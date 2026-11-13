@@ -308,6 +308,7 @@ static void maybeDumpFrame(Instance* inst, const ImageInfo& src, double frame)
         return;
     }
     if (unlink(trigger.c_str()) != 0) return;  // another render thread took it
+    logf("dump: trigger taken, src data=%p bounds=%d,%d,%d,%d rowbytes=%d depth=%s", src.data, src.bounds[0], src.bounds[1], src.bounds[2], src.bounds[3], (int)src.rowBytes, src.depth.c_str());
     const int w = src.bounds[2] - src.bounds[0], h = src.bounds[3] - src.bounds[1];
     std::vector<float> contiguous((size_t)w * h * 4);
     for (int y = 0; y < h; ++y)
@@ -315,6 +316,7 @@ static void maybeDumpFrame(Instance* inst, const ImageInfo& src, double frame)
     char name[256];
     std::snprintf(name, sizeof name, "/frame_inst%d_t%.3f_%dx%d.exr", inst->id, frame, w, h);
     const std::string path = dir + name;
+    logf("dump: copied rows, writing %s", path.c_str());
     std::string err = writeExrFloatRgba(path, contiguous.data(), w, h, w * 4);
     logf("dump: %s -> %s", err.empty() ? "wrote" : ("FAILED " + err).c_str(), path.c_str());
 }

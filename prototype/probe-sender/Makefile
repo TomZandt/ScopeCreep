@@ -18,13 +18,13 @@ CXX      ?= g++
 CXXFLAGS = -std=c++17 -O2 -fPIC -fvisibility=hidden -Wall -I$(SDK)/OpenFX-1.4/include \
            -I/usr/include/OpenEXR -I/usr/include/Imath
 LDLIBS   = -lOpenEXR -lOpenEXRCore -lImath -lIex -lpthread
-# No lib dependency beyond system OpenEXR; bundle is loaded by Resolve in-process.
+# The plugin links NO OpenEXR (clashes with Resolve's bundled copy); only the test uses it.
 
 all: $(BIN)
 
 $(BIN): src/probe_sender.cpp src/exr_dump.cpp src/exr_dump.h
 	mkdir -p $(dir $@)
-	$(CXX) $(CXXFLAGS) -shared src/probe_sender.cpp src/exr_dump.cpp -o $@ $(LDLIBS)
+	$(CXX) $(CXXFLAGS) -shared src/probe_sender.cpp src/exr_dump.cpp -o $@ -lpthread
 
 build/exr_test: test/exr_roundtrip_test.cpp src/exr_dump.cpp src/exr_dump.h
 	mkdir -p build
