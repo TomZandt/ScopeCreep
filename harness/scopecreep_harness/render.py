@@ -31,21 +31,24 @@ def project_dir(setup):
     return os.path.join(paths.RENDERS, setup.project_name)
 
 
-def render_project(resolve, setup, timeout=600):
+def render_project(resolve, setup, timeout=600, project_name=None, outdir=None):
+    """Render frame 1 of every clip. project_name/outdir override where to render from/to (used by clone-sender
+    to render a candidate project without touching the reference renders)."""
     from . import projects
     pm = resolve.GetProjectManager()
-    project = projects.load(pm, setup.project_name)
+    project_name = project_name or setup.project_name
+    project = projects.load(pm, project_name)
     if not project:
-        raise SystemExit("project %s not found (run `harness projects`)" % setup.project_name)
+        raise SystemExit("project %s not found (run `harness projects`)" % project_name)
     timeline = project.GetCurrentTimeline() or project.GetTimelineByIndex(1)
     project.SetCurrentTimeline(timeline)
     start = timeline.GetStartFrame()
 
-    outdir = project_dir(setup)
+    outdir = outdir or project_dir(setup)
     if os.path.isdir(outdir):
         shutil.rmtree(outdir)  # idempotent: always re-render from scratch
     os.makedirs(outdir)
-    staging = os.path.join(STAGING, setup.project_name)
+    staging = os.path.join(STAGING, project_name)
     if os.path.isdir(staging):
         shutil.rmtree(staging)
     project.DeleteAllRenderJobs()
