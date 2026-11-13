@@ -1,0 +1,9 @@
+[package]
+name = "scopecreep-accuracy"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+exr = "1.74.3"
+rayon = "1.12.0"
+tiff = "0.11.3"

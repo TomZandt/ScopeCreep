@@ -10,6 +10,8 @@ Commands (Resolve must be running, Preferences > System > General > External scr
   clone-sender  export the hand-built scopecreep-test-dwg-p3d65 (probe Sender on its timeline) to a .drp and clone it
              into every other colour-setup project, applying that setup's Colour Setup; each clone is verified
              (settings vs dump, node graph, probe log, EXR render vs reference) before replacing the original
+  dump-timeline-frames  collect the probe Sender's Timeline Colour Space frame 1 of every clip, per project, into
+             <test-data>/dumps-feed/<project>/<clip>.exr (the input for accuracy/)
   all        media + projects + dump + render
   clean      delete every scopecreep-test-* project
   status     product, current project/page/timecode
@@ -32,7 +34,7 @@ from scopecreep_harness import paths, setups, testmedia  # noqa: E402
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("command", choices=["media", "projects", "dump", "render", "all", "clean", "status",
-                                        "goto", "play", "stop", "shot", "clone-sender"])
+                                        "goto", "play", "stop", "shot", "clone-sender", "dump-timeline-frames"])
     ap.add_argument("arg", nargs="?")
     ap.add_argument("--only", help="comma-separated setup keys: " + ", ".join(s.key for s in setups.ALL))
     ap.add_argument("--keep-hidden", action="store_true", help="clone-sender: keep the hidden-branch timeline (its CST is P3-D65 specific)")
@@ -60,6 +62,9 @@ def main(argv=None):
     if cmd == "clone-sender":
         from scopecreep_harness import clone
         clone.clone_all(resolve, only, a.keep_hidden)
+    if cmd == "dump-timeline-frames":
+        from scopecreep_harness import dump_feed
+        dump_feed.dump_all(resolve, only)
     if cmd == "clean":
         pm = resolve.GetProjectManager()
         gone = projects.clean(pm, projects.remember_original(pm))
