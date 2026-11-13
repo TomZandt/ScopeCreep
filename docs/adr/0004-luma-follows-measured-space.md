@@ -1,0 +1,3 @@
+# Luma weights are derived from the Measured Space's primaries, not fixed to Rec.709
+
+Many scope tools always use Rec.709 luma weights. scopecreep instead derives them mathematically from the Measured Space's primaries and white point (the Y row of its RGB-to-XYZ matrix). That reproduces the standards exactly where they exist (Rec.709: 0.2126/0.7152/0.0722; Rec.2020: 0.2627/0.6780/0.0593) and gives a consistent answer where no broadcast luma standard exists (P3-D65: 0.2290/0.6917/0.0793). The Scope label shows which weights are in use. Resolve's own waveform is compared against ours during prototyping. If Resolve differs, for example by always using Rec.709 weights, the difference is documented and offered as a mode rather than silently copied.
