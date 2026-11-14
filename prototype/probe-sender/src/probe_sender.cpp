@@ -30,6 +30,7 @@
 #include <string>
 #include <vector>
 #include <sys/stat.h>
+#include <sys/syscall.h>
 #include <unistd.h>
 
 #define PLUGIN_ID "com.scopecreep.probesender"
@@ -59,7 +60,7 @@ static void logf(const char* fmt, ...)
     if (!f) return;
     auto now = std::chrono::system_clock::now().time_since_epoch();
     long long ms = std::chrono::duration_cast<std::chrono::milliseconds>(now).count();
-    std::fprintf(f, "[%lld.%03lld pid=%d] ", ms / 1000, ms % 1000, (int)getpid());
+    std::fprintf(f, "[%lld.%03lld pid=%d tid=%ld] ", ms / 1000, ms % 1000, (int)getpid(), (long)syscall(SYS_gettid));
     va_list ap;
     va_start(ap, fmt);
     std::vfprintf(f, fmt, ap);
@@ -377,6 +378,14 @@ static OfxStatus onRender(OfxImageEffectHandle effect, OfxPropertySetHandle inAr
          str(inArgs, kOfxImageEffectPropInteractiveRenderStatus).c_str(),
          str(inArgs, kOfxImageEffectPropRenderQualityDraft).c_str(),
          ints(srcClipProps, kOfxImageClipPropThumbnail, 1).c_str());
+    logf("RENDER inst=%d   extra: scale_xy=%s|%s opencl=%s cuda=%s metal=%s opengl=%s abort=%s interactive_effect=%s "
+         "frame_range=%s|%s inst_changed_since_create=%s",
+         inst->id, dbl(inArgs, kOfxImageEffectPropRenderScale).c_str(), ints(inArgs, kOfxImageEffectPropRenderScale, 2).c_str(),
+         ints(inArgs, kOfxImageEffectPropOpenCLEnabled, 1).c_str(), ints(inArgs, kOfxImageEffectPropCudaEnabled, 1).c_str(),
+         ints(inArgs, kOfxImageEffectPropMetalEnabled, 1).c_str(), ints(inArgs, kOfxImageEffectPropOpenGLEnabled, 1).c_str(),
+         ints(inArgs, kOfxImageEffectPropRenderQualityDraft, 1).c_str(),
+         ints(inst->effectProps, kOfxPropIsInteractive, 1).c_str(),
+         dbl(inst->effectProps, kOfxImageEffectPropFrameRange).c_str(), "-", "-");
     logf("RENDER inst=%d   src: depth=%s components=%s bounds=%d,%d,%d,%d rowbytes=%d  dst: depth=%s components=%s "
          "bounds=%d,%d,%d,%d  render_page_arg=%s  copy_ms=%.3f gap_since_last_render_ms=%.3f",
          inst->id, src.depth.c_str(), src.components.c_str(), src.bounds[0], src.bounds[1], src.bounds[2],
@@ -405,6 +414,15 @@ static OfxStatus mainEntry(const char* action, const void* handle, OfxPropertySe
     if (std::strcmp(action, kOfxImageEffectActionGetClipPreferences) == 0) return onGetClipPreferences(effect, outArgs);
     if (std::strcmp(action, kOfxImageEffectActionGetOutputColourspace) == 0)
         return onGetOutputColourspace(effect, inArgs, outArgs);
+    if (std::strcmp(action, kOfxImageEffectActionBeginSequenceRender) == 0 ||
+        std::strcmp(action, kOfxImageEffectActionEndSequenceRender) == 0) {
+        Instance* i = getInstance(effect);
+        logf("inst=%d ACTION %s range=%s|%s step=%s interactive=%s sequential=%s page=%s", i ? i->id : -1, action,
+             dbl(inArgs, kOfxImageEffectPropFrameRange).c_str(), ints(inArgs, kOfxImageEffectPropFrameRange, 2).c_str(),
+             dbl(inArgs, kOfxImageEffectPropFrameStep).c_str(), str(inArgs, kOfxImageEffectPropInteractiveRenderStatus).c_str(),
+             str(inArgs, kOfxImageEffectPropSequentialRenderStatus).c_str(), str(inArgs, kOfxImageEffectPropResolvePage).c_str());
+        return kOfxStatReplyDefault;
+    }
     if (std::strcmp(action, kOfxActionUnload) == 0 || std::strcmp(action, kOfxActionBeginInstanceChanged) == 0 ||
         std::strcmp(action, kOfxActionEndInstanceChanged) == 0)
         return kOfxStatReplyDefault;
