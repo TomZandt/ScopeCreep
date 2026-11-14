@@ -6,3 +6,7 @@ The Sender is C++ because Resolve's OFX SDK, samples and GPU paths (CUDA, OpenCL
 
 - C++ with Qt 6 throughout: one language, but clumsier GPU compute and LGPL or commercial licensing constraints for a sold product.
 - C++ with Vulkan and MoltenVK: maximum control, most work.
+
+## Consequences
+
+- The Sender must never link OpenEXR or Imath. Resolve bundles its own copies; linking the system ones crashed Resolve in Stage 0. The Sender stays free of heavyweight dependencies.
