@@ -128,11 +128,15 @@ impl FeedReader {
         self.map.atomic_u64(H_READER_HEARTBEAT_NS).store(now_ns, Release);
     }
 
-    /// Has the Sender replaced this Feed file (new layout, or Resolve restarted)? If so, open the path again.
+    /// Has the Sender marked this Feed file as replaced (it made a ring with a new layout)? If so, open the path
+    /// again. Cheap: one atomic load.
     pub fn retired(&self) -> bool {
-        if self.map.atomic_u32(H_RETIRED).load(Acquire) != 0 {
-            return true;
-        }
+        self.map.atomic_u32(H_RETIRED).load(Acquire) != 0
+    }
+
+    /// Does the path now name a different file (Resolve restarted, so nobody marked this one retired)? If so,
+    /// open the path again. Costs a `stat`, so check it a few times a second, not every poll.
+    pub fn replaced(&self) -> bool {
         match std::fs::metadata(&self.path) {
             Ok(m) => (m.dev(), m.ino()) != self.file_id,
             Err(_) => true,
