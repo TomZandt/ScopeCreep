@@ -192,8 +192,8 @@ static void noteRender(double ms, bool cuda, bool copyWasOn, int inst, double fr
     const unsigned long long dstart = cs.started - gPrevStats.started, dcomp = cs.completed - gPrevStats.completed,
                              dharv = cs.harvested - gPrevStats.harvested;
     logf("COPYSTATS renders=%llu renders_per_s=%.1f render_ms_mean=%.3f render_ms_max=%.3f cuda_renders=%llu "
-         "copy_off_renders=%llu started=%llu completed=%llu started_per_s=%.1f gpu_copy_ms_mean=%.3f gpu_copy_ms_max_total=%.3f "
-         "wall_latency_ms_mean=%.3f wall_latency_ms_max_total=%.3f submit_ms_mean=%.3f submit_ms_max_total=%.3f "
+         "copy_off_renders=%llu started=%llu completed=%llu started_per_s=%.1f gpu_copy_ms_mean=%.3f gpu_copy_ms_max=%.3f "
+         "wall_latency_ms_mean=%.3f wall_latency_ms_max=%.3f submit_ms_mean=%.3f submit_ms_max=%.3f "
          "drop_overwrite=%llu drop_noslot=%llu drop_nostaging=%llu drop_oversize=%llu skipped_thumb=%llu last_err=%s",
          dn, dn / dtS, dn ? (gRenderMsSum - gPrevRenderMsSum) / dn : 0.0, gRenderMsMax, gCudaRenders, gCopyOffRenders,
          cs.started, cs.completed, dstart / dtS,
@@ -203,6 +203,7 @@ static void noteRender(double ms, bool cuda, bool copyWasOn, int inst, double fr
          cs.dropOverwrite, cs.dropNoSlot, cs.dropNoStaging, cs.dropOversize, cs.skippedThumb,
          sc::cudaCopyLastError().c_str());
     gPrevStats = cs;
+    if (sc::cudaCopyReady()) sc::cudaCopyResetIntervalMax();
     gPrevRenderCount = gRenderCount;
     gPrevRenderMsSum = gRenderMsSum;
     gRenderMsMax = 0;

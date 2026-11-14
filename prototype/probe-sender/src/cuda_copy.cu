@@ -87,6 +87,21 @@ void CUDART_CB onComplete(void* arg)
     sh->state.store(kReady, std::memory_order_release);
 }
 
+// Collect the GPU time of a finished copy (non-blocking: the host callback has already run, so both events are complete).
+// Caller holds gMu.
+void harvestOne(SlotRec* r)
+{
+    int exp = 2;
+    if (r->harvest.compare_exchange_strong(exp, 0)) {
+        float ms = 0;
+        if (cudaEventElapsedTime(&ms, r->evStart, r->evEnd) == cudaSuccess) {
+            gStats.harvested++;
+            gStats.gpuMsSum += ms;
+            if (ms > gStats.gpuMsMax) gStats.gpuMsMax = ms;
+        }
+    }
+}
+
 // Returns slot index or -1. Caller holds gMu.
 int acquireSlot()
 {
@@ -195,6 +210,7 @@ bool cudaCopyFrame(void* stream, const void* src, size_t srcRowBytes, int width,
     const int si = acquireSlot();
     if (si < 0) { gHdr->dropNoSlot.fetch_add(1); gStats.dropNoSlot++; return false; }
     SlotRec* rec = gSlots[(size_t)si];
+    harvestOne(rec);  // the slot's previous copy has completed (it was FREE or READY): bank its GPU time before reuse
     SlotHeader* sh = slotHeader(gBase, (uint32_t)si, gCfg.slotBytes);
     void* host = slotData(gBase, (uint32_t)si, gCfg.slotBytes);
     sh->seq = gHdr->nextSeq.fetch_add(1);
@@ -268,18 +284,14 @@ void cudaCopyCountThumb()
 CopyStats cudaCopyStats()
 {
     std::lock_guard<std::mutex> lock(gMu);
-    for (SlotRec* r : gSlots) {
-        int exp = 2;
-        if (r->harvest.compare_exchange_strong(exp, 0)) {
-            float ms = 0;
-            if (cudaEventElapsedTime(&ms, r->evStart, r->evEnd) == cudaSuccess) {  // both complete: does not wait
-                gStats.harvested++;
-                gStats.gpuMsSum += ms;
-                if (ms > gStats.gpuMsMax) gStats.gpuMsMax = ms;
-            }
-        }
-    }
+    for (SlotRec* r : gSlots) harvestOne(r);
     return gStats;
+}
+
+void cudaCopyResetIntervalMax()
+{
+    std::lock_guard<std::mutex> lock(gMu);
+    gStats.gpuMsMax = gStats.latMsMax = gStats.submitMsMax = 0;
 }
 
 bool cudaReadbackBlocking(void* stream, const void* src, size_t srcRowBytes, size_t widthBytes, size_t height, void* dst)

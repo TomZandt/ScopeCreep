@@ -40,6 +40,7 @@ bool cudaCopyFrame(void* stream, const void* src, size_t srcRowBytes, int width,
 void cudaCopyCountThumb();
 // Non-blocking: collect GPU timings of completed copies, then return cumulative stats.
 CopyStats cudaCopyStats();
+void cudaCopyResetIntervalMax();  // zero the *Max fields (they are per-interval when this is called after each report)
 std::string cudaCopyLastError();
 
 // Blocking diagnostic (dump trigger only): copy a device frame to host memory.
