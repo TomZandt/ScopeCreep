@@ -5,6 +5,7 @@
 //   --exr-dir DIR    compare slots bit-exactly with frame_inst*_t<time>_WxH.exr dumps (written by the plugin's
 //                    dump trigger) whose <time> equals the slot's frame time. This is the "known frame" check:
 //                    the dump is Resolve's own frame as the plugin received it.
+//   --touch          read every byte of every frame (CPU checksum, result discarded): a realistic busy consumer
 //   --sleep-ms N     pretend to be a slow consumer (hold each slot N ms) to exercise drop counting
 //   --seconds N      run N seconds (default 10; 0 = until killed)
 // Build: g++ -O2 -std=c++17 src/probe_reader.cpp -o build/probe_reader -lrt
@@ -87,16 +88,18 @@ static std::map<std::string, std::string> scanDumps(const std::string& dir)
 int main(int argc, char** argv)
 {
     std::string shm = "/scopecreep-probe-ring", exrDir;
-    bool verify = false;
+    bool verify = false, verbose = false, touch = false;
     double seconds = 10, sleepMs = 0;
     for (int i = 1; i < argc; ++i) {
         std::string a = argv[i];
         if (a == "--verify") verify = true;
+        else if (a == "--verbose") verbose = true;
+        else if (a == "--touch") touch = true;
         else if (a == "--exr-dir" && i + 1 < argc) exrDir = argv[++i];
         else if (a == "--sleep-ms" && i + 1 < argc) sleepMs = std::atof(argv[++i]);
         else if (a == "--seconds" && i + 1 < argc) seconds = std::atof(argv[++i]);
         else if (a == "--shm" && i + 1 < argc) shm = argv[++i];
-        else { std::fprintf(stderr, "usage: %s [--verify] [--exr-dir DIR] [--sleep-ms N] [--seconds N] [--shm NAME]\n", argv[0]); return 2; }
+        else { std::fprintf(stderr, "usage: %s [--verify] [--touch] [--verbose] [--exr-dir DIR] [--sleep-ms N] [--seconds N] [--shm NAME]\n", argv[0]); return 2; }
     }
     int fd = -1;
     for (int i = 0; i < 300 && fd < 0; ++i) { fd = shm_open(shm.c_str(), O_RDWR, 0); if (fd < 0) usleep(100000); }
@@ -142,9 +145,11 @@ int main(int argc, char** argv)
                     else gaps += sh->seq - lastSeq - 1;
                 }
                 lastSeq = sh->seq; haveLast = true;
+                if (verbose) std::fprintf(stderr, "frame seq=%llu time=%.3f %ux%u inst=%u\n", (unsigned long long)sh->seq, sh->time, w, h, sh->inst);
                 bool allZero = true;
                 for (size_t i = 0; i < nwords && i < 4096; ++i) if (words[(nwords / 2 + i) % nwords]) { allZero = false; break; }
                 if (allZero) blank++;
+                if (touch) { volatile uint64_t sink = frameChecksum(words, nwords); (void)sink; }  // read every byte, like a real consumer
                 if (verify) {
                     if (!sh->hasChecksum) csNone++;
                     else if (frameChecksum(words, nwords) == sh->checksum) csOk++;

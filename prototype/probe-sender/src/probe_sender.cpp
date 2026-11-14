@@ -23,6 +23,7 @@
 //      SCOPECREEP_PROBE_SLOT_BYTES (default 3840*2160*16); SCOPECREEP_PROBE_SHM (default /scopecreep-probe-ring)
 //      SCOPECREEP_PROBE_CHECKSUM=1  GPU checksum of every copied frame (verification runs; costs GPU time)
 //      SCOPECREEP_PROBE_QUIET=1  no per-render log lines, only a COPYSTATS line each second
+//      SCOPECREEP_PROBE_TRACE=1  buffer one CSV line per render in memory, appended to <DIR>/render_trace.csv once a second
 #include "ofxCore.h"
 #include "ofxImageEffect.h"
 #include "ofxImageEffectExt.h"
@@ -156,9 +157,17 @@ static sc::CopyStats gPrevStats;
 static unsigned long long gPrevRenderCount = 0;
 static double gPrevRenderMsSum = 0;
 
-static void noteRender(double ms, bool cuda, bool copyWasOn)
+static std::string gTrace;
+static bool traceOn() { static const bool t = envFlag("SCOPECREEP_PROBE_TRACE", false); return t; }
+
+static void noteRender(double ms, bool cuda, bool copyWasOn, int inst, double frameTime, int thumb, int copyResult, int tid)
 {
     std::lock_guard<std::mutex> l(gStatMutex);
+    if (traceOn()) {
+        char b[160];
+        std::snprintf(b, sizeof b, "%.3f,%d,%d,%.3f,%.4f,%d,%d,%d\n", steadyMs(), inst, tid, frameTime, ms, thumb, (int)copyWasOn, copyResult);
+        gTrace += b;
+    }
     gRenderCount++;
     gRenderMsSum += ms;
     if (ms > gRenderMsMax) gRenderMsMax = ms;
@@ -168,6 +177,16 @@ static void noteRender(double ms, bool cuda, bool copyWasOn)
     if (now - gLastStatsMs < 1000) return;
     const double dtS = (now - gLastStatsMs) / 1000.0;
     gLastStatsMs = now;
+    if (traceOn() && !gTrace.empty()) {
+        const std::string path = probeDir() + "/render_trace.csv";
+        bool fresh = access(path.c_str(), F_OK) != 0;
+        if (FILE* f = std::fopen(path.c_str(), "a")) {
+            if (fresh) std::fputs("steady_ms,inst,tid,frame_time,render_ms,thumbnail,copy_on,copy_result\n", f);
+            std::fwrite(gTrace.data(), 1, gTrace.size(), f);
+            std::fclose(f);
+        }
+        gTrace.clear();
+    }
     sc::CopyStats cs = sc::cudaCopyReady() ? sc::cudaCopyStats() : sc::CopyStats();
     const unsigned long long dn = gRenderCount - gPrevRenderCount;
     const unsigned long long dstart = cs.started - gPrevStats.started, dcomp = cs.completed - gPrevStats.completed,
@@ -507,7 +526,7 @@ static OfxStatus onRender(OfxImageEffectHandle effect, OfxPropertySetHandle inAr
     if (haveSrc) maybeDumpFrame(inst, src, time, cuda, cudaStream);
 
     double ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count();
-    noteRender(ms, cuda, copyOn);
+    noteRender(ms, cuda, copyOn, inst->id, time, ints(srcClipProps, kOfxImageClipPropThumbnail, 1) == "1" ? 1 : 0, copyResult, (int)syscall(SYS_gettid));
     if (!quiet()) logf("RENDER inst=%d page=%s time=%.3f src_frame=%s render_window=%d,%d,%d,%d render_scale=%s,%s "
          "field=%s sequential=%s interactive=%s draft=%s thumbnail=%s",
          inst->id, inst->page.c_str(), time, ints(inArgs, kOfxImageEffectPropSrcFrame, 1).c_str(),
