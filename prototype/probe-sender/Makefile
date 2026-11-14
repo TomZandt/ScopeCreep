@@ -3,8 +3,9 @@
 #   make install    copy the bundle into Resolve's Linux OFX folder
 #   make test       EXR round-trip test
 #   make clean
-# Override OFX_PLUGIN_DIR if needed. CUDA is not used by the probe;
-# CUDAPATH is only used by `make cuda-check` (toolchain smoke test).
+# Override OFX_PLUGIN_DIR if needed.
+# Issue #12: the plugin now contains CUDA code (src/cuda_copy.cu, linked with static cudart; used only
+# when run with SCOPECREEP_PROBE_CUDA=1). Also: build/probe_reader (outside Resolve), `make cuda-test`.
 
 SDK        ?= /opt/resolve/Developer/OpenFX
 CUDAPATH   ?= /opt/cuda
@@ -20,11 +21,34 @@ CXXFLAGS = -std=c++17 -O2 -fPIC -fvisibility=hidden -Wall -I$(SDK)/OpenFX-1.4/in
 LDLIBS   = -lOpenEXR -lOpenEXRCore -lImath -lIex -lpthread
 # The plugin links NO OpenEXR (clashes with Resolve's bundled copy); only the test uses it.
 
-all: $(BIN)
+NVCC      = $(CUDAPATH)/bin/nvcc
+NVCCFLAGS = -O2 -std=c++17 -gencode arch=compute_86,code=sm_86 --compiler-options="-fPIC -fvisibility=hidden"
 
-$(BIN): src/probe_sender.cpp src/exr_dump.cpp src/exr_dump.h
+all: $(BIN) build/probe_reader
+
+build/cuda_copy.o: src/cuda_copy.cu src/cuda_copy.h src/ring_layout.h
+	mkdir -p build
+	$(NVCC) $(NVCCFLAGS) -c $< -o $@
+
+$(BIN): src/probe_sender.cpp src/exr_dump.cpp src/exr_dump.h src/cuda_copy.h src/ring_layout.h build/cuda_copy.o
 	mkdir -p $(dir $@)
-	$(CXX) $(CXXFLAGS) -shared src/probe_sender.cpp src/exr_dump.cpp -o $@ -lpthread
+	$(CXX) $(CXXFLAGS) -shared src/probe_sender.cpp src/exr_dump.cpp build/cuda_copy.o -o $@ \
+	    -L$(CUDAPATH)/lib64 -lcudart_static -lrt -ldl -lpthread
+
+build/probe_reader: src/probe_reader.cpp src/ring_layout.h
+	mkdir -p build
+	$(CXX) -std=c++17 -O2 -Wall src/probe_reader.cpp -o $@ -lrt -lpthread
+
+build/cuda_copy_test: test/cuda_copy_test.cu build/cuda_copy.o
+	mkdir -p build
+	$(NVCC) $(NVCCFLAGS) test/cuda_copy_test.cu build/cuda_copy.o -o $@ -lrt
+
+# Offline end-to-end check of the async copy + ring + reader (no Resolve): a fake renderer at 24 fps and flat out,
+# staged and direct, reader verifying GPU checksums on every frame.
+cuda-test: build/cuda_copy_test build/probe_reader
+	./build/cuda_copy_test 24 6 staged /scopecreep-test-ring & sleep 1; ./build/probe_reader --verify --seconds 5 --shm /scopecreep-test-ring; wait
+	./build/cuda_copy_test 24 6 direct /scopecreep-test-ring & sleep 1; ./build/probe_reader --verify --seconds 5 --shm /scopecreep-test-ring; wait
+	./build/cuda_copy_test 0 6 staged /scopecreep-test-ring & sleep 1; ./build/probe_reader --verify --sleep-ms 40 --seconds 5 --shm /scopecreep-test-ring; wait
 
 build/exr_test: test/exr_roundtrip_test.cpp src/exr_dump.cpp src/exr_dump.h
 	mkdir -p build
@@ -55,4 +79,4 @@ cuda-check:
 clean:
 	rm -rf $(BUNDLE) build
 
-.PHONY: all test install cuda-check clean
+.PHONY: all test cuda-test install cuda-check clean
