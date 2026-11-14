@@ -16,6 +16,10 @@ _Avoid_: Input, source type, tap
 The scopecreep OFX plugin placed in a Resolve project that hands each frame Resolve renders to scopecreep.
 _Avoid_: Connector, link, OFX node, tap
 
+**Viewer Frame**:
+A frame Resolve renders because it is the frame on screen, as opposed to thumbnail renders, background cache renders and repeat renders of the same frame. Only Viewer Frames belong in the Feed. Resolve flags thumbnails but not cache renders, so the Sender tells cache renders apart by the playhead and the pacing of renders.
+_Avoid_: Current frame, live frame, real frame
+
 **Capture**:
 A Feed Source that reads Resolve's video output from Blackmagic capture hardware.
 _Avoid_: Ingest, input card, hardware feed
@@ -59,7 +63,7 @@ A display that measures the Feed's pixel values, such as a waveform, RGB parade 
 _Avoid_: Monitor, meter, graph
 
 **Luma**:
-The single brightness value a Scope plots per pixel: a weighted sum of the encoded red, green and blue values, with weights set by the Measured Space's primaries and white point.
+The single brightness value a Scope plots per pixel: a weighted sum of the encoded red, green and blue values, with weights set by the Measured Space's primaries and white point. A **Match Resolve** mode instead uses the weights Resolve's own waveform uses (Rec.709 weights for Rec.709 and P3 outputs, Rec.2020 weights for Rec.2020 and Rec.2100).
 _Avoid_: Luminance (that is linear light, not this), brightness, Y (on its own)
 
 **Picture View**:
