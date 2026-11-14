@@ -6,12 +6,23 @@
 // the next received source frame as a float EXR, exactly as received.
 //
 // Raw C OFX API, no support library: we want every property read and every
-// action visible. CPU render path (no CUDA): this probe copies and logs, it
-// does not need the GPU.
+// action visible. Default: CPU render path. With SCOPECREEP_PROBE_CUDA=1 the plugin
+// opts into Resolve's CUDA render path (images arrive as device pointers) and, on every
+// non-thumbnail render, starts an ASYNCHRONOUS copy of the whole frame into a shared-memory
+// ring (issue #12, see cuda_copy.cu / ring_layout.h) and returns without waiting.
 //
 // Env: SCOPECREEP_PROBE_DIR  (default /tmp/scopecreep-probe) log + dumps + trigger
 //      SCOPECREEP_PROBE_STYLE (ocio|full|core|basic|none; default ocio) colour
 //                              management style declared to the host
+//      SCOPECREEP_PROBE_CUDA=1  declare CUDA render + CUDA stream support (default: off, CPU path)
+//      SCOPECREEP_PROBE_COPY=0  start with the frame copy switched off (default on, CUDA path only)
+//      <DIR>/copy.off           while this file exists the copy is off (switch at run time; passthrough continues)
+//      SCOPECREEP_PROBE_COPY_MODE=staged|direct   staged (default): D2D to private staging on Resolve's stream,
+//                              D2H on our own stream; direct: D2H straight on Resolve's stream
+//      SCOPECREEP_PROBE_SLOTS (default 4) host shm slots; SCOPECREEP_PROBE_STAGING (default 2) device staging buffers
+//      SCOPECREEP_PROBE_SLOT_BYTES (default 3840*2160*16); SCOPECREEP_PROBE_SHM (default /scopecreep-probe-ring)
+//      SCOPECREEP_PROBE_CHECKSUM=1  GPU checksum of every copied frame (verification runs; costs GPU time)
+//      SCOPECREEP_PROBE_QUIET=1  no per-render log lines, only a COPYSTATS line each second
 #include "ofxCore.h"
 #include "ofxImageEffect.h"
 #include "ofxImageEffectExt.h"
@@ -20,11 +31,13 @@
 #include "ofxProperty.h"
 
 #include "exr_dump.h"
+#include "cuda_copy.h"
 
 #include <chrono>
 #include <cstdarg>
 #include <cstdio>
 #include <cstdlib>
+#include <atomic>
 #include <cstring>
 #include <mutex>
 #include <string>
@@ -113,6 +126,100 @@ static std::string dbl(OfxPropertySetHandle p, const char* name)
     char b[64];
     std::snprintf(b, sizeof b, "%.6f", v);
     return b;
+}
+
+static bool envFlag(const char* name, bool def)
+{
+    const char* v = std::getenv(name);
+    if (!v || !*v) return def;
+    return std::strcmp(v, "0") != 0;
+}
+static long envLong(const char* name, long def)
+{
+    const char* v = std::getenv(name);
+    return v && *v ? std::atol(v) : def;
+}
+static bool useCuda() { return envFlag("SCOPECREEP_PROBE_CUDA", false); }
+static bool quiet() { static const bool q = envFlag("SCOPECREEP_PROBE_QUIET", false); return q; }
+
+static double steadyMs()
+{
+    return std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now().time_since_epoch()).count();
+}
+
+// Per-render time inside onRender, all instances, and the periodic COPYSTATS line.
+static std::mutex gStatMutex;
+static double gRenderMsSum = 0, gRenderMsMax = 0;
+static unsigned long long gRenderCount = 0, gCudaRenders = 0, gCopyOffRenders = 0;
+static double gLastStatsMs = 0;
+static sc::CopyStats gPrevStats;
+static unsigned long long gPrevRenderCount = 0;
+static double gPrevRenderMsSum = 0;
+
+static void noteRender(double ms, bool cuda, bool copyWasOn)
+{
+    std::lock_guard<std::mutex> l(gStatMutex);
+    gRenderCount++;
+    gRenderMsSum += ms;
+    if (ms > gRenderMsMax) gRenderMsMax = ms;
+    if (cuda) { gCudaRenders++; if (!copyWasOn) gCopyOffRenders++; }
+    const double now = steadyMs();
+    if (gLastStatsMs == 0) { gLastStatsMs = now; return; }
+    if (now - gLastStatsMs < 1000) return;
+    const double dtS = (now - gLastStatsMs) / 1000.0;
+    gLastStatsMs = now;
+    sc::CopyStats cs = sc::cudaCopyReady() ? sc::cudaCopyStats() : sc::CopyStats();
+    const unsigned long long dn = gRenderCount - gPrevRenderCount;
+    const unsigned long long dstart = cs.started - gPrevStats.started, dcomp = cs.completed - gPrevStats.completed,
+                             dharv = cs.harvested - gPrevStats.harvested;
+    logf("COPYSTATS renders=%llu renders_per_s=%.1f render_ms_mean=%.3f render_ms_max=%.3f cuda_renders=%llu "
+         "copy_off_renders=%llu started=%llu completed=%llu started_per_s=%.1f gpu_copy_ms_mean=%.3f gpu_copy_ms_max_total=%.3f "
+         "wall_latency_ms_mean=%.3f wall_latency_ms_max_total=%.3f submit_ms_mean=%.3f submit_ms_max_total=%.3f "
+         "drop_overwrite=%llu drop_noslot=%llu drop_nostaging=%llu drop_oversize=%llu skipped_thumb=%llu last_err=%s",
+         dn, dn / dtS, dn ? (gRenderMsSum - gPrevRenderMsSum) / dn : 0.0, gRenderMsMax, gCudaRenders, gCopyOffRenders,
+         cs.started, cs.completed, dstart / dtS,
+         dharv ? (cs.gpuMsSum - gPrevStats.gpuMsSum) / dharv : 0.0, cs.gpuMsMax,
+         dcomp ? (cs.latMsSum - gPrevStats.latMsSum) / dcomp : 0.0, cs.latMsMax,
+         dstart ? (cs.submitMsSum - gPrevStats.submitMsSum) / dstart : 0.0, cs.submitMsMax,
+         cs.dropOverwrite, cs.dropNoSlot, cs.dropNoStaging, cs.dropOversize, cs.skippedThumb,
+         sc::cudaCopyLastError().c_str());
+    gPrevStats = cs;
+    gPrevRenderCount = gRenderCount;
+    gPrevRenderMsSum = gRenderMsSum;
+    gRenderMsMax = 0;
+}
+
+static std::mutex gCopyInitMutex;
+static bool gCopyInitTried = false;
+static bool gCopyInitOk = false;
+static bool ensureCopyInit()
+{
+    std::lock_guard<std::mutex> l(gCopyInitMutex);
+    if (gCopyInitTried) return gCopyInitOk;
+    gCopyInitTried = true;
+    sc::CopyConfig cfg;
+    cfg.nslots = (int)envLong("SCOPECREEP_PROBE_SLOTS", 4);
+    cfg.nstaging = (int)envLong("SCOPECREEP_PROBE_STAGING", 2);
+    cfg.slotBytes = (size_t)envLong("SCOPECREEP_PROBE_SLOT_BYTES", 3840L * 2160 * 16);
+    const char* m = std::getenv("SCOPECREEP_PROBE_COPY_MODE");
+    cfg.staged = !(m && std::strcmp(m, "direct") == 0);
+    cfg.checksum = envFlag("SCOPECREEP_PROBE_CHECKSUM", false);
+    if (const char* n = std::getenv("SCOPECREEP_PROBE_SHM")) cfg.shmName = n;
+    const double t0 = steadyMs();
+    std::string err = sc::cudaCopyInit(cfg);
+    logf("copy init: %s in %.1f ms (slots=%d slot_bytes=%zu staging=%d mode=%s checksum=%d shm=%s)",
+         err.empty() ? "OK" : ("FAILED " + err).c_str(), steadyMs() - t0, cfg.nslots, cfg.slotBytes, cfg.nstaging,
+         cfg.staged ? "staged" : "direct", (int)cfg.checksum, cfg.shmName.c_str());
+    gCopyInitOk = err.empty();
+    return gCopyInitOk;
+}
+
+static bool copySwitchedOn()
+{
+    static const bool envOn = envFlag("SCOPECREEP_PROBE_COPY", true);
+    if (!envOn) return false;
+    const std::string off = probeDir() + "/copy.off";
+    return access(off.c_str(), F_OK) != 0;
 }
 
 // ------------------------------------------------------------ instance data
@@ -206,6 +313,11 @@ static OfxStatus onDescribe(OfxImageEffectHandle effect)
     gProp->propSetInt(p, kOfxImageEffectPropSupportsTiles, 0, 0);
     gProp->propSetInt(p, kOfxImageEffectPropSupportsMultiResolution, 0, 0);
     gProp->propSetString(p, kOfxImageEffectPluginRenderThreadSafety, 0, kOfxImageEffectRenderFullySafe);
+    if (useCuda()) {
+        gProp->propSetString(p, kOfxImageEffectPropCudaRenderSupported, 0, "true");
+        gProp->propSetString(p, kOfxImageEffectPropCudaStreamSupported, 0, "true");
+        logf("describe: declared CUDA render + CUDA stream support");
+    }
     // Colour management: declare the richest style, let the host negotiate down.
     gProp->propSetString(p, kOfxImageEffectPropColourManagementStyle, 0, declaredStyle());
     gProp->propSetString(p, kOfxImageEffectPropColourManagementAvailableConfigs, 0,
@@ -299,7 +411,7 @@ static const char* rowPtr(const ImageInfo& im, int y)
     return (const char*)im.data + (long long)(y - im.bounds[1]) * im.rowBytes;
 }
 
-static void maybeDumpFrame(Instance* inst, const ImageInfo& src, double frame)
+static void maybeDumpFrame(Instance* inst, const ImageInfo& src, double frame, bool cuda, void* stream)
 {
     const std::string dir = probeDir();
     const std::string trigger = dir + "/dump.trigger";
@@ -312,8 +424,16 @@ static void maybeDumpFrame(Instance* inst, const ImageInfo& src, double frame)
     logf("dump: trigger taken, src data=%p bounds=%d,%d,%d,%d rowbytes=%d depth=%s", src.data, src.bounds[0], src.bounds[1], src.bounds[2], src.bounds[3], (int)src.rowBytes, src.depth.c_str());
     const int w = src.bounds[2] - src.bounds[0], h = src.bounds[3] - src.bounds[1];
     std::vector<float> contiguous((size_t)w * h * 4);
-    for (int y = 0; y < h; ++y)
-        std::memcpy(&contiguous[(size_t)y * w * 4], rowPtr(src, src.bounds[1] + y), (size_t)w * 16);
+    if (cuda) {
+        // diagnostic only: this one DOES block (dump trigger); the normal copy path never does
+        if (!sc::cudaReadbackBlocking(stream, src.data, (size_t)src.rowBytes, (size_t)w * 16, (size_t)h, contiguous.data())) {
+            logf("dump: CUDA readback failed: %s", sc::cudaCopyLastError().c_str());
+            return;
+        }
+    } else {
+        for (int y = 0; y < h; ++y)
+            std::memcpy(&contiguous[(size_t)y * w * 4], rowPtr(src, src.bounds[1] + y), (size_t)w * 16);
+    }
     char name[256];
     std::snprintf(name, sizeof name, "/frame_inst%d_t%.3f_%dx%d.exr", inst->id, frame, w, h);
     const std::string path = dir + name;
@@ -354,8 +474,28 @@ static OfxStatus onRender(OfxImageEffectHandle effect, OfxPropertySetHandle inAr
         gHaveLastRender = true;
     }
 
-    if (haveSrc && haveDst && src.depth == kOfxBitDepthFloat && dst.depth == kOfxBitDepthFloat &&
-        src.components == kOfxImageComponentRGBA && dst.components == kOfxImageComponentRGBA) {
+    const bool cuda = ints(inArgs, kOfxImageEffectPropCudaEnabled, 1) == "1";
+    void* cudaStream = nullptr;
+    if (cuda) gProp->propGetPointer(inArgs, kOfxImageEffectPropCudaStream, 0, &cudaStream);
+    bool copyOn = false;
+    int copyResult = -1;  // -1 not attempted, 0 skipped/dropped, 1 started
+    const bool floatRgba = haveSrc && haveDst && src.depth == kOfxBitDepthFloat && dst.depth == kOfxBitDepthFloat &&
+                           src.components == kOfxImageComponentRGBA && dst.components == kOfxImageComponentRGBA;
+    if (cuda) {
+        if (floatRgba) {
+            const int w = rw[2] - rw[0], h = rw[3] - rw[1];
+            // device pointers: addresses of the render window's first pixel (rows are bottom-up, bounds[1] = lowest row)
+            const char* sp = (const char*)src.data + (long long)(rw[1] - src.bounds[1]) * src.rowBytes + (long long)(rw[0] - src.bounds[0]) * 16;
+            char* dp = (char*)dst.data + (long long)(rw[1] - dst.bounds[1]) * dst.rowBytes + (long long)(rw[0] - dst.bounds[0]) * 16;
+            if (!sc::cudaCopyReady()) ensureCopyInit();  // first CUDA render pins the ring (one-off, hundreds of ms)
+            sc::cudaPassthrough(cudaStream, dp, (size_t)dst.rowBytes, sp, (size_t)src.rowBytes, (size_t)w * 16, (size_t)h);
+            copyOn = copySwitchedOn() && sc::cudaCopyReady();
+            if (copyOn) {
+                if (ints(srcClipProps, kOfxImageClipPropThumbnail, 1) == "1") { sc::cudaCopyCountThumb(); copyResult = 0; }
+                else copyResult = sc::cudaCopyFrame(cudaStream, sp, (size_t)src.rowBytes, w, h, time, inst->id) ? 1 : 0;
+            }
+        }
+    } else if (floatRgba) {
         const int x1 = rw[0], x2 = rw[2];
         for (int y = rw[1]; y < rw[3]; ++y) {
             if (y < src.bounds[1] || y >= src.bounds[3] || y < dst.bounds[1] || y >= dst.bounds[3]) continue;
@@ -364,11 +504,11 @@ static OfxStatus onRender(OfxImageEffectHandle effect, OfxPropertySetHandle inAr
             std::memcpy(d, s, (size_t)(x2 - x1) * 16);
         }
     }
-    if (haveSrc) maybeDumpFrame(inst, src, time);
+    if (haveSrc) maybeDumpFrame(inst, src, time, cuda, cudaStream);
 
     double ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count();
-
-    logf("RENDER inst=%d page=%s time=%.3f src_frame=%s render_window=%d,%d,%d,%d render_scale=%s,%s "
+    noteRender(ms, cuda, copyOn);
+    if (!quiet()) logf("RENDER inst=%d page=%s time=%.3f src_frame=%s render_window=%d,%d,%d,%d render_scale=%s,%s "
          "field=%s sequential=%s interactive=%s draft=%s thumbnail=%s",
          inst->id, inst->page.c_str(), time, ints(inArgs, kOfxImageEffectPropSrcFrame, 1).c_str(),
          rw[0], rw[1], rw[2], rw[3],
@@ -378,7 +518,7 @@ static OfxStatus onRender(OfxImageEffectHandle effect, OfxPropertySetHandle inAr
          str(inArgs, kOfxImageEffectPropInteractiveRenderStatus).c_str(),
          str(inArgs, kOfxImageEffectPropRenderQualityDraft).c_str(),
          ints(srcClipProps, kOfxImageClipPropThumbnail, 1).c_str());
-    logf("RENDER inst=%d   extra: scale_xy=%s|%s opencl=%s cuda=%s metal=%s opengl=%s abort=%s interactive_effect=%s "
+    if (!quiet()) logf("RENDER inst=%d   extra: scale_xy=%s|%s opencl=%s cuda=%s metal=%s opengl=%s abort=%s interactive_effect=%s "
          "frame_range=%s|%s inst_changed_since_create=%s",
          inst->id, dbl(inArgs, kOfxImageEffectPropRenderScale).c_str(), ints(inArgs, kOfxImageEffectPropRenderScale, 2).c_str(),
          ints(inArgs, kOfxImageEffectPropOpenCLEnabled, 1).c_str(), ints(inArgs, kOfxImageEffectPropCudaEnabled, 1).c_str(),
@@ -386,13 +526,13 @@ static OfxStatus onRender(OfxImageEffectHandle effect, OfxPropertySetHandle inAr
          ints(inArgs, kOfxImageEffectPropRenderQualityDraft, 1).c_str(),
          ints(inst->effectProps, kOfxPropIsInteractive, 1).c_str(),
          dbl(inst->effectProps, kOfxImageEffectPropFrameRange).c_str(), "-", "-");
-    logf("RENDER inst=%d   src: depth=%s components=%s bounds=%d,%d,%d,%d rowbytes=%d  dst: depth=%s components=%s "
-         "bounds=%d,%d,%d,%d  render_page_arg=%s  copy_ms=%.3f gap_since_last_render_ms=%.3f",
+    if (!quiet()) logf("RENDER inst=%d   src: depth=%s components=%s bounds=%d,%d,%d,%d rowbytes=%d  dst: depth=%s components=%s "
+         "bounds=%d,%d,%d,%d  render_page_arg=%s  copy_ms=%.3f gap_since_last_render_ms=%.3f cuda=%d copy_result=%d",
          inst->id, src.depth.c_str(), src.components.c_str(), src.bounds[0], src.bounds[1], src.bounds[2],
          src.bounds[3], src.rowBytes, dst.depth.c_str(), dst.components.c_str(), dst.bounds[0], dst.bounds[1],
-         dst.bounds[2], dst.bounds[3], str(inArgs, kOfxImageEffectPropResolvePage).c_str(), ms, gapMs);
+         dst.bounds[2], dst.bounds[3], str(inArgs, kOfxImageEffectPropResolvePage).c_str(), ms, gapMs, (int)cuda, copyResult);
     // Colour management as seen at render time (first renders of an instance only, to keep the log readable).
-    if (inst->renders <= 3) logColour("render", inst, effect);
+    if (!quiet() && inst->renders <= 3) logColour("render", inst, effect);
 
     if (srcP) gEffect->clipReleaseImage(srcP);
     if (dstP) gEffect->clipReleaseImage(dstP);
