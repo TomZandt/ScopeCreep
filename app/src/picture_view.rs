@@ -1,9 +1,9 @@
 //! Drawing the Picture View: the latest Feed frame as an image, untouched.
 //!
-//! The frame is uploaded as a 32-bit float texture at full resolution and drawn scaled to fit. No colour
+//! The frame is the 32-bit float texture at full resolution that `gpu_frame` uploads, drawn scaled to fit. No colour
 //! conversion, no tone curve: the Sender's values go to the screen as they are (clamped to 0..1 by the display
 //! surface, which is not sRGB-encoded for that reason).
-use scopecreep_feed::Frame;
+use scopecreep::gpu_frame::GpuFrame;
 use std::sync::{Arc, Mutex};
 
 const SHADER: &str = r#"
@@ -37,7 +37,7 @@ fn fs(in: VertexOut) -> @location(0) vec4<f32> {
 
 /// The frame on the GPU.
 struct Picture {
-    texture: wgpu::Texture,
+    texture_id: u64,
     bind_group: wgpu::BindGroup,
     width: u32,
     height: u32,
@@ -120,43 +120,25 @@ impl PictureView {
         PictureView { device: device.clone(), queue: queue.clone(), pipeline, layout, sampler, placement, picture: Arc::new(Mutex::new(None)) }
     }
 
-    /// Put a Feed frame on the GPU, as it is. Called on the Feed thread.
-    pub fn upload(&self, frame: &Frame) {
-        let (width, height) = (frame.width(), frame.height());
-        let existing = self.picture.lock().unwrap().as_ref().filter(|p| p.width == width && p.height == height).map(|p| p.texture.clone());
-        let texture = existing.unwrap_or_else(|| {
-            let texture = self.device.create_texture(&wgpu::TextureDescriptor {
-                label: Some("feed frame"),
-                size: wgpu::Extent3d { width, height, depth_or_array_layers: 1 },
-                mip_level_count: 1,
-                sample_count: 1,
-                dimension: wgpu::TextureDimension::D2,
-                format: wgpu::TextureFormat::Rgba32Float,
-                usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
-                view_formats: &[],
-            });
+    /// Show the Feed frame [`FrameUploader`](scopecreep::gpu_frame::FrameUploader) put on the GPU. Called on
+    /// the Feed thread.
+    pub fn show(&self, frame: &GpuFrame) {
+        let mut picture = self.picture.lock().unwrap();
+        if picture.as_ref().is_none_or(|p| p.texture_id != frame.texture_id) {
             let bind_group = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
                 label: Some("picture view"),
                 layout: &self.layout,
                 entries: &[
                     wgpu::BindGroupEntry { binding: 0, resource: self.placement.as_entire_binding() },
-                    wgpu::BindGroupEntry { binding: 1, resource: wgpu::BindingResource::TextureView(&texture.create_view(&Default::default())) },
+                    wgpu::BindGroupEntry { binding: 1, resource: wgpu::BindingResource::TextureView(&frame.texture.create_view(&Default::default())) },
                     wgpu::BindGroupEntry { binding: 2, resource: wgpu::BindingResource::Sampler(&self.sampler) },
                 ],
             });
-            *self.picture.lock().unwrap() = Some(Picture { texture: texture.clone(), bind_group, width, height, bottom_up: frame.bottom_up() });
-            texture
-        });
-        self.queue.write_texture(
-            wgpu::TexelCopyTextureInfo { texture: &texture, mip_level: 0, origin: wgpu::Origin3d::ZERO, aspect: wgpu::TextureAspect::All },
-            bytemuck::cast_slice(frame.pixels()),
-            wgpu::TexelCopyBufferLayout { offset: 0, bytes_per_row: Some(frame.row_floats() as u32 * 4), rows_per_image: Some(height) },
-            wgpu::Extent3d { width, height, depth_or_array_layers: 1 },
-        );
-        if let Some(p) = self.picture.lock().unwrap().as_mut() {
-            p.bottom_up = frame.bottom_up();
+            *picture = Some(Picture { texture_id: frame.texture_id, bind_group, width: frame.width, height: frame.height, bottom_up: frame.bottom_up });
         }
-        self.queue.submit([]);
+        if let Some(p) = picture.as_mut() {
+            p.bottom_up = frame.bottom_up;
+        }
     }
 
     /// Draw the picture, scaled to fit inside `area` (left, top, width, height in pixels of a `surface`-sized

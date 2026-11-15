@@ -31,6 +31,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let start = Instant::now();
     let (mut frame, mut written, mut idle) = (0u64, 0u64, 0u64);
     let mut had_reader = false;
+    let mut card = synthetic::test_card(width, height, 0);
     while frame < frames {
         let render_ns = now_ns();
         let present = writer.reader_present(render_ns);
@@ -42,7 +43,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             idle += 1;
         } else {
             let meta = FrameMeta { width, height, frame_time: 86400.0 + frame as f64, frame_rate: fps, render_ns, sender_instance: 1 };
-            match writer.write_frame(&meta, &synthetic::test_card(width, height, frame)) {
+            synthetic::move_test_card_marker(&mut card, width, height, frame);
+            match writer.write_frame(&meta, &card) {
                 Ok(_) => written += 1,
                 Err(WriteError::TooLarge) => writer = FeedWriter::create(&path, 4, slot_bytes)?, // first frame: make the ring
                 Err(WriteError::Dropped) => {}

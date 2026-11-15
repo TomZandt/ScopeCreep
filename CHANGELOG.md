@@ -12,6 +12,13 @@ The format follows [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/
 - scopecreep Sender (`sender/`): OFX plugin on Resolve's CUDA path that copies each Viewer Frame into the Feed without ever making Resolve wait, and does no work when no app is attached (#14).
 - scopecreep app (`app/`): one window with a Picture View of the clean picture, a quiet label and one-line notices; Viewer Frames chosen by pacing so background cache renders are ignored (#14).
 - `feed-synth`, a synthetic Feed writer for testing without Resolve (#14).
+- Luma waveform beside the Picture View (two panels): computed on the GPU from every pixel of every Viewer Frame at full resolution in 32-bit float, one waveform column per picture column, on a 10-bit scale (0–1023) with legal reference lines at 64 and 940. Pixels below 0 or above 1023 are counted and shown in their own edge rows, never cut off. A quiet label states the scale, the Measured Space and the luma weights (#15).
+- Luma weights derived from the Measured Space's primaries and white point (default), or a Match Resolve mode with the weights Resolve's own waveform uses (`--luma match-resolve`) (#15).
+- Known limitation: until the Colour Setup reaches the app (#16, #17) the waveform measures the values as sent and assumes Rec.709; its label says "Rec.709 assumed" (#15).
+
+### Changed
+
+- Feed frames go to the GPU once, through reused staging buffers, for the Picture View and the waveform to share: the app now keeps up with UHD float at 60 fps (#15).
 
 ## [0.0.0] - 2026-11-15
 

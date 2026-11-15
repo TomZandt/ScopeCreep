@@ -17,6 +17,7 @@ What we learned by testing, kept in the repo so it isn't lost when an issue thre
 | [12](12-uhd-copy-cost.md) | What does copying UHD float frames out of Resolve cost? |
 | [13](13-report-and-decisions.md) | The Stage 0 report and the decisions it made |
 | [14](14-feed-reaches-the-app.md) | Milestone 1: what the Feed tracer bullet verified in Resolve, and its limits |
+| [15](15-luma-waveform-uhd.md) | Does the luma waveform keep up with UHD float at 24, 25, 50 and 60 fps? |
 
 ## Adding findings
 

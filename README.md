@@ -25,11 +25,11 @@ Pre-alpha. Nothing to install yet.
 |---|---|---|
 | Feed protocol | `feed/PROTOCOL.md`, `feed/include/scopecreep_feed.h`, `feed/` crate | The shared-memory ring between Sender and app: spec, C header (Sender), Rust reader and synthetic writer (app, tests) |
 | Sender | `sender/` | C++ OFX plugin, Resolve's CUDA render path, async pinned copy into the Feed |
-| App | `app/` | Rust + wgpu: one window, a Picture View of the latest Feed frame |
+| App | `app/` | Rust + wgpu: one window, the Picture View of the latest Feed frame beside its luma waveform (GPU, every pixel, full resolution) |
 
 ```sh
-cargo test                       # Feed protocol (Rust and C against each other) and the app, driven at the Feed seam
-cargo run -p scopecreep          # the app (reads /dev/shm/scopecreep-feed, or $SCOPECREEP_FEED)
+cargo test                       # Feed protocol (Rust and C against each other) and the app, driven at the Feed seam (waveform tests need a GPU)
+cargo run -p scopecreep          # the app (reads /dev/shm/scopecreep-feed, or $SCOPECREEP_FEED); --luma match-resolve for Resolve's luma weights
 cargo run -p scopecreep-feed --bin feed-synth   # a moving test card into the Feed, no Resolve needed
 
 make -C sender                   # build the Sender (needs /opt/cuda and Resolve's OpenFX headers)

@@ -2,3 +2,5 @@
 //! the part with behaviour worth testing: what the app makes of the Feed.
 pub mod monitor;
 pub mod viewer_gate;
+pub mod gpu_frame;
+pub mod waveform;
