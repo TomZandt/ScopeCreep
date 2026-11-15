@@ -2,7 +2,7 @@
 
 What we learned by testing, kept in the repo so it isn't lost when an issue thread scrolls away. Each file is copied from the closing comments of its GitHub issue. Decisions drawn from these findings are in [`../stage0-report.md`](../stage0-report.md) and the ADRs in [`../adr/`](../adr/).
 
-**Still to do or check:** [open-checks.md](open-checks.md) lists every unverified item in one place.
+**Still to do or check** lives in GitHub issues, never in these files: [open issues labelled `ready-for-human`](https://github.com/TomZandt/scopecreep/issues?q=is%3Aopen+label%3Aready-for-human) (needs a person at Resolve or a decision) and [`ready-for-agent`](https://github.com/TomZandt/scopecreep/issues?q=is%3Aopen+label%3Aready-for-agent).
 
 | File | Question |
 |---|---|
@@ -22,4 +22,4 @@ What we learned by testing, kept in the repo so it isn't lost when an issue thre
 
 When a ticket answers a question by testing, its closing comment holds the evidence. Copy that comment into a new file here, numbered by the issue, and add a row to the table. Do it in the same change that closes the ticket.
 
-Add anything the ticket could not verify to [open-checks.md](open-checks.md), and remove lines from it when a later ticket settles them.
+Anything the ticket could not verify becomes a GitHub issue (or a comment on the planned ticket that will cover it), and the findings file links to it. When a later ticket settles a check, update the findings file it came from.
