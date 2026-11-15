@@ -249,8 +249,8 @@ fn the_colour_setup_block_is_read_leniently() {
 }
 
 #[test]
-fn this_crate_speaks_feed_protocol_1_1() {
-    assert_eq!((scopecreep_feed::VERSION_MAJOR, scopecreep_feed::VERSION_MINOR), (1, 1));
+fn this_crate_speaks_feed_protocol_1_2() {
+    assert_eq!((scopecreep_feed::VERSION_MAJOR, scopecreep_feed::VERSION_MINOR), (1, 2));
 }
 
 #[test]

@@ -10,15 +10,20 @@ pub mod synthetic;
 mod writer;
 
 pub use colour_setup::{Provenance, SentColourSetup};
-pub use reader::{FeedReader, FeedStats, Frame, OpenError, SenderInfo};
-pub use writer::{FeedWriter, FrameMeta, WriteError};
+pub use layout::process_alive;
+pub use reader::{FeedReader, FeedStats, Frame, OpenError, RegisteredSender, SenderInfo};
+pub use writer::{FeedWriter, FrameMeta, SenderIdentity, WriteError};
 
 use std::path::PathBuf;
 
 /// The protocol version this crate speaks.
 pub const VERSION_MAJOR: u32 = 1;
 /// 1.1: the slot's Colour Setup block has a defined format (ticket #16).
-pub const VERSION_MINOR: u32 = 1;
+/// 1.2: the Sender registry in the header, and guest Senders (ticket #19).
+pub const VERSION_MINOR: u32 = 2;
+
+/// Entries in the Sender registry of a version 1.2 Feed header.
+pub const REGISTRY_ENTRIES: usize = 24;
 
 /// A reader whose heartbeat is older than this is gone.
 pub const READER_TIMEOUT_NS: u64 = 1_000_000_000;

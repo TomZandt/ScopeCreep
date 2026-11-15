@@ -1,5 +1,6 @@
 //! The scopecreep app: one window with two panels, the Picture View of the latest Feed frame on the left and the
-//! luma waveform on the right, each with a quiet label.
+//! luma waveform on the right, each with a quiet label, and a quiet status line along the bottom (Resolve's
+//! playback rate, dropped frames, the Sender driving the Feed).
 //!
 //!   scopecreep [--feed <path>] [--luma primaries|match-resolve] [--no-scripting]
 //!
@@ -18,7 +19,7 @@ use glyphon::{Attrs, Buffer, Cache, Color, ColorMode, Family, FontSystem, Metric
 use picture_view::PictureView;
 use scopecreep::gpu_frame::FrameUploader;
 use scopecreep::waveform::{DEFAULT_LUMA_WEIGHTS, LumaWeights, MeasuredSpace, Measurement, PlotLayout, Waveform};
-use scopecreep::monitor::Monitor;
+use scopecreep::monitor::{FeedState, Monitor};
 use scopecreep::resolve_helper::ScriptHelper;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -39,6 +40,8 @@ const MARGIN: f32 = 12.0;
 const LABEL_SIZE: f32 = 12.5;
 const LABEL_STRIP: f32 = 30.0;
 const NOTICE_SIZE: f32 = 15.0;
+/// Height of one row of the status line, under the label strip.
+const STATUS_ROW: f32 = 20.0;
 const SCALE_COLOUR: Color = Color::rgb(112, 112, 112);
 const SCALE_SIZE: f32 = 11.0;
 
@@ -56,6 +59,7 @@ const MARKS: [Mark; 5] = [Mark::Above, Mark::Code(940), Mark::Code(512), Mark::C
 #[derive(Clone, Default, PartialEq)]
 struct Texts {
     label: String,
+    status: String,
     notice: Option<String>,
     has_picture: bool,
 }
@@ -114,6 +118,7 @@ struct AppWindow {
     atlas: TextAtlas,
     text_renderer: TextRenderer,
     label: Buffer,
+    status: Buffer,
     notice: Buffer,
     waveform_label: Buffer,
     /// The text of `waveform_label` as laid out.
@@ -166,6 +171,7 @@ impl AppWindow {
         let text_renderer = TextRenderer::new(&mut atlas, &device, wgpu::MultisampleState::default(), None);
         let label = Buffer::new(&mut font_system, Metrics::new(LABEL_SIZE, LABEL_SIZE * 1.4));
         let notice = Buffer::new(&mut font_system, Metrics::new(NOTICE_SIZE, NOTICE_SIZE * 1.5));
+        let status = Buffer::new(&mut font_system, Metrics::new(LABEL_SIZE, LABEL_SIZE * 1.4));
         let waveform_label = Buffer::new(&mut font_system, Metrics::new(LABEL_SIZE, LABEL_SIZE * 1.4));
         let marks = MARKS.iter().map(|&mark| (mark, Buffer::new(&mut font_system, Metrics::new(SCALE_SIZE, SCALE_SIZE * 1.3)))).collect();
 
@@ -177,6 +183,13 @@ impl AppWindow {
             std::thread::Builder::new().name("feed".into()).spawn(move || {
                 // The Resolve scripting helper is owned by this thread's Monitor: it is killed when the app quits.
                 let mut monitor = if scripting { Monitor::with_project_reader(&feed, Box::new(ScriptHelper::from_env())) } else { Monitor::new(&feed) };
+                // SCOPECREEP_FRAME_LOG=<file>: one line per Feed frame read and shown, with the Sender's timing (diagnostics).
+                if let Some(path) = std::env::var_os("SCOPECREEP_FRAME_LOG").filter(|p| !p.is_empty()) {
+                    match std::fs::File::create(&path) {
+                        Ok(f) => monitor.set_trace(Box::new(std::io::LineWriter::new(f))),
+                        Err(e) => eprintln!("scopecreep: cannot write the frame log: {e}"),
+                    }
+                }
                 // Frames put on the GPU and measured by the waveform.
                 let mut scope_frames = 0u64;
                 // The waveform measures in the Colour Setup's Output Colour Space (the default Measured Space).
@@ -191,7 +204,7 @@ impl AppWindow {
                         let s = monitor.status();
                         let fed = s.feed_stats.map_or(0, |f| f.frames_published);
                         eprintln!(
-                            "status feed={:?} fed={} viewer_frames={} scope_frames={} repeats={} cache_ignored={} dropped={} frame={:?} project={:?} timeline={:?} colour={:?} project_state={:?} reads={}",
+                            "status feed={:?} fed={} viewer_frames={} scope_frames={} repeats={} cache_ignored={} dropped={} frame={:?} project={:?} timeline={:?} colour={:?} project_state={:?} reads={} rate={} line={:?} notice={:?}",
                             s.feed,
                             fed,
                             s.viewer_frames,
@@ -204,7 +217,10 @@ impl AppWindow {
                             s.project.as_ref().and_then(|p| p.timeline.as_deref()),
                             s.colour_setup().map(|c| c.label()),
                             s.project_state,
-                            s.project_reads
+                            s.project_reads,
+                            s.playback_rate.map_or("-".to_string(), |r| format!("{r:.3}")),
+                            s.status_line(),
+                            s.notice()
                         );
                     }
                     let mut shown = false;
@@ -223,7 +239,12 @@ impl AppWindow {
                         measurement = now_measuring;
                         waveform.set_measurement(measurement);
                     }
-                    let now = Texts { label: status.picture_label(), notice: status.notice(), has_picture: status.picture.is_some() };
+                    let now = Texts {
+                        label: status.picture_label(),
+                        status: if status.feed == FeedState::Connected { status.status_line() } else { String::new() },
+                        notice: status.notice(),
+                        has_picture: status.picture.is_some(),
+                    };
                     if now != last {
                         *texts.lock().unwrap() = now.clone();
                         last = now;
@@ -252,6 +273,7 @@ impl AppWindow {
             atlas,
             text_renderer,
             label,
+            status,
             notice,
             waveform_label,
             waveform_text: String::new(),
@@ -275,30 +297,44 @@ impl AppWindow {
         let scale = self.window.scale_factor() as f32;
         let (width, height) = (self.config.width as f32, self.config.height as f32);
         let margin = MARGIN * scale;
-        let strip = LABEL_STRIP * scale;
+        let line = LABEL_SIZE * scale * 1.4;
+        // A long Picture View label wraps: the strip grows by a line for each extra line, so the label never runs
+        // into the status line. (Measured from the label as last laid out; a change of line count redraws.)
+        let label_lines = self.label.layout_runs().count().max(1);
+        let strip = LABEL_STRIP * scale + (label_lines - 1) as f32 * line;
+        let texts = self.texts.lock().unwrap().clone();
+        // Along the bottom, under the panel labels: the status line, and above it, while a picture is on screen, a
+        // notice in the same quiet size (it never covers the picture).
+        let notice_in_status = texts.has_picture && texts.notice.is_some();
+        let row = STATUS_ROW * scale;
+        let status_height = row * if notice_in_status { 2.0 } else { 1.0 };
         // Two panels side by side above the label strip: the Picture View on the left, the waveform on the right.
         let half = (width / 2.0).round();
-        let panel_height = (height - strip - margin).max(1.0);
+        let panel_height = (height - strip - status_height - margin).max(1.0);
         let picture_area = [margin, margin, (half - 1.5 * margin).max(1.0), panel_height];
         let waveform_area = [half + 0.5 * margin, margin, (width - half - 1.5 * margin).max(1.0), panel_height];
         let plot = PlotLayout::new(waveform_area, scale);
         let gutter = plot.plot()[0] - waveform_area[0];
         let attrs = Attrs::new().family(Family::SansSerif);
 
-        let texts = self.texts.lock().unwrap().clone();
         if texts != self.drawn {
-            // With a picture on screen, a notice joins the label line instead of covering the picture.
-            let (label, notice) = match (&texts.notice, texts.has_picture) {
-                (Some(n), true) => (format!("{}  ·  {}", texts.label, n), String::new()),
-                (n, _) => (texts.label.clone(), n.clone().unwrap_or_default()),
-            };
-            self.label.set_metrics(Metrics::new(LABEL_SIZE * scale, LABEL_SIZE * scale * 1.4));
+            let line = LABEL_SIZE * scale * 1.4;
+            self.label.set_metrics(Metrics::new(LABEL_SIZE * scale, line));
             self.label.set_size(Some(picture_area[2]), Some(strip));
-            self.label.set_text(&label, &attrs, Shaping::Advanced, None);
+            self.label.set_text(&texts.label, &attrs, Shaping::Advanced, None);
             self.label.shape_until_scroll(&mut self.font_system, false);
-            self.notice.set_metrics(Metrics::new(NOTICE_SIZE * scale, NOTICE_SIZE * scale * 1.5));
-            self.notice.set_size(Some((picture_area[2] - 2.0 * margin).max(1.0)), None);
-            self.notice.set_text(&notice, &attrs, Shaping::Advanced, Some(glyphon::cosmic_text::Align::Center));
+            self.status.set_metrics(Metrics::new(LABEL_SIZE * scale, line));
+            self.status.set_size(Some(width - 2.0 * margin), Some(line));
+            self.status.set_text(&texts.status, &attrs, Shaping::Advanced, None);
+            self.status.shape_until_scroll(&mut self.font_system, false);
+            let (size, notice_width, align) = if notice_in_status {
+                (LABEL_SIZE, width - 2.0 * margin, None)
+            } else {
+                (NOTICE_SIZE, (picture_area[2] - 2.0 * margin).max(1.0), Some(glyphon::cosmic_text::Align::Center))
+            };
+            self.notice.set_metrics(Metrics::new(size * scale, size * scale * 1.5));
+            self.notice.set_size(Some(notice_width), None);
+            self.notice.set_text(texts.notice.as_deref().unwrap_or(""), &attrs, Shaping::Advanced, align);
             self.notice.shape_until_scroll(&mut self.font_system, false);
             self.drawn = texts.clone();
         }
@@ -324,7 +360,16 @@ impl AppWindow {
         }
         let notice_height: f32 = self.notice.layout_runs().map(|run| run.line_height).sum();
         let bounds = TextBounds { left: 0, top: 0, right: width as i32, bottom: height as i32 };
-        let label_top = height - strip + (strip - LABEL_SIZE * scale * 1.4) / 2.0;
+        if self.label.layout_runs().count().max(1) != label_lines {
+            self.window.request_redraw(); // the label's line count changed: lay the panels out again
+        }
+        let label_top = height - status_height - strip + (LABEL_STRIP * scale - line) / 2.0;
+        let status_top = height - row + (row - LABEL_SIZE * scale * 1.4) / 2.0 - 0.25 * margin;
+        let (notice_left, notice_top) = if notice_in_status {
+            (margin, status_top - row)
+        } else {
+            (picture_area[0] + margin, (margin + (panel_height - notice_height) / 2.0).max(margin))
+        };
         let mark_line = SCALE_SIZE * scale * 1.3;
         let mark_y = |mark: Mark| match mark {
             Mark::Code(code) => plot.y_of_code(code),
@@ -333,10 +378,11 @@ impl AppWindow {
         };
         let mut areas = vec![
             TextArea { buffer: &self.label, left: picture_area[0], top: label_top, scale: 1.0, bounds, default_color: LABEL_COLOUR, custom_glyphs: &[] },
+            TextArea { buffer: &self.status, left: margin, top: status_top, scale: 1.0, bounds, default_color: LABEL_COLOUR, custom_glyphs: &[] },
             TextArea {
                 buffer: &self.notice,
-                left: picture_area[0] + margin,
-                top: (margin + (panel_height - notice_height) / 2.0).max(margin),
+                left: notice_left,
+                top: notice_top,
                 scale: 1.0,
                 bounds,
                 default_color: NOTICE_COLOUR,

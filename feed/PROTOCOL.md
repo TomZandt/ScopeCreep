@@ -1,4 +1,4 @@
-# The Feed protocol, version 1.1
+# The Feed protocol, version 1.2
 
 The Feed is how the **Sender** (inside Resolve) hands frames to the scopecreep app on the same machine. It is one shared-memory file holding a small header and a ring of frame slots. This document is the specification; `include/scopecreep_feed.h` (C, used by the Sender) and the `scopecreep-feed` Rust crate (used by the app) are two implementations of it, tested against each other (`tests/c_interop.rs`).
 
@@ -7,7 +7,7 @@ Think of it as a row of pigeonholes in a corridor between two rooms. The Sender 
 ## Rules that never change
 
 1. **Nobody waits.** No locks, no blocking calls. Every shared field that both sides touch is a lock-free atomic.
-2. **One Sender process writes, one app reads.**
+2. **One Sender process writes frames, one app reads.** The first running Sender process owns the Feed; Sender processes started while it runs (another Resolve) only register themselves (see "More than one Sender").
 3. **A Feed file's layout never changes.** To change the slot count or slot size the Sender makes a new file, renames it over the old name, then marks the old file retired. A reader keeps a valid mapping of the old file until it re-opens.
 4. **No reader, no work.** The Sender copies frames only while the reader's heartbeat is fresh.
 5. All integers are little-endian. All offsets are fixed. Reserved bytes are written as zero and ignored when read.
@@ -29,7 +29,7 @@ A Feed with `slot_count = 0` is valid: it means "a Sender is loaded but has not 
 |---|---|---|---|---|
 | 0 | 8 | `magic` | Sender | bytes `SCFEED\0\0` |
 | 8 | 4 | `version_major` | Sender | 1 |
-| 12 | 4 | `version_minor` | Sender | 1 |
+| 12 | 4 | `version_minor` | Sender | 2 |
 | 16 | 4 | `header_bytes` | Sender | 4096 |
 | 20 | 4 | `slot_header_bytes` | Sender | 4096 |
 | 24 | 4 | `slot_count` | Sender | number of slots, 0 = no ring yet |
@@ -57,7 +57,8 @@ A Feed with `slot_count = 0` is valid: it means "a Sender is loaded but has not 
 | 392 | 8 | `last_render_ns` (atomic) | Sender | monotonic time of the last render call |
 | 400 | 112 | reserved | | |
 | 512 | 256 | `sender_error` | Sender | UTF-8, NUL padded: the Sender's last error, empty = none |
-| 768 | 3328 | reserved | | |
+| 768 | 256 | reserved | | |
+| 1024 | 3072 | `registry` | every Sender process | 24 entries of 128 bytes listing Sender instances (version 1.2, see "More than one Sender") |
 
 **Clock.** Every `_ns` time is the system-wide monotonic clock in nanoseconds (`CLOCK_MONOTONIC` on Linux), so both processes can compare times.
 
@@ -112,7 +113,40 @@ A missing key is unknown, never a default: in particular a missing `aces_version
 
 ### Sender identity
 
-Resolve tells an OFX plugin no project name, timeline name or page (Stage 0). So the identity of a frame's Sender in the Feed is what is really available: `sender_pid` and `host_name` (header) plus `sender_instance` and `frame_rate` (slot). The app adds the project and timeline names from its scripting helper (ADR 0006); they are not in the Feed.
+Resolve tells an OFX plugin no project name, timeline name or page (Stage 0). So the identity of a frame's Sender in the Feed is what is really available: `sender_pid` and `host_name` (header) plus `sender_instance` and `frame_rate` (slot), and the same four in each registry entry. The app adds the project and timeline names from its scripting helper (ADR 0006); they are not in the Feed.
+
+## More than one Sender (version 1.2)
+
+There can be several Sender instances at once: one per timeline that has the Sender (Resolve creates an instance per timeline and keeps it across timeline and page switches), more if the user puts it on several nodes, and in rare cases instances in a second Resolve process. Exactly one drives the Scopes, chosen by rules both sides can apply:
+
+1. **Between processes, the first one keeps the Feed.** A Sender process publishes a Feed only if the file at the path is missing, is not a version 1.2+ Feed of this major version, is `retired`, belongs to its own process, or belongs to a process that is no longer running. Otherwise it is a **guest**: it maps that Feed's header, registers its instances in the registry and records their renders there, but never copies a frame, never builds a ring and never touches the owner's counters or `sender_error`. About once a second (on a render, without waiting) a guest checks the path again: if the owner published a new Feed file it re-registers there; if the owner has quit it publishes its own Feed (with only its own instances) and from then on sends frames.
+2. **Within the owning process, the app chooses** from the frames (`sender_instance`, `render_ns`), because only it sees every frame and the instances do not know about each other's timing:
+   - one after another (a timeline switch: one instance stops rendering, another starts) the Feed follows the instance that rendered last, at once; that is not a conflict;
+   - in step (two instances rendering the same frames, e.g. on a clip node and on the timeline node: each of their last two renders within half a frame period of the other's) the instance with the lowest number drives, whichever renders first, and stays driving while both keep rendering. The other is flagged. An instance whose first frame comes within half a period of the driver's does not take over before that is settled.
+3. **The app flags** every instance that renders in step with the driver, and every guest instance whose `last_render_ns` is under 2 s old in a running process, and names them.
+
+Instances of the owning process that are in step with the driver are still copied into the ring (the app discards their frames). That doubles the copy work while the conflict lasts; the app's notice asks the user to remove the extra Sender.
+
+### Registry entry (128 bytes, at header offset 1024 + 128 × i, i = 0 ... 23)
+
+| Offset | Size | Field | Meaning |
+|---|---|---|---|
+| 0 | 4 | `state` (atomic) | 0 free, 1 being filled in, 2 live. Readers ignore entries that are not live. |
+| 4 | 4 | `instance` | the instance number within its process (as `sender_instance`) |
+| 8 | 8 | `pid` | process id of the instance's host; the Feed's own process if equal to `sender_pid`, else a guest |
+| 16 | 8 | `frame_rate` (f64) | frames per second of the instance's timeline, 0 = unknown |
+| 24 | 8 | `registered_ns` | monotonic time it registered |
+| 32 | 8 | `last_render_ns` (atomic) | monotonic time of its last non-thumbnail render call, fed or not, 0 = none yet |
+| 40 | 8 | `last_frame_time` (f64) | source frame number of that render |
+| 48 | 8 | `renders` (atomic) | its non-thumbnail render calls so far |
+| 56 | 8 | reserved | |
+| 64 | 64 | `host_name` | UTF-8, NUL padded: the host name and version of the instance's process |
+
+- **Registering:** look for a live entry with the same `pid` and `instance` (reuse it); else compare-and-swap a free entry's `state` from 0 to 1, fill in the fields, store 2. A full registry is not an error: the instance goes unlisted.
+- **Unregistering** (the instance is destroyed): store 0 into `state`.
+- **Recording a render:** store `last_frame_time`, add 1 to `renders`, store `last_render_ns` last.
+- **A new Feed file** of the same owner (a ring built or replaced) starts with a copy of the old file's live entries at the same places, like the counters.
+- Entries of a process that died stay until the Feed file is replaced; readers ignore entries of processes that are not running.
 
 ## Slot protocol
 
@@ -157,6 +191,7 @@ Frames are therefore delivered in order, and a slow reader loses the oldest fram
 
 - `version_major` changes when an existing field moves or changes meaning. Readers refuse other major versions.
 - `version_minor` changes when reserved bytes get a meaning. Readers accept any minor version of their major version and must ignore what they do not know.
+- History: 1.0 the first version (ticket #14). 1.1 the slot's Colour Setup block (ticket #16). 1.2 the Sender registry and guest Senders (ticket #19); an older Feed has no registry (the bytes are zero, so it reads as empty), and a 1.2 Sender treats an older Feed of another process as not live and replaces it, as earlier Senders did.
 
 ## What the Feed does not decide
 

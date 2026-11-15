@@ -35,6 +35,21 @@ pub const H_RENDERS_UNSUPPORTED: usize = 376;
 pub const H_RENDER_CALL_NS_TOTAL: usize = 384;
 pub const H_LAST_RENDER_NS: usize = 392;
 pub const H_SENDER_ERROR: usize = 512;
+// Sender registry (version 1.2): REGISTRY_ENTRIES entries of R_ENTRY_BYTES from H_REGISTRY
+pub const H_REGISTRY: usize = 1024;
+pub const R_ENTRY_BYTES: usize = 128;
+pub const R_STATE: usize = 0;
+pub const R_INSTANCE: usize = 4;
+pub const R_PID: usize = 8;
+pub const R_FRAME_RATE: usize = 16;
+pub const R_REGISTERED_NS: usize = 24;
+pub const R_LAST_RENDER_NS: usize = 32;
+pub const R_LAST_FRAME_TIME: usize = 40;
+pub const R_RENDERS: usize = 48;
+pub const R_HOST_NAME: usize = 64;
+pub const ENTRY_FREE: u32 = 0;
+pub const ENTRY_CLAIMING: u32 = 1;
+pub const ENTRY_LIVE: u32 = 2;
 pub const SENDER_NAME_BYTES: usize = 64;
 pub const SENDER_VERSION_BYTES: usize = 32;
 pub const HOST_NAME_BYTES: usize = 64;
@@ -189,6 +204,17 @@ impl Drop for Mapping {
         // SAFETY: the mapping made in `map`, unmapped once.
         unsafe { libc::munmap(self.ptr as *mut libc::c_void, self.len) };
     }
+}
+
+/// Offset of registry entry `i`.
+pub fn entry(i: usize) -> usize {
+    H_REGISTRY + i * R_ENTRY_BYTES
+}
+
+/// Is process `pid` running? (Signal 0 only checks; EPERM means it exists but belongs to someone else.)
+pub fn process_alive(pid: u64) -> bool {
+    // SAFETY: signal 0 sends nothing.
+    pid != 0 && pid <= i32::MAX as u64 && (unsafe { libc::kill(pid as libc::pid_t, 0) } == 0 || io::Error::last_os_error().raw_os_error() == Some(libc::EPERM))
 }
 
 /// Total size of a Feed file with this layout.

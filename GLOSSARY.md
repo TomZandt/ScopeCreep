@@ -17,7 +17,7 @@ The scopecreep OFX plugin placed in a Resolve project that hands each frame Reso
 _Avoid_: Connector, link, OFX node, tap
 
 **Viewer Frame**:
-A frame Resolve renders because it is the frame on screen, as opposed to thumbnail renders, background cache renders and repeat renders of the same frame. Only Viewer Frames belong in the Feed. Resolve flags thumbnails but not cache renders, so the Sender tells cache renders apart by the playhead and the pacing of renders.
+A frame Resolve renders because it is the frame on screen, as opposed to thumbnail renders, background cache renders and repeat renders of the same frame. Only Viewer Frames reach the Scopes. Resolve flags thumbnails (the Sender never feeds them) but not cache renders, so the app tells cache renders apart by the pacing of renders: a cache fill runs faster than real time, in numbered order, often two frames at once.
 _Avoid_: Current frame, live frame, real frame
 
 **Capture**:

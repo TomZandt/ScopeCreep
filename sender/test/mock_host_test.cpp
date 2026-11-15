@@ -16,6 +16,8 @@
 
 #include <cuda_runtime.h>
 #include <dlfcn.h>
+#include <signal.h>
+#include <sys/wait.h>
 
 #include <chrono>
 #include <cstdarg>
@@ -235,10 +237,64 @@ static bool reopen(scfeed_reader& r, const char* path)
     return scfeed_reader_open(&r, path) == SCFEED_OK;
 }
 
+// Run as a second Resolve: another live process already owns the Feed. The Sender must join it as a guest
+// (registered, no frames, no counters), and take the Feed over once the owner has quit.
+static int guestTest(const char* feed)
+{
+    const pid_t other = fork();
+    if (other == 0) { pause(); _exit(0); }  // "the first Resolve": alive until killed
+    scfeed_writer ow;
+    if (scfeed_writer_create(&ow, feed, 4, 64 * 36 * 16, "other", "Resolve A") != SCFEED_OK) return 2;
+    ow.hdr->sender_pid = (uint64_t)other;
+    scfeed_registry_add(ow.hdr, (uint64_t)other, 1, 25.0, "Resolve A");
+    scfeed_reader r;
+    scfeed_reader_open(&r, feed);
+
+    std::printf("a second Resolve joins the Feed as a guest\n");
+    CHECK(gPlugin->mainEntry(kOfxActionLoad, nullptr, nullptr, nullptr) == kOfxStatOK, "load");
+    setD((OfxPropertySetHandle)&gEffectProps, kOfxImageEffectPropFrameRate, 0, 50.0);
+    CHECK(gPlugin->mainEntry(kOfxActionCreateInstance, gEffect, nullptr, nullptr) == kOfxStatOK, "create instance");
+    CHECK(scfeed_load32(&r.hdr->retired) == 0 && r.hdr->sender_pid == (uint64_t)other, "the Feed is not replaced");
+    GpuFrame f(64, 36);
+    f.fill(1);
+    render(f, 7.0);
+    CHECK(f.passedThrough(), "the picture passes through unchanged");
+    std::this_thread::sleep_for(std::chrono::milliseconds(50));
+    CHECK(r.hdr->next_sequence == 0 && scfeed_reader_claim(&r) < 0, "the guest copies nothing");
+    CHECK(r.hdr->renders_total == 0, "and does not touch the owner's counters");
+    const int e = scfeed_registry_find(r.hdr, (uint64_t)getpid(), 1);
+    CHECK(e >= 0 && r.hdr->registry[e].renders == 1 && r.hdr->registry[e].frame_rate == 50.0, "its instance and render are registered");
+
+    std::printf("the first Resolve quits\n");
+    kill(other, SIGKILL);
+    waitpid(other, nullptr, 0);
+    std::this_thread::sleep_for(std::chrono::milliseconds(1100));
+    f.fill(2);
+    render(f, 8.0);
+    CHECK(scfeed_load32(&r.hdr->retired) == 1, "within a second the guest takes the Feed over");
+    CHECK(reopen(r, feed), "the app re-attaches");
+    CHECK(r.hdr->sender_pid == (uint64_t)getpid(), "the Feed is now this Resolve's");
+    CHECK(scfeed_registry_find(r.hdr, (uint64_t)getpid(), 1) >= 0 && scfeed_registry_find(r.hdr, (uint64_t)other, 1) < 0, "listing only its own instances");
+    f.fill(3);
+    render(f, 9.0);  // builds the ring
+    reopen(r, feed);
+    f.fill(4);
+    render(f, 10.0);
+    const int i = nextFrame(r);
+    CHECK(i >= 0 && scfeed_slot_at(r.hdr, (uint32_t)i)->frame_time == 10.0, "and it sends frames");
+    scfeed_reader_close(&r);
+    gPlugin->mainEntry(kOfxActionDestroyInstance, gEffect, nullptr, nullptr);
+    scfeed_writer_close(&ow);
+    unlink(feed);
+    std::printf(gFails ? "\nSender guest test: %d FAILED\n" : "\nSender guest test: all passed\n", gFails);
+    return gFails ? 1 : 0;
+}
+
 int main(int argc, char** argv)
 {
     setvbuf(stdout, nullptr, _IOLBF, 0);
-    if (argc < 2) { std::printf("usage: mock_host_test <path to .ofx>\n"); return 2; }
+    if (argc < 2) { std::printf("usage: mock_host_test <path to .ofx> [--guest]\n"); return 2; }
+    const bool guest = argc > 2 && !std::strcmp(argv[2], "--guest");
     char feed[128];
     std::snprintf(feed, sizeof feed, "/dev/shm/scopecreep-sender-test-%d", (int)getpid());
     setenv(SCFEED_PATH_ENV, feed, 1);
@@ -262,6 +318,12 @@ int main(int argc, char** argv)
     setS((OfxPropertySetHandle)&hostProps, kOfxPropVersionLabel, 0, "9.9");
     OfxHost host{(OfxPropertySetHandle)&hostProps, fetchSuite};
     gPlugin->setHost(&host);
+    if (guest) {
+        gPlugin->mainEntry(kOfxActionDescribe, gEffect, nullptr, nullptr);
+        Props gctx;
+        gPlugin->mainEntry(kOfxImageEffectActionDescribeInContext, gEffect, (OfxPropertySetHandle)&gctx, nullptr);
+        return guestTest(feed);
+    }
     CHECK(gPlugin->mainEntry(kOfxActionLoad, nullptr, nullptr, nullptr) == kOfxStatOK, "load");
     CHECK(gPlugin->mainEntry(kOfxActionDescribe, gEffect, nullptr, nullptr) == kOfxStatOK, "describe");
     CHECK(gEffectProps.m[kOfxPropLabel][0].s == "scopecreep Sender", "label is 'scopecreep Sender'");
@@ -304,6 +366,12 @@ int main(int argc, char** argv)
     CHECK(reopen(r, feed), "the reader re-attaches to the new Feed");
     CHECK(r.hdr->slot_count == 4 && r.hdr->slot_capacity >= 64 * 36 * 16, "the new Feed has a ring that fits the frame");
     CHECK(r.hdr->renders_total == 3 && r.hdr->renders_idle == 1 && r.hdr->renders_thumbnail == 1, "the counters carry over to the new Feed");
+    {
+        const int e = scfeed_registry_find(r.hdr, (uint64_t)getpid(), 1);
+        CHECK(e >= 0, "the instance is listed in the registry, and the listing carries over to the new Feed");
+        CHECK(e >= 0 && r.hdr->registry[e].frame_rate == 24.0 && std::string(r.hdr->registry[e].host_name) == "MockHost 9.9", "with its timeline rate and host");
+        CHECK(e >= 0 && r.hdr->registry[e].renders == 2 && r.hdr->registry[e].last_frame_time == 12.0, "every render but the thumbnail is recorded against it");
+    }
 
     std::printf("frames reach the Feed bit for bit\n");
     bool exact = true, meta = true, through = true;

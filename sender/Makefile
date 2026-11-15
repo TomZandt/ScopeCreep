@@ -52,6 +52,7 @@ build/mock_host_test: test/mock_host_test.cpp ../feed/include/scopecreep_feed.h
 test: $(PLUGIN) build/mock_host_test
 	@! ldd $(PLUGIN) | grep -i -E 'openexr|imath|iex|ilmthread' || (echo "the Sender must not link OpenEXR or Imath"; exit 1)
 	./build/mock_host_test $(PLUGIN)
+	./build/mock_host_test $(PLUGIN) --guest
 
 install: $(PLUGIN)
 	@test -d "$(OFX_PLUGIN_DIR)" && test -w "$(OFX_PLUGIN_DIR)" || { \

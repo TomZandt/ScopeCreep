@@ -7,6 +7,10 @@
  *   feed_c_tool serve <path> <width> <height> <ms>               act as a Sender for <ms>: copy only while a reader is attached
  *   feed_c_tool write-colour <path> <provenance> <text>          write two 16x9 frames, the second with this Colour Setup
  *   feed_c_tool read-colour <path>                               print the Colour Setup of every waiting frame
+ *   feed_c_tool guest <path> <renders>                           start as a Sender process does (join a live Feed of another
+ *                                                                process as a guest, else publish), print the role, record renders
+ *   feed_c_tool registry <path>                                  print the live registry entries
+ * The writing commands register their frames' Sender instance (7, or 3 for `guest`) in the registry.
  */
 #include "scopecreep_feed.h"
 
@@ -33,7 +37,9 @@ static int cmd_write(const char* path, uint32_t slots, uint32_t width, uint32_t 
 {
     scfeed_writer w;
     if (scfeed_writer_create(&w, path, slots, (uint64_t)width * height * 16, "c-tool", "feed_c_tool") != SCFEED_OK) { perror("create"); return 1; }
+    scfeed_registry_add(w.hdr, (uint64_t)getpid(), 7, 25.0, "feed_c_tool");
     for (uint64_t f = 0; f < frames; ++f) {
+        scfeed_registry_note(w.hdr, (uint64_t)getpid(), 7, 100.0 + (double)f, scfeed_now_ns());
         int i = scfeed_writer_acquire(&w);
         if (i < 0) continue;
         fill_slot(&w, i, width, height, f);
@@ -123,8 +129,44 @@ static int cmd_serve(const char* path, uint32_t width, uint32_t height, uint64_t
     return 0;
 }
 
+static int cmd_guest(const char* path, int renders)
+{
+    const uint64_t me = (uint64_t)getpid();
+    scfeed_header* owner = scfeed_live_feed_of_another(path, me);
+    scfeed_writer w;
+    scfeed_header* h = owner;
+    if (!owner) {
+        if (scfeed_writer_create(&w, path, 0, 0, "c-tool", "feed_c_tool") != SCFEED_OK) { perror("create"); return 1; }
+        h = w.hdr;
+    }
+    printf("%s\n", owner ? "guest" : "owner");
+    scfeed_registry_add(h, me, 3, 25.0, "feed_c_tool");
+    for (int k = 0; k < renders; ++k) scfeed_registry_note(h, me, 3, (double)k, scfeed_now_ns());
+    if (owner) munmap(owner, SCFEED_HEADER_BYTES);
+    else scfeed_writer_close(&w);
+    return 0;
+}
+
+static int cmd_registry(const char* path)
+{
+    int fd = open(path, O_RDONLY | O_CLOEXEC);
+    if (fd < 0) { perror("open"); return 1; }
+    const scfeed_header* h = (const scfeed_header*)mmap(NULL, SCFEED_HEADER_BYTES, PROT_READ, MAP_SHARED, fd, 0);
+    close(fd);
+    if (h == MAP_FAILED) { perror("mmap"); return 1; }
+    for (uint32_t i = 0; i < SCFEED_REGISTRY_ENTRIES; ++i) {
+        const scfeed_entry* e = &h->registry[i];
+        if (scfeed_load32(&e->state) != SCFEED_ENTRY_LIVE) continue;
+        printf("%llu %u %.3f %llu %.3f %llu %s\n", (unsigned long long)e->pid, e->instance, e->frame_rate, (unsigned long long)e->last_render_ns,
+               e->last_frame_time, (unsigned long long)e->renders, e->host_name);
+    }
+    return 0;
+}
+
 int main(int argc, char** argv)
 {
+    if (argc == 4 && !strcmp(argv[1], "guest")) return cmd_guest(argv[2], atoi(argv[3]));
+    if (argc == 3 && !strcmp(argv[1], "registry")) return cmd_registry(argv[2]);
     if (argc == 7 && !strcmp(argv[1], "write"))
         return cmd_write(argv[2], (uint32_t)atoi(argv[3]), (uint32_t)atoi(argv[4]), (uint32_t)atoi(argv[5]), (uint64_t)atoll(argv[6]));
     if (argc == 5 && !strcmp(argv[1], "write-version")) {

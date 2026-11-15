@@ -111,7 +111,7 @@ fn a_colour_setup_written_by_the_c_writer_is_read_by_the_rust_reader() {
     let text = "timeline=DaVinci WG/Intermediate\noutput=P3-D65\nlevels=full\n";
     run(&["write-colour", path.to_str().unwrap(), "2", text]);
     let mut reader = FeedReader::open(&path).unwrap();
-    assert_eq!(reader.sender().protocol, (1, 1), "the C header speaks 1.1 too");
+    assert_eq!(reader.sender().protocol, (1, 2), "the C header speaks the same version (1.2)");
     let none = reader.next_frame().unwrap();
     assert_eq!(none.colour_setup(), None, "frame 1 has no Colour Setup");
     drop(none);
@@ -202,4 +202,59 @@ fn a_synthetic_test_card_reaches_the_c_reader() {
     let meta = FrameMeta { width: 32, height: 18, frame_time: 0.0, frame_rate: 24.0, render_ns: now_ns(), sender_instance: 1 };
     writer.write_frame(&meta, &synthetic::test_card(32, 18, 0)).unwrap();
     assert!(run(&["read", path.to_str().unwrap()]).contains("\n1 32 18 512 0 0.000 24.000 1 "));
+}
+
+// ------------------------------------------------------------------ the Sender registry (protocol 1.2)
+
+#[test]
+fn instances_the_c_writer_registers_are_listed_by_the_rust_reader() {
+    let path = temp_feed("c-registry");
+    // `write` registers instance 7 at 25 fps and records each frame's render against it.
+    run(&["write", path.to_str().unwrap(), "4", "8", "8", "3"]);
+    let reader = FeedReader::open(&path).unwrap();
+    let reg = reader.registry();
+    assert_eq!(reg.len(), 1);
+    let e = &reg[0];
+    assert_eq!((e.instance, e.frame_rate, e.renders, e.last_frame_time, e.host.as_str()), (7, 25.0, 3, 102.0, "feed_c_tool"));
+    assert!(e.last_render_ns > 0 && e.pid > 0);
+}
+
+#[test]
+fn a_c_sender_started_while_another_resolve_owns_the_feed_joins_as_a_guest() {
+    let path = temp_feed("c-guest");
+    let mut owner = FeedWriter::create(&path, 4, 8 * 8 * 16).unwrap(); // this test process is the first Resolve
+    owner.register(1, 24.0);
+    let mut reader = FeedReader::open(&path).unwrap();
+    // `guest`: start as a Sender does; print the role, then record 10 renders of instance 3 without sending.
+    assert_eq!(run(&["guest", path.to_str().unwrap(), "10"]), "guest\n");
+    assert_eq!(reader.sender().pid, std::process::id() as u64, "the Feed was not replaced");
+    assert!(!reader.retired());
+    assert!(reader.next_frame().is_none());
+    let guest = reader.registry().into_iter().find(|e| e.pid != std::process::id() as u64).expect("the guest registered");
+    assert_eq!((guest.instance, guest.frame_rate, guest.renders, guest.host.as_str()), (3, 25.0, 10, "feed_c_tool"));
+    assert_eq!(reader.stats().renders_total, 0, "the guest's renders are not counted as the owner's");
+}
+
+#[test]
+fn a_c_sender_replaces_a_feed_whose_resolve_has_quit() {
+    let path = temp_feed("c-stale");
+    let mut gone = Command::new("sleep").arg("0").spawn().unwrap();
+    let dead = gone.id() as u64;
+    gone.wait().unwrap();
+    let mut owner = FeedWriter::start(&path, scopecreep_feed::SenderIdentity { pid: dead, host: "gone".into() }).unwrap();
+    owner.register(1, 24.0);
+    assert_eq!(run(&["guest", path.to_str().unwrap(), "2"]), "owner\n");
+    let reader = FeedReader::open(&path).unwrap();
+    assert_eq!(reader.sender().host, "feed_c_tool");
+    assert_eq!(reader.registry().iter().map(|e| e.instance).collect::<Vec<_>>(), [3]);
+}
+
+#[test]
+fn the_c_and_rust_registries_have_the_same_layout() {
+    let path = temp_feed("c-layout");
+    let mut w = FeedWriter::create(&path, 0, 0).unwrap();
+    w.register(5, 59.94);
+    w.note_render(5, 1234.0, 42);
+    // `registry`: print every live entry as the C header reads it
+    assert_eq!(run(&["registry", path.to_str().unwrap()]), format!("{} 5 59.940 42 1234.000 1 synthetic frame writer\n", std::process::id()));
 }

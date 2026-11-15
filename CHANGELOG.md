@@ -21,9 +21,14 @@ The format follows [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/
 - When the Colour Setup cannot be read, the label says it is unknown and a notice says how to fix it (external scripting, or the Sender node) (#16).
 - The app knows the Resolve project and timeline names (from scripting) for the Sender's identity (#16).
 - `--no-scripting`: never read the project by Resolve scripting (#16).
+- A quiet status line under the panels: Resolve's live playback rate, measured from the Sender's own render times (within ±0.01 fps of the timeline rate at 24, 25 and 50 fps in Resolve; "paused" when stopped), dropped frames split into "app too slow" and "Sender busy", and the Sender driving the Feed with its project and timeline names when known (#19).
+- More than one Sender: exactly one drives the Feed. Senders rendering the same frames are settled by a fixed rule (the instance Resolve created first in its process) and the others are named in a notice; a timeline switch simply follows the Sender now rendering. A second Resolve process joins the Feed as a guest, sends no frames and is flagged; it takes the Feed over when the first Resolve quits (#19).
+- `SCOPECREEP_FRAME_LOG=<file>`: a per-frame timing log of what the app read and showed, for diagnostics (#19).
 
 ### Changed
 
+- Feed protocol 1.2: a Sender registry in the header (instances, timeline rate, host, last render) and guest Senders from a second Resolve process. Older readers and writers stay compatible (#19).
+- Background cache fills while paused are now recognised at 50 and 60 fps too (they render about 1.6-2x real time, in pairs, from two threads), so the Scopes stay on the viewer frame; a ragged playback start is held back for a moment and then shown (#19).
 - Feed protocol 1.1: the slot's Colour Setup block now has a format (provenance plus `key=value` lines). It carries the Sender's manual override; 1.0 readers and writers stay compatible (#16).
 - Feed frames go to the GPU once, through reused staging buffers, for the Picture View and the waveform to share: the app now keeps up with UHD float at 60 fps (#15).
 

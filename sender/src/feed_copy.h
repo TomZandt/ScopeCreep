@@ -28,7 +28,23 @@ struct FrameInfo {
 enum class Render { Fed, Idle, Thumbnail, Unsupported };  // what a render call turned out to be, for the Feed's counters
 
 // Publish the Feed (with no ring yet) so an app can find the Sender. Safe to call repeatedly and from any thread.
+// If the Feed already belongs to another running Resolve, this process joins it as a guest instead: its
+// instances are listed in the Feed's registry and their renders recorded, but it never copies a frame
+// (feed/PROTOCOL.md, "More than one Sender").
 void feedOpen(const char* hostName);
+
+// Is this process a guest in another Resolve's Feed?
+bool feedIsGuest();
+
+// A Sender instance was created / destroyed: list it in, or take it off, the Feed's registry. Not on the render
+// path (may wait briefly for the Feed's lock).
+void feedRegister(uint32_t instance, double frameRate);
+void feedUnregister(uint32_t instance);
+
+// Record a non-thumbnail render call of `instance` in the registry (a few atomic stores). About once a second a
+// guest also checks, without waiting, whether the owner has replaced its Feed or quit (then this process takes
+// the Feed over).
+void feedNoteRender(uint32_t instance, double frameTime, uint64_t renderNs);
 
 // Is an app attached to the Feed right now? One atomic load and a clock read.
 bool feedReaderPresent();

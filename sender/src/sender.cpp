@@ -237,11 +237,13 @@ OfxStatus createInstance(OfxImageEffectHandle effect)
         gParam->paramGetHandle(ps, PARAM_ACES, &inst->aces, nullptr);
     }
     gProp->propSetPointer(props, kOfxPropInstanceData, 0, inst);
+    scopecreep::feedRegister(inst->id, inst->frameRate);
     return kOfxStatOK;
 }
 
 OfxStatus destroyInstance(OfxImageEffectHandle effect)
 {
+    if (Instance* inst = instanceOf(effect)) scopecreep::feedUnregister(inst->id);
     delete instanceOf(effect);
     return kOfxStatOK;
 }
@@ -287,6 +289,9 @@ OfxStatus render(OfxImageEffectHandle effect, OfxPropertySetHandle inArgs)
 
     int thumbnail = 0;
     gProp->propGetInt(srcClipProps, kOfxImageClipPropThumbnail, 0, &thumbnail);
+    // Every other render is recorded against this instance in the Feed's registry, fed or not: it is how the
+    // app tells which Senders are active (feed/PROTOCOL.md, "More than one Sender").
+    if (!thumbnail) scopecreep::feedNoteRender(inst->id, time, t0);
 
     scopecreep::Render what = scopecreep::Render::Idle;
     if (cudaEnabled) {
@@ -294,7 +299,7 @@ OfxStatus render(OfxImageEffectHandle effect, OfxPropertySetHandle inArgs)
             return kOfxStatFailed;
         if (thumbnail) {
             what = scopecreep::Render::Thumbnail;
-        } else if (scopecreep::feedReaderPresent()) {
+        } else if (scopecreep::feedReaderPresent() && !scopecreep::feedIsGuest()) {
             scopecreep::FrameInfo info;
             info.width = width;
             info.height = height;
@@ -315,7 +320,7 @@ OfxStatus render(OfxImageEffectHandle effect, OfxPropertySetHandle inArgs)
         for (int y = y1; y < y2; ++y) std::memcpy(dst.at(x1, y), src.at(x1, y), (size_t)width * 16);
         if (thumbnail) {
             what = scopecreep::Render::Thumbnail;
-        } else if (scopecreep::feedReaderPresent()) {
+        } else if (scopecreep::feedReaderPresent() && !scopecreep::feedIsGuest()) {
             what = scopecreep::Render::Unsupported;
             scopecreep::feedSetError("Resolve is not rendering this effect with CUDA, so no frames can be sent. Set GPU processing mode to CUDA in Resolve's preferences.");
         }

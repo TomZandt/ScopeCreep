@@ -15,7 +15,11 @@
 #include <cstring>
 #include <mutex>
 #include <string>
+#include <utility>
 #include <vector>
+
+#include <sys/mman.h>
+#include <unistd.h>
 
 #include <cuda_runtime.h>
 
@@ -52,6 +56,38 @@ uint64_t gRetryAfterNs = 0;
 std::atomic<bool> gErrorShown{false};
 std::string gHostName;
 std::once_flag gOpenOnce;
+// While this process is a guest: the header of the other Resolve's Feed (never unmapped: a render thread may
+// still be using an old one; they are 4 KB and replaced rarely). nullptr while this process owns the Feed.
+std::atomic<scfeed_header*> gGuest{nullptr};
+std::atomic<uint64_t> gNextGuestCheckNs{0};
+constexpr uint64_t kGuestCheckNs = 1000000000ull;
+std::vector<std::pair<uint32_t, double>> gRegistered;  // this process's instances (guarded by gMu)
+
+uint64_t myPid() { return (uint64_t)getpid(); }
+
+// The header the registry is in: the other Resolve's Feed while a guest, else our own.
+scfeed_header* registryHeader()
+{
+    if (scfeed_header* g = gGuest.load(std::memory_order_acquire)) return g;
+    Ring* r = gRing.load(std::memory_order_acquire);
+    return r ? r->w.hdr : nullptr;
+}
+
+// Publish a Feed with no ring and make it current. Caller holds gMu or is in feedOpen's call_once.
+bool publishEmptyFeed()
+{
+    Ring* r = new Ring();
+    if (scfeed_writer_create(&r->w, scfeed_path(), 0, 0, SCOPECREEP_SENDER_VERSION, gHostName.c_str()) != SCFEED_OK) {
+        std::fprintf(stderr, "scopecreep Sender: cannot create the Feed at %s: %s\n", scfeed_path(), std::strerror(errno));
+        delete r;
+        return false;
+    }
+    if (Ring* old = gRing.exchange(r, std::memory_order_acq_rel)) {
+        old->retiredNs = scfeed_now_ns();
+        gRetired.push_back(old);
+    }
+    return true;
+}
 
 int stagingCount()
 {
@@ -123,9 +159,10 @@ Ring* buildRing(size_t frameBytes, const Ring* previous, std::string& err)
         freeRing(r);
         return nullptr;
     }
-    if (previous && previous->w.hdr) {  // the counters carry on across Feed files
+    if (previous && previous->w.hdr) {  // the counters and the registry carry on across Feed files
         const scfeed_header* o = previous->w.hdr;
         scfeed_header* n = r->w.hdr;
+        scfeed_registry_copy(n, o, 0);
         n->frames_published = scfeed_load64(&o->frames_published);
         n->drops_overwritten = scfeed_load64(&o->drops_overwritten);
         n->drops_busy = scfeed_load64(&o->drops_busy);
@@ -170,24 +207,77 @@ void feedOpen(const char* hostName)
 {
     std::call_once(gOpenOnce, [&] {
         gHostName = hostName ? hostName : "";
-        Ring* r = new Ring();
-        if (scfeed_writer_create(&r->w, scfeed_path(), 0, 0, SCOPECREEP_SENDER_VERSION, gHostName.c_str()) != SCFEED_OK) {
-            std::fprintf(stderr, "scopecreep Sender: cannot create the Feed at %s: %s\n", scfeed_path(), std::strerror(errno));
-            delete r;
+        // The first running Resolve keeps the Feed; a second one joins it as a guest.
+        if (scfeed_header* owner = scfeed_live_feed_of_another(scfeed_path(), myPid())) {
+            gGuest.store(owner, std::memory_order_release);
+            gNextGuestCheckNs.store(scfeed_now_ns() + kGuestCheckNs, std::memory_order_relaxed);
             return;
         }
-        gRing.store(r, std::memory_order_release);
+        publishEmptyFeed();
     });
+}
+
+bool feedIsGuest() { return gGuest.load(std::memory_order_acquire) != nullptr; }
+
+void feedRegister(uint32_t instance, double frameRate)
+{
+    std::lock_guard<std::mutex> lock(gMu);
+    gRegistered.emplace_back(instance, frameRate);
+    if (scfeed_header* h = registryHeader()) scfeed_registry_add(h, myPid(), instance, frameRate, gHostName.c_str());
+}
+
+void feedUnregister(uint32_t instance)
+{
+    std::lock_guard<std::mutex> lock(gMu);
+    for (size_t i = 0; i < gRegistered.size(); ++i)
+        if (gRegistered[i].first == instance) { gRegistered.erase(gRegistered.begin() + (long)i); break; }
+    if (scfeed_header* h = registryHeader()) scfeed_registry_remove(h, myPid(), instance);
+}
+
+// A guest's once-a-second look at the Feed. Caller holds gMu.
+void refreshGuest(scfeed_header* guest)
+{
+    scfeed_header* owner = scfeed_live_feed_of_another(scfeed_path(), myPid());
+    if (owner) {
+        if (owner->feed_id == guest->feed_id) {
+            munmap(owner, SCFEED_HEADER_BYTES);
+            return;
+        }
+        gGuest.store(owner, std::memory_order_release);  // the owner published a new Feed file: follow it
+    } else {
+        // The owner has quit (or its Feed is gone): this process takes the Feed over.
+        if (!publishEmptyFeed()) return;
+        gGuest.store(nullptr, std::memory_order_release);
+    }
+    scfeed_header* h = registryHeader();
+    for (const auto& reg : gRegistered) scfeed_registry_add(h, myPid(), reg.first, reg.second, gHostName.c_str());
+}
+
+void feedNoteRender(uint32_t instance, double frameTime, uint64_t renderNs)
+{
+    scfeed_header* h = registryHeader();
+    if (!h) return;
+    scfeed_registry_note(h, myPid(), instance, frameTime, renderNs);
+    scfeed_header* guest = gGuest.load(std::memory_order_acquire);
+    if (!guest || renderNs < gNextGuestCheckNs.load(std::memory_order_relaxed)) return;
+    std::unique_lock<std::mutex> lock(gMu, std::try_to_lock);
+    if (!lock.owns_lock()) return;  // never wait on the render path; try again on a later render
+    gNextGuestCheckNs.store(renderNs + kGuestCheckNs, std::memory_order_relaxed);
+    if (gGuest.load(std::memory_order_acquire) == guest) refreshGuest(guest);
 }
 
 bool feedReaderPresent()
 {
+    // A guest reports the owner's app too, so Resolve keeps calling render and the renders can be registered
+    // (the app flags them). A guest never copies a frame.
+    if (const scfeed_header* g = gGuest.load(std::memory_order_acquire)) return scfeed_reader_present(g, scfeed_now_ns());
     const Ring* r = gRing.load(std::memory_order_acquire);
     return r && scfeed_reader_present(r->w.hdr, scfeed_now_ns());
 }
 
 void feedCount(Render what, uint64_t renderNs, uint64_t callNs)
 {
+    if (feedIsGuest()) return;  // the counters belong to the owner's renders
     Ring* r = gRing.load(std::memory_order_acquire);
     if (!r) return;
     scfeed_header* h = r->w.hdr;
@@ -201,6 +291,7 @@ void feedCount(Render what, uint64_t renderNs, uint64_t callNs)
 
 void feedSetError(const char* text)
 {
+    if (feedIsGuest()) return;  // the owner's error line is not ours to write
     const bool clear = !text || !*text;
     if (clear && !gErrorShown.load(std::memory_order_relaxed)) return;
     setError(gRing.load(std::memory_order_acquire), clear ? "" : text);
@@ -213,6 +304,7 @@ bool cudaPassthrough(void* hostStream, void* dst, size_t dstRowBytes, const void
 
 bool feedSubmitCuda(void* hostStream, const void* src, size_t srcRowBytes, const FrameInfo& info)
 {
+    if (feedIsGuest()) return false;  // a guest sends no frames
     Ring* r = gRing.load(std::memory_order_acquire);
     if (!r || info.width <= 0 || info.height <= 0) return false;
     std::unique_lock<std::mutex> lock(gMu, std::try_to_lock);

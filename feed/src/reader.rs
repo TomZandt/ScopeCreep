@@ -1,7 +1,7 @@
 //! The reader side of the Feed: what the app uses.
 use crate::SentColourSetup;
 use crate::layout::*;
-use crate::{READER_TIMEOUT_NS, VERSION_MAJOR, VERSION_MINOR, now_ns};
+use crate::{READER_TIMEOUT_NS, REGISTRY_ENTRIES, VERSION_MAJOR, VERSION_MINOR, now_ns};
 use std::fs::OpenOptions;
 use std::io;
 use std::os::unix::fs::MetadataExt;
@@ -45,6 +45,25 @@ pub struct SenderInfo {
     pub host: String,
     pub pid: u64,
     pub protocol: (u32, u32),
+}
+
+/// A Sender instance listed in the Feed's registry (feed/PROTOCOL.md, "More than one Sender"). Instances of the
+/// Feed's own Sender process send frames; instances of any other process are guests and send none.
+#[derive(Clone, Debug, PartialEq)]
+pub struct RegisteredSender {
+    pub pid: u64,
+    pub instance: u32,
+    /// Frames per second of the instance's timeline, 0 = unknown.
+    pub frame_rate: f64,
+    /// Host name and version of the instance's process.
+    pub host: String,
+    pub registered_ns: u64,
+    /// Monotonic time of its last render call, 0 = none yet.
+    pub last_render_ns: u64,
+    /// Source frame number of its last render call.
+    pub last_frame_time: f64,
+    /// Render calls so far (thumbnails excluded).
+    pub renders: u64,
 }
 
 /// The Feed's counters, as the Sender keeps them (feed/PROTOCOL.md).
@@ -157,9 +176,29 @@ impl FeedReader {
 
     /// Is the Sender's host process still running?
     pub fn sender_alive(&self) -> bool {
-        let pid = self.map.u64(H_SENDER_PID);
-        // SAFETY: signal 0 only checks that the process exists.
-        pid != 0 && (unsafe { libc::kill(pid as libc::pid_t, 0) } == 0 || io::Error::last_os_error().raw_os_error() == Some(libc::EPERM))
+        process_alive(self.map.u64(H_SENDER_PID))
+    }
+
+    /// The Sender instances listed in the registry, in registry order. Empty for a version 1.0 Feed.
+    pub fn registry(&self) -> Vec<RegisteredSender> {
+        let m = &self.map;
+        if m.u32(H_VERSION_MINOR) < 2 {
+            return Vec::new();
+        }
+        (0..REGISTRY_ENTRIES)
+            .map(entry)
+            .filter(|&e| m.atomic_u32(e + R_STATE).load(Acquire) == ENTRY_LIVE)
+            .map(|e| RegisteredSender {
+                pid: m.u64(e + R_PID),
+                instance: m.u32(e + R_INSTANCE),
+                frame_rate: m.f64(e + R_FRAME_RATE),
+                host: m.text(e + R_HOST_NAME, HOST_NAME_BYTES),
+                registered_ns: m.u64(e + R_REGISTERED_NS),
+                last_render_ns: m.atomic_u64(e + R_LAST_RENDER_NS).load(Acquire),
+                last_frame_time: m.f64(e + R_LAST_FRAME_TIME),
+                renders: m.atomic_u64(e + R_RENDERS).load(Relaxed),
+            })
+            .collect()
     }
 
     /// The Sender's last error, if it reported one.

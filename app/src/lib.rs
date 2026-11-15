@@ -2,6 +2,8 @@
 //! the part with behaviour worth testing: what the app makes of the Feed.
 pub mod colour_setup;
 pub mod monitor;
+pub mod playback_rate;
+pub mod senders;
 pub mod project;
 pub mod resolve_helper;
 pub mod viewer_gate;

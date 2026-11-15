@@ -1,4 +1,4 @@
-/* The Feed protocol, version 1.1: C implementation (header only, C11 and C++17, Linux, GCC or Clang).
+/* The Feed protocol, version 1.2: C implementation (header only, C11 and C++17, Linux, GCC or Clang).
  * The specification is feed/PROTOCOL.md; keep the two in step. Used by the Sender (writer side) and by
  * feed/c/feed_c_tool.c (both sides, for the interop tests against the Rust crate).
  *
@@ -7,6 +7,7 @@
 #define SCOPECREEP_FEED_H
 
 #include <errno.h>
+#include <signal.h>
 #include <fcntl.h>
 #include <stddef.h>
 #include <stdint.h>
@@ -24,7 +25,7 @@ extern "C" {
 
 #define SCFEED_MAGIC 0x0000444545464353ull /* "SCFEED\0\0" read as a little-endian u64 */
 #define SCFEED_VERSION_MAJOR 1u
-#define SCFEED_VERSION_MINOR 1u /* 1.1: the slot's Colour Setup block has a defined format */
+#define SCFEED_VERSION_MINOR 2u /* 1.1: the slot's Colour Setup block has a defined format; 1.2: the Sender registry */
 #define SCFEED_HEADER_BYTES 4096u
 #define SCFEED_SLOT_HEADER_BYTES 4096u
 #define SCFEED_DEFAULT_PATH "/dev/shm/scopecreep-feed"
@@ -32,12 +33,28 @@ extern "C" {
 #define SCFEED_SENDER_NAME "scopecreep Sender"
 #define SCFEED_READER_TIMEOUT_NS 1000000000ull
 #define SCFEED_COLOUR_SETUP_BYTES 3064u
+#define SCFEED_REGISTRY_ENTRIES 24u
 
+enum { SCFEED_ENTRY_FREE = 0, SCFEED_ENTRY_CLAIMING = 1, SCFEED_ENTRY_LIVE = 2 };
 enum { SCFEED_FREE = 0, SCFEED_WRITING = 1, SCFEED_READY = 2, SCFEED_READING = 3 };
 enum { SCFEED_PIXEL_RGBA32F = 1 };
 enum { SCFEED_ROWS_BOTTOM_UP = 0, SCFEED_ROWS_TOP_DOWN = 1 };
 enum { SCFEED_PROVENANCE_NONE = 0, SCFEED_PROVENANCE_PROJECT = 1, SCFEED_PROVENANCE_MANUAL = 2 };
 enum { SCFEED_OK = 0, SCFEED_ERR_NO_FEED = -1, SCFEED_ERR_NOT_A_FEED = -2, SCFEED_ERR_VERSION = -3, SCFEED_ERR_BUSY = -4, SCFEED_ERR_IO = -5 };
+
+/* One Sender instance in the registry (version 1.2). 128 bytes. */
+typedef struct scfeed_entry {
+    uint32_t state;          /*   0 atomic: SCFEED_ENTRY_* */
+    uint32_t instance;       /*   4 */
+    uint64_t pid;            /*   8 */
+    double frame_rate;       /*  16 */
+    uint64_t registered_ns;  /*  24 */
+    uint64_t last_render_ns; /*  32 atomic */
+    double last_frame_time;  /*  40 */
+    uint64_t renders;        /*  48 atomic */
+    uint64_t reserved;       /*  56 */
+    char host_name[64];      /*  64 */
+} scfeed_entry;
 
 typedef struct scfeed_header {
     uint64_t magic;                /*   0 */
@@ -70,7 +87,8 @@ typedef struct scfeed_header {
     uint64_t last_render_ns;       /* 392 atomic */
     uint8_t reserved3[112];        /* 400 */
     char sender_error[256];        /* 512 */
-    uint8_t reserved4[3328];       /* 768 */
+    uint8_t reserved4[256];        /* 768 */
+    scfeed_entry registry[SCFEED_REGISTRY_ENTRIES]; /* 1024, version 1.2 */
 } scfeed_header;
 
 typedef struct scfeed_slot {
@@ -107,6 +125,10 @@ SCFEED_ASSERT(offsetof(scfeed_header, reader_heartbeat_ns) == 256, "reader_heart
 SCFEED_ASSERT(offsetof(scfeed_header, next_sequence) == 320, "next_sequence");
 SCFEED_ASSERT(offsetof(scfeed_header, last_render_ns) == 392, "last_render_ns");
 SCFEED_ASSERT(offsetof(scfeed_header, sender_error) == 512, "sender_error");
+SCFEED_ASSERT(sizeof(scfeed_entry) == 128, "registry entry is 128 bytes");
+SCFEED_ASSERT(offsetof(scfeed_header, registry) == 1024, "registry");
+SCFEED_ASSERT(offsetof(scfeed_entry, last_render_ns) == 32, "last_render_ns");
+SCFEED_ASSERT(offsetof(scfeed_entry, host_name) == 64, "host_name");
 SCFEED_ASSERT(sizeof(scfeed_slot) == 4096, "slot header is 4096 bytes");
 SCFEED_ASSERT(offsetof(scfeed_slot, sequence) == 8, "sequence");
 SCFEED_ASSERT(offsetof(scfeed_slot, frame_time) == 40, "frame_time");
@@ -158,6 +180,97 @@ static inline void scfeed_set_text(char* dst, size_t cap, const char* src)
 {
     memset(dst, 0, cap);
     if (src) strncpy(dst, src, cap - 1);
+}
+
+/* Is process `pid` running? (Signal 0 checks only; EPERM means it runs as someone else.) */
+static inline int scfeed_process_alive(uint64_t pid)
+{
+    return pid != 0 && pid <= 0x7fffffffull && (kill((pid_t)pid, 0) == 0 || errno == EPERM);
+}
+
+/* ------------------------------------------------------------ the registry */
+/* Every Sender instance lists itself here: instances of the Feed's own process (`sender_pid`) and guests from
+ * other Sender processes, which send no frames (PROTOCOL.md, "More than one Sender"). Nothing here waits. */
+
+static inline int scfeed_registry_find(const scfeed_header* h, uint64_t pid, uint32_t instance)
+{
+    for (uint32_t i = 0; i < SCFEED_REGISTRY_ENTRIES; ++i) {
+        const scfeed_entry* e = &h->registry[i];
+        if (scfeed_load32(&e->state) == SCFEED_ENTRY_LIVE && e->pid == pid && e->instance == instance) return (int)i;
+    }
+    return -1;
+}
+
+/* List an instance. Returns its entry index, or -1 if the registry is full (not an error: it goes unlisted). */
+static inline int scfeed_registry_add(scfeed_header* h, uint64_t pid, uint32_t instance, double frame_rate, const char* host_name)
+{
+    int i = scfeed_registry_find(h, pid, instance);
+    if (i >= 0) return i;
+    for (uint32_t k = 0; k < SCFEED_REGISTRY_ENTRIES; ++k) {
+        scfeed_entry* e = &h->registry[k];
+        if (!scfeed_cas32(&e->state, SCFEED_ENTRY_FREE, SCFEED_ENTRY_CLAIMING)) continue;
+        e->instance = instance;
+        e->pid = pid;
+        e->frame_rate = frame_rate;
+        e->registered_ns = scfeed_now_ns();
+        scfeed_store64(&e->last_render_ns, 0);
+        e->last_frame_time = 0;
+        scfeed_store64(&e->renders, 0);
+        scfeed_set_text(e->host_name, sizeof e->host_name, host_name);
+        scfeed_store32(&e->state, SCFEED_ENTRY_LIVE);
+        return (int)k;
+    }
+    return -1;
+}
+
+static inline void scfeed_registry_remove(scfeed_header* h, uint64_t pid, uint32_t instance)
+{
+    const int i = scfeed_registry_find(h, pid, instance);
+    if (i >= 0) scfeed_store32(&h->registry[i].state, SCFEED_ENTRY_FREE);
+}
+
+/* Record one render call of an instance (fed or not; thumbnails excluded). */
+static inline void scfeed_registry_note(scfeed_header* h, uint64_t pid, uint32_t instance, double frame_time, uint64_t render_ns)
+{
+    const int i = scfeed_registry_find(h, pid, instance);
+    if (i < 0) return;
+    scfeed_entry* e = &h->registry[i];
+    e->last_frame_time = frame_time;
+    scfeed_add64(&e->renders, 1);
+    scfeed_store64(&e->last_render_ns, render_ns);
+}
+
+/* Copy the live entries of `from` (all of them, or only those of process `only_pid` if it is not 0) into a new
+ * header `to` that nobody else uses yet, at the same places. */
+static inline void scfeed_registry_copy(scfeed_header* to, const scfeed_header* from, uint64_t only_pid)
+{
+    if (from->version_minor < 2) return;
+    for (uint32_t i = 0; i < SCFEED_REGISTRY_ENTRIES; ++i) {
+        const scfeed_entry* e = &from->registry[i];
+        if (scfeed_load32(&e->state) != SCFEED_ENTRY_LIVE || (only_pid && e->pid != only_pid)) continue;
+        memcpy(&to->registry[i], e, sizeof *e);
+        to->registry[i].state = SCFEED_ENTRY_LIVE;
+    }
+}
+
+/* If the Feed at `path` is a live Feed (this major version, minor >= 1, not retired) of a running process other
+ * than `my_pid`, map its header and return it (unmap with munmap(h, SCFEED_HEADER_BYTES)): a Sender starting in
+ * `my_pid` must join it as a guest. Otherwise NULL: the Sender may publish its own Feed. */
+static inline scfeed_header* scfeed_live_feed_of_another(const char* path, uint64_t my_pid)
+{
+    int fd = open(path, O_RDWR | O_CLOEXEC);
+    if (fd < 0) return NULL;
+    struct stat st;
+    void* m = MAP_FAILED;
+    if (fstat(fd, &st) == 0 && (size_t)st.st_size >= SCFEED_HEADER_BYTES) m = mmap(NULL, SCFEED_HEADER_BYTES, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
+    close(fd);
+    if (m == MAP_FAILED) return NULL;
+    scfeed_header* h = (scfeed_header*)m;
+    if (h->magic == SCFEED_MAGIC && h->version_major == SCFEED_VERSION_MAJOR && h->version_minor >= 2 && !scfeed_load32(&h->retired) &&
+        h->sender_pid != my_pid && scfeed_process_alive(h->sender_pid))
+        return h;
+    munmap(m, SCFEED_HEADER_BYTES);
+    return NULL;
 }
 
 /* ------------------------------------------------------------- writer side */
