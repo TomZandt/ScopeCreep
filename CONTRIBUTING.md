@@ -55,4 +55,4 @@ The **Feed protocol** has its own version (`feed/PROTOCOL.md`), separate from th
 
 ## Findings
 
-Anything learned by testing (how Resolve behaves, what a measurement showed) is copied into [`docs/findings/`](docs/findings/) when its ticket closes. Decisions that meet the ADR criteria go in [`docs/adr/`](docs/adr/). See [`docs/findings/README.md`](docs/findings/README.md).
+Anything learned by testing (how Resolve behaves, what a measurement showed) is copied into [`docs/findings/`](docs/findings/) when its ticket closes. Anything not yet verified goes in [`docs/findings/open-checks.md`](docs/findings/open-checks.md). Decisions that meet the ADR criteria go in [`docs/adr/`](docs/adr/). See [`docs/findings/README.md`](docs/findings/README.md).

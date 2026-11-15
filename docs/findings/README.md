@@ -2,6 +2,8 @@
 
 What we learned by testing, kept in the repo so it isn't lost when an issue thread scrolls away. Each file is copied from the closing comments of its GitHub issue. Decisions drawn from these findings are in [`../stage0-report.md`](../stage0-report.md) and the ADRs in [`../adr/`](../adr/).
 
+**Still to do or check:** [open-checks.md](open-checks.md) lists every unverified item in one place.
+
 | File | Question |
 |---|---|
 | [04](04-probe-sender.md) | Does a plugin load in Resolve, and does Resolve tell it the colour space of each frame? |
@@ -19,3 +21,5 @@ What we learned by testing, kept in the repo so it isn't lost when an issue thre
 ## Adding findings
 
 When a ticket answers a question by testing, its closing comment holds the evidence. Copy that comment into a new file here, numbered by the issue, and add a row to the table. Do it in the same change that closes the ticket.
+
+Add anything the ticket could not verify to [open-checks.md](open-checks.md), and remove lines from it when a later ticket settles them.
