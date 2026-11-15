@@ -218,7 +218,7 @@ impl FeedReader {
                 && frame.width > 0
                 && frame.height > 0
                 && frame.row_bytes as u64 >= frame.width as u64 * 16
-                && frame.row_bytes % 4 == 0
+                && frame.row_bytes.is_multiple_of(4)
                 && frame.data_bytes == frame.row_bytes as u64 * frame.height as u64
                 && frame.data_bytes <= m.slot_capacity() as u64;
             if sane {

@@ -141,9 +141,9 @@ impl Mapping {
         while !text.is_char_boundary(n) {
             n -= 1;
         }
-        for i in 0..cap {
+        for (i, &b) in src[..n].iter().chain(std::iter::repeat_n(&0u8, cap - n)).enumerate() {
             // SAFETY: in range.
-            unsafe { self.ptr.add(off + i).write_volatile(if i < n { src[i] } else { 0 }) }
+            unsafe { self.ptr.add(off + i).write_volatile(b) }
         }
     }
 

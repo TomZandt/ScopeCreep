@@ -132,7 +132,25 @@ impl AppWindow {
             std::thread::Builder::new().name("feed".into()).spawn(move || {
                 let mut monitor = Monitor::new(&feed);
                 let mut last = Texts::default();
+                // SCOPECREEP_STATUS_LOG=1: one line a second on stderr with what the app made of the Feed (diagnostics).
+                let status_log = std::env::var_os("SCOPECREEP_STATUS_LOG").is_some_and(|v| v != "0");
+                let mut next_log = scopecreep_feed::now_ns();
                 while !stop.load(Ordering::Relaxed) {
+                    if status_log && scopecreep_feed::now_ns() >= next_log {
+                        next_log += 1_000_000_000;
+                        let s = monitor.status();
+                        let fed = s.feed_stats.map_or(0, |f| f.frames_published);
+                        eprintln!(
+                            "status feed={:?} fed={} viewer_frames={} repeats={} cache_ignored={} dropped={} frame={:?}",
+                            s.feed,
+                            fed,
+                            s.viewer_frames,
+                            s.repeat_renders,
+                            s.cache_renders_ignored,
+                            s.dropped,
+                            s.picture.as_ref().map(|p| p.frame_time)
+                        );
+                    }
                     let mut shown = false;
                     monitor.poll(scopecreep_feed::now_ns(), &mut |frame| {
                         picture_view.upload(frame);
