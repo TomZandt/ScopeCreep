@@ -49,3 +49,7 @@ Screenshots (not in git): `~/scopecreep-testdata/screenshots/18/` — Resolve: `
 ## Not verified
 
 - The Sender's manual Levels set by a person on the Sender node in Resolve (scripts cannot set OFX parameters); tested with the fake OFX host (#16) and at the Feed seam.
+
+## Decision
+
+The app always shows sub-black and super-white values, even where Resolve's own scope flattens them (Video Level Scopes on). There is no option to match Resolve's flattening (product owner, 2026-11-15; #41).
