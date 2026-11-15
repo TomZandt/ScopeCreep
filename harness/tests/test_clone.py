@@ -4,7 +4,7 @@ import unittest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from scopecreep_harness import clone
+from scopecreep_harness import clone, setups
 from scopecreep_harness.image import Image
 
 
@@ -13,7 +13,7 @@ class Helpers(unittest.TestCase):
         keys = [s.key for s in clone.clone_targets()]
         self.assertNotIn("dwg-p3d65", keys)
         self.assertNotIn("perf-uhd", keys)
-        self.assertEqual(len(keys), 7)
+        self.assertEqual(len(keys), len(setups.SETUPS) - 1)
         self.assertEqual([s.key for s in clone.clone_targets({"acescct-pq"})], ["acescct-pq"])
 
     def test_diff_settings(self):

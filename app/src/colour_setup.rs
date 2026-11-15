@@ -22,7 +22,7 @@ pub enum Science {
 }
 
 /// Whether code values use the legal range (video levels) or the full range (data levels).
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Levels {
     Video,
     Full,

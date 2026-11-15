@@ -391,3 +391,27 @@ fn the_waveform_measures_in_the_output_colour_space_of_the_colour_setup() {
     assert_eq!(space("Rec.2100 HLG"), Some(MeasuredSpace::Rec2100Hlg));
     assert_eq!(space("No Output Transform"), None, "unknown: the waveform keeps its labelled assumption");
 }
+
+#[test]
+fn the_waveform_follows_the_project_levels_and_says_when_they_are_set_manually() {
+    use scopecreep::waveform::{LumaWeights, Measurement};
+    let measuring = |b: &Bench| Measurement::for_colour_setup(b.monitor.status().colour_setup(), LumaWeights::FromPrimaries);
+    let scale_of = |m: Measurement| m.label().split("  ·  ").nth(1).unwrap().to_string();
+
+    let mut b = Bench::with_sender("levels");
+    assert_eq!(scale_of(measuring(&b)), "10-bit Legal 64–940 assumed", "nothing known yet: Resolve's default, video levels");
+    b.helper_answers(project_answer("scopecreep-test-levels-full", &[("videoDataLevels", "Full")]));
+    b.wait(2 * SECOND);
+    assert_eq!(scale_of(measuring(&b)), "10-bit Full 0–1023");
+    b.helper_answers(project_answer("scopecreep-test-levels-video", &[("videoDataLevels", "Video")]));
+    b.wait(3 * SECOND);
+    assert_eq!(scale_of(measuring(&b)), "10-bit Legal 64–940");
+    b.set_manually(Some("timeline=Rec.709 Gamma 2.4\noutput=Rec.709 Gamma 2.4\nlevels=full\n"));
+    b.render();
+    b.wait(100 * MS);
+    assert_eq!(scale_of(measuring(&b)), "10-bit Full 0–1023 set manually");
+    b.set_manually(Some("timeline=Rec.709 Gamma 2.4\noutput=Rec.709 Gamma 2.4\nlevels=video\n"));
+    b.render();
+    b.wait(100 * MS);
+    assert_eq!(scale_of(measuring(&b)), "10-bit Legal 64–940 set manually");
+}

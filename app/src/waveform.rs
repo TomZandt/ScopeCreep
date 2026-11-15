@@ -5,6 +5,10 @@
 //! pass over the frame [`crate::gpu_frame`] already put on the GPU. Each waveform column is one picture column,
 //! and holds 1026 counts: one per code value, plus a row for everything below code 0 and a row for everything
 //! above code 1023, so out-of-range pixels are counted and shown, never cut off.
+//!
+//! The Colour Setup's Levels decide where values land on the scale (#18): video levels put black (0.0) at code 64
+//! and white (1.0) at 940, full (data) levels at 0 and 1023. Resolve hands the Sender the same values either way.
+use crate::colour_setup::{KnownColourSetup, Levels, Provenance};
 use crate::gpu_frame::GpuFrame;
 use std::sync::{Arc, Mutex};
 
@@ -89,23 +93,79 @@ fn y_row([r, g, b, w]: Chromaticities) -> [f64; 3] {
     [det(w, g, b) / d, det(r, w, b) / d, det(r, g, w) / d]
 }
 
-/// What the waveform measures in, and how: everything its label states. Until the Colour Setup reaches the app
-/// (tickets #16 and #17), the Measured Space is not known: Rec.709 is assumed, and the label says so.
+impl Levels {
+    /// Where values land on the 10-bit scale: code = value × scale + offset. Inside Resolve every value is full
+    /// range (0.0 black, 1.0 white) whatever the project's Levels; the Levels decide the codes those values are
+    /// delivered as. Video levels: black 64, white 940. Full (data) levels: black 0, white 1023.
+    pub fn scale_and_offset(self) -> (f64, f64) {
+        match self {
+            Levels::Video => (876.0, 64.0),
+            Levels::Full => (1023.0, 0.0),
+        }
+    }
+
+    /// The codes of black and white.
+    pub fn black_and_white(self) -> (u32, u32) {
+        match self {
+            Levels::Video => (64, 940),
+            Levels::Full => (0, 1023),
+        }
+    }
+
+    /// The codes the scale names, top to bottom, besides its edge rows: black, middle and white for video
+    /// levels; for full levels black and white are the plot's own edges, so the quarter lines instead.
+    pub fn scale_marks(self) -> [u32; 3] {
+        match self {
+            Levels::Video => [940, 512, 64],
+            Levels::Full => [768, 512, 256],
+        }
+    }
+
+    /// The active range as the label shows it.
+    pub fn range_label(self) -> &'static str {
+        match self {
+            Levels::Video => "Legal 64–940",
+            Levels::Full => "Full 0–1023",
+        }
+    }
+}
+
+/// What the waveform measures in, and how: everything its label states. Until the Colour Setup is known, the
+/// Measured Space (Rec.709) and the Levels (video, Resolve's default) are assumed, and the label says so.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Measurement {
     pub space: MeasuredSpace,
     /// The space is an assumption, not known from the Colour Setup.
     pub assumed: bool,
     pub luma: LumaWeights,
+    /// How values map to the 10-bit scale.
+    pub levels: Levels,
+    /// Where the Levels came from; `None` when they are assumed.
+    pub levels_from: Option<Provenance>,
 }
 
 impl Default for Measurement {
     fn default() -> Measurement {
-        Measurement { space: MeasuredSpace::Rec709, assumed: true, luma: DEFAULT_LUMA_WEIGHTS }
+        Measurement { space: MeasuredSpace::Rec709, assumed: true, luma: DEFAULT_LUMA_WEIGHTS, levels: Levels::Video, levels_from: None }
     }
 }
 
 impl Measurement {
+    /// What to measure in for this Colour Setup (`None` when not known): its Output Colour Space and its Levels,
+    /// each assumed when the Colour Setup does not say.
+    pub fn for_colour_setup(known: Option<KnownColourSetup>, luma: LumaWeights) -> Measurement {
+        let known = known.as_ref();
+        let space = known.and_then(|c| c.setup.measured_space());
+        let levels = known.and_then(|c| c.setup.levels.map(|levels| (levels, c.provenance)));
+        Measurement {
+            space: space.unwrap_or(MeasuredSpace::Rec709),
+            assumed: space.is_none(),
+            luma,
+            levels: levels.map_or(Levels::Video, |(levels, _)| levels),
+            levels_from: levels.map(|(_, from)| from),
+        }
+    }
+
     /// Luma weights for red, green and blue.
     pub fn weights(&self) -> [f64; 3] {
         match self.luma {
@@ -123,14 +183,23 @@ impl Measurement {
             LumaWeights::FromPrimaries => "from primaries",
             LumaWeights::MatchResolve => "to match Resolve",
         };
-        format!("Luma  ·  10-bit 0–1023  ·  {space}  ·  Y = {r:.4} R + {g:.4} G + {b:.4} B {how}")
+        let range = self.levels.range_label();
+        let scale = match self.levels_from {
+            None => format!("{range} assumed"),
+            Some(Provenance::Project) => range.to_string(),
+            Some(Provenance::Manual) => format!("{range} set manually"),
+        };
+        format!("Luma  ·  10-bit {scale}  ·  {space}  ·  Y = {r:.4} R + {g:.4} G + {b:.4} B {how}")
     }
 }
+
+const PARAMS_BYTES: u64 = 48;
 
 const MEASURE_SHADER: &str = r#"
 struct Params {
     weights: vec4<f32>,   // luma weights for R, G, B
     size: vec4<u32>,      // picture width, height
+    levels: vec4<f32>,    // the Levels: code = luma * levels.x + levels.y
 };
 @group(0) @binding(0) var<uniform> params: Params;
 @group(0) @binding(1) var frame: texture_2d<f32>;
@@ -153,7 +222,7 @@ fn measure(@builtin(local_invocation_id) local: vec3<u32>, @builtin(local_invoca
     if (x < params.size.x) {
         for (var y = local.y; y < params.size.y; y += LANES) {
             let rgb = textureLoad(frame, vec2<u32>(x, y), 0).rgb;
-            let code = dot(rgb, params.weights.xyz) * 1023.0;
+            let code = dot(rgb, params.weights.xyz) * params.levels.x + params.levels.y;
             var row = 0u;                                   // below code 0 (and NaN: not a value at all)
             if (code >= 1023.5) {
                 row = ROWS - 1u;                            // above code 1023
@@ -262,7 +331,7 @@ struct Placement {
     above: vec4<f32>,
     below: vec4<f32>,
     info: vec4<f32>,      // waveform columns, picture height, device pixels per logical pixel
-    spare: vec4<f32>,
+    legal: vec4<f32>,     // the codes of black and white for the Levels in use
 };
 @group(0) @binding(0) var<uniform> placement: Placement;
 @group(0) @binding(1) var<storage, read> counts: array<u32>;
@@ -332,7 +401,7 @@ fn fs(@builtin(position) position: vec4<f32>) -> @location(0) vec4<f32> {
         if (on_line(p.y, 0.0) || on_line(p.y, 256.0) || on_line(p.y, 512.0) || on_line(p.y, 768.0) || on_line(p.y, 1023.0)) {
             base = GRID;
         }
-        if (on_line(p.y, 64.0) || on_line(p.y, 940.0)) {
+        if (on_line(p.y, placement.legal.x) || on_line(p.y, placement.legal.y)) {
             base = LEGAL;
         }
         // The codes under this screen row (bottom of the plot is code 0).
@@ -392,7 +461,7 @@ impl Waveform {
         });
         let params = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("waveform params"),
-            size: 32,
+            size: PARAMS_BYTES,
             usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
             mapped_at_creation: false,
         });
@@ -442,11 +511,13 @@ impl Waveform {
 
     /// Record the measurement of `frame` into `encoder` (see [`crate::gpu_frame::FrameUploader::upload`]).
     pub fn measure(&self, encoder: &mut wgpu::CommandEncoder, frame: &GpuFrame) {
-        let [r, g, b] = self.measurement().weights();
-        let weights = [r as f32, g as f32, b as f32, 0.0];
-        let mut params = [0u8; 32];
-        params[..16].copy_from_slice(bytemuck::cast_slice(&weights));
+        let measurement = self.measurement();
+        let [r, g, b] = measurement.weights();
+        let (scale, offset) = measurement.levels.scale_and_offset();
+        let mut params = [0u8; PARAMS_BYTES as usize];
+        params[..16].copy_from_slice(bytemuck::cast_slice(&[r as f32, g as f32, b as f32, 0.0]));
         params[16..24].copy_from_slice(bytemuck::cast_slice(&[frame.width, frame.height]));
+        params[32..40].copy_from_slice(bytemuck::cast_slice(&[scale as f32, offset as f32]));
         self.queue.write_buffer(&self.params, 0, &params);
 
         let mut state = self.state.lock().unwrap();
@@ -513,6 +584,8 @@ impl Waveform {
         placement[8..12].copy_from_slice(&layout.above);
         placement[12..16].copy_from_slice(&layout.below);
         placement[16..19].copy_from_slice(&[columns as f32, picture_height as f32, scale]);
+        let (black, white) = self.measurement().levels.black_and_white();
+        placement[20..22].copy_from_slice(&[black as f32, white as f32]);
         self.queue.write_buffer(&self.placement, 0, bytemuck::cast_slice(&placement));
         pass.set_pipeline(&self.draw);
         pass.set_bind_group(0, state.draw_bound.as_ref().unwrap(), &[]);

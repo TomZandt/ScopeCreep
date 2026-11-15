@@ -18,7 +18,7 @@ mod picture_view;
 use glyphon::{Attrs, Buffer, Cache, Color, ColorMode, Family, FontSystem, Metrics, Resolution, Shaping, SwashCache, TextArea, TextAtlas, TextBounds, TextRenderer, Viewport};
 use picture_view::PictureView;
 use scopecreep::gpu_frame::FrameUploader;
-use scopecreep::waveform::{DEFAULT_LUMA_WEIGHTS, LumaWeights, MeasuredSpace, Measurement, PlotLayout, Waveform};
+use scopecreep::waveform::{DEFAULT_LUMA_WEIGHTS, LumaWeights, Measurement, PlotLayout, Waveform};
 use scopecreep::monitor::{FeedState, Monitor};
 use scopecreep::resolve_helper::ScriptHelper;
 use std::path::PathBuf;
@@ -52,7 +52,8 @@ enum Mark {
     Above,
     Below,
 }
-/// Codes 0 and 1023 are the plot's own edges, so the edge rows are named instead.
+/// Codes 0 and 1023 are the plot's own edges, so the edge rows are named instead. The codes follow the Levels
+/// (`Levels::scale_marks`) and are set again whenever the waveform's label changes.
 const MARKS: [Mark; 5] = [Mark::Above, Mark::Code(940), Mark::Code(512), Mark::Code(64), Mark::Below];
 
 /// What the labels say, as the Feed thread last saw it.
@@ -233,8 +234,7 @@ impl AppWindow {
                         shown = true;
                     });
                     let status = monitor.status();
-                    let space = status.colour_setup().and_then(|c| c.setup.measured_space());
-                    let now_measuring = Measurement { space: space.unwrap_or(MeasuredSpace::Rec709), assumed: space.is_none(), luma };
+                    let now_measuring = Measurement::for_colour_setup(status.colour_setup(), luma);
                     if now_measuring != measurement {
                         measurement = now_measuring;
                         waveform.set_measurement(measurement);
@@ -344,7 +344,11 @@ impl AppWindow {
             self.waveform_label.set_size(Some(waveform_area[2] - gutter), Some(strip));
             self.waveform_label.set_text(&waveform_text, &attrs, Shaping::Advanced, None);
             self.waveform_label.shape_until_scroll(&mut self.font_system, false);
+            let mut codes = self.waveform.measurement().levels.scale_marks().into_iter();
             for (mark, buffer) in &mut self.marks {
+                if let Mark::Code(code) = mark {
+                    *code = codes.next().unwrap_or(*code);
+                }
                 let text = match mark {
                     Mark::Code(code) => code.to_string(),
                     Mark::Above => "> 1023".into(),

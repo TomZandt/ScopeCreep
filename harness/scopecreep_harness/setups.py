@@ -66,6 +66,9 @@ SETUPS = [
     _aces("acescct-rec709", "ACEScct, Rec.709 output transform", "Rec.709 BT.1886"),
     _aces("acescct-p3d65", "ACEScct, P3-D65 output transform", "P3-D65"),
     _aces("acescct-pq", "ACEScct, Rec.2100 PQ (1000 nit) output transform", "Rec.2100 ST2084 (1000 nit)"),
+    # The data-levels twin of yrgb-rec709g24 (#18). Every other project uses video levels, Resolve's default.
+    Setup("yrgb-rec709g24-full", "DaVinci YRGB, Rec.709 Gamma 2.4, data (full) levels",
+          _yrgb("", "", REC709, REC709).settings + [("videoDataLevels", "Full")]),
 ]
 
 PERF = Setup("perf-uhd", "UHD 24p performance project (YRGB, Rec.709 Gamma 2.4)", [

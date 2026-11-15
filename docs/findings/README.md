@@ -19,6 +19,7 @@ What we learned by testing, kept in the repo so it isn't lost when an issue thre
 | [14](14-feed-reaches-the-app.md) | Milestone 1: what the Feed tracer bullet verified in Resolve, and its limits |
 | [16](16-colour-setup-by-script.md) | Reading the Colour Setup by script while Resolve runs: every test project, read times, reads during playback |
 | [15](15-luma-waveform-uhd.md) | Does the luma waveform keep up with UHD float at 24, 25, 50 and 60 fps? |
+| [18](18-levels.md) | What do video and data Levels change in Resolve, and does the waveform follow them? |
 | [19](19-playback-rate-drops-and-senders.md) | Is the app's playback rate Resolve's? How do two Senders and background cache fills behave at 24, 25, 50 and 60 fps? |
 
 ## Adding findings

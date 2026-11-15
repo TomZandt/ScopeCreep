@@ -47,7 +47,7 @@ Turning a Sender's Timeline Colour Space frames into Output Colour Space. Every 
 _Avoid_: CST, transform, ODT
 
 **Levels**:
-Whether code values use the full range (data levels) or the legal range (video levels), as set in Resolve.
+Whether code values use the full range (data levels) or the legal range (video levels), as set in Resolve (Project Settings, Video Monitoring, Data levels). On the Scopes' 10-bit scale, video levels put black at code 64 and white at 940; data levels put them at 0 and 1023. Inside Resolve, and in the Feed, values are the same whichever Levels the project uses: Levels only say which codes they are delivered as.
 _Avoid_: Range, data range, legal/full (on its own)
 
 ## Setup

@@ -4,6 +4,7 @@
 //! waveform as drawn. Needs a GPU.
 use scopecreep::gpu_frame::FrameUploader;
 use scopecreep::monitor::Monitor;
+use scopecreep::colour_setup::{Levels, Provenance};
 use scopecreep::waveform::{LumaWeights, MeasuredSpace, Measurement, PlotLayout, Waveform, WaveformCounts};
 use scopecreep_feed::{FeedWriter, FrameMeta, now_ns};
 use std::path::PathBuf;
@@ -63,6 +64,8 @@ impl Bench {
             frame: 86400.0,
             _gpu_turn: turn,
         };
+        // Full levels unless a test says otherwise: a value's code is then simply value × 1023.
+        b.waveform.set_measurement(measuring(MeasuredSpace::Rec709, LumaWeights::FromPrimaries));
         b.poll();
         b
     }
@@ -152,8 +155,9 @@ fn half_primaries_codes(b: &mut Bench) -> [u32; 3] {
     [0, 1, 2].map(|x| (0..1024).find(|&code| counts.at(x, code) == 4).unwrap_or_else(|| panic!("column {x} is not on one code")))
 }
 
+/// Full levels, so that a value's code is simply value × 1023.
 fn measuring(space: MeasuredSpace, luma: LumaWeights) -> Measurement {
-    Measurement { space, assumed: false, luma }
+    Measurement { space, assumed: false, luma, levels: Levels::Full, levels_from: Some(Provenance::Project) }
 }
 
 // Expected codes: 0.5 × weight × 1023, rounded, with the weights ADR 0004 quotes for each space.
@@ -200,10 +204,50 @@ fn match_resolve_uses_rec2020_weights_for_rec2100() {
 }
 
 #[test]
-fn until_the_colour_setup_is_known_the_label_says_rec709_is_assumed() {
+fn until_the_colour_setup_is_known_the_label_says_rec709_and_video_levels_are_assumed() {
     let mut b = Bench::new("assumed");
-    assert_eq!(half_primaries_codes(&mut b), [109, 366, 37]);
-    assert_eq!(b.waveform.label(), "Luma  ·  10-bit 0–1023  ·  Rec.709 assumed  ·  Y = 0.2126 R + 0.7152 G + 0.0722 B from primaries");
+    b.waveform.set_measurement(Measurement::default());
+    // 64 + 0.5 × weight × 876 with the Rec.709 weights.
+    assert_eq!(half_primaries_codes(&mut b), [157, 377, 96]);
+    assert_eq!(b.waveform.label(), "Luma  ·  10-bit Legal 64–940 assumed  ·  Rec.709 assumed  ·  Y = 0.2126 R + 0.7152 G + 0.0722 B from primaries");
+}
+
+// ------------------------------------------------------------------ Levels
+
+/// Plays one column per grey value and returns, for each, the code it lands on, or "below" or "above".
+fn codes_of_greys(b: &mut Bench, greys: &[f32]) -> Vec<String> {
+    let n = greys.len() as u32;
+    let counts = b.play(n, 4, &picture(n, 4, |x, _| [greys[x as usize]; 3]));
+    (0..n)
+        .map(|x| match (0..1024).find(|&code| counts.at(x, code) == 4) {
+            Some(code) => code.to_string(),
+            None if counts.below(x) == 4 => "below".into(),
+            None if counts.above(x) == 4 => "above".into(),
+            None => panic!("column {x} is not on one code"),
+        })
+        .collect()
+}
+
+fn levels(levels: Levels, from: Option<Provenance>) -> Measurement {
+    Measurement { space: MeasuredSpace::Rec709, assumed: false, levels, levels_from: from, ..Measurement::default() }
+}
+
+// Video levels put black (0.0) at code 64 and white (1.0) at code 940: 876 codes for 0 to 1. Code 0 is
+// -64/876 = -0.0731 and code 1023 is 959/876 = 1.0947.
+#[test]
+fn video_levels_put_black_at_64_and_white_at_940() {
+    let mut b = Bench::new("legal");
+    b.waveform.set_measurement(levels(Levels::Video, Some(Provenance::Project)));
+    let codes = codes_of_greys(&mut b, &[0.0, 1.0, 0.5, 0.25, -0.0731, 1.0947, -0.08, 1.1]);
+    assert_eq!(codes, ["64", "940", "502", "283", "0", "1023", "below", "above"]);
+}
+
+#[test]
+fn full_levels_put_black_at_0_and_white_at_1023() {
+    let mut b = Bench::new("full");
+    b.waveform.set_measurement(levels(Levels::Full, Some(Provenance::Project)));
+    let codes = codes_of_greys(&mut b, &[0.0, 1.0, 0.25, 0.5005, -0.001, 1.001]);
+    assert_eq!(codes, ["0", "1023", "256", "512", "below", "above"]);
 }
 
 // ------------------------------------------------------------------ out of range
@@ -299,4 +343,27 @@ fn a_single_out_of_range_pixel_is_visible_in_the_edge_rows() {
     assert!(brightest_in(below, 1400) < 64, "elsewhere the bottom edge row stays dark: {}", brightest_in(below, 1400));
     let mid_grey = layout.y_of_code(512);
     assert!(brightness(layout.x_of_column(1400, 1920), mid_grey) >= 128, "the mid-grey trace is drawn");
+}
+
+/// How bright the empty plot is drawn at each code's row, away from any trace (the graticule).
+fn graticule_at(b: &mut Bench, codes: &[u32]) -> Vec<u8> {
+    b.play(64, 4, &picture(64, 4, |_, _| [0.5; 3]));
+    let (width, height) = (400, 1100);
+    let image = draw(b, width, height);
+    let layout = PlotLayout::new([0.0, 0.0, width as f32, height as f32], 1.0);
+    let x = layout.x_of_column(10, 64) as usize;
+    codes.iter().map(|&code| image[(layout.y_of_code(code).floor() as usize * width as usize + x) * 4]).collect()
+}
+
+#[test]
+fn the_legal_lines_mark_black_and_white_for_the_levels_in_use() {
+    let mut b = Bench::new("legallines");
+    b.waveform.set_measurement(levels(Levels::Video, Some(Provenance::Project)));
+    let [black, white, between] = graticule_at(&mut b, &[64, 940, 600])[..] else { unreachable!() };
+    assert!(black > between + 20 && white > between + 20, "video levels: lines at 64 and 940 ({black}, {white}, plot {between})");
+
+    b.waveform.set_measurement(levels(Levels::Full, Some(Provenance::Project)));
+    let [at_64, at_940, black, white, between] = graticule_at(&mut b, &[64, 940, 0, 1023, 600])[..] else { unreachable!() };
+    assert_eq!((at_64, at_940), (between, between), "full levels: no line at 64 or 940");
+    assert!(black > between + 20 && white > between + 20, "full levels: lines at 0 and 1023 ({black}, {white}, plot {between})");
 }
