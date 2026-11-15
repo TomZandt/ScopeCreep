@@ -3,3 +3,5 @@ scopecreep-testdata/
 # Build outputs
 /target/
 /sender/build/
+# Agent worktrees (never commit)
+/.claude/worktrees/
