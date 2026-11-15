@@ -1,0 +1,9 @@
+[package]
+name = "scopecreep-feed"
+description = "The Feed protocol: the shared-memory ring between the Sender and the scopecreep app"
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+
+[dependencies]
+libc = "0.2"

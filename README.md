@@ -15,9 +15,29 @@ Pre-alpha. Nothing to install yet.
 
 | Stage | What | State |
 |---|---|---|
-| 0 | Colour and performance checks against Resolve (throwaway prototypes) | Next |
-| 1 | Feed plus clean picture plus luma waveform (Linux, NVIDIA) | Planned |
+| 0 | Colour and performance checks against Resolve (throwaway prototypes) | Done ([report](docs/stage0-report.md)) |
+| 1 | Feed plus clean picture plus luma waveform (Linux, NVIDIA) | In progress: the Feed reaches the app (#14) |
 | Later | Parade, vectorscope, false colour, HDR, Setup Checklist, Capture, Windows/macOS, installers, licensing | Decided, parked |
+
+## Development (Linux, NVIDIA)
+
+| Part | Where | What |
+|---|---|---|
+| Feed protocol | `feed/PROTOCOL.md`, `feed/include/scopecreep_feed.h`, `feed/` crate | The shared-memory ring between Sender and app: spec, C header (Sender), Rust reader and synthetic writer (app, tests) |
+| Sender | `sender/` | C++ OFX plugin, Resolve's CUDA render path, async pinned copy into the Feed |
+| App | `app/` | Rust + wgpu: one window, a Picture View of the latest Feed frame |
+
+```sh
+cargo test                       # Feed protocol (Rust and C against each other) and the app, driven at the Feed seam
+cargo run -p scopecreep          # the app (reads /dev/shm/scopecreep-feed, or $SCOPECREEP_FEED)
+cargo run -p scopecreep-feed --bin feed-synth   # a moving test card into the Feed, no Resolve needed
+
+make -C sender                   # build the Sender (needs /opt/cuda and Resolve's OpenFX headers)
+make -C sender test              # drive the built Sender with a fake CUDA host (needs the GPU, not Resolve)
+make -C sender install           # developer install into /usr/OFX/Plugins, then restart Resolve
+```
+
+In Resolve, put **scopecreep Sender** (Effects > OpenFX > scopecreep) on its own last timeline node, with no grade on that node. GPU processing must be CUDA.
 
 ## How it works
 
