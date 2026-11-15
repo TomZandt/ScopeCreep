@@ -33,6 +33,16 @@ pub fn read_exr(path: &Path) -> Result<Image, String> {
     Ok(img.layer_data.channel_data.pixels)
 }
 
+/// Write an RGB float EXR (alpha 1), bit-exact for every f32 value.
+pub fn write_exr(path: &Path, image: &Image) -> Result<(), String> {
+    use exr::prelude::write_rgba_file;
+    write_rgba_file(path, image.width, image.height, |x, y| {
+        let [r, g, b] = image.rgb[y * image.width + x];
+        (r, g, b, 1.0f32)
+    })
+    .map_err(|e| format!("{}: {e}", path.display()))
+}
+
 /// 16-bit RGB TIFF as values in 0..1 (code / 65535).
 pub fn read_tiff16(path: &Path) -> Result<Image, String> {
     use tiff::decoder::{Decoder, DecodingResult};
@@ -84,6 +94,14 @@ mod tests {
                 assert_eq!(img.pixel(x, y), [vals[i], vals[(i + 1) % 6], vals[(i + 2) % 6]]);
             }
         }
+    }
+
+    #[test]
+    fn written_exr_reads_back_bit_exact() {
+        let image = Image { width: 2, height: 2, rgb: vec![[-0.25, 0.0, 0.18], [1.0, 10.0, 1234.5], [f32::MIN_POSITIVE, 0.5, 1e-9], [0.1, 0.2, 0.3]] };
+        let p = tmp("written.exr");
+        write_exr(&p, &image).unwrap();
+        assert_eq!(read_exr(&p).unwrap().rgb, image.rgb);
     }
 
     #[test]

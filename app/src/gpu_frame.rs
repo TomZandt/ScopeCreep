@@ -7,7 +7,7 @@
 //! from the Feed for that moment, and the Feed drops (and counts) frames instead. The Sender never waits.
 use scopecreep_feed::Frame;
 use std::sync::Arc;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 
 const STAGING_BUFFERS: usize = 2;
 
@@ -20,7 +20,14 @@ pub struct GpuFrame {
     /// The texture's first row is the bottom of the picture (as the Sender writes it).
     pub bottom_up: bool,
     /// Changes whenever a new texture is made (the frame size changed), so displays know to bind it again.
+    /// Unique across every [`GpuFrame`] the app makes (see [`new_texture_id`]).
     pub texture_id: u64,
+}
+
+/// A `texture_id` no other [`GpuFrame`] has had.
+pub fn new_texture_id() -> u64 {
+    static NEXT: AtomicU64 = AtomicU64::new(1);
+    NEXT.fetch_add(1, Ordering::Relaxed)
 }
 
 struct Staging {
@@ -37,12 +44,11 @@ pub struct FrameUploader {
     staging: Vec<Staging>,
     next: usize,
     frame: Option<GpuFrame>,
-    textures_made: u64,
 }
 
 impl FrameUploader {
     pub fn new(device: &wgpu::Device, queue: &wgpu::Queue) -> FrameUploader {
-        FrameUploader { device: device.clone(), queue: queue.clone(), staging: Vec::new(), next: 0, frame: None, textures_made: 0 }
+        FrameUploader { device: device.clone(), queue: queue.clone(), staging: Vec::new(), next: 0, frame: None }
     }
 
     /// The latest frame put on the GPU, if any.
@@ -76,7 +82,6 @@ impl FrameUploader {
             self.next = 0;
         }
         if self.frame.as_ref().is_none_or(|f| f.width != width || f.height != height) {
-            self.textures_made += 1;
             self.frame = Some(GpuFrame {
                 texture: self.device.create_texture(&wgpu::TextureDescriptor {
                     label: Some("feed frame"),
@@ -85,13 +90,13 @@ impl FrameUploader {
                     sample_count: 1,
                     dimension: wgpu::TextureDimension::D2,
                     format: wgpu::TextureFormat::Rgba32Float,
-                    usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
+                    usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST | wgpu::TextureUsages::COPY_SRC,
                     view_formats: &[],
                 }),
                 width,
                 height,
                 bottom_up: frame.bottom_up(),
-                texture_id: self.textures_made,
+                texture_id: new_texture_id(),
             });
         }
         let gpu_frame = self.frame.as_mut().unwrap();

@@ -1,8 +1,9 @@
-//! Drawing the Picture View: the latest Feed frame as an image, untouched.
+//! Drawing the Picture View: the latest Feed frame as an image, after Output Conversion.
 //!
-//! The frame is the 32-bit float texture at full resolution that `gpu_frame` uploads, drawn scaled to fit. No colour
-//! conversion, no tone curve: the Sender's values go to the screen as they are (clamped to 0..1 by the display
-//! surface, which is not sRGB-encoded for that reason).
+//! The frame is the 32-bit float texture at full resolution that `gpu_frame` uploads, or the converted one
+//! `output_conversion` makes from it, drawn scaled to fit. Nothing else is done to it: the Output Colour Space
+//! values go to the screen as they are (clamped to 0..1 by the display surface, which is not sRGB-encoded for
+//! that reason).
 use scopecreep::gpu_frame::GpuFrame;
 use std::sync::{Arc, Mutex};
 

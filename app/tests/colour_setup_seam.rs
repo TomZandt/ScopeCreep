@@ -201,7 +201,7 @@ fn the_project_colour_setup_is_read_once_playback_stops_and_labelled_from_projec
     b.wait(SECOND + 100 * MS);
     assert_eq!(b.requests(), 1, "asked once playback has been stopped for a second");
     assert_eq!(b.colour_label().as_deref(), Some("DaVinci WG/Intermediate → Rec.709 Gamma 2.4 (from project)"));
-    assert_eq!(b.label(), "Clean picture  ·  16 × 9  ·  DaVinci WG/Intermediate → Rec.709 Gamma 2.4 (from project)  ·  as sent, no Output Conversion");
+    assert_eq!(b.label(), "Clean picture  ·  16 × 9  ·  DaVinci WG/Intermediate → Rec.709 Gamma 2.4 (from project)  ·  Output Conversion exact");
 }
 
 #[test]

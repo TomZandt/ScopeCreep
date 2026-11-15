@@ -1,6 +1,7 @@
 //! The scopecreep app: one window with two panels, the Picture View of the latest Feed frame on the left and the
 //! luma waveform on the right, each with a quiet label, and a quiet status line along the bottom (Resolve's
-//! playback rate, dropped frames, the Sender driving the Feed).
+//! playback rate, dropped frames, the Sender driving the Feed). Both panels show the Feed after Output Conversion,
+//! in the Output Colour Space, whenever the Colour Setup has one (`output_conversion.rs`).
 //!
 //!   scopecreep [--feed <path>] [--luma primaries|match-resolve] [--no-scripting]
 //!
@@ -12,7 +13,7 @@
 //!                    /opt/resolve/bin/ResolvePython.
 //!
 //! Two threads. The Feed thread polls the Feed every millisecond (the ring is short and the Sender never waits),
-//! puts the frames to show on the GPU, measures them, and wakes the window. The window thread only draws.
+//! puts the frames to show on the GPU, converts and measures them, and wakes the window. The window thread only draws.
 mod picture_view;
 
 use glyphon::{Attrs, Buffer, Cache, Color, ColorMode, Family, FontSystem, Metrics, Resolution, Shaping, SwashCache, TextArea, TextAtlas, TextBounds, TextRenderer, Viewport};
@@ -20,6 +21,7 @@ use picture_view::PictureView;
 use scopecreep::gpu_frame::FrameUploader;
 use scopecreep::waveform::{DEFAULT_LUMA_WEIGHTS, LumaWeights, Measurement, PlotLayout, Waveform};
 use scopecreep::monitor::{FeedState, Monitor};
+use scopecreep::output_conversion::{self, OutputConversion};
 use scopecreep::resolve_helper::ScriptHelper;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -181,6 +183,7 @@ impl AppWindow {
         let feed_thread = {
             let (texts, stop, picture_view, waveform) = (texts.clone(), stop.clone(), picture_view.clone(), waveform.clone());
             let mut uploader = FrameUploader::new(&device, &queue);
+            let mut conversion = OutputConversion::new(&device, &queue);
             std::thread::Builder::new().name("feed".into()).spawn(move || {
                 // The Resolve scripting helper is owned by this thread's Monitor: it is killed when the app quits.
                 let mut monitor = if scripting { Monitor::with_project_reader(&feed, Box::new(ScriptHelper::from_env())) } else { Monitor::new(&feed) };
@@ -227,18 +230,26 @@ impl AppWindow {
                     let mut shown = false;
                     monitor.poll(scopecreep_feed::now_ns(), &mut |frame| {
                         uploader.upload(frame, |encoder, gpu_frame| {
-                            waveform.measure(encoder, gpu_frame);
-                            picture_view.show(gpu_frame);
+                            // The Picture View and the waveform both see the picture after Output Conversion.
+                            let picture = conversion.convert(encoder, gpu_frame);
+                            waveform.measure(encoder, picture);
+                            picture_view.show(picture);
                             scope_frames += 1;
                         });
                         shown = true;
                     });
                     let status = monitor.status();
-                    let now_measuring = Measurement::for_colour_setup(status.colour_setup(), luma);
+                    let setup = status.colour_setup().map(|c| c.setup);
+                    let now_measuring = output_conversion::measurement(status.colour_setup(), luma);
                     if now_measuring != measurement {
                         measurement = now_measuring;
                         waveform.set_measurement(measurement);
                     }
+                    // A Colour Setup that arrives or changes while Resolve is stopped converts the frame on screen.
+                    shown |= conversion.follow(setup.as_ref(), uploader.frame(), |encoder, picture| {
+                        waveform.measure(encoder, picture);
+                        picture_view.show(picture);
+                    });
                     let now = Texts {
                         label: status.picture_label(),
                         status: if status.feed == FeedState::Connected { status.status_line() } else { String::new() },

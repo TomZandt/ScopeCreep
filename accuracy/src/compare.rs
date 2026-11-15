@@ -82,6 +82,16 @@ pub fn code(v: f64, scale: f64) -> i64 {
 
 /// Our conversion of `input` against Resolve's float reference. All three images must have the same size.
 pub fn compare_float(pipeline: &Pipeline, input: &Image, reference: &Image) -> Stats {
+    compare_float_with(pipeline, |v| pipeline.apply(v), input, reference)
+}
+
+/// A frame the app already converted (the real Feed after Output Conversion) against Resolve's float reference.
+/// `pipeline` is the Colour Setup's published maths, used only to judge errors in display light.
+pub fn compare_converted(pipeline: &Pipeline, converted: &Image, reference: &Image) -> Stats {
+    compare_float_with(pipeline, |v| v, converted, reference)
+}
+
+fn compare_float_with(pipeline: &Pipeline, apply: impl Fn([f64; 3]) -> [f64; 3] + Sync, input: &Image, reference: &Image) -> Stats {
     assert_eq!((input.width, input.height), (reference.width, reference.height), "size mismatch");
     let w = input.width;
     (0..input.height)
@@ -91,7 +101,7 @@ pub fn compare_float(pipeline: &Pipeline, input: &Image, reference: &Image) -> S
             for x in 0..w {
                 let i = input.rgb[y * w + x];
                 let r = reference.rgb[y * w + x];
-                let o = pipeline.apply([i[0] as f64, i[1] as f64, i[2] as f64]);
+                let o = apply([i[0] as f64, i[1] as f64, i[2] as f64]);
                 for c in 0..3 {
                     let err = if o[c].is_nan() || r[c].is_nan() { f64::INFINITY } else { (o[c] - r[c] as f64).abs() };
                     s.samples += 1;
@@ -195,6 +205,17 @@ mod tests {
         assert_eq!((s.worst.x, s.worst.channel), (1, 2));
         assert!((s.max_codes_10bit() - 102.3).abs() < 1e-3);
         assert_eq!(s.mismatched_codes_10bit, 1);
+    }
+
+    #[test]
+    fn a_converted_frame_is_compared_as_it_is_and_judged_in_the_pipelines_light() {
+        let ours = img(vec![[0.5, 0.5, 0.5]]);
+        let reference = img(vec![[0.5, 0.5, 0.5002]]);
+        let s = compare_converted(&Pipeline::dwg_rec709(), &ours, &reference);
+        assert!((s.max_abs - 2e-4).abs() < 1e-6, "{}", s.max_abs);
+        assert_eq!(s.over_tolerance, 1);
+        // 2e-4 at code 0.5 under gamma 2.4 is about 1.8e-4 of white in light: outside both tolerances.
+        assert_eq!(s.failing, 1);
     }
 
     #[test]

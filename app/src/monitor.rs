@@ -9,6 +9,7 @@
 use crate::playback_rate::PlaybackRate;
 use crate::senders::{Arbiter, SenderKey};
 use crate::colour_setup::{ColourSetup, KnownColourSetup, Provenance};
+use crate::output_conversion::Plan;
 use crate::project::{Outcome, ProjectReader, ProjectReading};
 use crate::viewer_gate::{Timing, ViewerGate};
 use scopecreep_feed::{FeedReader, FeedStats, Frame, OpenError, SenderInfo};
@@ -187,9 +188,11 @@ impl Status {
     /// The quiet label of the Picture View.
     pub fn picture_label(&self) -> String {
         match &self.picture {
-            // The values are shown exactly as the Sender received them; until the Colour Setup is known
-            // (ticket #16) that means Timeline Colour Space values, and the label must not pretend otherwise.
-            Some(p) => format!("Clean picture  ·  {} × {}  ·  {}  ·  as sent, no Output Conversion", p.width, p.height, self.colour_label()),
+            // What was done to the picture, and how far it can be trusted (ticket #17): never more than is proven.
+            Some(p) => {
+                let conversion = Plan::for_setup(self.colour_setup().map(|c| c.setup).as_ref());
+                format!("Clean picture  ·  {} × {}  ·  {}  ·  {}", p.width, p.height, self.colour_label(), conversion.label())
+            }
             None => "Clean picture".to_string(),
         }
     }

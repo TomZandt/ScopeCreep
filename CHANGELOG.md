@@ -8,6 +8,10 @@ The format follows [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/
 
 ### Added
 
+- Output Conversion: when the Feed is in the Timeline Colour Space, the app converts it to the Output Colour Space on the GPU with published maths, and the Picture View and the waveform show the converted picture. DaVinci Wide Gamut / Intermediate to Rec.709 Gamma 2.4, P3-D65 (gamma 2.6) and Rec.2100 ST2084, and ACEScct (ACES 2.0) to Rec.709 BT.1886, P3-D65 and Rec.2100 ST2084 (1000 nit), are labelled "Output Conversion exact" ("exact for ACES 2.0" while the ACES version is assumed). A Colour Setup read after playback stops converts the picture already on screen (#17).
+- Approximated conversions say why: DWG/DI to Rec.2020 Gamma 2.4 (not yet measured against Resolve), DaVinci tone mapping or gamut mapping on (not applied, unpublished), YRGB with colour spaces other than Rec.709 Gamma 2.4 (#17).
+- Known limitation: Rec.2100 HLG, P3-DCI and sRGB outputs, ACES output transforms other than the three above, ACES 1.3, ACEScc and timelines other than DWG/DI are not converted yet: the picture is shown and measured as sent, and the label says "as sent, no Output Conversion" and why (#17).
+- Accuracy suite on the real Feed: `harness.py feed-frames` captures each test project's frames after the app's own Output Conversion, and `cargo run -p scopecreep-accuracy -- feed` compares them with Resolve's renders and checks the app's label never claims more than was measured (#17).
 - Feed protocol v1.0 (`feed/PROTOCOL.md`): the versioned shared-memory hand-over between the Sender and the app, with drop counting, a reader-present flag and version-mismatch reporting. C header for the Sender, Rust crate for the app (#14).
 - scopecreep Sender (`sender/`): OFX plugin on Resolve's CUDA path that copies each Viewer Frame into the Feed without ever making Resolve wait, and does no work when no app is attached (#14).
 - scopecreep app (`app/`): one window with a Picture View of the clean picture, a quiet label and one-line notices; Viewer Frames chosen by pacing so background cache renders are ignored (#14).
@@ -30,6 +34,7 @@ The format follows [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/
 
 ### Changed
 
+- The Picture View label states the Output Conversion and how far it can be trusted, instead of "as sent, no Output Conversion" (#17).
 - Feed protocol 1.2: a Sender registry in the header (instances, timeline rate, host, last render) and guest Senders from a second Resolve process. Older readers and writers stay compatible (#19).
 - Background cache fills while paused are now recognised at 50 and 60 fps too (they render about 1.6-2x real time, in pairs, from two threads), so the Scopes stay on the viewer frame; a ragged playback start is held back for a moment and then shown (#19).
 - Feed protocol 1.1: the slot's Colour Setup block now has a format (provenance plus `key=value` lines). It carries the Sender's manual override; 1.0 readers and writers stay compatible (#16).

@@ -1777,6 +1777,7 @@ dependencies = [
  "glyphon",
  "libc",
  "pollster",
+ "scopecreep-accuracy",
  "scopecreep-feed",
  "wgpu",
  "winit",
