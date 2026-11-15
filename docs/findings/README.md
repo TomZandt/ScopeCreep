@@ -14,6 +14,7 @@ What we learned by testing, kept in the repo so it isn't lost when an issue thre
 | [11](11-sender-behaviour-in-resolve.md) | How does Resolve treat the Sender: caching, Shift-D, placement, thumbnails? |
 | [12](12-uhd-copy-cost.md) | What does copying UHD float frames out of Resolve cost? |
 | [13](13-report-and-decisions.md) | The Stage 0 report and the decisions it made |
+| [14](14-feed-reaches-the-app.md) | Milestone 1: what the Feed tracer bullet verified in Resolve, and its limits |
 
 ## Adding findings
 
