@@ -109,6 +109,7 @@ struct GpuFrame {
         host[0] = -0.5f; host[1] = 7.25f; host[2] = 1e-40f; host[3] = 65504.0f;  // negative, over-range, denormal, huge
         cudaMemcpy2D(src, pitch, host.data(), (size_t)w * 16, (size_t)w * 16, (size_t)h, cudaMemcpyHostToDevice);
         cudaMemset(dst, 0, pitch * (size_t)h);
+        cudaDeviceSynchronize();  // the host stream is non-blocking: it does not wait for the legacy stream by itself
     }
     bool passedThrough()
     {
@@ -360,11 +361,15 @@ int main(int argc, char** argv)
     CHECK(worst < 5.0 && big.passedThrough(), "renders carry on, quickly, with the picture unchanged");
     scfeed_reader r2;
     CHECK(scfeed_reader_open(&r2, feed) == SCFEED_OK, "a restarted app attaches");
-    big.fill(55);
-    for (int k = 0; k < 8; ++k) render(big, 700.0 + k);
     int got = 0;
-    while ((i = nextFrame(r2, 300)) >= 0) { scfeed_reader_release(&r2, i); ++got; }
-    CHECK(got >= 4, "and gets frames through every slot, including the one the killed app held");
+    for (int k = 0; k < 8; ++k) {  // at playback pace, reading each frame: the ring cycles through all four slots
+        big.fill(55 + (unsigned)k);
+        render(big, 700.0 + k);
+        i = nextFrame(r2, 500);
+        if (i >= 0 && scfeed_slot_at(r2.hdr, (uint32_t)i)->frame_time == 700.0 + k) ++got;
+        if (i >= 0) scfeed_reader_release(&r2, i);
+    }
+    CHECK(got == 8, "and gets every frame through every slot, including the one the killed app held");
     scfeed_reader_close(&r2);
 
     gPlugin->mainEntry(kOfxActionDestroyInstance, gEffect, nullptr, nullptr);
