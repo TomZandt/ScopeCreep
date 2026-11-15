@@ -1,4 +1,4 @@
-/* The Feed protocol, version 1.0: C implementation (header only, C11 and C++17, Linux, GCC or Clang).
+/* The Feed protocol, version 1.1: C implementation (header only, C11 and C++17, Linux, GCC or Clang).
  * The specification is feed/PROTOCOL.md; keep the two in step. Used by the Sender (writer side) and by
  * feed/c/feed_c_tool.c (both sides, for the interop tests against the Rust crate).
  *
@@ -24,7 +24,7 @@ extern "C" {
 
 #define SCFEED_MAGIC 0x0000444545464353ull /* "SCFEED\0\0" read as a little-endian u64 */
 #define SCFEED_VERSION_MAJOR 1u
-#define SCFEED_VERSION_MINOR 0u
+#define SCFEED_VERSION_MINOR 1u /* 1.1: the slot's Colour Setup block has a defined format */
 #define SCFEED_HEADER_BYTES 4096u
 #define SCFEED_SLOT_HEADER_BYTES 4096u
 #define SCFEED_DEFAULT_PATH "/dev/shm/scopecreep-feed"
@@ -36,6 +36,7 @@ extern "C" {
 enum { SCFEED_FREE = 0, SCFEED_WRITING = 1, SCFEED_READY = 2, SCFEED_READING = 3 };
 enum { SCFEED_PIXEL_RGBA32F = 1 };
 enum { SCFEED_ROWS_BOTTOM_UP = 0, SCFEED_ROWS_TOP_DOWN = 1 };
+enum { SCFEED_PROVENANCE_NONE = 0, SCFEED_PROVENANCE_PROJECT = 1, SCFEED_PROVENANCE_MANUAL = 2 };
 enum { SCFEED_OK = 0, SCFEED_ERR_NO_FEED = -1, SCFEED_ERR_NOT_A_FEED = -2, SCFEED_ERR_VERSION = -3, SCFEED_ERR_BUSY = -4, SCFEED_ERR_IO = -5 };
 
 typedef struct scfeed_header {
@@ -160,6 +161,24 @@ static inline void scfeed_set_text(char* dst, size_t cap, const char* src)
 }
 
 /* ------------------------------------------------------------- writer side */
+
+/* Put a Colour Setup (UTF-8 `key=value` lines, see PROTOCOL.md) in a slot the writer owns, or clear it with
+ * SCFEED_PROVENANCE_NONE. Text longer than the block is cut after its last whole line that fits. */
+static inline void scfeed_slot_set_colour_setup(scfeed_slot* s, uint32_t provenance, const char* text, size_t len)
+{
+    if (provenance == SCFEED_PROVENANCE_NONE || !text) {
+        s->colour_setup_provenance = SCFEED_PROVENANCE_NONE;
+        s->colour_setup_bytes = 0;
+        return;
+    }
+    if (len > SCFEED_COLOUR_SETUP_BYTES) {
+        len = SCFEED_COLOUR_SETUP_BYTES;
+        while (len > 0 && text[len - 1] != '\n') --len;
+    }
+    memcpy(s->colour_setup, text, len);
+    s->colour_setup_bytes = (uint32_t)len;
+    s->colour_setup_provenance = provenance;
+}
 
 typedef struct scfeed_writer {
     scfeed_header* hdr; /* the whole mapping starts here */

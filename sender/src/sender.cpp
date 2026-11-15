@@ -5,6 +5,8 @@
 //  - with no app attached it does nothing: it tells Resolve the effect is an identity, so Resolve does not even
 //    call render; if Resolve renders anyway, the picture is passed through and nothing else happens;
 //  - thumbnail renders (Resolve flags them) are never fed;
+//  - the Colour Setup can be set by hand on the node (ADR 0006): it wins over the project's, which the app reads by
+//    script, and travels with every frame (Feed protocol 1.1);
 //  - every other render on Resolve's CUDA path starts an asynchronous copy into the Feed and returns
 //    (feed_copy.cpp). Background cache renders and repeat renders cannot be told apart here (Resolve does not
 //    flag them and a plugin cannot see the playhead), so frames are tagged with the frame number, the timeline
@@ -16,13 +18,16 @@
 #include "ofxImageEffect.h"
 #include "ofxImageEffectExt.h"
 #include "ofxGPURender.h"
+#include "ofxParam.h"
 #include "ofxProperty.h"
 
 #include "feed_copy.h"
+#include "scopecreep_feed.h"
 
 #include <algorithm>
 #include <atomic>
 #include <cstddef>
+#include <cstdio>
 #include <cstring>
 #include <string>
 #include <time.h>
@@ -36,6 +41,7 @@ namespace {
 OfxHost* gHost = nullptr;
 OfxPropertySuiteV1* gProp = nullptr;
 OfxImageEffectSuiteV1* gEffect = nullptr;
+OfxParameterSuiteV1* gParam = nullptr;  // optional: without it there is no manual override
 std::atomic<uint32_t> gInstances{0};
 
 uint64_t nowNs()
@@ -45,12 +51,56 @@ uint64_t nowNs()
     return (uint64_t)ts.tv_sec * 1000000000ull + (uint64_t)ts.tv_nsec;
 }
 
+// ------------------------------------------------------------- the manual Colour Setup
+//
+// Choice values are Resolve's own names, written into the Feed as they are. Resolve saves a choice as its index,
+// so options may only ever be appended, never reordered or removed.
+const char* const kTimelineSpaces[] = {"DaVinci WG/Intermediate", "ACEScct", "ACEScc", "Rec.709 Gamma 2.4", "Rec.2020 Gamma 2.4"};
+const char* const kOutputSpaces[] = {"Rec.709 Gamma 2.4", "P3-D65", "Rec.2100 ST2084", "Rec.2100 HLG", "Rec.2020 Gamma 2.4", "sRGB",
+                                     "P3-DCI", "Rec.709 BT.1886", "Rec.2100 ST2084 (1000 nit)"};
+const char* const kLevels[] = {"Video", "Full"};
+const char* const kLevelsFeed[] = {"video", "full"};
+const char* const kAcesVersions[] = {"ACES 2.0", "ACES 1.3"};
+const char* const kAcesVersionsFeed[] = {"2.0", "1.3"};
+#define PARAM_GROUP "colourSetup"
+#define PARAM_MANUAL "colourSetupManual"
+#define PARAM_TIMELINE "timelineColourSpace"
+#define PARAM_OUTPUT "outputColourSpace"
+#define PARAM_LEVELS "levels"
+#define PARAM_ACES "acesVersion"
+
+template <size_t N>
+const char* pick(const char* const (&options)[N], int i)
+{
+    return options[i >= 0 && (size_t)i < N ? i : 0];
+}
+
 // What identifies a Sender instance. Resolve reports no project, timeline or page to a plugin (Stage 0), so
 // this is all there is: an ordinal within this Resolve process, and the timeline frame rate.
 struct Instance {
     uint32_t id = 0;
     double frameRate = 0;
+    OfxParamHandle manual = nullptr, timeline = nullptr, output = nullptr, levels = nullptr, aces = nullptr;
 };
+
+int paramInt(OfxParamHandle h)
+{
+    int v = 0;
+    if (gParam && h) gParam->paramGetValue(h, &v);
+    return v;
+}
+
+// The manual Colour Setup as Feed protocol 1.1 text into `buf`; returns its length, or 0 when switched off.
+size_t manualColourSetup(const Instance* inst, char* buf, size_t cap)
+{
+    if (!paramInt(inst->manual)) return 0;
+    const char* timeline = pick(kTimelineSpaces, paramInt(inst->timeline));
+    int n = std::snprintf(buf, cap, "timeline=%s\noutput=%s\nlevels=%s\n", timeline, pick(kOutputSpaces, paramInt(inst->output)),
+                          pick(kLevelsFeed, paramInt(inst->levels)));
+    if (n > 0 && !std::strncmp(timeline, "ACES", 4) && (size_t)n < cap)
+        n += std::snprintf(buf + n, cap - (size_t)n, "aces_version=%s\n", pick(kAcesVersionsFeed, paramInt(inst->aces)));
+    return n > 0 && (size_t)n < cap ? (size_t)n : 0;
+}
 
 Instance* instanceOf(OfxImageEffectHandle effect)
 {
@@ -123,8 +173,44 @@ OfxStatus describe(OfxImageEffectHandle effect, const char* label)
     return kOfxStatOK;
 }
 
+template <size_t N>
+void defineChoice(OfxParamSetHandle ps, const char* name, const char* label, const char* hint, const char* const (&options)[N])
+{
+    OfxPropertySetHandle p = nullptr;
+    if (gParam->paramDefine(ps, kOfxParamTypeChoice, name, &p) != kOfxStatOK || !p) return;
+    gProp->propSetString(p, kOfxPropLabel, 0, label);
+    gProp->propSetString(p, kOfxParamPropHint, 0, hint);
+    gProp->propSetString(p, kOfxParamPropParent, 0, PARAM_GROUP);
+    gProp->propSetInt(p, kOfxParamPropAnimates, 0, 0);
+    gProp->propSetInt(p, kOfxParamPropDefault, 0, 0);
+    for (size_t i = 0; i < N; ++i) gProp->propSetString(p, kOfxParamPropChoiceOption, (int)i, options[i]);
+}
+
+// The manual override: for Resolve's free version (no scripting), or to say what the project cannot (ACES 1.3).
+void defineColourSetupParams(OfxImageEffectHandle effect)
+{
+    OfxParamSetHandle ps = nullptr;
+    if (!gParam || gEffect->getParamSet(effect, &ps) != kOfxStatOK || !ps) return;
+    OfxPropertySetHandle p = nullptr;
+    if (gParam->paramDefine(ps, kOfxParamTypeGroup, PARAM_GROUP, &p) == kOfxStatOK && p) gProp->propSetString(p, kOfxPropLabel, 0, "Colour Setup");
+    if (gParam->paramDefine(ps, kOfxParamTypeBoolean, PARAM_MANUAL, &p) == kOfxStatOK && p) {
+        gProp->propSetString(p, kOfxPropLabel, 0, "Set Colour Setup manually");
+        gProp->propSetString(p, kOfxParamPropHint, 0,
+                             "Off: scopecreep reads the Colour Setup from the project (Resolve Studio, external scripting set to Local). "
+                             "On: these settings are used instead.");
+        gProp->propSetString(p, kOfxParamPropParent, 0, PARAM_GROUP);
+        gProp->propSetInt(p, kOfxParamPropAnimates, 0, 0);
+        gProp->propSetInt(p, kOfxParamPropDefault, 0, 0);
+    }
+    defineChoice(ps, PARAM_TIMELINE, "Timeline Colour Space", "The colour space the project grades in.", kTimelineSpaces);
+    defineChoice(ps, PARAM_OUTPUT, "Output Colour Space", "What Resolve delivers to the monitor. For ACES, the output transform.", kOutputSpaces);
+    defineChoice(ps, PARAM_LEVELS, "Levels", "Video (legal range) or Full (data levels), as set in Resolve.", kLevels);
+    defineChoice(ps, PARAM_ACES, "ACES version", "Only used with an ACES timeline. Resolve does not tell scripts which ACES version a project uses.", kAcesVersions);
+}
+
 OfxStatus describeInContext(OfxImageEffectHandle effect)
 {
+    defineColourSetupParams(effect);
     for (const char* name : {kOfxImageEffectSimpleSourceClipName, kOfxImageEffectOutputClipName}) {
         OfxPropertySetHandle clip = nullptr;
         gEffect->clipDefine(effect, name, &clip);
@@ -142,6 +228,14 @@ OfxStatus createInstance(OfxImageEffectHandle effect)
     OfxPropertySetHandle props = nullptr;
     gEffect->getPropertySet(effect, &props);
     gProp->propGetDouble(props, kOfxImageEffectPropFrameRate, 0, &inst->frameRate);
+    OfxParamSetHandle ps = nullptr;
+    if (gParam && gEffect->getParamSet(effect, &ps) == kOfxStatOK && ps) {
+        gParam->paramGetHandle(ps, PARAM_MANUAL, &inst->manual, nullptr);
+        gParam->paramGetHandle(ps, PARAM_TIMELINE, &inst->timeline, nullptr);
+        gParam->paramGetHandle(ps, PARAM_OUTPUT, &inst->output, nullptr);
+        gParam->paramGetHandle(ps, PARAM_LEVELS, &inst->levels, nullptr);
+        gParam->paramGetHandle(ps, PARAM_ACES, &inst->aces, nullptr);
+    }
     gProp->propSetPointer(props, kOfxPropInstanceData, 0, inst);
     return kOfxStatOK;
 }
@@ -208,6 +302,10 @@ OfxStatus render(OfxImageEffectHandle effect, OfxPropertySetHandle inArgs)
             info.frameRate = inst->frameRate;
             info.instance = inst->id;
             info.renderNs = t0;
+            char colour[512];
+            info.colourSetupBytes = manualColourSetup(inst, colour, sizeof colour);
+            info.colourSetup = colour;
+            info.colourProvenance = info.colourSetupBytes ? SCFEED_PROVENANCE_MANUAL : SCFEED_PROVENANCE_NONE;
             scopecreep::feedSubmitCuda(stream, src.at(x1, y1), (size_t)src.rowBytes, info);
             what = scopecreep::Render::Fed;
         }
@@ -249,6 +347,7 @@ void setHost(OfxHost* host)
     if (!host) return;
     gProp = (OfxPropertySuiteV1*)host->fetchSuite(host->host, kOfxPropertySuite, 1);
     gEffect = (OfxImageEffectSuiteV1*)host->fetchSuite(host->host, kOfxImageEffectSuite, 1);
+    gParam = (OfxParameterSuiteV1*)host->fetchSuite(host->host, kOfxParameterSuite, 1);
 }
 
 OfxStatus senderEntry(const char* action, const void* handle, OfxPropertySetHandle inArgs, OfxPropertySetHandle outArgs)

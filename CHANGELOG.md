@@ -15,9 +15,16 @@ The format follows [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/
 - Luma waveform beside the Picture View (two panels): computed on the GPU from every pixel of every Viewer Frame at full resolution in 32-bit float, one waveform column per picture column, on a 10-bit scale (0–1023) with legal reference lines at 64 and 940. Pixels below 0 or above 1023 are counted and shown in their own edge rows, never cut off. A quiet label states the scale, the Measured Space and the luma weights (#15).
 - Luma weights derived from the Measured Space's primaries and white point (default), or a Match Resolve mode with the weights Resolve's own waveform uses (`--luma match-resolve`) (#15).
 - Known limitation: until the Colour Setup reaches the app (#16, #17) the waveform measures the values as sent and assumes Rec.709; its label says "Rec.709 assumed" (#15).
+- The Colour Setup travels with the Feed: the app shows it in the Picture View label, e.g. "ACEScct → Rec.709 BT.1886 (from project, assumes ACES 2.0)". It is read from the Resolve project through a scripting helper the app runs under Resolve's own Python (Studio, external scripting set to Local), only while playback is stopped; a changed project setting shows within a few seconds, with nothing restarted. Resolve's "P3-D65" is labelled gamma 2.6. ACES setups say "assumes ACES 2.0" (the version is not readable by script) (#16).
+- Manual Colour Setup on the Sender node ("Set Colour Setup manually": Timeline Colour Space, Output Colour Space, Levels, ACES version). It wins over the project's and is labelled "set manually"; it is the way to use scopecreep with Resolve's free version (#16).
+- The waveform measures in the Colour Setup's Output Colour Space when it is known (#16).
+- When the Colour Setup cannot be read, the label says it is unknown and a notice says how to fix it (external scripting, or the Sender node) (#16).
+- The app knows the Resolve project and timeline names (from scripting) for the Sender's identity (#16).
+- `--no-scripting`: never read the project by Resolve scripting (#16).
 
 ### Changed
 
+- Feed protocol 1.1: the slot's Colour Setup block now has a format (provenance plus `key=value` lines). It carries the Sender's manual override; 1.0 readers and writers stay compatible (#16).
 - Feed frames go to the GPU once, through reused staging buffers, for the Picture View and the waveform to share: the app now keeps up with UHD float at 60 fps (#15).
 
 ## [0.0.0] - 2026-11-15

@@ -35,7 +35,7 @@ The colour space Resolve delivers to the monitor and the render, such as Rec.709
 _Avoid_: Display space, ODT (except when talking specifically about ACES), delivery space
 
 **Colour Setup**:
-Everything about a Resolve project's colour pipeline that the Scopes depend on: colour science mode, Timeline Colour Space, Output Colour Space, tone and gamut mapping, ACES version and output transform, and Levels. A Colour Setup always says where it came from: the host, the project, or set manually.
+Everything about a Resolve project's colour pipeline that the Scopes depend on: colour science mode, Timeline Colour Space, Output Colour Space, tone and gamut mapping, ACES version and output transform, and Levels. A Colour Setup always says where it came from: the project (read by script) or set manually (on the Sender node). Set manually wins.
 _Avoid_: Project settings, colour config, colour pipeline
 
 **Measured Space**:

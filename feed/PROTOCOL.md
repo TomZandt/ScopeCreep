@@ -1,4 +1,4 @@
-# The Feed protocol, version 1.0
+# The Feed protocol, version 1.1
 
 The Feed is how the **Sender** (inside Resolve) hands frames to the scopecreep app on the same machine. It is one shared-memory file holding a small header and a ring of frame slots. This document is the specification; `include/scopecreep_feed.h` (C, used by the Sender) and the `scopecreep-feed` Rust crate (used by the app) are two implementations of it, tested against each other (`tests/c_interop.rs`).
 
@@ -29,7 +29,7 @@ A Feed with `slot_count = 0` is valid: it means "a Sender is loaded but has not 
 |---|---|---|---|---|
 | 0 | 8 | `magic` | Sender | bytes `SCFEED\0\0` |
 | 8 | 4 | `version_major` | Sender | 1 |
-| 12 | 4 | `version_minor` | Sender | 0 |
+| 12 | 4 | `version_minor` | Sender | 1 |
 | 16 | 4 | `header_bytes` | Sender | 4096 |
 | 20 | 4 | `slot_header_bytes` | Sender | 4096 |
 | 24 | 4 | `slot_count` | Sender | number of slots, 0 = no ring yet |
@@ -80,15 +80,39 @@ A Feed with `slot_count = 0` is valid: it means "a Sender is loaded but has not 
 | 72 | 4 | `sender_instance` | which Sender instance made this frame: 1, 2, 3 ... in order of creation within the Sender process |
 | 76 | 4 | `flags` | reserved, 0 |
 | 80 | 944 | reserved | |
-| 1024 | 4 | `colour_setup_provenance` | 0 = none, 1 = project, 2 = manual |
-| 1028 | 4 | `colour_setup_bytes` | bytes used in `colour_setup`, 0 in version 1.0 |
-| 1032 | 3064 | `colour_setup` | the Colour Setup known to the Sender. Format to be defined by a later minor version (ticket #16) |
+| 1024 | 4 | `colour_setup_provenance` | 0 = none, 1 = project, 2 = manual (see "The Colour Setup block") |
+| 1028 | 4 | `colour_setup_bytes` | bytes used in `colour_setup`, at most 3064; 0 when provenance is 0 |
+| 1032 | 3064 | `colour_setup` | the Colour Setup the Sender knows for this frame, as UTF-8 `key=value` lines (1.1) |
 
 Pixel values are the Sender's input exactly as Resolve rendered it: unclamped, in the Timeline Colour Space.
 
+### The Colour Setup block (version 1.1)
+
+Version 1.0 reserved these bytes; 1.1 gives them a meaning. A 1.0 Sender writes zeros there, which reads as "no Colour Setup", so readers need no special case.
+
+A Sender cannot learn the project's Colour Setup from Resolve (OFX tells it nothing, ADR 0005), so what it sends is only the Colour Setup it was **given by hand**: the manual override on the Sender node. The project's own Colour Setup reaches the app by another road, from Resolve's scripting API through a helper the app runs (ADR 0006), and never through the Feed.
+
+- **Provenance 0, none**: the Sender has no Colour Setup of its own for this frame. This does *not* mean the frame has no Colour Setup: the app uses the project's.
+- **Provenance 2, manual**: set by hand on the Sender node. It wins over the project's, and the app labels it "set manually".
+- **Provenance 1, project**: a Colour Setup the Sender learned from the project. No Sender writes this today; it is kept for a Sender that can, and readers treat it as the project's Colour Setup.
+- Any other provenance, or a byte count over 3064, reads as none.
+
+`colour_setup` holds `colour_setup_bytes` bytes of UTF-8 text, one `key=value` per line, lines ended by `\n`. Readers trim spaces around keys and values, skip lines with no `=`, and ignore keys they do not know. A writer whose text does not fit cuts it after the last whole line that fits. Keys in 1.1, with values as Resolve names them:
+
+| Key | Meaning | Example values |
+|---|---|---|
+| `timeline` | Timeline Colour Space | `DaVinci WG/Intermediate`, `ACEScct`, `ACEScc`, `Rec.709 Gamma 2.4` |
+| `output` | Output Colour Space (for ACES, the output transform) | `Rec.709 Gamma 2.4`, `P3-D65`, `Rec.2100 ST2084`, `Rec.709 BT.1886`, `Rec.2100 ST2084 (1000 nit)` |
+| `levels` | Levels | `video` (legal range) or `full` (data levels) |
+| `aces_version` | ACES version, only for ACES timelines | `2.0`, `1.3` |
+| `tone_mapping` | output tone mapping (optional) | `None`, `DaVinci` |
+| `gamut_mapping` | output gamut mapping (optional) | `None`, `Saturation Compression` |
+
+A missing key is unknown, never a default: in particular a missing `aces_version` on an ACES timeline means unknown, which the app shows as "assumes ACES 2.0".
+
 ### Sender identity
 
-Resolve tells an OFX plugin no project name, timeline name or page (Stage 0). So the identity of a frame's Sender is what is really available: `sender_pid` and `host_name` (header) plus `sender_instance` and `frame_rate` (slot). Project and timeline names must come from the scripting side (ticket #16) if they are wanted.
+Resolve tells an OFX plugin no project name, timeline name or page (Stage 0). So the identity of a frame's Sender in the Feed is what is really available: `sender_pid` and `host_name` (header) plus `sender_instance` and `frame_rate` (slot). The app adds the project and timeline names from its scripting helper (ADR 0006); they are not in the Feed.
 
 ## Slot protocol
 

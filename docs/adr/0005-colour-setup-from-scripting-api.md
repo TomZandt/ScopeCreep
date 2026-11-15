@@ -10,5 +10,5 @@ The Colour Setup comes from, in priority order: the scripting API (Studio, exter
 
 - The app depends on Resolve Studio with external scripting enabled for automatic colour; the free version works only with the manual override.
 - Resolve scripting calls made during playback block for minutes and starve Resolve's main thread. The Colour Setup is read while playback is stopped and never from the Sender's render call, ideally by a process outside Resolve.
-- The Resolve scripting API is Python and Lua, so the Rust app needs a small helper to read it. This is decided in ticket #16.
+- The Resolve scripting API is Python and Lua, so the Rust app needs a small helper to read it. Decided in ADR 0006 (ticket #16).
 - The Feed's Sender identity cannot be the Resolve page. What it can be is decided in ticket #14.

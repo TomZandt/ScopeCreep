@@ -1,11 +1,14 @@
 //! The scopecreep app: one window with two panels, the Picture View of the latest Feed frame on the left and the
 //! luma waveform on the right, each with a quiet label.
 //!
-//!   scopecreep [--feed <path>] [--luma primaries|match-resolve]
+//!   scopecreep [--feed <path>] [--luma primaries|match-resolve] [--no-scripting]
 //!
-//!   --feed   default: $SCOPECREEP_FEED, else /dev/shm/scopecreep-feed
-//!   --luma   luma weights (ADR 0004): from the Measured Space's primaries (the default), or the weights
-//!            Resolve's own waveform uses
+//!   --feed           default: $SCOPECREEP_FEED, else /dev/shm/scopecreep-feed
+//!   --luma           luma weights (ADR 0004): from the Measured Space's primaries (the default), or the weights
+//!                    Resolve's own waveform uses
+//!   --no-scripting   never read the project by Resolve scripting (the Colour Setup then comes only from the
+//!                    Sender node's manual override). Resolve's Python: $SCOPECREEP_RESOLVE_PYTHON, else
+//!                    /opt/resolve/bin/ResolvePython.
 //!
 //! Two threads. The Feed thread polls the Feed every millisecond (the ring is short and the Sender never waits),
 //! puts the frames to show on the GPU, measures them, and wakes the window. The window thread only draws.
@@ -14,8 +17,9 @@ mod picture_view;
 use glyphon::{Attrs, Buffer, Cache, Color, ColorMode, Family, FontSystem, Metrics, Resolution, Shaping, SwashCache, TextArea, TextAtlas, TextBounds, TextRenderer, Viewport};
 use picture_view::PictureView;
 use scopecreep::gpu_frame::FrameUploader;
-use scopecreep::waveform::{DEFAULT_LUMA_WEIGHTS, LumaWeights, Measurement, PlotLayout, Waveform};
+use scopecreep::waveform::{DEFAULT_LUMA_WEIGHTS, LumaWeights, MeasuredSpace, Measurement, PlotLayout, Waveform};
 use scopecreep::monitor::Monitor;
+use scopecreep::resolve_helper::ScriptHelper;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
@@ -60,11 +64,13 @@ struct Wake;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut feed = scopecreep_feed::default_path();
+    let mut scripting = true;
     let mut luma = DEFAULT_LUMA_WEIGHTS;
     let mut args = std::env::args().skip(1);
     while let Some(arg) = args.next() {
         match arg.as_str() {
             "--feed" => feed = args.next().ok_or("--feed needs a path")?.into(),
+            "--no-scripting" => scripting = false,
             "--luma" => {
                 luma = match args.next().as_deref() {
                     Some("primaries") => LumaWeights::FromPrimaries,
@@ -76,11 +82,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 println!("scopecreep {} (Feed protocol {}.{})", env!("CARGO_PKG_VERSION"), scopecreep_feed::VERSION_MAJOR, scopecreep_feed::VERSION_MINOR);
                 return Ok(());
             }
-            _ => return Err(format!("unknown argument {arg}. Usage: scopecreep [--feed <path>] [--luma primaries|match-resolve]").into()),
+            _ => return Err(format!("unknown argument {arg}. Usage: scopecreep [--feed <path>] [--luma primaries|match-resolve] [--no-scripting]").into()),
         }
     }
     let event_loop = EventLoop::<Wake>::with_user_event().build()?;
-    let mut app = App { feed, luma, proxy: event_loop.create_proxy(), window: None };
+    let mut app = App { feed, luma, scripting, proxy: event_loop.create_proxy(), window: None };
     event_loop.run_app(&mut app)?;
     Ok(())
 }
@@ -88,6 +94,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 struct App {
     feed: PathBuf,
     luma: LumaWeights,
+    scripting: bool,
     proxy: EventLoopProxy<Wake>,
     window: Option<AppWindow>,
 }
@@ -119,7 +126,7 @@ struct AppWindow {
 }
 
 impl AppWindow {
-    fn new(window: Arc<Window>, event_loop: &ActiveEventLoop, feed: PathBuf, luma: LumaWeights, proxy: EventLoopProxy<Wake>) -> Result<AppWindow, Box<dyn std::error::Error>> {
+    fn new(window: Arc<Window>, event_loop: &ActiveEventLoop, feed: PathBuf, luma: LumaWeights, scripting: bool, proxy: EventLoopProxy<Wake>) -> Result<AppWindow, Box<dyn std::error::Error>> {
         // WGPU_BACKEND and friends are honoured, for trying another graphics backend.
         let instance = wgpu::Instance::new(wgpu::InstanceDescriptor::new_with_display_handle_from_env(Box::new(event_loop.owned_display_handle())));
         let surface = instance.create_surface(window.clone()).map_err(|e| format!("no drawing surface: {e}"))?;
@@ -168,9 +175,12 @@ impl AppWindow {
             let (texts, stop, picture_view, waveform) = (texts.clone(), stop.clone(), picture_view.clone(), waveform.clone());
             let mut uploader = FrameUploader::new(&device, &queue);
             std::thread::Builder::new().name("feed".into()).spawn(move || {
-                let mut monitor = Monitor::new(&feed);
+                // The Resolve scripting helper is owned by this thread's Monitor: it is killed when the app quits.
+                let mut monitor = if scripting { Monitor::with_project_reader(&feed, Box::new(ScriptHelper::from_env())) } else { Monitor::new(&feed) };
                 // Frames put on the GPU and measured by the waveform.
                 let mut scope_frames = 0u64;
+                // The waveform measures in the Colour Setup's Output Colour Space (the default Measured Space).
+                let mut measurement = Measurement { luma, ..Measurement::default() };
                 let mut last = Texts::default();
                 // SCOPECREEP_STATUS_LOG=1: one line a second on stderr with what the app made of the Feed (diagnostics).
                 let status_log = std::env::var_os("SCOPECREEP_STATUS_LOG").is_some_and(|v| v != "0");
@@ -181,7 +191,7 @@ impl AppWindow {
                         let s = monitor.status();
                         let fed = s.feed_stats.map_or(0, |f| f.frames_published);
                         eprintln!(
-                            "status feed={:?} fed={} viewer_frames={} scope_frames={} repeats={} cache_ignored={} dropped={} frame={:?}",
+                            "status feed={:?} fed={} viewer_frames={} scope_frames={} repeats={} cache_ignored={} dropped={} frame={:?} project={:?} timeline={:?} colour={:?} project_state={:?} reads={}",
                             s.feed,
                             fed,
                             s.viewer_frames,
@@ -189,7 +199,12 @@ impl AppWindow {
                             s.repeat_renders,
                             s.cache_renders_ignored,
                             s.dropped,
-                            s.picture.as_ref().map(|p| p.frame_time)
+                            s.picture.as_ref().map(|p| p.frame_time),
+                            s.project.as_ref().map(|p| p.project.as_str()),
+                            s.project.as_ref().and_then(|p| p.timeline.as_deref()),
+                            s.colour_setup().map(|c| c.label()),
+                            s.project_state,
+                            s.project_reads
                         );
                     }
                     let mut shown = false;
@@ -202,6 +217,12 @@ impl AppWindow {
                         shown = true;
                     });
                     let status = monitor.status();
+                    let space = status.colour_setup().and_then(|c| c.setup.measured_space());
+                    let now_measuring = Measurement { space: space.unwrap_or(MeasuredSpace::Rec709), assumed: space.is_none(), luma };
+                    if now_measuring != measurement {
+                        measurement = now_measuring;
+                        waveform.set_measurement(measurement);
+                    }
                     let now = Texts { label: status.picture_label(), notice: status.notice(), has_picture: status.picture.is_some() };
                     if now != last {
                         *texts.lock().unwrap() = now.clone();
@@ -401,7 +422,7 @@ impl ApplicationHandler<Wake> for App {
         let made = event_loop
             .create_window(attributes)
             .map_err(Into::into)
-            .and_then(|window| AppWindow::new(Arc::new(window), event_loop, self.feed.clone(), self.luma, self.proxy.clone()));
+            .and_then(|window| AppWindow::new(Arc::new(window), event_loop, self.feed.clone(), self.luma, self.scripting, self.proxy.clone()));
         match made {
             Ok(window) => self.window = Some(window),
             Err(e) => {

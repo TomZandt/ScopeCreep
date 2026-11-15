@@ -1,5 +1,6 @@
 //! The synthetic frame writer: plays the part of Resolve and the Sender, so everything downstream of the Feed can
 //! be tested with no Resolve. It follows the same slot protocol as the Sender (feed/PROTOCOL.md).
+use crate::SentColourSetup;
 use crate::layout::*;
 use crate::{READER_TIMEOUT_NS, SENDER_NAME, VERSION_MAJOR, VERSION_MINOR, now_ns};
 use std::fs::OpenOptions;
@@ -33,6 +34,7 @@ pub enum WriteError {
 pub struct FeedWriter {
     map: Mapping,
     path: PathBuf,
+    colour_setup: Option<SentColourSetup>,
 }
 
 impl FeedWriter {
@@ -77,7 +79,7 @@ impl FeedWriter {
         {
             old.atomic_u32(H_RETIRED).store(1, Release);
         }
-        Ok(FeedWriter { map, path })
+        Ok(FeedWriter { map, path, colour_setup: None })
     }
 
     pub fn path(&self) -> &Path {
@@ -88,6 +90,12 @@ impl FeedWriter {
     pub fn reader_present(&self, now_ns: u64) -> bool {
         let hb = self.map.atomic_u64(H_READER_HEARTBEAT_NS).load(Acquire);
         hb != 0 && (now_ns < hb || now_ns - hb < READER_TIMEOUT_NS)
+    }
+
+    /// The Colour Setup the Sender knows of its own (the manual override), stamped on every frame written from now
+    /// on; `None` = none (the app then uses the project's).
+    pub fn set_colour_setup(&mut self, setup: Option<SentColourSetup>) {
+        self.colour_setup = setup;
     }
 
     /// Record the Sender's last error for the app to show (empty = none).
@@ -123,6 +131,7 @@ impl FeedWriter {
         m.set_f64(s + S_FRAME_RATE, meta.frame_rate);
         m.set_u64(s + S_RENDER_NS, meta.render_ns);
         m.set_u32(s + S_SENDER_INSTANCE, meta.sender_instance);
+        SentColourSetup::store(self.colour_setup.as_ref(), m, s);
         // SAFETY: the slot is WRITING, so only this writer touches its pixel area; the range was checked.
         unsafe { std::ptr::copy_nonoverlapping(pixels.as_ptr(), m.floats(s + SLOT_HEADER_BYTES, pixels.len()), pixels.len()) };
         m.set_u64(s + S_PUBLISH_NS, now_ns());

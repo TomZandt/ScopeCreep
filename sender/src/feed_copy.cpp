@@ -271,8 +271,7 @@ bool feedSubmitCuda(void* hostStream, const void* src, size_t srcRowBytes, const
     s->publish_ns = 0;
     s->sender_instance = info.instance;
     s->flags = 0;
-    s->colour_setup_provenance = 0;
-    s->colour_setup_bytes = 0;
+    scfeed_slot_set_colour_setup(s, info.colourProvenance, info.colourSetup, info.colourSetupBytes);
 
     const cudaStream_t host = (cudaStream_t)hostStream;
     void* staging = r->staging[(size_t)stg];

@@ -2,7 +2,7 @@
 //! (`feed/include/scopecreep_feed.h`, driven through `feed/c/feed_c_tool.c`) and this Rust crate.
 mod common;
 use common::temp_feed;
-use scopecreep_feed::{FeedReader, FeedWriter, FrameMeta, OpenError, now_ns, synthetic};
+use scopecreep_feed::{FeedReader, FeedWriter, FrameMeta, OpenError, Provenance, SentColourSetup, now_ns, synthetic};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::sync::OnceLock;
@@ -103,6 +103,44 @@ fn frames_written_by_the_rust_writer_are_read_by_the_c_reader() {
         sum(1.0)
     );
     assert_eq!(run(&["read", path.to_str().unwrap()]), want);
+}
+
+#[test]
+fn a_colour_setup_written_by_the_c_writer_is_read_by_the_rust_reader() {
+    let path = temp_feed("c-colour");
+    let text = "timeline=DaVinci WG/Intermediate\noutput=P3-D65\nlevels=full\n";
+    run(&["write-colour", path.to_str().unwrap(), "2", text]);
+    let mut reader = FeedReader::open(&path).unwrap();
+    assert_eq!(reader.sender().protocol, (1, 1), "the C header speaks 1.1 too");
+    let none = reader.next_frame().unwrap();
+    assert_eq!(none.colour_setup(), None, "frame 1 has no Colour Setup");
+    drop(none);
+    let sent = reader.next_frame().unwrap().colour_setup().expect("frame 2 carries the Colour Setup");
+    assert_eq!(sent.provenance, Provenance::Manual);
+    assert_eq!(sent.text, text);
+}
+
+#[test]
+fn a_colour_setup_too_long_for_the_block_is_cut_at_a_line_end_by_the_c_writer() {
+    let path = temp_feed("c-colour-long");
+    let line = "note=".to_string() + &"x".repeat(1000) + "\n";
+    let text = line.repeat(4); // 4024 bytes: only three whole lines fit in 3064
+    run(&["write-colour", path.to_str().unwrap(), "1", &text]);
+    let mut reader = FeedReader::open(&path).unwrap();
+    drop(reader.next_frame());
+    let sent = reader.next_frame().unwrap().colour_setup().unwrap();
+    assert_eq!(sent.provenance, Provenance::Project);
+    assert_eq!(sent.text, line.repeat(3));
+}
+
+#[test]
+fn a_colour_setup_written_by_the_rust_writer_is_read_by_the_c_reader() {
+    let path = temp_feed("rust-colour-to-c");
+    let mut writer = FeedWriter::create(&path, 4, 16 * 9 * 16).unwrap();
+    writer.set_colour_setup(Some(SentColourSetup::new(Provenance::Manual, "timeline=ACEScct\noutput=P3-D65\n")));
+    let meta = FrameMeta { width: 16, height: 9, frame_time: 1.0, frame_rate: 24.0, render_ns: now_ns(), sender_instance: 1 };
+    writer.write_frame(&meta, &synthetic::solid(16, 9, [0.5; 4])).unwrap();
+    assert_eq!(run(&["read-colour", path.to_str().unwrap()]), "provenance=2 bytes=31\ntimeline=ACEScct\noutput=P3-D65\n");
 }
 
 #[test]

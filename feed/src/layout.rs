@@ -54,6 +54,10 @@ pub const S_FRAME_RATE: usize = 48;
 pub const S_RENDER_NS: usize = 56;
 pub const S_PUBLISH_NS: usize = 64;
 pub const S_SENDER_INSTANCE: usize = 72;
+pub const S_COLOUR_SETUP_PROVENANCE: usize = 1024;
+pub const S_COLOUR_SETUP_BYTES: usize = 1028;
+pub const S_COLOUR_SETUP: usize = 1032;
+pub const COLOUR_SETUP_CAPACITY: usize = 3064;
 
 pub const FREE: u32 = 0;
 pub const WRITING: u32 = 1;
@@ -142,6 +146,20 @@ impl Mapping {
             n -= 1;
         }
         for (i, &b) in src[..n].iter().chain(std::iter::repeat_n(&0u8, cap - n)).enumerate() {
+            // SAFETY: in range.
+            unsafe { self.ptr.add(off + i).write_volatile(b) }
+        }
+    }
+
+    /// `len` raw bytes. The caller owns the region (a slot it holds).
+    pub fn bytes(&self, off: usize, len: usize) -> Vec<u8> {
+        self.check(off, len);
+        // SAFETY: in range.
+        (0..len).map(|i| unsafe { self.ptr.add(off + i).read_volatile() }).collect()
+    }
+    pub fn set_bytes(&self, off: usize, src: &[u8]) {
+        self.check(off, src.len());
+        for (i, &b) in src.iter().enumerate() {
             // SAFETY: in range.
             unsafe { self.ptr.add(off + i).write_volatile(b) }
         }

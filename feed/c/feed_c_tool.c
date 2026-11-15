@@ -5,6 +5,8 @@
  *   feed_c_tool write-version <path> <major> <minor>             publish an empty Feed claiming another version
  *   feed_c_tool read <path>                                      attach as a reader and print every waiting frame
  *   feed_c_tool serve <path> <width> <height> <ms>               act as a Sender for <ms>: copy only while a reader is attached
+ *   feed_c_tool write-colour <path> <provenance> <text>          write two 16x9 frames, the second with this Colour Setup
+ *   feed_c_tool read-colour <path>                               print the Colour Setup of every waiting frame
  */
 #include "scopecreep_feed.h"
 
@@ -66,6 +68,37 @@ static int cmd_read(const char* path)
     return 0;
 }
 
+static int cmd_write_colour(const char* path, uint32_t provenance, const char* text)
+{
+    scfeed_writer w;
+    if (scfeed_writer_create(&w, path, 4, 16 * 9 * 16, "c-tool", "feed_c_tool") != SCFEED_OK) { perror("create"); return 1; }
+    for (uint64_t f = 0; f < 2; ++f) {
+        int i = scfeed_writer_acquire(&w);
+        if (i < 0) return 1;
+        fill_slot(&w, i, 16, 9, f);
+        scfeed_slot* s = scfeed_slot_at(w.hdr, (uint32_t)i);
+        if (f == 0) scfeed_slot_set_colour_setup(s, SCFEED_PROVENANCE_NONE, NULL, 0);
+        else scfeed_slot_set_colour_setup(s, provenance, text, strlen(text));
+        scfeed_writer_publish(&w, i);
+    }
+    scfeed_writer_close(&w);
+    return 0;
+}
+
+static int cmd_read_colour(const char* path)
+{
+    scfeed_reader r;
+    if (scfeed_reader_open(&r, path) != SCFEED_OK) { printf("cannot open\n"); return 1; }
+    int i;
+    while ((i = scfeed_reader_claim(&r)) >= 0) {
+        const scfeed_slot* s = scfeed_slot_at(r.hdr, (uint32_t)i);
+        printf("provenance=%u bytes=%u\n%.*s", s->colour_setup_provenance, s->colour_setup_bytes, (int)s->colour_setup_bytes, (const char*)s->colour_setup);
+        scfeed_reader_release(&r, i);
+    }
+    scfeed_reader_close(&r);
+    return 0;
+}
+
 static int cmd_serve(const char* path, uint32_t width, uint32_t height, uint64_t ms)
 {
     scfeed_writer w;
@@ -102,6 +135,8 @@ int main(int argc, char** argv)
         return 0;
     }
     if (argc == 3 && !strcmp(argv[1], "read")) return cmd_read(argv[2]);
+    if (argc == 5 && !strcmp(argv[1], "write-colour")) return cmd_write_colour(argv[2], (uint32_t)atoi(argv[3]), argv[4]);
+    if (argc == 3 && !strcmp(argv[1], "read-colour")) return cmd_read_colour(argv[2]);
     if (argc == 6 && !strcmp(argv[1], "serve")) return cmd_serve(argv[2], (uint32_t)atoi(argv[3]), (uint32_t)atoi(argv[4]), (uint64_t)atoll(argv[5]));
     fprintf(stderr, "usage: see the top of feed_c_tool.c\n");
     return 2;

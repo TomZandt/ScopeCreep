@@ -9,6 +9,7 @@
 #include "ofxGPURender.h"
 #include "ofxImageEffect.h"
 #include "ofxImageEffectExt.h"
+#include "ofxParam.h"
 #include "ofxProperty.h"
 
 #include "scopecreep_feed.h"
@@ -17,6 +18,7 @@
 #include <dlfcn.h>
 
 #include <chrono>
+#include <cstdarg>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -56,10 +58,41 @@ static OfxStatus getI(OfxPropertySetHandle h, const char* n, int i, int* v) { Va
 static std::map<std::string, Props*> gClips;
 static Props gSrcImage, gDstImage, gEffectProps;
 
+// Parameters: what the plugin defined (type and properties) and the value the "user" set (bool or choice index).
+struct Param { std::string type; Props props; int value = 0; };
+static std::map<std::string, Param> gParams;
+static Props gParamSetProps;
+
+static OfxStatus paramGetValue(OfxParamHandle h, ...)
+{
+    va_list ap;
+    va_start(ap, h);
+    int* out = va_arg(ap, int*);
+    va_end(ap);
+    *out = ((Param*)h)->value;
+    return kOfxStatOK;
+}
+
 static const void* fetchSuite(OfxPropertySetHandle, const char* name, int)
 {
     static OfxPropertySuiteV1 ps;
     static OfxImageEffectSuiteV1 es;
+    static OfxParameterSuiteV1 prm;
+    prm.paramDefine = [](OfxParamSetHandle, const char* type, const char* n, OfxPropertySetHandle* p) {
+        gParams[n].type = type;
+        if (p) *p = (OfxPropertySetHandle)&gParams[n].props;
+        return kOfxStatOK;
+    };
+    prm.paramGetHandle = [](OfxParamSetHandle, const char* n, OfxParamHandle* h, OfxPropertySetHandle* p) {
+        auto it = gParams.find(n);
+        if (it == gParams.end()) return kOfxStatErrUnknown;
+        *h = (OfxParamHandle)&it->second;
+        if (p) *p = (OfxPropertySetHandle)&it->second.props;
+        return kOfxStatOK;
+    };
+    prm.paramSetGetPropertySet = [](OfxParamSetHandle, OfxPropertySetHandle* p) { *p = (OfxPropertySetHandle)&gParamSetProps; return kOfxStatOK; };
+    prm.paramGetValue = paramGetValue;
+    es.getParamSet = [](OfxImageEffectHandle, OfxParamSetHandle* p) { *p = (OfxParamSetHandle)&gParamSetProps; return kOfxStatOK; };
     ps.propSetString = setS; ps.propSetPointer = setP; ps.propSetDouble = setD; ps.propSetInt = setI;
     ps.propGetString = getS; ps.propGetPointer = getP; ps.propGetDouble = getD; ps.propGetInt = getI;
     es.getPropertySet = [](OfxImageEffectHandle, OfxPropertySetHandle* p) { *p = (OfxPropertySetHandle)&gEffectProps; return kOfxStatOK; };
@@ -76,7 +109,17 @@ static const void* fetchSuite(OfxPropertySetHandle, const char* name, int)
     es.clipReleaseImage = [](OfxPropertySetHandle) { return kOfxStatOK; };
     if (!std::strcmp(name, kOfxPropertySuite)) return &ps;
     if (!std::strcmp(name, kOfxImageEffectSuite)) return &es;
+    if (!std::strcmp(name, kOfxParameterSuite)) return &prm;
     return nullptr;
+}
+
+// The index of `option` in a choice parameter the plugin defined, or -1.
+static int choiceIndex(const char* param, const char* option)
+{
+    auto& opts = gParams[param].props.m[kOfxParamPropChoiceOption];
+    for (size_t i = 0; i < opts.size(); ++i)
+        if (opts[i].s == option) return (int)i;
+    return -1;
 }
 
 // ---------------------------------------------------------------------- the test
@@ -194,6 +237,7 @@ static bool reopen(scfeed_reader& r, const char* path)
 
 int main(int argc, char** argv)
 {
+    setvbuf(stdout, nullptr, _IOLBF, 0);
     if (argc < 2) { std::printf("usage: mock_host_test <path to .ofx>\n"); return 2; }
     char feed[128];
     std::snprintf(feed, sizeof feed, "/dev/shm/scopecreep-sender-test-%d", (int)getpid());
@@ -279,6 +323,51 @@ int main(int argc, char** argv)
     CHECK(exact, "three frames arrive with every value identical (negative, over-range, denormal included)");
     CHECK(meta, "each frame carries its size, format, frame number, frame rate, instance, sequence and times");
     CHECK(through, "the picture still passes through unchanged");
+
+    std::printf("a Colour Setup set by hand on the Sender node travels with each frame\n");
+    CHECK(gParams["colourSetupManual"].type == kOfxParamTypeBoolean, "a 'Set Colour Setup manually' switch is defined");
+    CHECK(gParams["colourSetupManual"].props.m[kOfxParamPropDefault].size() == 1 && gParams["colourSetupManual"].props.m[kOfxParamPropDefault][0].i == 0, "it is off by default: the project's Colour Setup is used");
+    CHECK(gParams["timelineColourSpace"].type == kOfxParamTypeChoice && choiceIndex("timelineColourSpace", "DaVinci WG/Intermediate") >= 0 &&
+              choiceIndex("timelineColourSpace", "ACEScct") >= 0,
+          "a Timeline Colour Space choice is defined, with Resolve's names");
+    CHECK(gParams["outputColourSpace"].type == kOfxParamTypeChoice && choiceIndex("outputColourSpace", "P3-D65") >= 0 &&
+              choiceIndex("outputColourSpace", "Rec.709 Gamma 2.4") >= 0,
+          "an Output Colour Space choice is defined");
+    CHECK(choiceIndex("levels", "Video") >= 0 && choiceIndex("levels", "Full") >= 0, "a Levels choice is defined");
+    CHECK(choiceIndex("acesVersion", "ACES 2.0") == 0 && choiceIndex("acesVersion", "ACES 1.3") >= 0, "an ACES version choice is defined, 2.0 first");
+    auto frameColour = [&](double t, uint32_t* provenance) {
+        f.fill(30);
+        render(f, t);
+        const int k = nextFrame(r);
+        std::string text;
+        *provenance = 99;
+        if (k >= 0) {
+            const scfeed_slot* s = scfeed_slot_at(r.hdr, (uint32_t)k);
+            *provenance = s->colour_setup_provenance;
+            text.assign((const char*)s->colour_setup, s->colour_setup_bytes);
+            scfeed_reader_release(&r, k);
+        }
+        return text;
+    };
+    uint32_t prov = 0;
+    std::string text = frameColour(150.0, &prov);
+    CHECK(prov == SCFEED_PROVENANCE_NONE && text.empty(), "switched off: the frame carries no Colour Setup of the Sender's own");
+    gParams["colourSetupManual"].value = 1;
+    gParams["timelineColourSpace"].value = choiceIndex("timelineColourSpace", "ACEScct");
+    gParams["outputColourSpace"].value = choiceIndex("outputColourSpace", "P3-D65");
+    gParams["levels"].value = choiceIndex("levels", "Full");
+    gParams["acesVersion"].value = choiceIndex("acesVersion", "ACES 1.3");
+    text = frameColour(151.0, &prov);
+    CHECK(prov == SCFEED_PROVENANCE_MANUAL, "switched on: the frame's Colour Setup is marked manual");
+    CHECK(text == "timeline=ACEScct\noutput=P3-D65\nlevels=full\naces_version=1.3\n", "and says exactly what was set");
+    gParams["timelineColourSpace"].value = choiceIndex("timelineColourSpace", "DaVinci WG/Intermediate");
+    gParams["outputColourSpace"].value = choiceIndex("outputColourSpace", "Rec.709 Gamma 2.4");
+    gParams["levels"].value = choiceIndex("levels", "Video");
+    text = frameColour(152.0, &prov);
+    CHECK(text == "timeline=DaVinci WG/Intermediate\noutput=Rec.709 Gamma 2.4\nlevels=video\n", "a non-ACES timeline sends no ACES version");
+    gParams["colourSetupManual"].value = 0;
+    text = frameColour(153.0, &prov);
+    CHECK(prov == SCFEED_PROVENANCE_NONE && text.empty(), "switched off again: back to none");
 
     std::printf("the Sender never waits for a slow app\n");
     const uint64_t pub0 = scfeed_load64(&r.hdr->frames_published), busy0 = scfeed_load64(&r.hdr->drops_busy), over0 = scfeed_load64(&r.hdr->drops_overwritten);

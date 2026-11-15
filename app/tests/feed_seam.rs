@@ -103,7 +103,7 @@ fn the_label_says_what_the_picture_is() {
     let mut b = Bench::with_sender("label");
     b.render(86400.0);
     b.wait(100 * MS);
-    assert_eq!(b.label(), "Clean picture  ·  16 × 9  ·  as sent, no Output Conversion");
+    assert_eq!(b.label(), "Clean picture  ·  16 × 9  ·  Colour Setup unknown  ·  as sent, no Output Conversion");
     assert_eq!(b.notice(), "", "nothing to report while the picture is live");
 }
 
@@ -295,7 +295,7 @@ fn a_feed_version_mismatch_is_reported_not_crashed_on() {
     let mut b = Bench::new("mismatch");
     b.writer = Some(FeedWriter::create_with_version(&b.path, 4, 4096, 2, 3).unwrap());
     b.wait(600 * MS);
-    assert_eq!(b.monitor.status().feed, FeedState::VersionMismatch { found: (2, 3), supported: (1, 0) });
+    assert_eq!(b.monitor.status().feed, FeedState::VersionMismatch { found: (2, 3), supported: (1, scopecreep_feed::VERSION_MINOR) });
     assert_eq!(
         b.notice(),
         "The Sender speaks Feed version 2.3 and this app reads version 1.x. Install the Sender and the app from the same release."

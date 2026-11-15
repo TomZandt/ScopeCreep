@@ -19,6 +19,10 @@ struct FrameInfo {
     double frameRate = 0;   // frames per second of the timeline, 0 = unknown
     uint32_t instance = 0;  // which Sender instance
     uint64_t renderNs = 0;  // monotonic time the render call began
+    // The Colour Setup set by hand on the Sender node (Feed protocol 1.1 text), or provenance 0 for none.
+    uint32_t colourProvenance = 0;
+    const char* colourSetup = nullptr;
+    size_t colourSetupBytes = 0;
 };
 
 enum class Render { Fed, Idle, Thumbnail, Unsupported };  // what a render call turned out to be, for the Feed's counters

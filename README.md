@@ -29,7 +29,7 @@ Pre-alpha. Nothing to install yet.
 
 ```sh
 cargo test                       # Feed protocol (Rust and C against each other) and the app, driven at the Feed seam (waveform tests need a GPU)
-cargo run -p scopecreep          # the app (reads /dev/shm/scopecreep-feed, or $SCOPECREEP_FEED); --luma match-resolve for Resolve's luma weights
+cargo run -p scopecreep          # the app (reads /dev/shm/scopecreep-feed, or $SCOPECREEP_FEED); --luma match-resolve for Resolve's luma weights; --no-scripting to never read the project by Resolve scripting
 cargo run -p scopecreep-feed --bin feed-synth   # a moving test card into the Feed, no Resolve needed
 
 make -C sender                   # build the Sender (needs /opt/cuda and Resolve's OpenFX headers)
@@ -52,7 +52,7 @@ DaVinci Resolve                                 scopecreep app (Rust + wgpu)
 
 - **Sender:** a small C++ OFX plugin placed on the last timeline node. It hands each rendered frame to scopecreep without ever making Resolve wait.
 - **App:** reads the Feed, converts it from the Timeline Colour Space to the Output Colour Space when required, and draws the Scopes and Picture Views on the GPU.
-- **Colour Setup:** read from Resolve automatically where possible (OFX colour management or the scripting API), with a manual override on the Sender.
+- **Colour Setup:** read from the project by Resolve's scripting API (Studio, external scripting set to Local) while playback is stopped, with a manual override on the Sender node (ADR 0005, ADR 0006).
 
 ## Documentation
 

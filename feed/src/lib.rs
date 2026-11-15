@@ -3,11 +3,13 @@
 //! The protocol is specified in `feed/PROTOCOL.md`. This crate is its Rust implementation: [`FeedReader`] is what
 //! the app uses, [`FeedWriter`] is the synthetic frame writer that stands in for Resolve and the Sender in tests.
 //! The Sender itself uses the C implementation in `feed/include/scopecreep_feed.h`.
+mod colour_setup;
 mod layout;
 mod reader;
 pub mod synthetic;
 mod writer;
 
+pub use colour_setup::{Provenance, SentColourSetup};
 pub use reader::{FeedReader, FeedStats, Frame, OpenError, SenderInfo};
 pub use writer::{FeedWriter, FrameMeta, WriteError};
 
@@ -15,7 +17,8 @@ use std::path::PathBuf;
 
 /// The protocol version this crate speaks.
 pub const VERSION_MAJOR: u32 = 1;
-pub const VERSION_MINOR: u32 = 0;
+/// 1.1: the slot's Colour Setup block has a defined format (ticket #16).
+pub const VERSION_MINOR: u32 = 1;
 
 /// A reader whose heartbeat is older than this is gone.
 pub const READER_TIMEOUT_NS: u64 = 1_000_000_000;

@@ -1,4 +1,5 @@
 //! The reader side of the Feed: what the app uses.
+use crate::SentColourSetup;
 use crate::layout::*;
 use crate::{READER_TIMEOUT_NS, VERSION_MAJOR, VERSION_MINOR, now_ns};
 use std::fs::OpenOptions;
@@ -213,6 +214,7 @@ impl FeedReader {
                 render_ns: m.u64(s + S_RENDER_NS),
                 publish_ns: m.u64(s + S_PUBLISH_NS),
                 sender_instance: m.u32(s + S_SENDER_INSTANCE),
+                colour_setup: SentColourSetup::load(m, s),
             };
             let sane = m.u32(s + S_PIXEL_FORMAT) == PIXEL_RGBA32F
                 && frame.width > 0
@@ -251,9 +253,15 @@ pub struct Frame {
     render_ns: u64,
     publish_ns: u64,
     sender_instance: u32,
+    colour_setup: Option<SentColourSetup>,
 }
 
 impl Frame {
+    /// The Colour Setup the Sender sent with this frame (its manual override), if any. `None` means the Sender has
+    /// no Colour Setup of its own, not that there is none: the app then uses the project's.
+    pub fn colour_setup(&self) -> Option<SentColourSetup> {
+        self.colour_setup.clone()
+    }
     /// 1, 2, 3 ... in the order the Sender took frames. A gap means frames were dropped.
     pub fn sequence(&self) -> u64 {
         self.sequence
