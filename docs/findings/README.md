@@ -22,6 +22,7 @@ What we learned by testing, kept in the repo so it isn't lost when an issue thre
 | [17](17-output-conversion-accuracy.md) | Does the app's GPU Output Conversion of the real Feed match Resolve's renders, and what did 32-bit float need? |
 | [18](18-levels.md) | What do video and data Levels change in Resolve, and does the waveform follow them? |
 | [19](19-playback-rate-drops-and-senders.md) | Is the app's playback rate Resolve's? How do two Senders and background cache fills behave at 24, 25, 50 and 60 fps? |
+| [20](20-performance-benchmark.md) | Does the Sender, or the Sender plus the app, slow Resolve down at UHD 50 fps? |
 | [46](46-sender-colour-setup-controls.md) | Can the Sender node grey out its manual Colour Setup controls, and can it show the project's values in them? |
 
 ## Adding findings
