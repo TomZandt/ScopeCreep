@@ -6,11 +6,14 @@ The format follows [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/
 
 ## [Unreleased]
 
+## [0.1.0] - 2026-11-16
+
+Milestone 1: the Feed from Resolve to the app, the Output Conversion, and the luma waveform.
+
 ### Added
 
 - Output Conversion: when the Feed is in the Timeline Colour Space, the app converts it to the Output Colour Space on the GPU with published maths, and the Picture View and the waveform show the converted picture. DaVinci Wide Gamut / Intermediate to Rec.709 Gamma 2.4, P3-D65 (gamma 2.6) and Rec.2100 ST2084, and ACEScct (ACES 2.0) to Rec.709 BT.1886, P3-D65 and Rec.2100 ST2084 (1000 nit), are labelled "Output Conversion exact" ("exact for ACES 2.0" while the ACES version is assumed). A Colour Setup read after playback stops converts the picture already on screen (#17).
 - Approximated conversions say why: DWG/DI to Rec.2020 Gamma 2.4 (not yet measured against Resolve), DaVinci tone mapping or gamut mapping on (not applied, unpublished), YRGB with colour spaces other than Rec.709 Gamma 2.4 (#17).
-- Known limitation: Rec.2100 HLG, P3-DCI and sRGB outputs, ACES output transforms other than the three above, ACES 1.3, ACEScc and timelines other than DWG/DI are not converted yet: the picture is shown and measured as sent, and the label says "as sent, no Output Conversion" and why (#17).
 - Accuracy suite on the real Feed: `harness.py feed-frames` captures each test project's frames after the app's own Output Conversion, and `cargo run -p scopecreep-accuracy -- feed` compares them with Resolve's renders and checks the app's label never claims more than was measured (#17).
 - Feed protocol v1.0 (`feed/PROTOCOL.md`): the versioned shared-memory hand-over between the Sender and the app, with drop counting, a reader-present flag and version-mismatch reporting. C header for the Sender, Rust crate for the app (#14).
 - scopecreep Sender (`sender/`): OFX plugin on Resolve's CUDA path that copies each Viewer Frame into the Feed without ever making Resolve wait, and does no work when no app is attached (#14).
@@ -18,7 +21,6 @@ The format follows [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/
 - `feed-synth`, a synthetic Feed writer for testing without Resolve (#14).
 - Luma waveform beside the Picture View (two panels): computed on the GPU from every pixel of every Viewer Frame at full resolution in 32-bit float, one waveform column per picture column, on a 10-bit scale (0–1023) with legal reference lines at 64 and 940. Pixels below 0 or above 1023 are counted and shown in their own edge rows, never cut off. A quiet label states the scale, the Measured Space and the luma weights (#15).
 - Luma weights derived from the Measured Space's primaries and white point (default), or a Match Resolve mode with the weights Resolve's own waveform uses (`--luma match-resolve`) (#15).
-- Known limitation: until the Colour Setup reaches the app (#16, #17) the waveform measures the values as sent and assumes Rec.709; its label says "Rec.709 assumed" (#15).
 - The Colour Setup travels with the Feed: the app shows it in the Picture View label, e.g. "ACEScct → Rec.709 BT.1886 (from project, assumes ACES 2.0)". It is read from the Resolve project through a scripting helper the app runs under Resolve's own Python (Studio, external scripting set to Local), only while playback is stopped; a changed project setting shows within a few seconds, with nothing restarted. Resolve's "P3-D65" is labelled gamma 2.6. ACES setups say "assumes ACES 2.0" (the version is not readable by script) (#16).
 - Manual Colour Setup on the Sender node ("Set Colour Setup manually": Timeline Colour Space, Output Colour Space, Levels, ACES version). It wins over the project's and is labelled "set manually"; it is the way to use scopecreep with Resolve's free version (#16).
 - The waveform measures in the Colour Setup's Output Colour Space when it is known (#16).
@@ -49,6 +51,11 @@ The format follows [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/
 - When the Feed is shown as sent (no Output Conversion), the waveform label says "Rec.709 assumed, measured as sent, unconverted" instead of reading like a Rec.709 measurement (#17).
 - The Sender no longer allocates graphics memory, pins the Feed's memory or scans Feed files on Resolve's render thread: the ring (when the first frame arrives or the frame size grows) and a second Resolve's look at the first one's Feed are handled by the Sender's own worker thread. The frame that triggers a new ring passes through and is counted as dropped ("Sender busy"); retired rings are freed by the worker even when no more renders arrive (#2).
 
+### Known limitations
+
+- Rec.2100 HLG, P3-DCI and sRGB outputs, ACES output transforms other than the three above, ACES 1.3, ACEScc and timelines other than DWG/DI are not converted yet: the picture is shown and measured as sent, and the label says "as sent, no Output Conversion" and why (#17).
+- Performance with the Sender on has not been benchmarked on this release (#20); Stage 0 measured no change in Resolve's playback with the Sender's copy at UHD 23.976-60 fps.
+
 ## [0.0.0] - 2026-11-15
 
 Stage 0: colour and performance checks. Nothing here is the product yet; it is the evidence the product is built on.
@@ -70,5 +77,6 @@ Stage 0: colour and performance checks. Nothing here is the product yet; it is t
 - ADR 0003: "Resolve never waits" is proven at UHD float, 23.976 to 60 fps, on the CUDA path.
 - ADR 0004: Resolve's waveform uses Rec.709 weights for P3; offered as a Match Resolve mode.
 
-[Unreleased]: https://github.com/TomZandt/scopecreep/compare/v0.0.0...HEAD
+[Unreleased]: https://github.com/TomZandt/scopecreep/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/TomZandt/scopecreep/compare/v0.0.0...v0.1.0
 [0.0.0]: https://github.com/TomZandt/scopecreep/releases/tag/v0.0.0
