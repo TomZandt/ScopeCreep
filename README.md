@@ -39,6 +39,18 @@ make -C sender install           # developer install into /usr/OFX/Plugins, then
 
 In Resolve, put **scopecreep Sender** (Effects > OpenFX > scopecreep) on its own last timeline node, with no grade on that node. GPU processing must be CUDA.
 
+### Running the app from the app launcher
+
+The launcher entry (`~/.local/share/applications/scopecreep.desktop`) runs a copy of the app installed outside the repo, so cleaning build outputs (`cargo clean`) never breaks it:
+
+```sh
+cargo build --release -p scopecreep && install -Dm755 target/release/scopecreep ~/.local/bin/scopecreep
+```
+
+The installed copy doesn't update itself: run the line above again after changing the app. The app shows a picture only while a Sender is playing in Resolve.
+
+The `scopecreep-test-*` projects (in Resolve's `scopecreep` project folder) carry the Stage 0 probe on their timeline node. To use them, install the Sender with `make -C sender PROBE_ALIAS=1 install`, which answers to the probe's identifier, and restart Resolve. The plain `make -C sender install` build doesn't load in those projects.
+
 ## How it works
 
 ```
