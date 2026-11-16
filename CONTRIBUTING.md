@@ -60,7 +60,7 @@ Anything learned by testing (how Resolve behaves, what a measurement showed) is 
 ## Keeping the repo clean
 
 - **Work to do lives in GitHub issues, never in repo files.** No to-do lists, "open checks" or TODO sections in docs. Anything a ticket can't verify becomes an issue labelled `ready-for-human` or `ready-for-agent` (or a comment on the planned ticket that will cover it). Code comments may say `TODO(#n)` only with an issue number.
-- **The repo holds records:** findings (`docs/findings/`), decisions (`docs/adr/`), vocabulary (`GLOSSARY.md`), the changelog. Records state what is true; they don't track work.
+- **The repo holds records:** findings (`docs/findings/`), research from public sources (`docs/research/`), decisions (`docs/adr/`), vocabulary (`GLOSSARY.md`), the changelog. Records state what is true; they don't track work.
 - **Known limitations** a user would care about go in the changelog and README at each release.
 - **One commit per ticket on the integration branch:** ticket branches are squash-merged with a Conventional Commit message (`feat(app): luma waveform (#15)`).
 - **Merged branches and worktrees are deleted** once their work is on the integration branch or `main`.

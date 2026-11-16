@@ -58,6 +58,14 @@ _Avoid_: Onboarding, wizard, warnings panel, status page
 
 ## Displays
 
+**Window**:
+The whole scopecreep app on screen: every Panel, the labels and the status line.
+_Avoid_: App (for the screen area), screen, workspace
+
+**Panel**:
+One area of the Window that shows one Scope or Picture View. Every display has its own Panel, so everything can be seen at once; the Panels sit in an ordered grid whose borders the user can drag.
+_Avoid_: Pane, view, tile, window (for one display)
+
 **Scope**:
 A display that measures the Feed's pixel values, such as a waveform, RGB parade or vectorscope.
 _Avoid_: Monitor, meter, graph
@@ -69,3 +77,7 @@ _Avoid_: Luminance (that is linear light, not this), brightness, Y (on its own)
 **Picture View**:
 A display that shows the Feed as an image, either untouched (the clean picture) or remapped for inspection (false colour, black and white).
 _Avoid_: Scope (for false colour), filter, LUT view
+
+**Loupe**:
+A movable square on a Picture View that shows the picture under it magnified, so single pixels (and noise) can be seen.
+_Avoid_: PiP, magnifier, zoom window
