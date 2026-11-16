@@ -7,9 +7,9 @@ Commands (Resolve must be running, Preferences > System > General > External scr
   projects   rebuild every scopecreep-test-* project from scratch (idempotent)
   dump       read the Colour Setup of every test project by script and save it
   render     render 16-bit TIFF and float EXR reference frames in the Output Colour Space
-  clone-sender  export the hand-built scopecreep-test-dwg-p3d65 (probe Sender on its timeline) to a .drp and clone it
+  clone-sender  export the hand-built scopecreep-test-dwg-p3d65 (Sender on its timeline) to a .drp and clone it
              into every other colour-setup project, applying that setup's Colour Setup; each clone is verified
-             (settings vs dump, node graph, probe log, EXR render vs reference) before replacing the original
+             (settings vs dump, node graph, Sender renders counted in the Feed, EXR render vs reference) before replacing the original
   dump-timeline-frames  collect the probe Sender's Timeline Colour Space frame 1 of every clip, per project, into
              <test-data>/dumps-feed/<project>/<clip>.exr (the input for accuracy/)
   feed-frames  the accuracy suite's capture: frame 1 of every clip from the real Feed after the app's Output
@@ -42,6 +42,7 @@ def main(argv=None):
     ap.add_argument("arg", nargs="?")
     ap.add_argument("--only", help="comma-separated setup keys: " + ", ".join(s.key for s in setups.ALL))
     ap.add_argument("--keep-hidden", action="store_true", help="clone-sender: keep the hidden-branch timeline (its CST is P3-D65 specific)")
+    ap.add_argument("--verify-only", action="store_true", help="clone-sender: verify each clone, then delete it; replace nothing")
     ap.add_argument("--force", action="store_true", help="regenerate media even if present")
     a = ap.parse_args(argv)
     only = set(a.only.split(",")) if a.only else None
@@ -65,7 +66,7 @@ def main(argv=None):
         render.render_all(resolve, only)
     if cmd == "clone-sender":
         from scopecreep_harness import clone
-        clone.clone_all(resolve, only, a.keep_hidden)
+        clone.clone_all(resolve, only, a.keep_hidden, replace=not a.verify_only)
     if cmd == "dump-timeline-frames":
         from scopecreep_harness import dump_feed
         dump_feed.dump_all(resolve, only)

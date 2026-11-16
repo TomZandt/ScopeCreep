@@ -21,16 +21,11 @@ class Helpers(unittest.TestCase):
         self.assertEqual(len(clone.diff_settings({"a": "1"}, {"a": "2"})), 1)
         self.assertEqual(len(clone.diff_settings({"a": "1"}, {})), 1)
 
-    def test_count_probe_renders_ignores_detail_lines(self):
-        log = ("[1.1 pid=1] RENDER inst=4 page=<null set> time=0.000 src_frame=1\n"
-               "[1.1 pid=1] RENDER inst=4   src: depth=x\n"
-               "[1.2 pid=1] unhandled action: OfxImageEffectActionEndSequenceRender\n"
-               "[1.3 pid=1] RENDER inst=4 page=<null set> time=1.000 src_frame=2\n")
-        self.assertEqual(clone.count_probe_renders(log), 2)
-
-    def test_has_sender(self):
-        tree = {"nodes": [{"label": "sender", "tools": ["OFX: scopecreep Probe Sender"]}]}
-        self.assertTrue(clone.has_sender(tree))
+    def test_has_sender_finds_the_real_sender(self):
+        for tool in ("OFX: scopecreep Sender", "OFX: scopecreep Sender (standing in for the probe)"):
+            self.assertTrue(clone.has_sender({"nodes": [{"label": "sender", "tools": [tool]}]}), tool)
+        self.assertFalse(clone.has_sender({"nodes": [{"label": "sender", "tools": ["OFX: scopecreep Probe Sender"]}]}))
+        self.assertFalse(clone.has_sender({"nodes": [{"label": "other", "tools": ["OFX: scopecreep Sender"]}]}))
         self.assertFalse(clone.has_sender({"nodes": [{"label": "", "tools": []}]}))
         self.assertFalse(clone.has_sender(None))
 

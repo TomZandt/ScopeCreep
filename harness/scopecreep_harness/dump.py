@@ -106,14 +106,33 @@ def dump_all(resolve, selected=None):
         summaries.append((s, data))
         print("dump: wrote", p)
     if summaries:
-        md = markdown_summary(summaries)
-        mp = os.path.join(paths.DUMPS, "colour-setup-summary.md")
-        with open(mp, "w") as f:
-            f.write(md)
-        print("dump: wrote", mp)
+        print("dump: wrote", write_summary(summaries))
     if original:
         projects.load(pm, original)
     return summaries
+
+
+def _load_saved(name):
+    try:
+        with open(os.path.join(paths.DUMPS, name + ".json")) as f:
+            return json.load(f)
+    except (OSError, ValueError):
+        return None
+
+
+def write_summary(fresh):
+    """Write colour-setup-summary.md for every test project: the (setup, data) pairs just dumped, and the dump
+    saved earlier for every other project, so `dump --only X` updates X without dropping the rest."""
+    by_key = {s.key: d for s, d in fresh}
+    entries = []
+    for s in setups.ALL:
+        data = by_key[s.key] if s.key in by_key else _load_saved(s.project_name)
+        if data is not None:
+            entries.append((s, data))
+    mp = os.path.join(paths.DUMPS, "colour-setup-summary.md")
+    with open(mp, "w") as f:
+        f.write(markdown_summary(entries))
+    return mp
 
 
 SUMMARY_KEYS = ["colorScienceMode", "colorSpaceTimeline", "colorSpaceTimelineGamma", "colorSpaceOutput",
