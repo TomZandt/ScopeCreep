@@ -75,6 +75,7 @@ def clone_targets(only=None):
 def export_source(pm, path=None):
     path = path or os.path.join(DRP_DIR, SOURCE + ".drp")
     os.makedirs(DRP_DIR, exist_ok=True)
+    projects.enter_folder(pm)
     if SOURCE not in (pm.GetProjectListInCurrentFolder() or []):
         raise SystemExit("source project %s not found" % SOURCE)
     if not pm.ExportProject(SOURCE, path, True):  # read-only on the source
@@ -117,7 +118,7 @@ def _frame_to_tc(frame, fps):
 
 def import_candidate(pm, drp, setup):
     cand = setup.project_name + CANDIDATE_SUFFIX
-    projects.delete_project(pm, cand)
+    projects.delete_project(pm, cand)  # leaves Resolve in the scopecreep folder
     if not pm.ImportProject(drp, cand):
         raise RuntimeError("Resolve would not import %s as %s" % (drp, cand))
     project = projects.load(pm, cand)
@@ -235,6 +236,7 @@ def clone_one(resolve, setup, drp, keep_hidden=False, replace=True):
     except Exception as e:  # keep going with the other setups; the original project is untouched
         rep["problems"].append("%s: %s" % (type(e).__name__, e))
     finally:
+        projects.enter_folder(pm)
         if not rep["replaced"] and cand in (pm.GetProjectListInCurrentFolder() or []):
             projects.delete_project(pm, cand)
     return rep

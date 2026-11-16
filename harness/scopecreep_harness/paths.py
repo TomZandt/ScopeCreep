@@ -8,3 +8,4 @@ DUMPS = os.path.join(ROOT, "dumps")
 SHOTS = os.path.join(ROOT, "screenshots")
 
 PROJECT_PREFIX = "scopecreep-test-"
+PROJECT_FOLDER = "scopecreep"  # Project Manager folder (at the root) holding every test project

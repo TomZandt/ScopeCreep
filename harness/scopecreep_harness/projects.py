@@ -5,11 +5,23 @@ from . import paths, setups, testmedia
 from .resolve_api import set_checked
 
 SCRATCH = paths.PROJECT_PREFIX + "scratch"
+FOLDER = paths.PROJECT_FOLDER
 FIRST_TC_FRAME_OFFSET = 0  # clips are laid back to back from the timeline start
 
 
 def _is_ours(name):
     return name.startswith(paths.PROJECT_PREFIX)
+
+
+def enter_folder(pm):
+    """Go to the scopecreep folder at the root of the Project Manager, creating it if needed.
+
+    Every scopecreep-test-* project lives there, apart from the user's own projects."""
+    pm.GotoRootFolder()
+    if FOLDER not in (pm.GetFolderListInCurrentFolder() or []) and not pm.CreateFolder(FOLDER):
+        raise RuntimeError("Resolve would not create the project folder %s" % FOLDER)
+    if not pm.OpenFolder(FOLDER):
+        raise RuntimeError("Resolve would not open the project folder %s" % FOLDER)
 
 
 def remember_original(pm):
@@ -20,6 +32,7 @@ def remember_original(pm):
 
 
 def _ensure_scratch(pm):
+    enter_folder(pm)
     if SCRATCH in (pm.GetProjectListInCurrentFolder() or []):
         return load(pm, SCRATCH)
     scratch = pm.CreateProject(SCRATCH)
@@ -31,6 +44,7 @@ def _ensure_scratch(pm):
 
 def delete_project(pm, name):
     assert _is_ours(name), "refusing to delete %r: not a %s project" % (name, paths.PROJECT_PREFIX)
+    enter_folder(pm)
     if name not in (pm.GetProjectListInCurrentFolder() or []):
         return
     cur = pm.GetCurrentProject()
@@ -45,6 +59,7 @@ def delete_project(pm, name):
 
 def clean(pm, original=None):
     """Delete every scopecreep-test-* project (including scratch), then reopen the user's project."""
+    enter_folder(pm)
     names = [n for n in (pm.GetProjectListInCurrentFolder() or []) if _is_ours(n)]
     if original:
         load(pm, original)
@@ -58,6 +73,7 @@ def clean(pm, original=None):
 
 def delete_project_unchecked_open(pm, name):
     assert _is_ours(name)
+    enter_folder(pm)
     if not pm.DeleteProject(name):
         raise RuntimeError("Resolve would not delete project %s" % name)
 
@@ -116,8 +132,14 @@ def build_all(resolve, selected=None):
 
 
 def load(pm, name):
-    """Open a project by name. Resolve's LoadProject returns None when it is already the open one."""
+    """Open a project by name: ours from the scopecreep folder, the user's from the root.
+
+    Resolve's LoadProject returns None when it is already the open one."""
     cur = pm.GetCurrentProject()
     if cur and cur.GetName() == name:
         return cur
+    if _is_ours(name):
+        enter_folder(pm)
+    else:
+        pm.GotoRootFolder()
     return pm.LoadProject(name) or None
