@@ -16,7 +16,7 @@ Pre-alpha. Nothing to install yet.
 | Stage | What | State |
 |---|---|---|
 | 0 | Colour and performance checks against Resolve (throwaway prototypes) | Done ([report](docs/stage0-report.md)) |
-| 1 | Feed plus clean picture plus luma waveform (Linux, NVIDIA) | In progress: the Feed reaches the app (#14) |
+| 1 | Feed plus clean picture plus luma waveform (Linux, NVIDIA) | Released in v0.1.0 (performance benchmark #20 paused) |
 | Later | Parade, vectorscope, false colour, HDR, Setup Checklist, Capture, Windows/macOS, installers, licensing | Decided, parked |
 
 ## Development (Linux, NVIDIA)
