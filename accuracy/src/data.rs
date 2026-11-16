@@ -4,6 +4,7 @@
 //!   <root>/renders/scopecreep-test-<key>/<clip>-tif/*.tif     Resolve reference, 16-bit, Output Colour Space
 //!   <root>/feed-converted/scopecreep-test-<key>/<clip>.exr    the real Feed after the app's Output Conversion
 //!   <root>/feed-converted/scopecreep-test-<key>/<clip>.label  the app's Picture View label for that frame
+//!   <root>/{renders,feed-converted}/scopecreep-test-<key>/project-state.txt  the project state each was made from
 
 use crate::imageio::{self, Image};
 use std::path::{Path, PathBuf};
@@ -53,6 +54,18 @@ pub fn converted_path(root: &Path, key: &str, clip: &str) -> PathBuf {
 /// The frame the app showed for `clip`: the real Feed after Output Conversion, as the accuracy suite captured it.
 pub fn read_converted(root: &Path, key: &str, clip: &str) -> Result<Image, String> {
     imageio::read_exr(&converted_path(root, key, clip))
+}
+
+fn read_state(dir: PathBuf) -> Option<String> {
+    std::fs::read_to_string(dir.join(crate::state::FILE)).ok()
+}
+
+/// Why this project's test data can't be compared (see `state::problems`); empty when it is consistent. None when
+/// its references were rendered before the harness recorded project states.
+pub fn state_problems(root: &Path, key: &str) -> Option<Vec<String>> {
+    let project = format!("{PROJECT_PREFIX}{key}");
+    let references = read_state(root.join("renders").join(&project))?;
+    Some(crate::state::problems(Some(&references), read_state(root.join("feed-converted").join(&project)).as_deref()))
 }
 
 /// The app's Picture View label for that frame (it says whether the conversion is exact or approximated).

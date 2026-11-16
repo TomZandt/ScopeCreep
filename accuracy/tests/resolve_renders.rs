@@ -7,6 +7,26 @@ use scopecreep_accuracy::data::{self, CLIPS};
 use scopecreep_accuracy::report::{Claim, Verdict, claim_holds, classify};
 use scopecreep_accuracy::setups::SETUPS;
 
+/// The references and the Feed frames must come from the same, ungraded, project state (ticket #43): otherwise the
+/// comparisons below measure the test data, not the maths. Fails naming every project and what drifted. References
+/// rendered before the harness recorded project states are not checked here (they are named on stderr).
+#[test]
+fn the_references_were_rendered_from_the_state_the_feed_frames_were_taken_from() {
+    let root = data::testdata_root();
+    if !data::feed_path(&root, SETUPS[0].key, CLIPS[0]).exists() {
+        eprintln!("skipped: no harness data under {}", root.display());
+        return;
+    }
+    let mut drift = vec![];
+    for s in SETUPS {
+        match data::state_problems(&root, s.key) {
+            None => eprintln!("{}: no project state recorded with its references (harness.py record-state or render)", s.key),
+            Some(found) => drift.extend(found.into_iter().map(|p| format!("{}: {p}", s.key))),
+        }
+    }
+    assert!(drift.is_empty(), "test data out of step with its project (harness.py check-state):\n  {}", drift.join("\n  "));
+}
+
 #[test]
 fn every_setup_matches_resolve_or_has_a_recorded_reason() {
     let root = data::testdata_root();

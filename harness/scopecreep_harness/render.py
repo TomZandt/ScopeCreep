@@ -8,7 +8,7 @@ import os
 import shutil
 import time
 
-from . import exr, paths, setups, testmedia
+from . import exr, paths, setups, state, testmedia
 
 # Resolve refuses render paths outside its Media Storage locations ("Render Path Inaccessible"), and on this
 # machine the only one is ~/Videos. Render there, then move the frames into the test-data directory.
@@ -48,6 +48,7 @@ def render_project(resolve, setup, timeout=600, project_name=None, outdir=None):
     if os.path.isdir(outdir):
         shutil.rmtree(outdir)  # idempotent: always re-render from scratch
     os.makedirs(outdir)
+    state.write(outdir, state.read_live(project))  # what these references were rendered from (check-state)
     staging = os.path.join(STAGING, project_name)
     if os.path.isdir(staging):
         shutil.rmtree(staging)

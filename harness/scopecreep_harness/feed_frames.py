@@ -21,7 +21,7 @@ import shutil
 import subprocess
 import time
 
-from . import paths, projects, setups
+from . import paths, projects, render, setups, state
 from . import dump
 from .clone import SENDER_LABEL, _frame_to_tc
 from .dump_feed import CLIP_ORDER, clip_offsets
@@ -80,6 +80,15 @@ def capture_project(resolve, setup, clips=CLIP_ORDER):
     tl = _sender_timeline(project)
     if tl is None:
         raise SystemExit("%s: no timeline with the Sender node" % setup.project_name)
+    live = state.read_live(project)
+    recorded = state.read(render.project_dir(setup))
+    if recorded is None:
+        print("feed-frames: %-34s WARNING: no project state recorded with its references; only clip grades checked"
+              % setup.project_name)
+    drift = state.problems(live if recorded is None else recorded, live)
+    if drift:
+        raise SystemExit("%s does not match its references, so its captures would not either (run check-state):\n  %s"
+                         % (setup.project_name, "\n  ".join(drift)))
     resolve.OpenPage("color")
     project.SetCurrentTimeline(tl)
     time.sleep(1.0)
@@ -88,6 +97,7 @@ def capture_project(resolve, setup, clips=CLIP_ORDER):
     if os.path.isdir(out_dir):
         shutil.rmtree(out_dir)
     os.makedirs(out_dir)
+    state.write(out_dir, live)
     offsets = clip_offsets(clips)
     proc = subprocess.Popen(capture_args(CAPTURE_BIN, out_dir, setup.project_name, offsets, CLIP_TIMEOUT * len(offsets) + 30),
                             stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, encoding="utf-8",

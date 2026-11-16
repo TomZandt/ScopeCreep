@@ -15,6 +15,11 @@ Commands (Resolve must be running, Preferences > System > General > External scr
   feed-frames  the accuracy suite's capture: frame 1 of every clip from the real Feed after the app's Output
              Conversion, with the app's label, into <test-data>/feed-converted/<project>/ (input for
              `cargo run -p scopecreep-accuracy -- feed`; needs the capture_converted example built)
+  check-state  compare each test project with the state recorded next to its renders (Colour Setup, timeline and
+             clip grades) and fail, naming every difference, when they no longer match or a clip carries a grade
+  record-state  write the --only projects' live state next to references rendered before states were recorded
+             (only for references the accuracy tests show match; refuses a graded project)
+  reset-grades  remove every clip grade in the --only projects (Graph.ResetAllGrades) and verify the clip graphs
   all        media + projects + dump + render
   clean      delete every scopecreep-test-* project
   status     product, current project/page/timecode
@@ -38,7 +43,7 @@ def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("command", choices=["media", "projects", "dump", "render", "all", "clean", "status",
                                         "goto", "play", "stop", "shot", "clone-sender", "dump-timeline-frames",
-                                        "feed-frames"])
+                                        "feed-frames", "check-state", "record-state", "reset-grades"])
     ap.add_argument("arg", nargs="?")
     ap.add_argument("--only", help="comma-separated setup keys: " + ", ".join(s.key for s in setups.ALL))
     ap.add_argument("--keep-hidden", action="store_true", help="clone-sender: keep the hidden-branch timeline (its CST is P3-D65 specific)")
@@ -73,6 +78,15 @@ def main(argv=None):
     if cmd == "feed-frames":
         from scopecreep_harness import feed_frames
         feed_frames.capture_all(resolve, only)
+    if cmd == "check-state":
+        from scopecreep_harness import state
+        state.check_all(resolve, only)
+    if cmd == "record-state":
+        from scopecreep_harness import state
+        state.record_all(resolve, only)
+    if cmd == "reset-grades":
+        from scopecreep_harness import state
+        state.reset_clip_grades(resolve, only)
     if cmd == "clean":
         pm = resolve.GetProjectManager()
         gone = projects.clean(pm, projects.remember_original(pm))

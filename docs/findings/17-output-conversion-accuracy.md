@@ -12,7 +12,7 @@ What ticket #17 measured while building the Output Conversion. DaVinci Resolve 2
 | Colour Setup | max err (float) | max err (10-bit codes) | over 1e-4 | measured | app label | label holds |
 |---|---|---|---|---|---|---|
 | yrgb-rec709g24 | 0 | 0 | 0 % | exact (bit-identical) | exact | yes |
-| dwg-rec709 | 3.1e-5 * | 0.032 * | 0 % * | exact * | exact | yes * |
+| dwg-rec709 | 1.5e-5 * | 0.015 * | 0 % * | exact * | exact | yes * |
 | dwg-p3d65 | 3.6e-7 | 0.0004 | 0 % | exact | exact | yes |
 | dwg-pq-tmoff | 9.4e-6 | 0.0096 | 0 % | exact | exact | yes |
 | dwg-pq-tmon | 9.4e-6 | 0.0096 | 0 % | exact | approximated: DaVinci tone mapping not applied (unpublished) | yes (claims less) |
@@ -22,7 +22,14 @@ What ticket #17 measured while building the Output Conversion. DaVinci Resolve 2
 
 The ACES samples over 1e-4 all sit in the darkest band (reference at most 0.037 / 0.041 / 0.029 encoded) and are within 2.5e-6 of white in light. The numbers are the same as the f64 maths against Resolve in #10: the app's 32-bit GPU conversion matches Resolve as closely as the f64 reference does.
 
-\* **dwg-rec709 against the stored renders fails completely** (max 4.78, every sample), and the suite says so ("the label claims more than was measured"). The cause is the test data, not the conversion: the four clips in `scopecreep-test-dwg-rec709` now carry a clip grade (Primary Balance and Saturation/Hue/Lum Mix tools, not present in the other test projects), added after the reference renders were made. Rendered fresh from the project as it is now (into `~/scopecreep-testdata/scratch-17/`, the stored renders untouched), the same captured frames measure exact: max 3.1e-5, 0 samples over tolerance. The project's grade was left as found.
+\* **dwg-rec709** was first measured against renders out of step with its project (max 4.78, every sample, and the suite said so: "the label claims more than was measured"). Its four clips had picked up a clip grade (Primary Balance and Saturation/Hue/Lum Mix) after the Stage 0 renders; rendered fresh from the graded project the same captures measured exact (max 3.1e-5). #43 removed the grade, re-rendered the references and re-captured the Feed; the row above is that measurement (2026-11-16), and the published maths against the new renders gives the Stage 0 numbers again (max 1.2e-5, mean 3.7e-8, #10).
+
+## Test data must match its project (#43)
+
+- **A clip grade can be removed by script:** `Graph.ResetAllGrades()` on a timeline item's `GetNodeGraph()` returns True and leaves the clip as Resolve creates it (one node, no tools, as in the Stage 0 dumps). The timeline graph (the Sender) is untouched. `harness.py reset-grades --only <key>` does this and verifies by reading every clip graph back.
+- **The state a project's test data came from is recorded next to it:** `render` writes `project-state.txt` into the renders directory and `feed-frames` into feed-converted: the Colour Setup keys, the timeline graph (any Sender build reads as "Sender") and each clip's grade, one line each.
+- **Drift fails loudly:** `harness.py check-state` compares each live project with the state recorded with its renders and exits non-zero naming every changed line and every graded clip; `feed-frames` refuses to capture from a project that no longer matches its references; `accuracy/tests/resolve_renders.rs` fails when references were rendered from a graded clip or the Feed captures came from a different state than the references.
+- Only dwg-rec709 has a recorded state so far; references rendered before #43 are named on stderr by the test and are not checked (#48).
 
 ## Synthetic frames at the Feed seam (`app/tests/output_conversion_seam.rs`)
 
@@ -58,4 +65,4 @@ When there is no conversion the waveform says "Rec.709 assumed" rather than nami
 
 - Rec.2020 Gamma 2.4, HLG, P3-DCI, sRGB and the other ACES output transforms against Resolve (no test projects); ACES 1.3 (#23), tone mapping (#21), gamut mapping (#22).
 - GPU cost of the conversion at UHD 60 fps with Resolve playing.
-- The suite needs the reference renders to match the projects' current state; nothing checks that automatically.
+- The suite needs the reference renders to match the projects' current state; checked for dwg-rec709 only until the other projects' states are recorded (#48).

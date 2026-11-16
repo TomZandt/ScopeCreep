@@ -14,3 +14,4 @@ pub mod pipeline;
 pub mod compare;
 pub mod setups;
 pub mod report;
+pub mod state;
