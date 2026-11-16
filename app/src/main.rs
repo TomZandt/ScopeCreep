@@ -1,7 +1,8 @@
 //! The scopecreep app: one window with two panels, the Picture View of the latest Feed frame on the left and the
-//! luma waveform on the right, each with a quiet label, and a quiet status line along the bottom (Resolve's
-//! playback rate, dropped frames, the Sender driving the Feed). Both panels show the Feed after Output Conversion,
-//! in the Output Colour Space, whenever the Colour Setup has one (`output_conversion.rs`).
+//! luma waveform on the right, in the frame's shape and the same size (`layout.rs`), each with a quiet label, and a
+//! quiet status line along the bottom (Resolve's playback rate, dropped frames, the Sender driving the Feed). Both
+//! panels show the Feed after Output Conversion, in the Output Colour Space, whenever the Colour Setup has one
+//! (`output_conversion.rs`).
 //!
 //!   scopecreep [--feed <path>] [--luma primaries|match-resolve] [--no-scripting]
 //!
@@ -19,7 +20,8 @@ mod picture_view;
 use glyphon::{Attrs, Buffer, Cache, Color, ColorMode, Family, FontSystem, Metrics, Resolution, Shaping, SwashCache, TextArea, TextAtlas, TextBounds, TextRenderer, Viewport};
 use picture_view::PictureView;
 use scopecreep::gpu_frame::FrameUploader;
-use scopecreep::waveform::{DEFAULT_LUMA_WEIGHTS, LumaWeights, Measurement, PlotLayout, Waveform};
+use scopecreep::layout::{Chrome, MARGIN, WindowLayout};
+use scopecreep::waveform::{DEFAULT_LUMA_WEIGHTS, LumaWeights, Measurement, PlotLayout, Waveform, marks_that_fit};
 use scopecreep::monitor::{FeedState, Monitor};
 use scopecreep::output_conversion::{self, OutputConversion};
 use scopecreep::resolve_helper::ScriptHelper;
@@ -38,7 +40,6 @@ const BACKGROUND: wgpu::Color = wgpu::Color { r: 0.071, g: 0.071, b: 0.071, a: 1
 const LABEL_COLOUR: Color = Color::rgb(138, 138, 138);
 const NOTICE_COLOUR: Color = Color::rgb(176, 176, 176);
 /// Sizes in logical pixels.
-const MARGIN: f32 = 12.0;
 const LABEL_SIZE: f32 = 12.5;
 const LABEL_STRIP: f32 = 30.0;
 const NOTICE_SIZE: f32 = 15.0;
@@ -127,6 +128,11 @@ struct AppWindow {
     /// The text of `waveform_label` as laid out.
     waveform_text: String,
     marks: Vec<(Mark, Buffer)>,
+    /// Lines the label strip makes room for: the most either panel label has wrapped onto since the window or
+    /// the label last changed.
+    label_lines: usize,
+    /// The layout the labels were last laid out for.
+    laid_out: Option<WindowLayout>,
     stop: Arc<AtomicBool>,
     feed_thread: Option<std::thread::JoinHandle<()>>,
     // Last, so it outlives the surface made from it.
@@ -289,6 +295,8 @@ impl AppWindow {
             waveform_label,
             waveform_text: String::new(),
             marks,
+            label_lines: 1,
+            laid_out: None,
             stop,
             feed_thread: Some(feed_thread),
             window,
@@ -301,6 +309,7 @@ impl AppWindow {
         self.surface.configure(&self.device, &self.config);
         self.drawn.label = "\u{0}".into(); // lay the text out again for the new size
         self.waveform_text = "\u{0}".into();
+        self.label_lines = 1;
         self.window.request_redraw();
     }
 
@@ -309,29 +318,37 @@ impl AppWindow {
         let (width, height) = (self.config.width as f32, self.config.height as f32);
         let margin = MARGIN * scale;
         let line = LABEL_SIZE * scale * 1.4;
-        // A long Picture View label wraps: the strip grows by a line for each extra line, so the label never runs
-        // into the status line. (Measured from the label as last laid out; a change of line count redraws.)
-        let label_lines = self.label.layout_runs().count().max(1);
-        let strip = LABEL_STRIP * scale + (label_lines - 1) as f32 * line;
+        // A long panel label wraps (the labels are only as wide as their half): the strip grows by a line for each
+        // extra line, so a label never runs into the status line. (Measured from the labels as last laid out; a
+        // change of line count redraws. It only grows until the window or the texts change, so it settles.)
+        let strip = LABEL_STRIP * scale + (self.label_lines - 1) as f32 * line;
         let texts = self.texts.lock().unwrap().clone();
         // Along the bottom, under the panel labels: the status line, and above it, while a picture is on screen, a
         // notice in the same quiet size (it never covers the picture).
         let notice_in_status = texts.has_picture && texts.notice.is_some();
         let row = STATUS_ROW * scale;
         let status_height = row * if notice_in_status { 2.0 } else { 1.0 };
-        // Two panels side by side above the label strip: the Picture View on the left, the waveform on the right.
-        let half = (width / 2.0).round();
-        let panel_height = (height - strip - status_height - margin).max(1.0);
-        let picture_area = [margin, margin, (half - 1.5 * margin).max(1.0), panel_height];
-        let waveform_area = [half + 0.5 * margin, margin, (width - half - 1.5 * margin).max(1.0), panel_height];
+        // Two panels side by side, in the Feed frame's shape and the same size, each letterboxed in its half: the
+        // Picture View on the left, the waveform on the right, so each picture column sits level with its trace.
+        let layout = WindowLayout::new([width, height], scale, self.picture_view.frame_size(), Chrome { label_strip: strip, status: status_height });
+        if self.laid_out.as_ref() != Some(&layout) {
+            // New panel sizes (window, frame size or strip): lay the labels out again for their new widths.
+            self.drawn.label = "\u{0}".into();
+            self.waveform_text = "\u{0}".into();
+            self.laid_out = Some(layout);
+        }
+        let picture_area = layout.picture;
+        let waveform_area = layout.waveform_area();
         let plot = PlotLayout::new(waveform_area, scale);
-        let gutter = plot.plot()[0] - waveform_area[0];
+        let gutter = layout.gutter[2];
         let attrs = Attrs::new().family(Family::SansSerif);
 
         if texts != self.drawn {
-            let line = LABEL_SIZE * scale * 1.4;
+            if texts.label != self.drawn.label && self.drawn.label != "\u{0}" {
+                self.label_lines = 1; // a new label: let the strip shrink again
+            }
             self.label.set_metrics(Metrics::new(LABEL_SIZE * scale, line));
-            self.label.set_size(Some(picture_area[2]), Some(strip));
+            self.label.set_size(Some(layout.picture_label_width), None);
             self.label.set_text(&texts.label, &attrs, Shaping::Advanced, None);
             self.label.shape_until_scroll(&mut self.font_system, false);
             self.status.set_metrics(Metrics::new(LABEL_SIZE * scale, line));
@@ -341,7 +358,7 @@ impl AppWindow {
             let (size, notice_width, align) = if notice_in_status {
                 (LABEL_SIZE, width - 2.0 * margin, None)
             } else {
-                (NOTICE_SIZE, (picture_area[2] - 2.0 * margin).max(1.0), Some(glyphon::cosmic_text::Align::Center))
+                (NOTICE_SIZE, (layout.picture_half[2] - 2.0 * margin).max(1.0), Some(glyphon::cosmic_text::Align::Center))
             };
             self.notice.set_metrics(Metrics::new(size * scale, size * scale * 1.5));
             self.notice.set_size(Some(notice_width), None);
@@ -352,7 +369,7 @@ impl AppWindow {
         let waveform_text = self.waveform.label();
         if waveform_text != self.waveform_text {
             self.waveform_label.set_metrics(Metrics::new(LABEL_SIZE * scale, LABEL_SIZE * scale * 1.4));
-            self.waveform_label.set_size(Some(waveform_area[2] - gutter), Some(strip));
+            self.waveform_label.set_size(Some(layout.waveform_label_width), None);
             self.waveform_label.set_text(&waveform_text, &attrs, Shaping::Advanced, None);
             self.waveform_label.shape_until_scroll(&mut self.font_system, false);
             let mut codes = self.waveform.measurement().levels.scale_marks().into_iter();
@@ -375,15 +392,18 @@ impl AppWindow {
         }
         let notice_height: f32 = self.notice.layout_runs().map(|run| run.line_height).sum();
         let bounds = TextBounds { left: 0, top: 0, right: width as i32, bottom: height as i32 };
-        if self.label.layout_runs().count().max(1) != label_lines {
-            self.window.request_redraw(); // the label's line count changed: lay the panels out again
+        let lines = self.label.layout_runs().count().max(self.waveform_label.layout_runs().count()).max(1);
+        if lines > self.label_lines {
+            self.label_lines = lines;
+            self.window.request_redraw(); // a label wrapped onto another line: lay the panels out again
         }
-        let label_top = height - status_height - strip + (LABEL_STRIP * scale - line) / 2.0;
+        let label_top = layout.label_top + (LABEL_STRIP * scale - line) / 2.0;
         let status_top = height - row + (row - LABEL_SIZE * scale * 1.4) / 2.0 - 0.25 * margin;
         let (notice_left, notice_top) = if notice_in_status {
             (margin, status_top - row)
         } else {
-            (picture_area[0] + margin, (margin + (panel_height - notice_height) / 2.0).max(margin))
+            let [left, top, _, height] = layout.picture_half;
+            (left + margin, (top + (height - notice_height) / 2.0).max(top))
         };
         let mark_line = SCALE_SIZE * scale * 1.3;
         let mark_y = |mark: Mark| match mark {
@@ -406,7 +426,16 @@ impl AppWindow {
             TextArea { buffer: &self.waveform_label, left: plot.plot()[0], top: label_top, scale: 1.0, bounds, default_color: LABEL_COLOUR, custom_glyphs: &[] },
         ];
         if texts.has_picture {
-            for (mark, buffer) in &self.marks {
+            // On a short waveform, leave out the numbers that would overlap: black and white stay longest, then
+            // the edge rows, then the middle.
+            let rank = |mark: Mark| match mark {
+                Mark::Code(512) => 2,
+                Mark::Code(_) => 0,
+                Mark::Above | Mark::Below => 1,
+            };
+            let placed: Vec<(f32, u32)> = self.marks.iter().map(|(mark, _)| (mark_y(*mark), rank(*mark))).collect();
+            let shown = marks_that_fit(&placed, mark_line);
+            for ((mark, buffer), _) in self.marks.iter().zip(shown).filter(|(_, shown)| *shown) {
                 areas.push(TextArea {
                     buffer,
                     left: waveform_area[0],

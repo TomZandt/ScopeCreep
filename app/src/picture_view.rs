@@ -142,6 +142,12 @@ impl PictureView {
         }
     }
 
+    /// The size of the frame on screen (width, height), once one has arrived: the window lays the panels out in
+    /// its shape, so they follow a change of timeline resolution.
+    pub fn frame_size(&self) -> Option<[u32; 2]> {
+        self.picture.lock().unwrap().as_ref().map(|p| [p.width, p.height])
+    }
+
     /// Draw the picture, scaled to fit inside `area` (left, top, width, height in pixels of a `surface`-sized
     /// target) with its shape kept. Draws nothing until a frame has arrived.
     pub fn draw(&self, pass: &mut wgpu::RenderPass<'_>, area: [f32; 4], surface: [f32; 2]) {

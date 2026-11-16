@@ -284,14 +284,15 @@ pub struct PlotLayout {
 }
 
 /// Logical pixels.
-const GUTTER: f32 = 44.0;
 const EDGE_ROW: f32 = 5.0;
 const EDGE_GAP: f32 = 6.0;
 
 impl PlotLayout {
-    /// The layout inside `area` (left, top, width, height) at `scale` device pixels per logical pixel.
+    /// The layout inside `area` (left, top, width, height) at `scale` device pixels per logical pixel. The gutter
+    /// keeps its full width (the scale's numbers stay readable however small the panel), so the plot is exactly
+    /// the waveform panel [`crate::layout::WindowLayout`] sets beside it.
     pub fn new([left, top, width, height]: [f32; 4], scale: f32) -> PlotLayout {
-        let gutter = (GUTTER * scale).round().min(width / 4.0);
+        let gutter = (crate::layout::GUTTER * scale).round().min((width - 1.0).max(0.0));
         let (row, gap) = ((EDGE_ROW * scale).round(), (EDGE_GAP * scale).round());
         let (l, w) = (left + gutter, (width - gutter).max(1.0));
         let plot_top = top + row + gap;
@@ -320,6 +321,21 @@ impl PlotLayout {
         let [left, _, width, _] = self.plot;
         left + (column as f32 + 0.5) / columns as f32 * width
     }
+}
+
+/// Which of the scale's numbers to show so none overlaps another: `marks` are each number's height on screen
+/// and its rank (lower matters more), and a number is kept when it is at least `line` away from every number of
+/// the same or a higher rank kept before it. Ties go to the earlier mark.
+pub fn marks_that_fit(marks: &[(f32, u32)], line: f32) -> Vec<bool> {
+    let mut order: Vec<usize> = (0..marks.len()).collect();
+    order.sort_by_key(|&i| marks[i].1);
+    let mut shown = vec![false; marks.len()];
+    for i in order {
+        if (0..marks.len()).all(|j| !shown[j] || (marks[i].0 - marks[j].0).abs() >= line) {
+            shown[i] = true;
+        }
+    }
+    shown
 }
 
 const DRAW_UNIFORM_BYTES: u64 = 96;

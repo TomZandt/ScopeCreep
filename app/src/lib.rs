@@ -9,4 +9,5 @@ pub mod project;
 pub mod resolve_helper;
 pub mod viewer_gate;
 pub mod gpu_frame;
+pub mod layout;
 pub mod waveform;

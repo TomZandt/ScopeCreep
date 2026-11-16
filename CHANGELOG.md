@@ -34,6 +34,8 @@ The format follows [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/
 
 ### Changed
 
+- The waveform takes the picture's shape: the Picture View and the waveform are the same size, in the Feed frame's aspect ratio (16:9, 2.39:1, 4:3, 9:16...), each letterboxed in its half of the window, so each picture column sits level with its trace. They follow a change of timeline resolution without a restart, and each panel's label sits directly under it (#42).
+- The waveform scale's numbers keep their full gutter in a small window; on a short waveform, numbers that would overlap are left out (black and white stay longest) (#42).
 - The Picture View label states the Output Conversion and how far it can be trusted, instead of "as sent, no Output Conversion" (#17).
 - Feed protocol 1.2: a Sender registry in the header (instances, timeline rate, host, last render) and guest Senders from a second Resolve process. Older readers and writers stay compatible (#19).
 - Background cache fills while paused are now recognised at 50 and 60 fps too (they render about 1.6-2x real time, in pairs, from two threads), so the Scopes stay on the viewer frame; a ragged playback start is held back for a moment and then shown (#19).
