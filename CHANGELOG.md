@@ -54,7 +54,7 @@ Milestone 1: the Feed from Resolve to the app, the Output Conversion, and the lu
 ### Known limitations
 
 - Rec.2100 HLG, P3-DCI and sRGB outputs, ACES output transforms other than the three above, ACES 1.3, ACEScc and timelines other than DWG/DI are not converted yet: the picture is shown and measured as sent, and the label says "as sent, no Output Conversion" and why (#17).
-- Performance with the Sender on has not been benchmarked on this release (#20); Stage 0 measured no change in Resolve's playback with the Sender's copy at UHD 23.976-60 fps.
+- Performance with the Sender on has not been benchmarked on this release (#20); Stage 0 measured no change in Resolve's playback with the Sender's copy at UHD 23.976-60 fps. Checked after release (2026-11-16, #20): no change at UHD 50 fps with the Sender, or with the Sender and the app.
 
 ## [0.0.0] - 2026-11-15
 

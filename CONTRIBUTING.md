@@ -68,3 +68,25 @@ Anything learned by testing (how Resolve behaves, what a measurement showed) is 
 - **Enforced:** run `git config core.hooksPath .githooks` once per clone; the `commit-msg` hook and the `conventions` CI workflow both run `scripts/check-commits.sh`.
 - **`main` is always releasable:** it only receives finished, reviewed work, with the changelog up to date.
 
+
+## Definition of done
+
+Finish every item, unprompted. Work is not done while any item is open.
+
+### A ticket
+
+1. **Tests green:** `cargo test --workspace` (plain `cargo test` skips the accuracy crate), `make -C sender test`, and `cd harness && python3 -m unittest discover -s tests`.
+2. **Records written:** what testing showed in `docs/findings/<ticket>-*.md` with a row in its README; every decision that is hard to reverse, surprising or a real trade-off as an ADR in `docs/adr/`, listed in `README.md` under Documentation; new terms in `GLOSSARY.md`; a line under `## [Unreleased]` in `CHANGELOG.md` for anything a user can see.
+3. **Loose ends filed:** anything unverified is a GitHub issue (`ready-for-human` when it needs a person at Resolve), linked from the findings.
+4. **Merged and closed:** squash-merged with one Conventional Commit, pushed, the issue closed with a comment pointing at the commit and findings.
+5. **Clean:** the ticket's branches (local and on GitHub) and worktrees deleted; Resolve left on the project that was open, with no scratch projects.
+
+### A release
+
+1. **Performance check passes:** `harness/experiments/uhd50_bench` (ADR 0003) on the build being released.
+2. **Versioned:** the Unreleased lines moved under `## [X.Y.Z] - date` (known limitations in their own section), the version bumped, `chore(release): vX.Y.Z` merged to `main`, tagged `vX.Y.Z`, pushed.
+3. **Published:** a GitHub release for the tag (pre-release while `0.y.z`) with the changelog section as notes and the Linux build attached (the app, the plain Sender bundle, `INSTALL.txt`, `SHA256SUMS`).
+4. **Docs current:** README roadmap state, ADR list, findings index; the spec issue closed or its remaining tickets said.
+5. **Issues triaged:** finished or obsolete tickets closed with a reason, labels right, links to deleted branches repointed at `main`.
+6. **Clean everywhere:** only `main` locally and on GitHub; no worktrees or stashes; no ignored files left in the repo (`git status --ignored`); temporary runs removed from `~/scopecreep-testdata` (keep data the tests and findings use); in Resolve, the user's own projects at the top level and only the `scopecreep-test-*` projects in the `scopecreep` folder.
+7. **Launcher works:** the app reinstalled to `~/.local/bin/scopecreep` (README, "Running the app from the app launcher"), and the Sender the test projects need installed (`make -C sender PROBE_ALIAS=1 install`).

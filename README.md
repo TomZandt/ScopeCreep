@@ -74,6 +74,11 @@ DaVinci Resolve                                 scopecreep app (Rust + wgpu)
   - [0002](docs/adr/0002-cpp-sender-rust-app.md): C++ Sender, Rust + wgpu app
   - [0003](docs/adr/0003-resolve-never-waits.md): Resolve never waits for scopecreep
   - [0004](docs/adr/0004-luma-follows-measured-space.md): luma weights follow the Measured Space
+  - [0005](docs/adr/0005-colour-setup-from-scripting-api.md): the Colour Setup comes from Resolve's scripting API and a manual override
+  - [0006](docs/adr/0006-colour-setup-helper.md): the app reads the Colour Setup through a helper it owns; only the manual override travels in the Feed
+  - [0007](docs/adr/0007-labels-claim-only-what-is-proven.md): labels claim "exact" only for what has been proven
+  - [0008](docs/adr/0008-manual-colour-setup-does-not-mirror-the-project.md): the Sender's manual Colour Setup controls don't mirror the project
+- [docs/findings/](docs/findings/): what testing showed, one file per ticket.
 
 ## Licence
 
