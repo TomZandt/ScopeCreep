@@ -1,2 +1,7 @@
 # Test media, render outputs and Resolve dumps live outside git (default: ~/scopecreep-testdata)
 scopecreep-testdata/
+# Build outputs
+/target/
+/sender/build/
+# Agent worktrees (never commit)
+/.claude/worktrees/

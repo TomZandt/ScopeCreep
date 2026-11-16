@@ -1,4 +1,4 @@
-"""clone-sender: copy the hand-built probe Sender node tree into every other test project.
+"""clone-sender: copy the hand-built Sender node tree into every other test project.
 
 Scripts cannot create nodes on a timeline node tree, so one project (SOURCE) was hand-built. This exports it as a
 .drp, imports it once per other Colour Setup under a candidate name, applies that setup's Colour Setup by script,
@@ -10,15 +10,16 @@ import os
 import shutil
 import time
 
-from . import dump, exr, paths, projects, render, setups
+from . import dump, exr, feed_header, paths, projects, render, setups
 from .resolve_api import set_checked
 
 SOURCE_KEY = "dwg-p3d65"
 SOURCE = paths.PROJECT_PREFIX + SOURCE_KEY
 DRP_DIR = os.path.join(paths.ROOT, "drp")
 CLONE_RENDERS = os.path.join(paths.ROOT, "renders-clone")
-PROBE_LOG = "/tmp/scopecreep-probe/probe.log"
-SENDER_TOOL = "OFX: scopecreep Probe Sender"
+# The Sender's name in Timeline.GetNodeGraph().GetToolsInNode(); the dev probe-alias build appends
+# " (standing in for the probe)".
+SENDER_TOOL = "OFX: scopecreep Sender"
 SENDER_LABEL = "sender"
 CANDIDATE_SUFFIX = "-clone"
 # Timelines in the source that are not the plain `sender` timeline.
@@ -37,16 +38,16 @@ def diff_settings(expected, actual, keys=None):
     return out
 
 
-def count_probe_renders(log_text):
-    """Number of RENDER actions the probe logged (lines 'RENDER inst=.. page=..', not the '  src:' detail lines)."""
-    return sum(1 for ln in log_text.splitlines() if "] RENDER inst=" in ln and " page=" in ln)
+def is_sender_tool(tool):
+    """True for the real Sender's tool name, including the probe-alias development build."""
+    return tool == SENDER_TOOL or tool.startswith(SENDER_TOOL + " (")
 
 
-def has_sender(tree, label=SENDER_LABEL, tool=SENDER_TOOL):
+def has_sender(tree, label=SENDER_LABEL):
     """True if a dump._graph() style tree has a node with this label holding the Sender OFX."""
     if not tree:
         return False
-    return any(n["label"] == label and tool in (n["tools"] or []) for n in tree["nodes"])
+    return any(n["label"] == label and any(is_sender_tool(t) for t in (n["tools"] or [])) for n in tree["nodes"])
 
 
 def max_abs_diff(a, b):
@@ -81,29 +82,20 @@ def export_source(pm, path=None):
     return path
 
 
-def probe_log_size():
-    try:
-        return os.path.getsize(PROBE_LOG)
-    except OSError:
-        return 0
+def _feed_renders():
+    h = feed_header.read()
+    return h.renders if h else 0
 
 
-def probe_renders_since(offset):
-    try:
-        with open(PROBE_LOG, "r", errors="replace") as f:
-            f.seek(offset)
-            return count_probe_renders(f.read())
-    except OSError:
-        return 0
+def sender_receives_frames(resolve, project, timeline):
+    """Open the Color page, move the playhead across the timeline by script, count the Sender's new renders.
 
-
-def probe_receives_frames(resolve, project, timeline):
-    """Open the Color page, move the playhead across the timeline by script, count new probe RENDER log lines."""
+    The count comes from the Feed header's render counters, which move whether or not an app is attached."""
     resolve.OpenPage("color")
     project.SetCurrentTimeline(timeline)
     time.sleep(1.0)
     start = timeline.GetStartFrame()
-    offset = probe_log_size()
+    before = _feed_renders()
     from .testmedia import CLIPS
     off = 0
     for clip in ("ramp", "chart", "outofrange", "natural"):
@@ -113,7 +105,7 @@ def probe_receives_frames(resolve, project, timeline):
             time.sleep(0.8)
         off += frames
     time.sleep(1.0)
-    return probe_renders_since(offset)
+    return _feed_renders() - before
 
 
 def _frame_to_tc(frame, fps):
@@ -224,9 +216,9 @@ def clone_one(resolve, setup, drp, keep_hidden=False, replace=True):
         rep["node_graph"] = tree
         if not has_sender(tree):
             rep["problems"].append("timeline node tree has no `sender` node: %r" % (tree,))
-        rep["probe_renders"] = probe_receives_frames(resolve, project, main)
-        if rep["probe_renders"] <= 0:
-            rep["problems"].append("probe logged no RENDER after moving the playhead")
+        rep["sender_renders"] = sender_receives_frames(resolve, project, main)
+        if rep["sender_renders"] <= 0:
+            rep["problems"].append("the Feed counted no Sender render after moving the playhead")
         ref_dir = render.project_dir(setup)
         out_dir = os.path.join(CLONE_RENDERS, setup.project_name)
         render.render_project(resolve, setup, project_name=cand, outdir=out_dir)
@@ -248,7 +240,8 @@ def clone_one(resolve, setup, drp, keep_hidden=False, replace=True):
     return rep
 
 
-def clone_all(resolve, only=None, keep_hidden=False):
+def clone_all(resolve, only=None, keep_hidden=False, replace=True):
+    """Clone into every target; with replace=False only verify each clone, then delete it (projects untouched)."""
     pm = resolve.GetProjectManager()
     original = projects.remember_original(pm)
     drp = export_source(pm)
@@ -256,12 +249,15 @@ def clone_all(resolve, only=None, keep_hidden=False):
     reports = []
     for s in clone_targets(only):
         t = time.time()
-        rep = clone_one(resolve, s, drp, keep_hidden)
+        rep = clone_one(resolve, s, drp, keep_hidden, replace)
         reports.append(rep)
-        status = "OK, replaced" if rep["replaced"] else "FAILED, original kept"
+        if not replace:
+            status = "FAILED" if rep["problems"] else "OK (verified only, original kept)"
+        else:
+            status = "OK, replaced" if rep["replaced"] else "FAILED, original kept"
         print("clone-sender: %-34s %s (%.0fs)" % (rep["project"], status, time.time() - t))
         print("  node graph: %s" % ([(n["label"], n["tools"]) for n in (rep.get("node_graph") or {}).get("nodes", [])],))
-        print("  probe RENDER lines after moving playhead: %s" % rep.get("probe_renders"))
+        print("  Sender renders in the Feed after moving playhead: %s" % rep.get("sender_renders"))
         print("  render max abs diff vs reference: %s" % rep.get("render_max_abs_diff"))
         for p in rep["problems"]:
             print("  PROBLEM:", p)
@@ -269,6 +265,6 @@ def clone_all(resolve, only=None, keep_hidden=False):
         projects.load(pm, original)
     else:
         projects.load(pm, SOURCE)
-    if any(not r["replaced"] for r in reports):
+    if any(r["problems"] or (replace and not r["replaced"]) for r in reports):
         raise SystemExit("some clones failed verification (see above)")
     return reports

@@ -4,8 +4,28 @@
 
 use scopecreep_accuracy::compare;
 use scopecreep_accuracy::data::{self, CLIPS};
-use scopecreep_accuracy::report::{Verdict, classify};
+use scopecreep_accuracy::report::{Claim, Verdict, claim_holds, classify};
 use scopecreep_accuracy::setups::SETUPS;
+
+/// The references and the Feed frames must come from the same, ungraded, project state (ticket #43): otherwise the
+/// comparisons below measure the test data, not the maths. Fails naming every project and what drifted. References
+/// rendered before the harness recorded project states are not checked here (they are named on stderr).
+#[test]
+fn the_references_were_rendered_from_the_state_the_feed_frames_were_taken_from() {
+    let root = data::testdata_root();
+    if !data::feed_path(&root, SETUPS[0].key, CLIPS[0]).exists() {
+        eprintln!("skipped: no harness data under {}", root.display());
+        return;
+    }
+    let mut drift = vec![];
+    for s in SETUPS {
+        match data::state_problems(&root, s.key) {
+            None => eprintln!("{}: no project state recorded with its references (harness.py record-state or render)", s.key),
+            Some(found) => drift.extend(found.into_iter().map(|p| format!("{}: {p}", s.key))),
+        }
+    }
+    assert!(drift.is_empty(), "test data out of step with its project (harness.py check-state):\n  {}", drift.join("\n  "));
+}
 
 #[test]
 fn every_setup_matches_resolve_or_has_a_recorded_reason() {
@@ -30,5 +50,34 @@ fn every_setup_matches_resolve_or_has_a_recorded_reason() {
             stats.max_abs,
             stats.failing
         );
+    }
+}
+
+/// The accuracy suite (ticket #17), when `harness.py feed-frames` has captured the real Feed after the app's Output
+/// Conversion: every label the app showed is backed by the measurement against Resolve's renders.
+#[test]
+fn the_app_never_labels_a_conversion_exact_that_does_not_match_resolve() {
+    let root = data::testdata_root();
+    if !data::converted_path(&root, SETUPS[0].key, CLIPS[0]).exists() {
+        eprintln!("skipped: no converted Feed frames under {}", root.display());
+        return;
+    }
+    for s in SETUPS {
+        let pipeline = (s.pipeline)();
+        for clip in CLIPS {
+            let ours = data::read_converted(&root, s.key, clip).unwrap();
+            let reference = data::read_reference_exr(&root, s.key, clip).unwrap();
+            let label = data::read_converted_label(&root, s.key, clip).unwrap();
+            let stats = compare::compare_converted(&pipeline, &ours, &reference);
+            let verdict = classify(&stats);
+            assert!(
+                claim_holds(Claim::from_label(&label), verdict),
+                "{} {clip}: the app said {label:?} but measured {} (max err {:.3e}, {} failing samples)",
+                s.key,
+                verdict.label(),
+                stats.max_abs,
+                stats.failing
+            );
+        }
     }
 }

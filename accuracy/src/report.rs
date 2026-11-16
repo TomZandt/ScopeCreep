@@ -36,6 +36,33 @@ pub fn classify(s: &Stats) -> Verdict {
     }
 }
 
+/// What the app's label claims about a conversion (app/src/output_conversion.rs, `Plan::label`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Claim {
+    Exact,
+    Approximated,
+    /// Shown as sent: no Output Conversion.
+    None,
+}
+
+impl Claim {
+    /// From the Picture View label the app showed with the frame.
+    pub fn from_label(label: &str) -> Claim {
+        if label.contains("Output Conversion exact") {
+            Claim::Exact
+        } else if label.contains("Output Conversion approximated") {
+            Claim::Approximated
+        } else {
+            Claim::None
+        }
+    }
+}
+
+/// Whether a measured verdict supports what the label claims. A label may claim less than was measured, never more.
+pub fn claim_holds(claim: Claim, verdict: Verdict) -> bool {
+    claim != Claim::Exact || matches!(verdict, Verdict::Exact | Verdict::ExactToeNoise)
+}
+
 pub fn tolerance_text() -> String {
     format!(
         "Tolerance for \"exact\" (per colour channel value, over every pixel of the four test frames):
@@ -75,3 +102,21 @@ pub const SOURCES: &str = "Sources (primary):
     are exactly Resolve's ODT names: \"Rec.709 BT.1886\", \"P3-D65\", \"Rec.2100 ST2084 (1000 nit)\").
 Observed Resolve behaviour (not published; found by comparison, recorded in src/pipeline.rs): float output unclamped;
   sign-preserving power law for gamma outputs; P3-D65 output = gamma 2.6; PQ negatives encode as 0; DWG 1.0 = 100 nit.";
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn an_exact_label_needs_an_exact_measurement_and_less_may_always_be_claimed() {
+        assert_eq!(Claim::from_label("Clean picture  ·  1920 × 1080  ·  … (from project)  ·  Output Conversion exact"), Claim::Exact);
+        assert_eq!(Claim::from_label("…  ·  Output Conversion exact for ACES 2.0"), Claim::Exact);
+        assert_eq!(Claim::from_label("…  ·  Output Conversion approximated: DaVinci tone mapping not applied (unpublished)"), Claim::Approximated);
+        assert_eq!(Claim::from_label("…  ·  as sent, no Output Conversion"), Claim::None);
+        assert!(claim_holds(Claim::Exact, Verdict::Exact));
+        assert!(claim_holds(Claim::Exact, Verdict::ExactToeNoise));
+        assert!(!claim_holds(Claim::Exact, Verdict::Approximated));
+        assert!(claim_holds(Claim::Approximated, Verdict::Exact));
+        assert!(claim_holds(Claim::None, Verdict::Approximated));
+    }
+}

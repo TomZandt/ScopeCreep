@@ -14,11 +14,11 @@
 use crate::colour::{self, AP0, Chromaticities, M3, P3_D65, REC709, REC2020, V3, invert, mmul, rgb_to_xyz, vmul, xyz_to_rgb};
 use crate::transfer;
 
-const TABLE_SIZE: usize = 360;
-const ADDITIONAL_TABLE_ENTRIES: usize = 2;
-const TOTAL_TABLE_SIZE: usize = TABLE_SIZE + ADDITIONAL_TABLE_ENTRIES;
-const BASE_INDEX: usize = 1;
-const HUE_LIMIT: f64 = 360.0;
+pub const TABLE_SIZE: usize = 360;
+pub const ADDITIONAL_TABLE_ENTRIES: usize = 2;
+pub const TOTAL_TABLE_SIZE: usize = TABLE_SIZE + ADDITIONAL_TABLE_ENTRIES;
+pub const BASE_INDEX: usize = 1;
+pub const HUE_LIMIT: f64 = 360.0;
 const CUSP_CORNER_COUNT: usize = 6;
 const TOTAL_CORNER_COUNT: usize = CUSP_CORNER_COUNT + 2;
 const MAX_SORTED_CORNERS: usize = 2 * CUSP_CORNER_COUNT;
@@ -29,13 +29,13 @@ const GAMMA_MAXIMUM: f64 = 5.0;
 const GAMMA_SEARCH_STEP: f64 = 0.4;
 const GAMMA_ACCURACY: f64 = 1e-5;
 
-const REF_LUMINANCE: f64 = 100.0;
+pub const REF_LUMINANCE: f64 = 100.0;
 const L_A: f64 = 100.0;
 const Y_B: f64 = 20.0;
 const SURROUND: [f64; 3] = [0.9, 0.59, 0.9];
-const J_SCALE: f64 = 100.0;
+pub const J_SCALE: f64 = 100.0;
 const CAM_NL_Y_REFERENCE: f64 = 100.0;
-const CAM_NL_OFFSET: f64 = 0.2713 * CAM_NL_Y_REFERENCE;
+pub const CAM_NL_OFFSET: f64 = 0.2713 * CAM_NL_Y_REFERENCE;
 const CAM_NL_SCALE: f64 = 4.0 * CAM_NL_Y_REFERENCE;
 
 const CHROMA_COMPRESS: f64 = 2.4;
@@ -44,13 +44,13 @@ const CHROMA_EXPAND: f64 = 1.3;
 const CHROMA_EXPAND_FACT: f64 = 0.69;
 const CHROMA_EXPAND_THR: f64 = 0.5;
 
-const SMOOTH_CUSPS: f64 = 0.12;
+pub const SMOOTH_CUSPS: f64 = 0.12;
 const SMOOTH_M: f64 = 0.27;
-const CUSP_MID_BLEND: f64 = 1.3;
-const FOCUS_GAIN_BLEND: f64 = 0.3;
+pub const CUSP_MID_BLEND: f64 = 1.3;
+pub const FOCUS_GAIN_BLEND: f64 = 0.3;
 const FOCUS_DISTANCE: f64 = 1.35;
 const FOCUS_DISTANCE_SCALING: f64 = 1.75;
-const COMPRESSION_THRESHOLD: f64 = 0.75;
+pub const COMPRESSION_THRESHOLD: f64 = 0.75;
 
 fn model_gamma() -> f64 {
     SURROUND[1] * (1.48 + (Y_B / REF_LUMINANCE).sqrt())
@@ -179,15 +179,15 @@ pub fn tonescale_fwd(x: f64, p: &TsParams) -> f64 {
 
 #[derive(Clone, Debug)]
 pub struct JmhParams {
-    m_rgb_to_cam16_c: M3,
-    m_cam16_c_to_rgb: M3,
-    m_cone_response_to_aab: M3,
-    m_aab_to_cone_response: M3,
-    f_l_n: f64,
-    cz: f64,
-    inv_cz: f64,
-    a_w_j: f64,
-    inv_a_w_j: f64,
+    pub m_rgb_to_cam16_c: M3,
+    pub m_cam16_c_to_rgb: M3,
+    pub m_cone_response_to_aab: M3,
+    pub m_aab_to_cone_response: M3,
+    pub f_l_n: f64,
+    pub cz: f64,
+    pub inv_cz: f64,
+    pub a_w_j: f64,
+    pub inv_a_w_j: f64,
 }
 
 fn post_adaptation_fwd_(rc: f64) -> f64 {
@@ -330,24 +330,24 @@ pub fn init_jmh_params(prims: &Chromaticities) -> JmhParams {
 #[derive(Clone, Debug)]
 pub struct OdtParams {
     pub peak_luminance: f64,
-    input_params: JmhParams,
-    reach_params: JmhParams,
-    limit_params: JmhParams,
+    pub input_params: JmhParams,
+    pub reach_params: JmhParams,
+    pub limit_params: JmhParams,
     pub ts: TsParams,
-    limit_j_max: f64,
-    model_gamma_inv: f64,
-    table_reach_m: [f64; TOTAL_TABLE_SIZE],
-    sat: f64,
-    sat_thr: f64,
-    compr: f64,
-    chroma_compress_scale: f64,
-    mid_j: f64,
-    focus_dist: f64,
-    lower_hull_gamma_inv: f64,
-    table_hues: [f64; TOTAL_TABLE_SIZE],
-    table_gamut_cusps: [[f64; 3]; TOTAL_TABLE_SIZE],
-    table_upper_hull_gamma: [f64; TOTAL_TABLE_SIZE],
-    hue_linearity_search_range: [i64; 2],
+    pub limit_j_max: f64,
+    pub model_gamma_inv: f64,
+    pub table_reach_m: [f64; TOTAL_TABLE_SIZE],
+    pub sat: f64,
+    pub sat_thr: f64,
+    pub compr: f64,
+    pub chroma_compress_scale: f64,
+    pub mid_j: f64,
+    pub focus_dist: f64,
+    pub lower_hull_gamma_inv: f64,
+    pub table_hues: [f64; TOTAL_TABLE_SIZE],
+    pub table_gamut_cusps: [[f64; 3]; TOTAL_TABLE_SIZE],
+    pub table_upper_hull_gamma: [f64; TOTAL_TABLE_SIZE],
+    pub hue_linearity_search_range: [i64; 2],
 }
 
 struct HueDependentGamutParams {
@@ -982,10 +982,10 @@ pub struct AcesOutputTransform {
     pub name: &'static str,
     pub odt: OdtParams,
     pub peak_luminance: f64,
-    matrix_limit_to_display: M3,
-    ap0_to_ap1: M3,
-    ap1_to_ap0: M3,
-    eotf: Eotf,
+    pub matrix_limit_to_display: M3,
+    pub ap0_to_ap1: M3,
+    pub ap1_to_ap0: M3,
+    pub eotf: Eotf,
 }
 
 impl AcesOutputTransform {

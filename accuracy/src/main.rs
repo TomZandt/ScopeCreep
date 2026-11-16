@@ -1,15 +1,25 @@
 //! `accuracy`: one command, all test projects, one table.
 //!
-//!   cargo run --release --manifest-path accuracy/Cargo.toml              table for every Colour Setup
-//!   cargo run --release --manifest-path accuracy/Cargo.toml -- <key>     one setup, with per-clip detail
-//!   cargo run --release --manifest-path accuracy/Cargo.toml -- probe <clip> <key>   pixel dump for debugging
+//! The accuracy suite (ticket #17): frames taken from the real Feed after the app's Output Conversion, against
+//! Resolve's reference renders, with the label the app showed checked against the measurement:
 //!
-//! Inputs come from the harness (`python3 harness/harness.py all` then `clone-sender`, then
-//! `dump-timeline-frames`), under $SCOPECREEP_TESTDATA (default ~/scopecreep-testdata).
+//!   cargo run --release -p scopecreep-accuracy -- feed           table for every Colour Setup
+//!   cargo run --release -p scopecreep-accuracy -- feed <key>     one setup, with per-clip detail
+//!
+//! Its input comes from `python3 harness/harness.py feed-frames` (Resolve running, the Sender on every test project;
+//! see that command). The published maths alone (Stage 0, ticket #10), the f64 reference the app's GPU conversion
+//! is built from, against the same renders:
+//!
+//!   cargo run --release -p scopecreep-accuracy                   table for every Colour Setup
+//!   cargo run --release -p scopecreep-accuracy -- <key>          one setup, with per-clip detail
+//!   cargo run --release -p scopecreep-accuracy -- probe <clip> <key>   pixel dump for debugging
+//!
+//! Its inputs come from the harness (`python3 harness/harness.py all` then `clone-sender`, then
+//! `dump-timeline-frames`). All data lives under $SCOPECREEP_TESTDATA (default ~/scopecreep-testdata).
 
 use scopecreep_accuracy::compare::{self, Stats};
 use scopecreep_accuracy::data::{self, CLIPS};
-use scopecreep_accuracy::report::{self, Verdict};
+use scopecreep_accuracy::report::{self, Claim, Verdict};
 use scopecreep_accuracy::setups::{SETUPS, Setup};
 use std::path::Path;
 
@@ -17,6 +27,7 @@ fn main() {
     let args: Vec<String> = std::env::args().skip(1).collect();
     let root = data::testdata_root();
     match args.first().map(String::as_str) {
+        Some("feed") => std::process::exit(feed_table(&root, args.get(1).map(String::as_str))),
         Some("probe") => probe(&root, args.get(1).map(String::as_str).unwrap_or("chart"), args.get(2).map(String::as_str).unwrap_or("dwg-rec709")),
         None => std::process::exit(table(&root, None)),
         Some(only) => std::process::exit(table(&root, Some(only))),
@@ -130,6 +141,103 @@ fn table(root: &Path, only: Option<&str>) -> i32 {
         println!();
     }
     println!("{}", report::SOURCES);
+    status
+}
+
+/// One Colour Setup in the accuracy suite: the app's converted frames of the four clips against Resolve's renders.
+fn feed_row(root: &Path, s: &Setup) -> Result<(Stats, Vec<(&'static str, Stats)>, String), String> {
+    let pipeline = (s.pipeline)();
+    let mut all = Stats::default();
+    let mut per_clip = vec![];
+    let mut label = String::new();
+    for clip in CLIPS {
+        let ours = data::read_converted(root, s.key, clip)?;
+        let reference = data::read_reference_exr(root, s.key, clip)?;
+        let clip_label = data::read_converted_label(root, s.key, clip)?;
+        if !label.is_empty() && clip_label != label {
+            return Err(format!("the app's label changed between clips: {label:?} then {clip_label:?}"));
+        }
+        label = clip_label;
+        let c = compare::compare_converted(&pipeline, &ours, &reference);
+        all.merge(&c);
+        per_clip.push((clip, c));
+    }
+    Ok((all, per_clip, label))
+}
+
+/// The conversion part of the app's label (after the last "  ·  ").
+fn conversion_part(label: &str) -> &str {
+    label.rsplit("  ·  ").next().unwrap_or(label)
+}
+
+fn feed_table(root: &Path, only: Option<&str>) -> i32 {
+    println!("scopecreep accuracy suite: the real Feed after the app's Output Conversion vs Resolve 21.2 Studio renders (data: {})\n", root.display());
+    println!("{:<16} {:>9} {:>10} {:>9}  {:<30} {:<40} {}", "Colour Setup", "max err", "max err", "over tol", "measured", "the app's label", "label holds");
+    println!("{:<16} {:>9} {:>10} {:>9}", "", "(float)", "(10b code)", "(share)");
+    let mut status = 0;
+    let mut notes = vec![];
+    let mut detail = vec![];
+    for s in SETUPS.iter().filter(|s| only.is_none_or(|o| o == s.key)) {
+        match feed_row(root, s) {
+            Err(e) => {
+                println!("{:<16} ERROR: {e}", s.key);
+                status = 2;
+            }
+            Ok((st, per_clip, label)) => {
+                let verdict = report::classify(&st);
+                let claim = Claim::from_label(&label);
+                let holds = report::claim_holds(claim, verdict);
+                if !holds {
+                    status = status.max(1);
+                }
+                println!(
+                    "{:<16} {:>9.2e} {:>10.4} {:>8.4}%  {:<30} {:<40} {}",
+                    s.key,
+                    st.max_abs,
+                    st.max_codes_10bit(),
+                    100.0 * st.over_tolerance as f64 / st.samples as f64,
+                    verdict.label(),
+                    conversion_part(&label),
+                    if holds { "yes" } else { "NO: the label claims more than was measured" }
+                );
+                if verdict == Verdict::ExactToeNoise {
+                    notes.push(format!(
+                        "{}: {} of {} samples differ by more than {:.0e} encoded, all at or below reference {:.4} ({:.0} 10-bit codes), within {:.1e} of white in light (float32 noise at black). Worst {:.2} codes.",
+                        s.key, st.over_tolerance, st.samples, compare::TOLERANCE_FLOAT, st.max_ref_over_tolerance, st.max_ref_over_tolerance * compare::CODES_10BIT, st.max_linear_over_tolerance, st.max_codes_10bit()
+                    ));
+                }
+                if verdict == Verdict::Approximated {
+                    notes.push(format!("{}: {} samples outside both tolerances (max {:.2e}); the app says: {}", s.key, st.failing, st.max_abs, conversion_part(&label)));
+                }
+                if only.is_some() {
+                    for (clip, c) in &per_clip {
+                        let w = &c.worst;
+                        detail.push(format!(
+                            "  {clip:<10} max {:.3e} mean {:.3e} over-tol {:>8} failing {:>6} worst ({},{}) ch{} ours {:?} ref {:?}",
+                            c.max_abs, c.mean_abs(), c.over_tolerance, c.failing, w.x, w.y, w.channel, w.input, w.reference
+                        ));
+                    }
+                }
+            }
+        }
+    }
+    println!("\nColumns: error = |app - Resolve| per colour channel value over all pixels of 4 frames (ramp, chart, out-of-range, natural),");
+    println!("float EXR reference; 10b = the same in 10-bit codes (x1023); over tol = share of values more than the encoded tolerance away.");
+    println!("A label may claim less than was measured (approximated, or no Output Conversion), never more.\n");
+    println!("{}\n", report::tolerance_text());
+    if !notes.is_empty() {
+        println!("Notes:");
+        for n in &notes {
+            println!("  - {n}");
+        }
+        println!();
+    }
+    if !detail.is_empty() {
+        println!("Per clip:");
+        for d in &detail {
+            println!("{d}");
+        }
+    }
     status
 }
 

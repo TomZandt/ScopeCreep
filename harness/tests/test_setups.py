@@ -28,6 +28,14 @@ class SetupCatalogue(unittest.TestCase):
         pq = [v for k, v in by.items() if k.startswith("dwg-pq")]
         self.assertEqual({v["colorSpaceOutputToneMapping"] for v in pq}, {"None", "DaVinci"})
 
+    def test_a_data_levels_project_differs_from_its_video_levels_twin_only_in_levels(self):
+        full = dict(setups.by_key("yrgb-rec709g24-full").settings)
+        video = dict(setups.by_key("yrgb-rec709g24").settings)
+        self.assertEqual(full.pop("videoDataLevels"), "Full")
+        self.assertEqual(full, video)
+        self.assertEqual([s for s in setups.SETUPS if dict(s.settings).get("videoDataLevels") == "Full"],
+                         [setups.by_key("yrgb-rec709g24-full")])
+
     def test_perf_project_is_uhd(self):
         self.assertEqual(setups.PERF.resolution, (3840, 2160))
 

@@ -2,6 +2,9 @@
 //!   <root>/dumps-feed/scopecreep-test-<key>/<clip>.exr        probe Sender frame (Timeline Colour Space)
 //!   <root>/renders/scopecreep-test-<key>/<clip>-exr/*.exr     Resolve reference, float, Output Colour Space
 //!   <root>/renders/scopecreep-test-<key>/<clip>-tif/*.tif     Resolve reference, 16-bit, Output Colour Space
+//!   <root>/feed-converted/scopecreep-test-<key>/<clip>.exr    the real Feed after the app's Output Conversion
+//!   <root>/feed-converted/scopecreep-test-<key>/<clip>.label  the app's Picture View label for that frame
+//!   <root>/{renders,feed-converted}/scopecreep-test-<key>/project-state.txt  the project state each was made from
 
 use crate::imageio::{self, Image};
 use std::path::{Path, PathBuf};
@@ -42,4 +45,31 @@ pub fn read_reference_exr(root: &Path, key: &str, clip: &str) -> Result<Image, S
 pub fn read_reference_tiff(root: &Path, key: &str, clip: &str) -> Result<Image, String> {
     let dir = root.join("renders").join(format!("{PROJECT_PREFIX}{key}")).join(format!("{clip}-tif"));
     imageio::read_tiff16(&first_file(&dir, "tif")?)
+}
+
+pub fn converted_path(root: &Path, key: &str, clip: &str) -> PathBuf {
+    root.join("feed-converted").join(format!("{PROJECT_PREFIX}{key}")).join(format!("{clip}.exr"))
+}
+
+/// The frame the app showed for `clip`: the real Feed after Output Conversion, as the accuracy suite captured it.
+pub fn read_converted(root: &Path, key: &str, clip: &str) -> Result<Image, String> {
+    imageio::read_exr(&converted_path(root, key, clip))
+}
+
+fn read_state(dir: PathBuf) -> Option<String> {
+    std::fs::read_to_string(dir.join(crate::state::FILE)).ok()
+}
+
+/// Why this project's test data can't be compared (see `state::problems`); empty when it is consistent. None when
+/// its references were rendered before the harness recorded project states.
+pub fn state_problems(root: &Path, key: &str) -> Option<Vec<String>> {
+    let project = format!("{PROJECT_PREFIX}{key}");
+    let references = read_state(root.join("renders").join(&project))?;
+    Some(crate::state::problems(Some(&references), read_state(root.join("feed-converted").join(&project)).as_deref()))
+}
+
+/// The app's Picture View label for that frame (it says whether the conversion is exact or approximated).
+pub fn read_converted_label(root: &Path, key: &str, clip: &str) -> Result<String, String> {
+    let p = converted_path(root, key, clip).with_extension("label");
+    std::fs::read_to_string(&p).map(|s| s.trim().to_string()).map_err(|e| format!("{}: {e}", p.display()))
 }

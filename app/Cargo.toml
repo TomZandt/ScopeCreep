@@ -1,0 +1,16 @@
+[package]
+name = "scopecreep"
+description = "The scopecreep app: Picture Views and Scopes of the Feed"
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+
+[dependencies]
+bytemuck = "1.25.2"
+libc = "0.2"
+glyphon = "0.12.0"
+pollster = "1.0.1"
+scopecreep-accuracy = { path = "../accuracy" }
+scopecreep-feed = { path = "../feed" }
+wgpu = "30.0.2"
+winit = "0.30"

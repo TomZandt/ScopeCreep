@@ -2,12 +2,12 @@
 
 // ---- DaVinci Intermediate ---------------------------------------------------------------------------------
 // Source: Blackmagic Design, "DaVinci Resolve 17 Wide Gamut Intermediate" v1.1 (Aug 2021), p.4.
-const DI_A: f64 = 0.0075;
-const DI_B: f64 = 7.0;
-const DI_C: f64 = 0.07329248;
-const DI_M: f64 = 10.44426855;
-const DI_LIN_CUT: f64 = 0.00262409;
-const DI_LOG_CUT: f64 = 0.02740668;
+pub const DI_A: f64 = 0.0075;
+pub const DI_B: f64 = 7.0;
+pub const DI_C: f64 = 0.07329248;
+pub const DI_M: f64 = 10.44426855;
+pub const DI_LIN_CUT: f64 = 0.00262409;
+pub const DI_LOG_CUT: f64 = 0.02740668;
 
 pub fn di_encode(l: f64) -> f64 {
     if l > DI_LIN_CUT { ((l + DI_A).log2() + DI_B) * DI_C } else { l * DI_M }
@@ -19,26 +19,28 @@ pub fn di_decode(v: f64) -> f64 {
 
 // ---- ACEScct ----------------------------------------------------------------------------------------------
 // Source: Academy S-2016-001, "ACEScct - A Quasi-Logarithmic Encoding of ACES Within the ACES Color Space".
-const CCT_X_BRK: f64 = 0.0078125;
-const CCT_Y_BRK: f64 = 0.155251141552511;
-const CCT_A: f64 = 10.5402377416545;
-const CCT_B: f64 = 0.0729055341958355;
+pub const CCT_X_BRK: f64 = 0.0078125;
+pub const CCT_Y_BRK: f64 = 0.155251141552511;
+pub const CCT_A: f64 = 10.5402377416545;
+pub const CCT_B: f64 = 0.0729055341958355;
+pub const CCT_LOG_SCALE: f64 = 17.52;
+pub const CCT_LOG_OFFSET: f64 = 9.72;
 
 pub fn acescct_encode(l: f64) -> f64 {
-    if l <= CCT_X_BRK { CCT_A * l + CCT_B } else { (l.log2() + 9.72) / 17.52 }
+    if l <= CCT_X_BRK { CCT_A * l + CCT_B } else { (l.log2() + CCT_LOG_OFFSET) / CCT_LOG_SCALE }
 }
 
 pub fn acescct_decode(v: f64) -> f64 {
-    if v <= CCT_Y_BRK { (v - CCT_B) / CCT_A } else { 2f64.powf(v * 17.52 - 9.72) }
+    if v <= CCT_Y_BRK { (v - CCT_B) / CCT_A } else { 2f64.powf(v * CCT_LOG_SCALE - CCT_LOG_OFFSET) }
 }
 
 // ---- SMPTE ST 2084 (PQ) ----------------------------------------------------------------------------------
 // Source: SMPTE ST 2084:2014 Table / ITU-R BT.2100-2 Table 4 (constants m1, m2, c1, c2, c3).
-const PQ_M1: f64 = 2610.0 / 16384.0;
-const PQ_M2: f64 = 2523.0 / 4096.0 * 128.0;
-const PQ_C1: f64 = 3424.0 / 4096.0;
-const PQ_C2: f64 = 2413.0 / 4096.0 * 32.0;
-const PQ_C3: f64 = 2392.0 / 4096.0 * 32.0;
+pub const PQ_M1: f64 = 2610.0 / 16384.0;
+pub const PQ_M2: f64 = 2523.0 / 4096.0 * 128.0;
+pub const PQ_C1: f64 = 3424.0 / 4096.0;
+pub const PQ_C2: f64 = 2413.0 / 4096.0 * 32.0;
+pub const PQ_C3: f64 = 2392.0 / 4096.0 * 32.0;
 
 /// Absolute luminance in cd/m^2 (0..10000) to PQ code value (0..1). Inverse EOTF.
 pub fn pq_encode(nits: f64) -> f64 {
