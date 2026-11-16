@@ -11,7 +11,7 @@
 //! accuracy suite proves against Resolve; the shader only repeats the per-pixel steps, in 32-bit float. Think of
 //! the accuracy crate as the recipe book and the shader as the cook: the cook gets the measured ingredients
 //! handed over, and the tests taste every dish against the book (app/tests/output_conversion_seam.rs).
-use crate::colour_setup::{ColourSetup, KnownColourSetup, Science};
+use crate::colour_setup::{ColourSetup, KnownColourSetup, OutputSpace, Science, TimelineSpace};
 use crate::gpu_frame::{GpuFrame, new_texture_id};
 use crate::waveform::{LumaWeights, MeasuredSpace, Measurement};
 use scopecreep_accuracy::aces2::{self, AcesOutputTransform, Eotf};
@@ -86,30 +86,27 @@ pub enum Plan {
     Unsupported(String),
 }
 
-const PROVEN_YRGB: &str = "Rec.709 Gamma 2.4";
-
-fn is_dwg(timeline: &str) -> bool {
-    timeline == "DaVinci WG/Intermediate" || timeline == "DaVinci Wide Gamut / DaVinci Intermediate"
-}
-
 impl Plan {
     /// The conversion for a Colour Setup, labelled no better than Stage 0 proved (docs/stage0-report.md, section 1).
     pub fn for_setup(setup: Option<&ColourSetup>) -> Plan {
         let Some(s) = setup else { return Plan::Unknown };
         let not_measured = |what: &str| Accuracy::Approximated(format!("{what} not yet measured against Resolve"));
         if s.is_aces() {
-            if s.timeline != "ACEScct" {
+            if s.timeline_space != TimelineSpace::Acescct {
                 return Plan::Unsupported(format!("{} timelines not yet supported", s.timeline));
             }
             let version = s.effective_aces_version().unwrap_or_default();
             if version != "2.0" {
                 return Plan::Unsupported(format!("ACES {version} not yet supported"));
             }
-            let output = match s.output.as_str() {
-                "Rec.709 BT.1886" => AcesOutput::Rec709Bt1886,
-                "P3-D65" => AcesOutput::P3D65,
-                "Rec.2100 ST2084 (1000 nit)" => AcesOutput::Rec2100Pq1000,
-                other => return Plan::Unsupported(format!("ACES output transform {other} not yet supported")),
+            let output = match &s.output_space {
+                OutputSpace::Rec709Bt1886 => AcesOutput::Rec709Bt1886,
+                OutputSpace::P3D65 => AcesOutput::P3D65,
+                OutputSpace::Rec2100Pq1000 => AcesOutput::Rec2100Pq1000,
+                _ => {
+                    let other = &s.output;
+                    return Plan::Unsupported(format!("ACES output transform {other} not yet supported"));
+                }
             };
             let accuracy = if s.aces_version.is_some() { Accuracy::Exact } else { Accuracy::ExactIfAces2 };
             return Plan::Convert { method: Method::FromAcescct(output), accuracy };
@@ -118,23 +115,27 @@ impl Plan {
             Some(Science::Other(mode)) => return Plan::Unsupported(format!("colour science {mode} not supported")),
             Some(Science::Yrgb) => {
                 // DaVinci YRGB converts nothing: the Colour Spaces are tags only.
-                let accuracy = if s.timeline == PROVEN_YRGB && s.output == PROVEN_YRGB { Accuracy::Exact } else { not_measured("YRGB with these colour spaces") };
+                let accuracy = if s.timeline_space == TimelineSpace::Rec709Gamma24 && s.output_space == OutputSpace::Rec709Gamma24 { Accuracy::Exact } else { not_measured("YRGB with these colour spaces") };
                 return Plan::Convert { method: Method::Unchanged, accuracy };
             }
             _ => {}
         }
-        if !is_dwg(&s.timeline) {
+        if s.timeline_space != TimelineSpace::DaVinciWideGamut {
             if s.timeline == s.output {
                 return Plan::Convert { method: Method::Unchanged, accuracy: not_measured(&format!("{} to itself", s.timeline)) };
             }
             return Plan::Unsupported(format!("{} timelines not yet supported", s.timeline));
         }
-        let (output, mut accuracy) = match s.output.as_str() {
-            "Rec.709 Gamma 2.4" => (DwgOutput::Rec709Gamma24, Accuracy::Exact),
-            "P3-D65" => (DwgOutput::P3D65, Accuracy::Exact),
-            "Rec.2100 ST2084" => (DwgOutput::Rec2100Pq, Accuracy::Exact),
-            "Rec.2020 Gamma 2.4" => (DwgOutput::Rec2020Gamma24, not_measured("Rec.2020 Gamma 2.4")),
-            other => return Plan::Unsupported(format!("output {other} not yet supported")),
+        // A Colour Setup set by hand on the Sender node says nothing about the colour science, tone mapping or gamut
+        // mapping (`science` is `None`). The conversion is proven only with mapping off, so it is not labelled exact.
+        let by_hand = || Accuracy::Approximated("assumes tone and gamut mapping off".to_string());
+        let proven = if s.science.is_none() { by_hand() } else { Accuracy::Exact };
+        let (output, mut accuracy) = match &s.output_space {
+            OutputSpace::Rec709Gamma24 => (DwgOutput::Rec709Gamma24, proven),
+            OutputSpace::P3D65 => (DwgOutput::P3D65, proven),
+            OutputSpace::Rec2100Pq => (DwgOutput::Rec2100Pq, proven),
+            OutputSpace::Rec2020Gamma24 => (DwgOutput::Rec2020Gamma24, not_measured("Rec.2020 Gamma 2.4")),
+            _ => return Plan::Unsupported(format!("output {} not yet supported", s.output)),
         };
         let mut unpublished = vec![];
         if let Some(t) = &s.tone_mapping {

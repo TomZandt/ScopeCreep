@@ -12,17 +12,21 @@ pub enum Provenance {
     Manual,
 }
 
+/// The provenance codes of the protocol, as `SCFEED_PROVENANCE_*` in `scopecreep_feed.h` (0 is "none").
+const PROVENANCE_PROJECT: u32 = 1;
+const PROVENANCE_MANUAL: u32 = 2;
+
 impl Provenance {
     fn code(self) -> u32 {
         match self {
-            Provenance::Project => 1,
-            Provenance::Manual => 2,
+            Provenance::Project => PROVENANCE_PROJECT,
+            Provenance::Manual => PROVENANCE_MANUAL,
         }
     }
     fn from_code(code: u32) -> Option<Provenance> {
         match code {
-            1 => Some(Provenance::Project),
-            2 => Some(Provenance::Manual),
+            PROVENANCE_PROJECT => Some(Provenance::Project),
+            PROVENANCE_MANUAL => Some(Provenance::Manual),
             _ => None,
         }
     }
@@ -49,19 +53,20 @@ impl SentColourSetup {
         SentColourSetup { provenance, text: text.into() }
     }
 
+    /// The `key=value` lines in order, trimmed, as borrowed pairs. Lines without `=` and lines with an empty key
+    /// are skipped.
+    fn pairs(&self) -> impl Iterator<Item = (&str, &str)> {
+        self.text.lines().filter_map(|line| line.split_once('=')).map(|(k, v)| (k.trim(), v.trim())).filter(|(k, _)| !k.is_empty())
+    }
+
     /// The `key=value` lines in order, trimmed. Lines without `=` are skipped.
     pub fn entries(&self) -> Vec<(String, String)> {
-        self.text
-            .lines()
-            .filter_map(|line| line.split_once('='))
-            .map(|(k, v)| (k.trim().to_string(), v.trim().to_string()))
-            .filter(|(k, _)| !k.is_empty())
-            .collect()
+        self.pairs().map(|(k, v)| (k.to_string(), v.to_string())).collect()
     }
 
     /// The value of `key`, if the block has it.
     pub fn get(&self, key: &str) -> Option<&str> {
-        self.text.lines().filter_map(|line| line.split_once('=')).find(|(k, _)| k.trim() == key).map(|(_, v)| v.trim())
+        self.pairs().find(|(k, _)| *k == key).map(|(_, v)| v)
     }
 
     /// Write into the slot whose header starts at `slot`. The caller owns the slot (WRITING).

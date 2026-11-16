@@ -369,15 +369,7 @@ fn the_waveform_measures_in_the_output_colour_space_of_the_colour_setup() {
     use scopecreep::colour_setup::ColourSetup;
     use scopecreep::waveform::MeasuredSpace;
     let space = |output: &str| {
-        let setup = ColourSetup {
-            science: None,
-            timeline: "DaVinci WG/Intermediate".into(),
-            output: output.into(),
-            tone_mapping: None,
-            gamut_mapping: None,
-            aces_version: None,
-            levels: None,
-        };
+        let setup = ColourSetup::new(None, "DaVinci WG/Intermediate".into(), output.into(), None, None, None, None);
         setup.measured_space()
     };
     assert_eq!(space("Rec.709 Gamma 2.4"), Some(MeasuredSpace::Rec709));

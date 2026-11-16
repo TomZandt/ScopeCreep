@@ -29,6 +29,7 @@
 #include <cstddef>
 #include <cstdio>
 #include <cstring>
+#include <iterator>
 #include <string>
 #include <time.h>
 
@@ -60,8 +61,8 @@ const char* const kOutputSpaces[] = {"Rec.709 Gamma 2.4", "P3-D65", "Rec.2100 ST
                                      "P3-DCI", "Rec.709 BT.1886", "Rec.2100 ST2084 (1000 nit)"};
 const char* const kLevels[] = {"Video", "Full"};
 const char* const kLevelsFeed[] = {"video", "full"};
-const char* const kAcesVersions[] = {"ACES 2.0", "ACES 1.3"};
-const char* const kAcesVersionsFeed[] = {"2.0", "1.3"};
+struct AcesVersion { const char* label; const char* feedText; };  // the label Resolve shows, the text sent in the Feed
+const AcesVersion kAcesVersions[] = {{"ACES 2.0", "2.0"}, {"ACES 1.3", "1.3"}};
 #define PARAM_GROUP "colourSetup"
 #define PARAM_MANUAL "colourSetupManual"
 #define PARAM_TIMELINE "timelineColourSpace"
@@ -73,6 +74,12 @@ template <size_t N>
 const char* pick(const char* const (&options)[N], int i)
 {
     return options[i >= 0 && (size_t)i < N ? i : 0];
+}
+
+template <typename T, size_t N>
+size_t paramIndex(const T (&options)[N], int i)
+{
+    return i >= 0 && (size_t)i < N ? (size_t)i : 0;
 }
 
 int paramInt(OfxParamHandle h)
@@ -111,7 +118,7 @@ size_t manualColourSetup(const Instance* inst, char* buf, size_t cap)
     int n = std::snprintf(buf, cap, "timeline=%s\noutput=%s\nlevels=%s\n", timeline, pick(kOutputSpaces, paramInt(inst->output)),
                           pick(kLevelsFeed, paramInt(inst->levels)));
     if (n > 0 && !std::strncmp(timeline, "ACES", 4) && (size_t)n < cap)
-        n += std::snprintf(buf + n, cap - (size_t)n, "aces_version=%s\n", pick(kAcesVersionsFeed, paramInt(inst->aces)));
+        n += std::snprintf(buf + n, cap - (size_t)n, "aces_version=%s\n", kAcesVersions[paramIndex(kAcesVersions, paramInt(inst->aces))].feedText);
     return n > 0 && (size_t)n < cap ? (size_t)n : 0;
 }
 
@@ -218,7 +225,11 @@ void defineColourSetupParams(OfxImageEffectHandle effect)
     defineChoice(ps, PARAM_TIMELINE, "Timeline Colour Space", "The colour space the project grades in.", kTimelineSpaces);
     defineChoice(ps, PARAM_OUTPUT, "Output Colour Space", "What Resolve delivers to the monitor. For ACES, the output transform.", kOutputSpaces);
     defineChoice(ps, PARAM_LEVELS, "Levels", "Video (legal range) or Full (data levels), as set in Resolve.", kLevels);
-    defineChoice(ps, PARAM_ACES, "ACES version", "Only used with an ACES timeline. Resolve does not tell scripts which ACES version a project uses.", kAcesVersions);
+    {
+        const char* labels[std::size(kAcesVersions)];
+        for (size_t i = 0; i < std::size(kAcesVersions); ++i) labels[i] = kAcesVersions[i].label;
+        defineChoice(ps, PARAM_ACES, "ACES version", "Only used with an ACES timeline. Resolve does not tell scripts which ACES version a project uses.", labels);
+    }
 }
 
 OfxStatus describeInContext(OfxImageEffectHandle effect)

@@ -178,7 +178,9 @@ impl Measurement {
     pub fn label(&self) -> String {
         let [r, g, b] = self.weights();
         let name = self.space.name();
-        let space = if self.assumed { format!("{name} assumed") } else { name.to_string() };
+        // Assumed means the picture is not converted into a known Output Colour Space: the values are measured as
+        // sent, like the Picture View's "as sent, no Output Conversion", and must not read as a Rec.709 measurement.
+        let space = if self.assumed { format!("{name} assumed, measured as sent, unconverted") } else { name.to_string() };
         let how = match self.luma {
             LumaWeights::FromPrimaries => "from primaries",
             LumaWeights::MatchResolve => "to match Resolve",

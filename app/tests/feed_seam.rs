@@ -227,8 +227,8 @@ fn scrubbing_ends_on_the_frame_the_playhead_stopped_at() {
 }
 
 #[test]
-fn a_quick_tap_through_a_few_frames_ends_on_the_last_one() {
-    let mut b = Bench::with_sender("tap");
+fn a_quick_step_through_a_few_frames_ends_on_the_last_one() {
+    let mut b = Bench::with_sender("quick-step");
     b.render(10.0);
     b.wait(1_000 * MS);
     for f in [11.0, 12.0, 13.0] {

@@ -28,6 +28,106 @@ pub enum Levels {
     Full,
 }
 
+/// A Timeline Colour Space, parsed once from the name Resolve (or the Sender node) gives it.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum TimelineSpace {
+    /// DaVinci Wide Gamut / DaVinci Intermediate (either of the names Resolve uses).
+    DaVinciWideGamut,
+    Acescct,
+    Acescc,
+    Rec709Gamma24,
+    /// Any other name, as given.
+    Other(String),
+}
+
+impl TimelineSpace {
+    pub fn parse(name: &str) -> TimelineSpace {
+        match name {
+            "DaVinci WG/Intermediate" | "DaVinci Wide Gamut / DaVinci Intermediate" => TimelineSpace::DaVinciWideGamut,
+            "ACEScct" => TimelineSpace::Acescct,
+            "ACEScc" => TimelineSpace::Acescc,
+            "Rec.709 Gamma 2.4" => TimelineSpace::Rec709Gamma24,
+            other => TimelineSpace::Other(other.to_string()),
+        }
+    }
+
+    pub fn is_aces(&self) -> bool {
+        match self {
+            TimelineSpace::Acescct | TimelineSpace::Acescc => true,
+            TimelineSpace::Other(name) => name.starts_with("ACES"),
+            _ => false,
+        }
+    }
+}
+
+/// An Output Colour Space (for ACES: the output transform), parsed once from Resolve's name for it.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum OutputSpace {
+    Rec709Gamma24,
+    Rec709Bt1886,
+    /// Resolve's "P3-D65", which is gamma 2.6.
+    P3D65,
+    P3Dci,
+    Srgb,
+    Rec2020Gamma24,
+    /// "Rec.2100 ST2084".
+    Rec2100Pq,
+    /// "Rec.2100 ST2084 (1000 nit)", the ACES output transform.
+    Rec2100Pq1000,
+    Rec2100Hlg,
+    /// Any other name, as given.
+    Other(String),
+}
+
+impl OutputSpace {
+    pub fn parse(name: &str) -> OutputSpace {
+        match name {
+            "Rec.709 Gamma 2.4" => OutputSpace::Rec709Gamma24,
+            "Rec.709 BT.1886" => OutputSpace::Rec709Bt1886,
+            "P3-D65" => OutputSpace::P3D65,
+            "P3-DCI" => OutputSpace::P3Dci,
+            "sRGB" => OutputSpace::Srgb,
+            "Rec.2020 Gamma 2.4" => OutputSpace::Rec2020Gamma24,
+            "Rec.2100 ST2084" => OutputSpace::Rec2100Pq,
+            "Rec.2100 ST2084 (1000 nit)" => OutputSpace::Rec2100Pq1000,
+            "Rec.2100 HLG" => OutputSpace::Rec2100Hlg,
+            other => OutputSpace::Other(other.to_string()),
+        }
+    }
+
+    /// The Measured Space by its primaries and encoding. `None` when the name is not one the Scopes know (the
+    /// waveform then keeps its labelled Rec.709 assumption). Names Resolve builds from a colour space and a
+    /// separate gamma ("Rec.709 / Gamma 2.4") are matched by their start.
+    pub fn measured_space(&self) -> Option<MeasuredSpace> {
+        Some(match self {
+            OutputSpace::Rec709Gamma24 | OutputSpace::Rec709Bt1886 | OutputSpace::Srgb => MeasuredSpace::Rec709,
+            OutputSpace::P3D65 => MeasuredSpace::P3D65,
+            OutputSpace::P3Dci => MeasuredSpace::P3Dci,
+            OutputSpace::Rec2020Gamma24 => MeasuredSpace::Rec2020,
+            OutputSpace::Rec2100Pq | OutputSpace::Rec2100Pq1000 => MeasuredSpace::Rec2100Pq,
+            OutputSpace::Rec2100Hlg => MeasuredSpace::Rec2100Hlg,
+            OutputSpace::Other(o) => {
+                let o = o.as_str();
+                if o.starts_with("Rec.709") {
+                    MeasuredSpace::Rec709
+                } else if o.starts_with("P3-D65") {
+                    MeasuredSpace::P3D65
+                } else if o.starts_with("P3-DCI") {
+                    MeasuredSpace::P3Dci
+                } else if o.starts_with("Rec.2020") {
+                    MeasuredSpace::Rec2020
+                } else if o.starts_with("Rec.2100 ST2084") || o.starts_with("Rec.2100 PQ") {
+                    MeasuredSpace::Rec2100Pq
+                } else if o.starts_with("Rec.2100 HLG") {
+                    MeasuredSpace::Rec2100Hlg
+                } else {
+                    return None;
+                }
+            }
+        })
+    }
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub struct ColourSetup {
     /// `None` when not known (a manual override does not say).
@@ -36,6 +136,9 @@ pub struct ColourSetup {
     pub timeline: String,
     /// Output Colour Space, as Resolve names it (for ACES: the output transform, e.g. `Rec.709 BT.1886`).
     pub output: String,
+    /// `timeline` and `output` parsed once, for the app's decisions; the strings are for display.
+    pub timeline_space: TimelineSpace,
+    pub output_space: OutputSpace,
     /// Output tone mapping, `None` when off or not known.
     pub tone_mapping: Option<String>,
     /// Output gamut mapping, `None` when off or not known.
@@ -61,6 +164,28 @@ fn levels(value: Option<&str>) -> Option<Levels> {
 }
 
 impl ColourSetup {
+    pub fn new(
+        science: Option<Science>,
+        timeline: String,
+        output: String,
+        tone_mapping: Option<String>,
+        gamut_mapping: Option<String>,
+        aces_version: Option<String>,
+        levels: Option<Levels>,
+    ) -> ColourSetup {
+        ColourSetup {
+            science,
+            timeline_space: TimelineSpace::parse(&timeline),
+            output_space: OutputSpace::parse(&output),
+            timeline,
+            output,
+            tone_mapping,
+            gamut_mapping,
+            aces_version,
+            levels,
+        }
+    }
+
     /// From Resolve's own setting keys and values (`Timeline.GetSetting()`, keys in #6's closing comment).
     /// `None` when there is no colour science mode to go on.
     pub fn from_resolve_settings(settings: &[(String, String)]) -> Option<ColourSetup> {
@@ -85,15 +210,15 @@ impl ColourSetup {
             m => (Science::Other(m.to_string()), space("colorSpaceTimeline"), space("colorSpaceOutput")),
         };
         let aces = science == Science::Aces;
-        Some(ColourSetup {
-            tone_mapping: if aces { None } else { mapping(get("colorSpaceOutputToneMapping")) },
-            gamut_mapping: if aces { None } else { mapping(get("colorSpaceOutputGamutMapping")) },
-            aces_version: if aces { mapping(get("acesVersion")) } else { None },
-            levels: levels(get("videoDataLevels")),
-            science: Some(science),
+        Some(ColourSetup::new(
+            Some(science),
             timeline,
             output,
-        })
+            if aces { None } else { mapping(get("colorSpaceOutputToneMapping")) },
+            if aces { None } else { mapping(get("colorSpaceOutputGamutMapping")) },
+            if aces { mapping(get("acesVersion")) } else { None },
+            levels(get("videoDataLevels")),
+        ))
     }
 
     /// From a Feed slot's Colour Setup block (protocol 1.1 vocabulary). `None` without a Timeline and Output
@@ -109,19 +234,19 @@ impl ColourSetup {
             _ if timeline.starts_with("ACES") => Some(Science::Aces),
             _ => None,
         };
-        Some(ColourSetup {
+        Some(ColourSetup::new(
             science,
             timeline,
             output,
-            tone_mapping: mapping(sent.get("tone_mapping")),
-            gamut_mapping: mapping(sent.get("gamut_mapping")),
-            aces_version: mapping(sent.get("aces_version")),
-            levels: levels(sent.get("levels")),
-        })
+            mapping(sent.get("tone_mapping")),
+            mapping(sent.get("gamut_mapping")),
+            mapping(sent.get("aces_version")),
+            levels(sent.get("levels")),
+        ))
     }
 
     pub fn is_aces(&self) -> bool {
-        self.science == Some(Science::Aces) || self.timeline.starts_with("ACES")
+        self.science == Some(Science::Aces) || self.timeline_space.is_aces()
     }
 
     /// The ACES version the Scopes should use: the known one, else the assumed 2.0. `None` when not ACES.
@@ -132,28 +257,13 @@ impl ColourSetup {
     /// The Measured Space by default: the Output Colour Space, by its primaries and encoding. `None` when the name
     /// is not one the Scopes know (the waveform then keeps its labelled Rec.709 assumption).
     pub fn measured_space(&self) -> Option<MeasuredSpace> {
-        let o = self.output.as_str();
-        Some(if o.starts_with("Rec.709") || o == "sRGB" {
-            MeasuredSpace::Rec709
-        } else if o.starts_with("P3-D65") {
-            MeasuredSpace::P3D65
-        } else if o.starts_with("P3-DCI") {
-            MeasuredSpace::P3Dci
-        } else if o.starts_with("Rec.2020") {
-            MeasuredSpace::Rec2020
-        } else if o.starts_with("Rec.2100 ST2084") || o.starts_with("Rec.2100 PQ") {
-            MeasuredSpace::Rec2100Pq
-        } else if o.starts_with("Rec.2100 HLG") {
-            MeasuredSpace::Rec2100Hlg
-        } else {
-            return None;
-        })
+        self.output_space.measured_space()
     }
 
     /// Output Colour Space as the label shows it. Resolve's "P3-D65" is gamma 2.6 (Stage 0, check 4), which its
     /// name does not say.
     pub fn output_label(&self) -> String {
-        if self.output == "P3-D65" { "P3-D65 (gamma 2.6)".to_string() } else { self.output.clone() }
+        if self.output_space == OutputSpace::P3D65 { "P3-D65 (gamma 2.6)".to_string() } else { self.output.clone() }
     }
 }
 

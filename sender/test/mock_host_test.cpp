@@ -250,6 +250,19 @@ static int nextFrame(scfeed_reader& r, int timeoutMs = 2000)
     return -1;
 }
 
+// Wait (the test may wait; a render call may not) until `done()` holds. The Sender's worker thread does the slow
+// work (building a ring, looking at another Resolve's Feed) after the render call has returned.
+template <class F>
+static bool waitFor(F done, int timeoutMs = 3000)
+{
+    const double end = nowMs() + timeoutMs;
+    while (nowMs() < end) {
+        if (done()) return true;
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    }
+    return done();
+}
+
 // Re-open the Feed after the Sender replaced it (as the app does when it sees `retired`).
 static bool reopen(scfeed_reader& r, const char* path)
 {
@@ -290,13 +303,15 @@ static int guestTest(const char* feed)
     waitpid(other, nullptr, 0);
     std::this_thread::sleep_for(std::chrono::milliseconds(1100));
     f.fill(2);
-    render(f, 8.0);
-    CHECK(scfeed_load32(&r.hdr->retired) == 1, "within a second the guest takes the Feed over");
+    const double takeoverCall = render(f, 8.0);
+    CHECK(takeoverCall < 5.0, "the render call that notices the owner has gone returns at once: the Feed is not looked at on the render thread");
+    CHECK(waitFor([&] { return scfeed_load32(&r.hdr->retired) == 1; }), "within a second the guest takes the Feed over");
     CHECK(reopen(r, feed), "the app re-attaches");
     CHECK(r.hdr->sender_pid == (uint64_t)getpid(), "the Feed is now this Resolve's");
     CHECK(scfeed_registry_find(r.hdr, (uint64_t)getpid(), 1) >= 0 && scfeed_registry_find(r.hdr, (uint64_t)other, 1) < 0, "listing only its own instances");
     f.fill(3);
-    render(f, 9.0);  // builds the ring
+    render(f, 9.0);  // asks for the ring
+    CHECK(waitFor([&] { return scfeed_load32(&r.hdr->retired) == 1; }), "the first frame makes the ring");
     reopen(r, feed);
     f.fill(4);
     render(f, 10.0);
@@ -380,11 +395,13 @@ int main(int argc, char** argv)
     h = peek(feed);
     CHECK(h.renders_thumbnail == 1 && h.slot_count == 0 && h.next_sequence == 0, "a thumbnail render is ignored");
     f.fill(3);
-    render(f, 12.0);
+    const double firstCall = render(f, 12.0);
     CHECK(f.passedThrough(), "the picture passes through unchanged while the ring is made");
-    CHECK(scfeed_load32(&r.hdr->retired) == 1, "the first frame makes the ring: the old Feed file is marked retired");
+    CHECK(firstCall < 5.0, "the render call that needs a ring does not build it (no cudaMalloc, no pinning on the render thread)");
+    CHECK(waitFor([&] { return scfeed_load32(&r.hdr->retired) == 1; }), "the first frame makes the ring: the old Feed file is marked retired");
     CHECK(reopen(r, feed), "the reader re-attaches to the new Feed");
     CHECK(r.hdr->slot_count == 4 && r.hdr->slot_capacity >= 64 * 36 * 16, "the new Feed has a ring that fits the frame");
+    waitFor([&] { return r.hdr->renders_total == 3; });  // the counters are carried over when the new Feed becomes current
     CHECK(r.hdr->renders_total == 3 && r.hdr->renders_idle == 1 && r.hdr->renders_thumbnail == 1, "the counters carry over to the new Feed");
     {
         const int e = scfeed_registry_find(r.hdr, (uint64_t)getpid(), 1);
@@ -521,9 +538,14 @@ int main(int argc, char** argv)
     std::printf("a larger frame replaces the ring\n");
     GpuFrame big(128, 72);
     big.fill(50);
-    render(big, 300.0);
-    CHECK(scfeed_load32(&r.hdr->retired) == 1, "the Feed is replaced");
+    const uint64_t busyBefore = scfeed_load64(&r.hdr->drops_busy);
+    const double growCall = render(big, 300.0);
+    CHECK(growCall < 5.0, "the render call that sees a larger frame returns at once: the new ring is built off the render thread");
+    CHECK(waitFor([&] { return scfeed_load32(&r.hdr->retired) == 1; }), "the Feed is replaced");
+    CHECK(big.passedThrough(), "the larger picture passes through while the ring is built");
+    CHECK(scfeed_load64(&r.hdr->drops_busy) == busyBefore + 1, "the frame that could not be fed is counted as dropped (Sender busy)");
     CHECK(reopen(r, feed) && r.hdr->slot_capacity >= 128 * 72 * 16, "the new ring fits the larger frame");
+    waitFor([&] { return scfeed_load64(&r.hdr->drops_busy) > busyBefore; });  // the new Feed is current once the counters have carried over
     big.fill(51);
     render(big, 301.0);
     i = nextFrame(r);

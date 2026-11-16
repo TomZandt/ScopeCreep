@@ -3,18 +3,24 @@
 //  - the one mutex is only ever taken with try_lock on the render path: if another render thread holds it, this
 //    frame is skipped and counted, not waited for;
 //  - the completion callback (a CUDA thread) touches only atomics;
-//  - the two things that do take real time happen once, not per frame: building a ring (pinning its memory) the
-//    first time an app is attached, and letting an old ring go after a larger frame replaced it.
+//  - everything that takes real time runs on the Sender's own worker thread, never on a render thread: building a
+//    ring (cudaMalloc, pinning the Feed's memory, creating the stream) the first time an app is attached and when
+//    a larger frame arrives, letting an old ring go, and a guest's once-a-second look at the other Resolve's Feed
+//    (scanning and mapping files). A render call only reads state, sets a flag and wakes the worker; a frame that
+//    arrives while a ring is being built passes through and is counted as dropped ("Sender busy").
 #include "feed_copy.h"
 
 #include "scopecreep_feed.h"
 
 #include <atomic>
+#include <chrono>
+#include <condition_variable>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
 #include <mutex>
 #include <string>
+#include <thread>
 #include <utility>
 #include <vector>
 
@@ -52,10 +58,17 @@ std::mutex gMu;                     // guards everything below; render path uses
 std::vector<Ring*> gRetired;
 cudaStream_t gStream = nullptr;     // the Sender's own stream: the copies to host memory run here, not on Resolve's
 cudaEvent_t gStaged = nullptr;      // "the frame is in staging", recorded on Resolve's stream
-uint64_t gRetryAfterNs = 0;
+std::atomic<uint64_t> gRetryAfterNs{0};
+// The worker. Its state is leaked on purpose: the thread is detached and may still be waiting when the process
+// exits, and a condition variable must not be destroyed with a waiter.
+std::mutex& gWorkMu = *new std::mutex;
+std::condition_variable& gWorkCv = *new std::condition_variable;
+std::atomic<size_t> gWantFrameBytes{0};   // a render call saw a frame this big that the ring cannot hold; 0 = none
+std::atomic<bool> gGuestCheckDue{false};  // a render call asks for the guest's once-a-second look at the Feed
+std::atomic<bool> gHaveRetired{false};    // gRetired is not empty (written under gMu)
 std::atomic<bool> gErrorShown{false};
 std::string gHostName;
-std::once_flag gOpenOnce;
+std::once_flag gOpenOnce, gWorkerOnce;
 // While this process is a guest: the header of the other Resolve's Feed (never unmapped: a render thread may
 // still be using an old one; they are 4 KB and replaced rarely). nullptr while this process owns the Feed.
 std::atomic<scfeed_header*> gGuest{nullptr};
@@ -85,6 +98,7 @@ bool publishEmptyFeed()
     if (Ring* old = gRing.exchange(r, std::memory_order_acq_rel)) {
         old->retiredNs = scfeed_now_ns();
         gRetired.push_back(old);
+        gHaveRetired.store(true, std::memory_order_relaxed);
     }
     return true;
 }
@@ -123,8 +137,8 @@ void freeRing(Ring* r)
 }
 
 // Publish a new Feed file with a ring whose slots hold `frameBytes`, pin it, and allocate staging.
-// Takes real time (it pins slots * frameBytes of memory). Caller holds gMu. Returns nullptr and `err` on failure.
-Ring* buildRing(size_t frameBytes, const Ring* previous, std::string& err)
+// Takes real time (it pins slots * frameBytes of memory): worker thread only, no lock held. Returns nullptr and `err` on failure.
+Ring* buildRing(size_t frameBytes, std::string& err)
 {
     if (!gStream) {
         cudaError_t e = cudaStreamCreateWithFlags(&gStream, cudaStreamNonBlocking);
@@ -159,20 +173,6 @@ Ring* buildRing(size_t frameBytes, const Ring* previous, std::string& err)
         freeRing(r);
         return nullptr;
     }
-    if (previous && previous->w.hdr) {  // the counters and the registry carry on across Feed files
-        const scfeed_header* o = previous->w.hdr;
-        scfeed_header* n = r->w.hdr;
-        scfeed_registry_copy(n, o, 0);
-        n->frames_published = scfeed_load64(&o->frames_published);
-        n->drops_overwritten = scfeed_load64(&o->drops_overwritten);
-        n->drops_busy = scfeed_load64(&o->drops_busy);
-        n->renders_total = scfeed_load64(&o->renders_total);
-        n->renders_thumbnail = scfeed_load64(&o->renders_thumbnail);
-        n->renders_idle = scfeed_load64(&o->renders_idle);
-        n->renders_unsupported = scfeed_load64(&o->renders_unsupported);
-        n->render_call_ns_total = scfeed_load64(&o->render_call_ns_total);
-        n->last_render_ns = scfeed_load64(&o->last_render_ns);
-    }
     const cudaError_t e = cudaHostRegister(r->w.hdr, r->w.bytes, cudaHostRegisterDefault);
     if (e != cudaSuccess) {
         // The new Feed is already published; say what went wrong in it and leave it without frames.
@@ -187,19 +187,115 @@ Ring* buildRing(size_t frameBytes, const Ring* previous, std::string& err)
     return r;
 }
 
-// Let go of rings that were replaced a while ago and have no copies in flight. Caller holds gMu.
+// Let go of rings that were replaced a while ago and have no copies in flight. Worker thread only; takes gMu just
+// long enough to pick them, and frees them (cudaFree) outside it. Every ring that was replaced ends up here,
+// whatever the render threads do afterwards, because the worker keeps coming back until gRetired is empty.
 void reap(uint64_t nowNs)
 {
-    for (size_t i = 0; i < gRetired.size();) {
-        Ring* r = gRetired[i];
-        if (r->inFlight.load(std::memory_order_acquire) == 0 && nowNs - r->retiredNs > kGraceNs) {
-            freeRing(r);
-            gRetired.erase(gRetired.begin() + (long)i);
-        } else {
-            ++i;
+    std::vector<Ring*> done;
+    {
+        std::lock_guard<std::mutex> lock(gMu);
+        for (size_t i = 0; i < gRetired.size();) {
+            Ring* r = gRetired[i];
+            if (r->inFlight.load(std::memory_order_acquire) == 0 && nowNs - r->retiredNs > kGraceNs) {
+                done.push_back(r);
+                gRetired.erase(gRetired.begin() + (long)i);
+            } else {
+                ++i;
+            }
         }
+        gHaveRetired.store(!gRetired.empty(), std::memory_order_relaxed);
+    }
+    for (Ring* r : done) freeRing(r);
+}
+
+// Make `fresh` the current Feed and retire the ring it replaces. Worker thread only.
+void swapIn(Ring* fresh)
+{
+    std::lock_guard<std::mutex> lock(gMu);
+    Ring* previous = gRing.load(std::memory_order_acquire);
+    // The counters and the registry carry on across Feed files; copied now, as late as possible, so renders
+    // counted while the ring was being built are not lost.
+    if (previous && previous->w.hdr) {
+        const scfeed_header* o = previous->w.hdr;
+        scfeed_header* n = fresh->w.hdr;
+        scfeed_registry_copy(n, o, 0);
+        n->frames_published = scfeed_load64(&o->frames_published);
+        n->drops_overwritten = scfeed_load64(&o->drops_overwritten);
+        n->drops_busy = scfeed_load64(&o->drops_busy);
+        n->renders_total = scfeed_load64(&o->renders_total);
+        n->renders_thumbnail = scfeed_load64(&o->renders_thumbnail);
+        n->renders_idle = scfeed_load64(&o->renders_idle);
+        n->renders_unsupported = scfeed_load64(&o->renders_unsupported);
+        n->render_call_ns_total = scfeed_load64(&o->render_call_ns_total);
+        n->last_render_ns = scfeed_load64(&o->last_render_ns);
+    }
+    if (Ring* old = gRing.exchange(fresh, std::memory_order_acq_rel)) {
+        old->retiredNs = scfeed_now_ns();
+        gRetired.push_back(old);
+        gHaveRetired.store(true, std::memory_order_relaxed);
     }
 }
+
+// Build a ring that holds `frameBytes` and make it current. Worker thread only.
+void growRing(size_t frameBytes)
+{
+    Ring* r = gRing.load(std::memory_order_acquire);
+    if (!r) return;
+    if (r->w.hdr->slot_count != 0 && frameBytes <= r->w.hdr->slot_capacity) return;  // already done
+    const uint64_t now = scfeed_now_ns();
+    if (now < gRetryAfterNs.load(std::memory_order_relaxed)) return;
+    std::string err;
+    Ring* fresh = buildRing(frameBytes, err);
+    if (!fresh) {
+        setError(r, err);
+        gRetryAfterNs.store(scfeed_now_ns() + kRetryNs, std::memory_order_relaxed);
+        return;
+    }
+    swapIn(fresh);
+}
+
+// A guest's once-a-second look at the Feed: has the owner replaced its Feed file or quit? The scanning and
+// mapping happen without gMu; the state change takes it.
+void refreshGuest()
+{
+    scfeed_header* guest = gGuest.load(std::memory_order_acquire);
+    if (!guest) return;
+    scfeed_header* owner = scfeed_live_feed_of_another(scfeed_path(), myPid());
+    if (owner && owner->feed_id == guest->feed_id) {
+        munmap(owner, SCFEED_HEADER_BYTES);
+        return;
+    }
+    std::lock_guard<std::mutex> lock(gMu);
+    if (owner) {
+        gGuest.store(owner, std::memory_order_release);  // the owner published a new Feed file: follow it
+    } else {
+        // The owner has quit (or its Feed is gone): this process takes the Feed over.
+        if (!publishEmptyFeed()) return;
+        gGuest.store(nullptr, std::memory_order_release);
+    }
+    scfeed_header* h = registryHeader();
+    for (const auto& reg : gRegistered) scfeed_registry_add(h, myPid(), reg.first, reg.second, gHostName.c_str());
+}
+
+void workerLoop()
+{
+    for (;;) {
+        {
+            std::unique_lock<std::mutex> lock(gWorkMu);
+            auto due = [] {
+                return gWantFrameBytes.load(std::memory_order_acquire) != 0 || gGuestCheckDue.load(std::memory_order_acquire);
+            };
+            if (gHaveRetired.load(std::memory_order_relaxed)) gWorkCv.wait_for(lock, std::chrono::milliseconds(250), due);
+            else gWorkCv.wait(lock, due);  // nothing to do: asleep until a render call asks for something
+        }
+        if (const size_t want = gWantFrameBytes.exchange(0, std::memory_order_acq_rel)) growRing(want);
+        if (gGuestCheckDue.exchange(false, std::memory_order_acq_rel)) refreshGuest();
+        reap(scfeed_now_ns());
+    }
+}
+
+void wakeWorker() { gWorkCv.notify_one(); }  // never waits; a wake that is missed is repeated by the next render
 
 }  // namespace
 
@@ -215,6 +311,7 @@ void feedOpen(const char* hostName)
         }
         publishEmptyFeed();
     });
+    std::call_once(gWorkerOnce, [] { std::thread(workerLoop).detach(); });
 }
 
 bool feedIsGuest() { return gGuest.load(std::memory_order_acquire) != nullptr; }
@@ -234,36 +331,16 @@ void feedUnregister(uint32_t instance)
     if (scfeed_header* h = registryHeader()) scfeed_registry_remove(h, myPid(), instance);
 }
 
-// A guest's once-a-second look at the Feed. Caller holds gMu.
-void refreshGuest(scfeed_header* guest)
-{
-    scfeed_header* owner = scfeed_live_feed_of_another(scfeed_path(), myPid());
-    if (owner) {
-        if (owner->feed_id == guest->feed_id) {
-            munmap(owner, SCFEED_HEADER_BYTES);
-            return;
-        }
-        gGuest.store(owner, std::memory_order_release);  // the owner published a new Feed file: follow it
-    } else {
-        // The owner has quit (or its Feed is gone): this process takes the Feed over.
-        if (!publishEmptyFeed()) return;
-        gGuest.store(nullptr, std::memory_order_release);
-    }
-    scfeed_header* h = registryHeader();
-    for (const auto& reg : gRegistered) scfeed_registry_add(h, myPid(), reg.first, reg.second, gHostName.c_str());
-}
-
 void feedNoteRender(uint32_t instance, double frameTime, uint64_t renderNs)
 {
     scfeed_header* h = registryHeader();
     if (!h) return;
     scfeed_registry_note(h, myPid(), instance, frameTime, renderNs);
-    scfeed_header* guest = gGuest.load(std::memory_order_acquire);
-    if (!guest || renderNs < gNextGuestCheckNs.load(std::memory_order_relaxed)) return;
-    std::unique_lock<std::mutex> lock(gMu, std::try_to_lock);
-    if (!lock.owns_lock()) return;  // never wait on the render path; try again on a later render
+    if (!gGuest.load(std::memory_order_acquire) || renderNs < gNextGuestCheckNs.load(std::memory_order_relaxed)) return;
+    // The look at the owner's Feed (file scanning, mapping) is the worker's job, not a render thread's.
     gNextGuestCheckNs.store(renderNs + kGuestCheckNs, std::memory_order_relaxed);
-    if (gGuest.load(std::memory_order_acquire) == guest) refreshGuest(guest);
+    gGuestCheckDue.store(true, std::memory_order_release);
+    wakeWorker();
 }
 
 bool feedReaderPresent()
@@ -313,23 +390,17 @@ bool feedSubmitCuda(void* hostStream, const void* src, size_t srcRowBytes, const
         return false;
     }
     r = gRing.load(std::memory_order_acquire);
-    reap(info.renderNs);
 
     const size_t rowBytes = (size_t)info.width * 16, frameBytes = rowBytes * (size_t)info.height;
     if (r->w.hdr->slot_count == 0 || frameBytes > r->w.hdr->slot_capacity) {
-        // No ring yet, or the frame has outgrown it: publish a new Feed. The app re-attaches within a few
-        // milliseconds; this frame is not fed.
-        if (info.renderNs < gRetryAfterNs) return false;
-        std::string err;
-        Ring* fresh = buildRing(frameBytes, r, err);
-        if (!fresh) {
-            setError(r, err);
-            gRetryAfterNs = info.renderNs + kRetryNs;
-            return false;
+        // No ring yet, or the frame has outgrown it: the worker publishes a new Feed (the app re-attaches within
+        // a few milliseconds). This frame is not fed; it is counted as dropped because the Sender is busy.
+        if (info.renderNs >= gRetryAfterNs.load(std::memory_order_relaxed)) {
+            size_t was = gWantFrameBytes.load(std::memory_order_relaxed);
+            while (frameBytes > was && !gWantFrameBytes.compare_exchange_weak(was, frameBytes, std::memory_order_acq_rel)) {}
+            wakeWorker();
         }
-        r->retiredNs = info.renderNs;
-        gRetired.push_back(r);
-        gRing.store(fresh, std::memory_order_release);
+        scfeed_add64(&r->w.hdr->drops_busy, 1);
         return false;
     }
     if (!r->pinned) return false;  // the error is already in the Feed header

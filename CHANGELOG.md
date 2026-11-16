@@ -43,6 +43,12 @@ The format follows [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/
 - Feed protocol 1.1: the slot's Colour Setup block now has a format (provenance plus `key=value` lines). It carries the Sender's manual override; 1.0 readers and writers stay compatible (#16).
 - Feed frames go to the GPU once, through reused staging buffers, for the Picture View and the waveform to share: the app now keeps up with UHD float at 60 fps (#15).
 
+### Fixed
+
+- A Colour Setup set by hand on the Sender node no longer claims "Output Conversion exact": it cannot say whether tone or gamut mapping is on, so the label reads "Output Conversion approximated: assumes tone and gamut mapping off" (#17).
+- When the Feed is shown as sent (no Output Conversion), the waveform label says "Rec.709 assumed, measured as sent, unconverted" instead of reading like a Rec.709 measurement (#17).
+- The Sender no longer allocates graphics memory, pins the Feed's memory or scans Feed files on Resolve's render thread: the ring (when the first frame arrives or the frame size grows) and a second Resolve's look at the first one's Feed are handled by the Sender's own worker thread. The frame that triggers a new ring passes through and is counted as dropped ("Sender busy"); retired rings are freed by the worker even when no more renders arrive (#2).
+
 ## [0.0.0] - 2026-11-15
 
 Stage 0: colour and performance checks. Nothing here is the product yet; it is the evidence the product is built on.

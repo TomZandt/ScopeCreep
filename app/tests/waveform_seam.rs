@@ -209,7 +209,7 @@ fn until_the_colour_setup_is_known_the_label_says_rec709_and_video_levels_are_as
     b.waveform.set_measurement(Measurement::default());
     // 64 + 0.5 × weight × 876 with the Rec.709 weights.
     assert_eq!(half_primaries_codes(&mut b), [157, 377, 96]);
-    assert_eq!(b.waveform.label(), "Luma  ·  10-bit Legal 64–940 assumed  ·  Rec.709 assumed  ·  Y = 0.2126 R + 0.7152 G + 0.0722 B from primaries");
+    assert_eq!(b.waveform.label(), "Luma  ·  10-bit Legal 64–940 assumed  ·  Rec.709 assumed, measured as sent, unconverted  ·  Y = 0.2126 R + 0.7152 G + 0.0722 B from primaries");
 }
 
 // ------------------------------------------------------------------ Levels

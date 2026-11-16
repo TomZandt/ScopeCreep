@@ -168,13 +168,15 @@ const DWG_REC709: &str = "timeline=DaVinci WG/Intermediate\noutput=Rec.709 Gamma
 
 // ------------------------------------------------------------------ labels
 
+/// A Colour Setup set by hand on the Sender cannot say whether tone or gamut mapping is on, so the label does not
+/// claim the conversion is exact: it says what it assumes.
 #[test]
-fn a_proven_colour_setup_is_labelled_exact() {
-    let mut b = Bench::new("label-exact", DWG_REC709);
+fn a_colour_setup_set_by_hand_does_not_claim_to_be_exact() {
+    let mut b = Bench::new("label-manual", DWG_REC709);
     b.play(16, 9, |_, _| [0.4, 0.4, 0.4]);
     assert_eq!(
         b.label(),
-        "Clean picture  ·  16 × 9  ·  DaVinci WG/Intermediate → Rec.709 Gamma 2.4 (set manually)  ·  Output Conversion exact"
+        "Clean picture  ·  16 × 9  ·  DaVinci WG/Intermediate → Rec.709 Gamma 2.4 (set manually)  ·  Output Conversion approximated: assumes tone and gamut mapping off"
     );
 }
 
@@ -320,7 +322,7 @@ fn colour_setups_without_a_conversion_are_shown_as_sent_and_say_why() {
         let mut b = Bench::new(name, setup);
         assert_converted_like(&mut b, &Pipeline::Identity, &test_values());
         assert!(b.label().ends_with(&format!("as sent, no Output Conversion: {why}")), "{name}: {}", b.label());
-        assert!(b.waveform.label().contains("Rec.709 assumed"), "{name}: the waveform does not claim the Output Colour Space: {}", b.waveform.label());
+        assert!(b.waveform.label().contains("Rec.709 assumed, measured as sent, unconverted"), "{name}: the waveform says it measures as sent: {}", b.waveform.label());
     }
 }
 
