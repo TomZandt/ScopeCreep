@@ -94,6 +94,7 @@ static const void* fetchSuite(OfxPropertySetHandle, const char* name, int)
     };
     prm.paramSetGetPropertySet = [](OfxParamSetHandle, OfxPropertySetHandle* p) { *p = (OfxPropertySetHandle)&gParamSetProps; return kOfxStatOK; };
     prm.paramGetValue = paramGetValue;
+    prm.paramGetPropertySet = [](OfxParamHandle h, OfxPropertySetHandle* p) { *p = (OfxPropertySetHandle)&((Param*)h)->props; return kOfxStatOK; };
     es.getParamSet = [](OfxImageEffectHandle, OfxParamSetHandle* p) { *p = (OfxParamSetHandle)&gParamSetProps; return kOfxStatOK; };
     ps.propSetString = setS; ps.propSetPointer = setP; ps.propSetDouble = setD; ps.propSetInt = setI;
     ps.propGetString = getS; ps.propGetPointer = getP; ps.propGetDouble = getD; ps.propGetInt = getI;
@@ -133,6 +134,25 @@ static OfxPlugin* gPlugin = nullptr;
 static OfxImageEffectHandle gEffect = (OfxImageEffectHandle)&gEffectProps;
 static cudaStream_t gHostStream = nullptr;
 static double nowMs() { return std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now().time_since_epoch()).count(); }
+
+// Is a parameter enabled (editable) in the host's UI? kOfxParamPropEnabled defaults to 1.
+static bool enabled(const char* param)
+{
+    auto& v = gParams[param].props.m[kOfxParamPropEnabled];
+    return v.empty() || v[0].i != 0;
+}
+
+// The user changes a parameter in the host's UI: the host stores the value, then tells the plugin.
+static OfxStatus userSets(const char* param, int value)
+{
+    gParams[param].value = value;
+    Props in;
+    setS((OfxPropertySetHandle)&in, kOfxPropType, 0, kOfxTypeParameter);
+    setS((OfxPropertySetHandle)&in, kOfxPropName, 0, param);
+    setS((OfxPropertySetHandle)&in, kOfxPropChangeReason, 0, kOfxChangeUserEdited);
+    setD((OfxPropertySetHandle)&in, kOfxPropTime, 0, 0.0);
+    return gPlugin->mainEntry(kOfxActionInstanceChanged, gEffect, (OfxPropertySetHandle)&in, nullptr);
+}
 
 // A frame "Resolve rendered": on the GPU, rows `pitch` bytes apart (wider than the picture, as hosts may do).
 struct GpuFrame {
@@ -403,6 +423,42 @@ int main(int argc, char** argv)
           "an Output Colour Space choice is defined");
     CHECK(choiceIndex("levels", "Video") >= 0 && choiceIndex("levels", "Full") >= 0, "a Levels choice is defined");
     CHECK(choiceIndex("acesVersion", "ACES 2.0") == 0 && choiceIndex("acesVersion", "ACES 1.3") >= 0, "an ACES version choice is defined, 2.0 first");
+    const char* const manualControls[] = {"timelineColourSpace", "outputColourSpace", "levels", "acesVersion"};
+    auto controlsEnabled = [&](bool want) {
+        bool ok = true;
+        for (const char* c : manualControls) ok &= enabled(c) == want;
+        return ok;
+    };
+    CHECK(controlsEnabled(false), "switched off: the manual controls are greyed out from the start");
+    CHECK(userSets("colourSetupManual", 1) == kOfxStatOK && controlsEnabled(true), "switched on: the manual controls can be edited");
+    CHECK(userSets("colourSetupManual", 0) == kOfxStatOK && controlsEnabled(false), "switched off again: greyed out again");
+    {
+        auto valuesAre = [&](const char* tl, const char* out, const char* lev, const char* aces) {
+            return gParams["timelineColourSpace"].value == choiceIndex("timelineColourSpace", tl) &&
+                   gParams["outputColourSpace"].value == choiceIndex("outputColourSpace", out) && gParams["levels"].value == choiceIndex("levels", lev) &&
+                   gParams["acesVersion"].value == choiceIndex("acesVersion", aces);
+        };
+        userSets("colourSetupManual", 1);
+        userSets("timelineColourSpace", choiceIndex("timelineColourSpace", "ACEScct"));
+        userSets("outputColourSpace", choiceIndex("outputColourSpace", "Rec.2100 ST2084"));
+        userSets("levels", choiceIndex("levels", "Full"));
+        userSets("acesVersion", choiceIndex("acesVersion", "ACES 1.3"));
+        userSets("colourSetupManual", 0);
+        CHECK(valuesAre("ACEScct", "Rec.2100 ST2084", "Full", "ACES 1.3"), "switched off: the values set by hand are kept, only greyed out");
+        userSets("colourSetupManual", 1);
+        CHECK(valuesAre("ACEScct", "Rec.2100 ST2084", "Full", "ACES 1.3") && controlsEnabled(true), "switched on again: the same values come back, not defaults");
+        // The project is closed and opened again: the host restores the saved values, then creates the instance.
+        gPlugin->mainEntry(kOfxActionDestroyInstance, gEffect, nullptr, nullptr);
+        for (const char* c : manualControls) gParams[c].props.m.erase(kOfxParamPropEnabled);
+        CHECK(gPlugin->mainEntry(kOfxActionCreateInstance, gEffect, nullptr, nullptr) == kOfxStatOK, "the project is opened again");
+        CHECK(valuesAre("ACEScct", "Rec.2100 ST2084", "Full", "ACES 1.3") && controlsEnabled(true), "the saved values and switch are left as saved, editable");
+        userSets("colourSetupManual", 0);
+        gPlugin->mainEntry(kOfxActionDestroyInstance, gEffect, nullptr, nullptr);
+        for (const char* c : manualControls) gParams[c].props.m.erase(kOfxParamPropEnabled);
+        gPlugin->mainEntry(kOfxActionCreateInstance, gEffect, nullptr, nullptr);
+        CHECK(valuesAre("ACEScct", "Rec.2100 ST2084", "Full", "ACES 1.3") && controlsEnabled(false), "saved with the switch off: values kept, greyed out from the start");
+        for (const char* c : {"timelineColourSpace", "outputColourSpace", "levels", "acesVersion"}) gParams[c].value = 0;
+    }
     auto frameColour = [&](double t, uint32_t* provenance) {
         f.fill(30);
         render(f, t);

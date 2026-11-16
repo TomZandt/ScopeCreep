@@ -31,6 +31,7 @@ The format follows [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/
 - A quiet status line under the panels: Resolve's live playback rate, measured from the Sender's own render times (within ±0.01 fps of the timeline rate at 24, 25 and 50 fps in Resolve; "paused" when stopped), dropped frames split into "app too slow" and "Sender busy", and the Sender driving the Feed with its project and timeline names when known (#19).
 - More than one Sender: exactly one drives the Feed. Senders rendering the same frames are settled by a fixed rule (the instance Resolve created first in its process) and the others are named in a notice; a timeline switch simply follows the Sender now rendering. A second Resolve process joins the Feed as a guest, sends no frames and is flagged; it takes the Feed over when the first Resolve quits (#19).
 - `SCOPECREEP_FRAME_LOG=<file>`: a per-frame timing log of what the app read and showed, for diagnostics (#19).
+- The Sender node greys out its manual Colour Setup controls (Timeline Colour Space, Output Colour Space, Levels, ACES version) while "Set Colour Setup manually" is off, so it never offers settings that are not in effect; scopecreep then uses the project's Colour Setup, as before. Values set by hand are kept when the switch is turned off and come back when it is turned on again (#46).
 
 ### Changed
 

@@ -75,6 +75,13 @@ const char* pick(const char* const (&options)[N], int i)
     return options[i >= 0 && (size_t)i < N ? i : 0];
 }
 
+int paramInt(OfxParamHandle h)
+{
+    int v = 0;
+    if (gParam && h) gParam->paramGetValue(h, &v);
+    return v;
+}
+
 // What identifies a Sender instance. Resolve reports no project, timeline or page to a plugin (Stage 0), so
 // this is all there is: an ordinal within this Resolve process, and the timeline frame rate.
 struct Instance {
@@ -83,12 +90,18 @@ struct Instance {
     OfxParamHandle manual = nullptr, timeline = nullptr, output = nullptr, levels = nullptr, aces = nullptr;
 };
 
-int paramInt(OfxParamHandle h)
+// The manual controls can be edited only while "Set Colour Setup manually" is on; otherwise they are greyed out,
+// so the node never offers settings that are not in effect. Never called from render.
+void enableManualControls(const Instance* inst)
 {
-    int v = 0;
-    if (gParam && h) gParam->paramGetValue(h, &v);
-    return v;
+    if (!gParam) return;
+    const int on = paramInt(inst->manual) ? 1 : 0;
+    for (OfxParamHandle h : {inst->timeline, inst->output, inst->levels, inst->aces}) {
+        OfxPropertySetHandle p = nullptr;
+        if (h && gParam->paramGetPropertySet(h, &p) == kOfxStatOK && p) gProp->propSetInt(p, kOfxParamPropEnabled, 0, on);
+    }
 }
+
 
 // The manual Colour Setup as Feed protocol 1.1 text into `buf`; returns its length, or 0 when switched off.
 size_t manualColourSetup(const Instance* inst, char* buf, size_t cap)
@@ -237,6 +250,7 @@ OfxStatus createInstance(OfxImageEffectHandle effect)
         gParam->paramGetHandle(ps, PARAM_ACES, &inst->aces, nullptr);
     }
     gProp->propSetPointer(props, kOfxPropInstanceData, 0, inst);
+    enableManualControls(inst);
     scopecreep::feedRegister(inst->id, inst->frameRate);
     return kOfxStatOK;
 }
@@ -245,6 +259,17 @@ OfxStatus destroyInstance(OfxImageEffectHandle effect)
 {
     if (Instance* inst = instanceOf(effect)) scopecreep::feedUnregister(inst->id);
     delete instanceOf(effect);
+    return kOfxStatOK;
+}
+
+// The user changed a parameter: when it is the manual switch, grey the manual controls out or let them be edited.
+OfxStatus instanceChanged(OfxImageEffectHandle effect, OfxPropertySetHandle inArgs)
+{
+    char* name = nullptr;
+    gProp->propGetString(inArgs, kOfxPropName, 0, &name);
+    Instance* inst = instanceOf(effect);
+    if (!inst || !name || std::strcmp(name, PARAM_MANUAL)) return kOfxStatReplyDefault;
+    enableManualControls(inst);
     return kOfxStatOK;
 }
 
@@ -343,6 +368,7 @@ OfxStatus mainEntry(const char* action, const void* handle, OfxPropertySetHandle
     if (!std::strcmp(action, kOfxImageEffectActionDescribeInContext)) return describeInContext(effect);
     if (!std::strcmp(action, kOfxActionCreateInstance)) return createInstance(effect);
     if (!std::strcmp(action, kOfxActionDestroyInstance)) return destroyInstance(effect);
+    if (!std::strcmp(action, kOfxActionInstanceChanged)) return instanceChanged(effect, inArgs);
     return kOfxStatReplyDefault;
 }
 
