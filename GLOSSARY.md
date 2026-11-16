@@ -78,6 +78,22 @@ _Avoid_: Luminance (that is linear light, not this), brightness, Y (on its own)
 A display that shows the Feed as an image, either untouched (the clean picture) or remapped for inspection (false colour, black and white).
 _Avoid_: Scope (for false colour), filter, LUT view
 
+**Colour Waveform**:
+A waveform whose trace is tinted by the colour of the pixels plotted at each point, so a green scene gives a green trace. A Scope in its own Panel, beside the plain Luma waveform.
+_Avoid_: Colourised waveform, RGB waveform, parade (that shows channels side by side)
+
+**False Colour**:
+A Picture View that paints each pixel by the band its value falls in, leaving the rest of the picture in grey.
+_Avoid_: Heatmap (for exposure), exposure overlay
+
+**ARRI False Colour**:
+False Colour with the Rec.709 percentage bands third parties publish as ARRI's (green near middle grey, pink near one stop over), measured on the Output picture. Modelled on ARRI's scheme; not ARRI's own specification.
+_Avoid_: ARRI spec, LogC false colour
+
+**Stops False Colour**:
+False Colour by stops above and below middle grey, in scene light decoded from the Timeline Colour Space.
+_Avoid_: EL Zone (a trademark scopecreep does not use), zone system
+
 **Loupe**:
 A movable square on a Picture View that shows the picture under it magnified, so single pixels (and noise) can be seen.
 _Avoid_: PiP, magnifier, zoom window
