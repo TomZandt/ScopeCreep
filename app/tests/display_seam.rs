@@ -166,7 +166,7 @@ fn middle(rect: [f32; 4]) -> (f32, f32) {
 }
 
 #[test]
-fn the_window_has_the_clean_picture_the_luma_waveform_and_the_gamut_warning_in_that_order() {
+fn the_window_starts_with_the_clean_picture_the_luma_waveform_and_the_gamut_warning_in_that_order() {
     let b = Bench::new("order");
     assert_eq!(b.set.names()[..3], ["Clean picture", "Luma waveform", "Gamut/legal warning"]);
 }

@@ -133,6 +133,7 @@ impl DisplaySet {
         set.register(Arc::new(crate::gamut_warning::GamutWarning::new(device, queue, target)));
         set.register(Arc::new(crate::highlight_neutrals::HighlightNeutrals::new(device, queue, target, filterable)));
         set.register(Arc::new(crate::channel_view::ChannelView::new(device, queue, target, filterable)));
+        set.register(Arc::new(crate::arri_false_colour::ArriFalseColour::new(device, queue, target)));
         set
     }
 

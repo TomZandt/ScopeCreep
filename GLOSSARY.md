@@ -106,6 +106,10 @@ _Avoid_: Heatmap (for exposure), exposure overlay
 False Colour with the Rec.709 percentage bands third parties publish as ARRI's (green near middle grey, pink near one stop over), measured on the Output picture. Modelled on ARRI's scheme; not ARRI's own specification.
 _Avoid_: ARRI spec, LogC false colour
 
+**Band**:
+One colour of ARRI False Colour: a range of Output Luma in percent of the full-range signal. A band includes its lower edge and excludes its upper edge; the lowest is open below and the highest open above (ADR 0016).
+_Avoid_: Zone (ARRI's and EL Zone's word for their own schemes)
+
 **Stops False Colour**:
 False Colour by stops above and below middle grey, in scene light decoded from the Timeline Colour Space.
 _Avoid_: EL Zone (a trademark scopecreep does not use), zone system
