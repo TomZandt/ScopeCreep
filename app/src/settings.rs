@@ -35,6 +35,10 @@ pub struct PanelSettings {
     /// What a display remembers that the menu does not offer (a Loupe's position and zoom): free values the
     /// display checks itself (ADR 0015). Kept apart so that changing it never re-measures the frame.
     state: BTreeMap<String, BTreeMap<String, String>>,
+    /// Counts the menu choices that changed, so a reader can tell cheaply whether anything did.
+    version: u64,
+    /// The same for remembered state, which labels may show (a Loupe's zoom) but which never re-measures anything.
+    state_version: u64,
 }
 
 /// Equal when the menu's choices are: remembered state is not a setting.
@@ -50,12 +54,30 @@ const STATE_PREFIX: &str = "state:";
 
 impl PanelSettings {
     pub fn set(&mut self, panel: &str, key: &str, value: &str) {
-        self.panels.entry(panel.to_string()).or_default().insert(key.to_string(), value.to_string());
+        let old = self.panels.entry(panel.to_string()).or_default().insert(key.to_string(), value.to_string());
+        if old.as_deref() != Some(value) {
+            self.version += 1;
+        }
     }
 
-    /// Remember a value a display keeps for itself (not a menu choice).
-    pub fn set_state(&mut self, panel: &str, key: &str, value: &str) {
-        self.state.entry(panel.to_string()).or_default().insert(key.to_string(), value.to_string());
+    /// Goes up whenever a menu choice changes (not remembered state): equal versions of the same settings are equal.
+    pub fn version(&self) -> u64 {
+        self.version
+    }
+
+    /// Remember a value a display keeps for itself (not a menu choice). Returns whether it changed.
+    pub fn set_state(&mut self, panel: &str, key: &str, value: &str) -> bool {
+        let old = self.state.entry(panel.to_string()).or_default().insert(key.to_string(), value.to_string());
+        let changed = old.as_deref() != Some(value);
+        if changed {
+            self.state_version += 1;
+        }
+        changed
+    }
+
+    /// Goes up whenever remembered state changes.
+    pub fn state_version(&self) -> u64 {
+        self.state_version
     }
 
     /// `panel`'s remembered values for `keys`, as a display reads them; those never remembered are left out.
@@ -101,7 +123,9 @@ impl PanelSettings {
             if let (Some(panel), Some(key), Some(value), None) = (parts.next(), parts.next(), parts.next(), parts.next()) {
                 if !panel.is_empty() && !key.is_empty() && !value.is_empty() {
                     match key.strip_prefix(STATE_PREFIX) {
-                        Some(key) => settings.set_state(panel, key, value),
+                        Some(key) => {
+                            settings.set_state(panel, key, value);
+                        }
                         None => settings.set(panel, key, value),
                     }
                 }
@@ -181,4 +205,19 @@ impl Menu {
     pub fn contains(rect: [f32; 4], point: [f32; 2]) -> bool {
         point[0] >= rect[0] && point[0] < rect[0] + rect[2] && point[1] >= rect[1] && point[1] < rect[1] + rect[3]
     }
+}
+
+/// Write `text` to `path` so that a reader (or a crash) never sees half of it: it goes to a temporary file next to
+/// `path` and is renamed over it. The folder is made if it is missing.
+pub fn save(path: &std::path::Path, text: &str) -> std::io::Result<()> {
+    if let Some(dir) = path.parent() {
+        std::fs::create_dir_all(dir)?;
+    }
+    let name = path.file_name().map_or_else(|| "file".into(), |n| n.to_string_lossy().into_owned());
+    let temporary = path.with_file_name(format!(".{name}.tmp"));
+    let written = std::fs::write(&temporary, text).and_then(|()| std::fs::rename(&temporary, path));
+    if written.is_err() {
+        let _ = std::fs::remove_file(&temporary);
+    }
+    written
 }

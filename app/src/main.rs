@@ -100,30 +100,48 @@ struct App {
     window: Option<AppWindow>,
 }
 
-/// A piece of text kept shaped until what it says, or the room it has, changes.
+/// How a piece of text is set: everything besides the words and the room that changes how it is shaped.
+#[derive(Clone, Copy, PartialEq)]
+struct TextStyle {
+    /// Logical pixels.
+    size: f32,
+    /// Line height as a multiple of `size`.
+    line: f32,
+    align: Option<glyphon::cosmic_text::Align>,
+    wrap: bool,
+}
+
+impl TextStyle {
+    /// The quiet labels, the status line and the menu.
+    const LABEL: TextStyle = TextStyle { size: LABEL_SIZE, line: 1.4, align: None, wrap: true };
+    /// A notice on its own over the Panel.
+    const NOTICE: TextStyle = TextStyle { size: NOTICE_SIZE, line: 1.5, align: Some(glyphon::cosmic_text::Align::Center), wrap: true };
+}
+
+/// A piece of text kept shaped until what it says, how it is set, or the room it has, changes.
 struct Text {
     buffer: Buffer,
-    key: (String, u32, u32),
+    key: Option<(String, u32, u32, TextStyle)>,
 }
 
 impl Text {
     fn new(font_system: &mut FontSystem) -> Text {
-        Text { buffer: Buffer::new(font_system, Metrics::new(LABEL_SIZE, LABEL_SIZE * 1.4)), key: (String::from("\u{0}"), 0, 0) }
+        Text { buffer: Buffer::new(font_system, Metrics::new(LABEL_SIZE, LABEL_SIZE * 1.4)), key: None }
     }
 
-    /// Shape `text` at `size` logical pixels (at `scale`) in `width` device pixels, unless it already is.
-    fn set(&mut self, font_system: &mut FontSystem, text: &str, size: f32, scale: f32, width: f32, align: Option<glyphon::cosmic_text::Align>, wrap: bool) {
-        let key = (text.to_string(), width.round() as u32, scale.to_bits());
-        if self.key == key {
+    /// Shape `text` in `style` (at `scale`) in `width` device pixels, unless it already is.
+    fn set(&mut self, font_system: &mut FontSystem, text: &str, style: TextStyle, scale: f32, width: f32) {
+        let width = width.round() as u32;
+        if self.key.as_ref().is_some_and(|(t, w, s, st)| t == text && *w == width && *s == scale.to_bits() && *st == style) {
             return;
         }
         let attrs = Attrs::new().family(Family::SansSerif);
-        self.buffer.set_metrics(Metrics::new(size * scale, size * scale * if size == SCALE_SIZE { 1.3 } else { 1.4 }));
-        self.buffer.set_size(Some(width.max(1.0)), None);
-        self.buffer.set_wrap(if wrap { glyphon::cosmic_text::Wrap::WordOrGlyph } else { glyphon::cosmic_text::Wrap::None });
-        self.buffer.set_text(text, &attrs, Shaping::Advanced, align);
+        self.buffer.set_metrics(Metrics::new(style.size * scale, style.size * scale * style.line));
+        self.buffer.set_size(Some((width as f32).max(1.0)), None);
+        self.buffer.set_wrap(if style.wrap { glyphon::cosmic_text::Wrap::WordOrGlyph } else { glyphon::cosmic_text::Wrap::None });
+        self.buffer.set_text(text, &attrs, Shaping::Advanced, style.align);
         self.buffer.shape_until_scroll(font_system, false);
-        self.key = key;
+        self.key = Some((text.to_string(), width, scale.to_bits(), style));
     }
 
     fn lines(&self) -> usize {
@@ -161,6 +179,8 @@ struct AppWindow {
     pointer_panel: Option<usize>,
     /// The border being dragged, if any.
     drag: Option<Border>,
+    /// Remembered display state (a Loupe's position) changed and is not written yet.
+    state_unsaved: bool,
     cursor: [f32; 2],
     /// Where the grid and its gaps were last drawn (device pixels), for the pointer to find borders in.
     grid_area: [f32; 4],
@@ -248,6 +268,10 @@ impl AppWindow {
                 // Displays measure in the Colour Setup's Output Colour Space (the default Measured Space).
                 let mut context = DisplayContext::default();
                 let mut chosen = settings.lock().unwrap().clone();
+                let (mut seen_version, mut seen_state_version) = (chosen.version(), chosen.state_version());
+                // What the Feed's status said when last looked at, and the texts made from it.
+                let mut seen: Option<scopecreep::monitor::Status> = None;
+                let (mut status_text, mut notice, mut has_picture) = (String::new(), None, false);
                 let mut last = Texts::default();
                 // SCOPECREEP_STATUS_LOG=1: one line a second on stderr with what the app made of the Feed (diagnostics).
                 let status_log = std::env::var_os("SCOPECREEP_STATUS_LOG").is_some_and(|v| v != "0");
@@ -289,45 +313,67 @@ impl AppWindow {
                         });
                         shown = true;
                     });
+                    // Idle costs a comparison, nothing more: the slower work below happens only when something it
+                    // depends on changed (the Feed's status, a menu choice, remembered state, a frame shown).
+                    let mut labels_stale = shown;
                     let status = monitor.status();
-                    let setup = status.colour_setup().map(|c| c.setup);
-                    let now_context = status.display_context();
-                    if now_context != context {
-                        context = now_context;
-                        displays.configure(&context, &chosen);
+                    let status_changed = seen.as_ref() != Some(status);
+                    if status_changed {
+                        seen = Some(status.clone());
+                        labels_stale = true;
+                        status_text = if status.feed == FeedState::Connected { status.status_line() } else { String::new() };
+                        notice = status.notice();
+                        has_picture = status.picture.is_some();
+                        let now_context = status.display_context();
+                        if now_context != context {
+                            context = now_context;
+                            displays.configure(&context, &chosen);
+                        }
                     }
                     // A setting changed in a menu measures the frame on screen again, even with Resolve stopped.
-                    let now_chosen = settings.lock().unwrap().clone();
-                    if now_chosen != chosen {
-                        chosen = now_chosen;
+                    let (version, state_version) = {
+                        let guard = settings.lock().unwrap();
+                        (guard.version(), guard.state_version())
+                    };
+                    if state_version != seen_state_version {
+                        seen_state_version = state_version;
+                        labels_stale = true;
+                    }
+                    if version != seen_version {
+                        seen_version = version;
+                        chosen = settings.lock().unwrap().clone();
                         displays.configure(&context, &chosen);
-                        let timeline = uploader.frame().cloned();
-                        conversion.again(uploader.frame(), |encoder, picture| {
+                        let on_screen = uploader.frame();
+                        conversion.again(on_screen, |encoder, picture| {
                             displays.on_frame(encoder, picture);
-                            if let Some(t) = &timeline {
+                            if let Some(t) = on_screen {
                                 displays.on_timeline_frame(encoder, t);
                             }
                         });
                         shown = true;
+                        labels_stale = true;
                     }
                     // A Colour Setup that arrives or changes while Resolve is stopped converts the frame on screen.
-                    let timeline = uploader.frame().cloned();
-                    shown |= conversion.follow(setup.as_ref(), uploader.frame(), |encoder, picture| {
-                        displays.on_frame(encoder, picture);
-                        if let Some(t) = &timeline {
-                            displays.on_timeline_frame(encoder, t);
+                    if status_changed {
+                        let setup = status.colour_setup().map(|c| c.setup);
+                        let on_screen = uploader.frame();
+                        if conversion.follow(setup.as_ref(), on_screen, |encoder, picture| {
+                            displays.on_frame(encoder, picture);
+                            if let Some(t) = on_screen {
+                                displays.on_timeline_frame(encoder, t);
+                            }
+                        }) {
+                            shown = true;
+                            labels_stale = true;
                         }
-                    });
-                    let now = Texts {
-                        labels: displays.labels(),
-                        status: if status.feed == FeedState::Connected { status.status_line() } else { String::new() },
-                        notice: status.notice(),
-                        has_picture: status.picture.is_some(),
-                    };
-                    if now != last {
-                        *texts.lock().unwrap() = now.clone();
-                        last = now;
-                        shown = true;
+                    }
+                    if labels_stale {
+                        let now = Texts { labels: displays.labels(), status: status_text.clone(), notice: notice.clone(), has_picture };
+                        if now != last {
+                            *texts.lock().unwrap() = now.clone();
+                            last = now;
+                            shown = true;
+                        }
                     }
                     if shown && proxy.send_event(Wake).is_err() {
                         break;
@@ -353,6 +399,7 @@ impl AppWindow {
             contents: Vec::new(),
             pointer_panel: None,
             drag: None,
+            state_unsaved: false,
             cursor: [0.0, 0.0],
             grid_area: [0.0; 4],
             grid_gap: 0.0,
@@ -426,15 +473,14 @@ impl AppWindow {
         let choice = menu.choice_at(rect, self.cursor, self.scale);
         if let Some((key, value)) = choice {
             let name = self.displays.name(menu.panel);
-            let mut settings = self.settings.lock().unwrap();
-            settings.set(name, key, value);
-            if let Some(path) = settings_file() {
-                if let Some(dir) = path.parent() {
-                    let _ = std::fs::create_dir_all(dir);
-                }
-                if let Err(e) = std::fs::write(&path, settings.to_text()) {
-                    eprintln!("scopecreep: cannot remember the Panel settings: {e}");
-                }
+            let changed = {
+                let mut settings = self.settings.lock().unwrap();
+                let before = settings.version();
+                settings.set(name, key, value);
+                settings.version() != before
+            };
+            if changed {
+                self.save_settings();
             }
         }
         if choice.is_none() && Menu::contains(rect, self.cursor) {
@@ -444,26 +490,33 @@ impl AppWindow {
         self.window.request_redraw();
     }
 
+    /// Write the Panel settings to their file. The text is made under the lock and written after it is let go, so
+    /// the Feed thread never waits for the disk.
+    fn save_settings(&self) {
+        let Some(path) = settings_file() else { return };
+        let text = self.settings.lock().unwrap().to_text();
+        if let Err(e) = scopecreep::settings::save(&path, &text) {
+            eprintln!("scopecreep: cannot remember the Panel settings: {e}");
+        }
+    }
+
     /// Give a display the pointer: what it asks to remember is kept with the Panel settings (and written to the
     /// file once the movement is done), and the window draws again. Returns whether the display took the event.
     fn display_pointer(&mut self, panel: usize, event: Pointer) -> bool {
         let Some(area) = self.contents.get(panel).copied() else { return false };
         let result = self.displays.pointer(panel, area, self.scale, event);
         if result.used {
-            let mut settings = self.settings.lock().unwrap();
             let name = self.displays.name(panel);
-            for (key, value) in &result.remember {
-                settings.set_state(name, key, value);
-            }
-            if !result.remember.is_empty() && !matches!(event, Pointer::Move(_)) {
-                if let Some(path) = settings_file() {
-                    if let Some(dir) = path.parent() {
-                        let _ = std::fs::create_dir_all(dir);
-                    }
-                    if let Err(e) = std::fs::write(&path, settings.to_text()) {
-                        eprintln!("scopecreep: cannot remember the Panel settings: {e}");
-                    }
+            {
+                let mut settings = self.settings.lock().unwrap();
+                for (key, value) in &result.remember {
+                    self.state_unsaved |= settings.set_state(name, key, value);
                 }
+            }
+            // A movement is written once it is done, and only if something changed.
+            if self.state_unsaved && !matches!(event, Pointer::Move(_)) {
+                self.state_unsaved = false;
+                self.save_settings();
             }
             self.window.request_redraw();
         }
@@ -482,10 +535,22 @@ impl AppWindow {
     }
 
     fn button(&mut self, state: ElementState) {
-        if self.menu.is_some() {
-            if state == ElementState::Pressed {
-                self.menu_click();
+        // Letting go always ends a drag, even with a menu open over it (a right click can open one meanwhile).
+        if state == ElementState::Released {
+            if let Some(panel) = self.pointer_panel.take() {
+                self.display_pointer(panel, Pointer::Up);
             }
+            if self.drag.take().is_some() {
+                if let Some(path) = grid_file() {
+                    if let Err(e) = scopecreep::settings::save(&path, &self.grid.to_text()) {
+                        eprintln!("scopecreep: cannot remember the Panel borders: {e}");
+                    }
+                }
+            }
+            return;
+        }
+        if self.menu.is_some() {
+            self.menu_click();
             return;
         }
         match state {
@@ -500,23 +565,7 @@ impl AppWindow {
                 }
                 self.drag = self.border_under_pointer();
             }
-            ElementState::Released => {
-                if let Some(panel) = self.pointer_panel.take() {
-                    self.display_pointer(panel, Pointer::Up);
-                    return;
-                }
-                if self.drag.take().is_some() {
-                    // Remember the border positions.
-                    if let Some(path) = grid_file() {
-                        if let Some(dir) = path.parent() {
-                            let _ = std::fs::create_dir_all(dir);
-                        }
-                        if let Err(e) = std::fs::write(&path, self.grid.to_text()) {
-                            eprintln!("scopecreep: cannot remember the Panel borders: {e}");
-                        }
-                    }
-                }
-            }
+            ElementState::Released => {}
         }
     }
 
@@ -545,7 +594,7 @@ impl AppWindow {
         for (i, cell) in cells.iter().enumerate() {
             let label = texts.labels.get(i).map(String::as_str).unwrap_or("");
             let panel_text = &mut self.panel_texts[i];
-            panel_text.label.set(&mut self.font_system, label, LABEL_SIZE, scale, cell[2], None, true);
+            panel_text.label.set(&mut self.font_system, label, TextStyle::LABEL, scale, cell[2]);
             let lines = panel_text.label.lines();
             if lines != panel_text.lines {
                 panel_text.lines = lines;
@@ -555,13 +604,13 @@ impl AppWindow {
         }
         self.contents = panels.iter().map(|p| p.content).collect();
         let status_width = width - 2.0 * margin;
-        self.status.set(&mut self.font_system, &texts.status, LABEL_SIZE, scale, status_width, None, true);
-        let (notice_size, notice_width, align, notice_wrap) = if notice_in_status {
-            (LABEL_SIZE, status_width, None, true)
+        self.status.set(&mut self.font_system, &texts.status, TextStyle::LABEL, scale, status_width);
+        let (notice_style, notice_width) = if notice_in_status {
+            (TextStyle::LABEL, status_width)
         } else {
-            (NOTICE_SIZE, (panels.first().map_or(1.0, |p| p.content[2]) - 2.0 * margin).max(1.0), Some(glyphon::cosmic_text::Align::Center), true)
+            (TextStyle::NOTICE, (panels.first().map_or(1.0, |p| p.content[2]) - 2.0 * margin).max(1.0))
         };
-        self.notice.set(&mut self.font_system, texts.notice.as_deref().unwrap_or(""), notice_size, scale, notice_width, align, notice_wrap);
+        self.notice.set(&mut self.font_system, texts.notice.as_deref().unwrap_or(""), notice_style, scale, notice_width);
         let notice_height: f32 = self.notice.buffer.layout_runs().map(|run| run.line_height).sum();
 
         let whole = TextBounds { left: 0, top: 0, right: width as i32, bottom: height as i32 };
@@ -593,8 +642,8 @@ impl AppWindow {
         for (i, mark) in &marks {
             let n = used[*i];
             used[*i] += 1;
-            let align = mark.right_aligned.then_some(glyphon::cosmic_text::Align::Right);
-            self.panel_texts[*i].scale[n].set(&mut self.font_system, &mark.text, SCALE_SIZE, scale, mark.width, align, false);
+            let style = TextStyle { size: SCALE_SIZE, line: 1.3, align: mark.right_aligned.then_some(glyphon::cosmic_text::Align::Right), wrap: false };
+            self.panel_texts[*i].scale[n].set(&mut self.font_system, &mark.text, style, scale, mark.width);
             mark_areas.push((*i, n, mark.left, mark.top - scale_mark_line / 2.0));
         }
 
@@ -645,7 +694,7 @@ impl AppWindow {
                         (text.as_str(), false)
                     }
                 };
-                self.menu_texts[i].set(&mut self.font_system, text, LABEL_SIZE, scale, rect[2] - 34.0 * scale, None, false);
+                self.menu_texts[i].set(&mut self.font_system, text, TextStyle { wrap: false, ..TextStyle::LABEL }, scale, rect[2] - 34.0 * scale);
                 menu_areas.push((i, if heading { rect[0] + 10.0 * scale } else { text_left }, top + (MENU_ROW * scale - line) / 2.0, heading));
             }
         }

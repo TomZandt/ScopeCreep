@@ -421,8 +421,10 @@ impl Display for ChannelView {
                 let steps = state.loupe.wheel.trunc();
                 state.loupe.wheel -= steps;
                 let zoom = (state.loupe.zoom as i32 + steps as i32 * ZOOM_STEP as i32).clamp(MIN_ZOOM as i32, MAX_ZOOM as i32) as u32;
+                // Nothing to remember when the zoom did not change (a part of a notch, or already at its limit).
+                let changed = zoom != state.loupe.zoom;
                 state.loupe.zoom = zoom;
-                PointerResult { used: true, remember: vec![("loupe_zoom", zoom.to_string())] }
+                PointerResult { used: true, remember: if changed { vec![("loupe_zoom", zoom.to_string())] } else { Vec::new() } }
             }
             _ => PointerResult::default(),
         }

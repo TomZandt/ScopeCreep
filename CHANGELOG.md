@@ -32,6 +32,13 @@ The format follows [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/
 
 - The waveform no longer takes the picture's shape and width: it fills its own Panel, so a picture column no longer sits exactly level with its trace column (#50, ADR 0012).
 
+### Fixed
+
+- A long label (a wrapped Skin tone, ARRI or Stops label) no longer spills out of its Panel: the display keeps at least 80 logical pixels and the label is cut off below that. The smallest Panel is now 120 by 110 logical pixels, and saved border positions that would leave a Panel smaller than that are ignored.
+- Letting go of the left button while a right-click menu is open now ends a Loupe or border drag, instead of leaving it following the pointer.
+- Every display that shows Luma follows the luma waveform's luma weights setting: the gamut/legal warning, ARRI False Colour, Highlight neutrals, both vectorscopes, Skin tone and the saturation heatmap (the vectorscope label no longer always says "from primaries").
+- Settings and border positions are saved atomically, and only when something changed (a scroll tick at a Loupe's zoom limit no longer rewrites the file).
+
 ### Removed
 
 - The `--luma` command-line option: the luma weights are now the luma waveform's setting in its right-click menu (#51).

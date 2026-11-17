@@ -249,6 +249,23 @@ fn scroll_zoom_stops_at_100_and_800_percent_and_only_acts_over_the_loupe() {
 }
 
 #[test]
+fn a_wheel_tick_that_changes_no_zoom_remembers_nothing() {
+    let mut b = Bench::new("zoom-nothing-to-remember");
+    b.play(64, 36, &solid(64, 36, [0.4, 0.6, 0.8]));
+    b.render();
+    let at = centre(b.drawn().loupe);
+    for _ in 0..20 {
+        b.pointer(Pointer::Wheel { at, lines: 1.0 });
+    }
+    assert_eq!(b.drawn().zoom, 800);
+    let at_limit = b.pointer(Pointer::Wheel { at, lines: 1.0 });
+    assert!(at_limit.used && at_limit.remember.is_empty(), "already at the limit: {at_limit:?}");
+    let part = b.pointer(Pointer::Wheel { at, lines: -0.2 });
+    assert!(part.used && part.remember.is_empty(), "a part of a notch: {part:?}");
+    assert!(!b.pointer(Pointer::Wheel { at, lines: -1.0 }).remember.is_empty(), "a real change is remembered");
+}
+
+#[test]
 fn dragging_moves_the_magnified_area_and_the_loupe_stays_inside_the_panel() {
     let mut b = Bench::new("drag");
     // Dark on the left half, bright on the right.

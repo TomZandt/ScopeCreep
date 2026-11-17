@@ -76,3 +76,29 @@ fn the_menu_stays_inside_the_window() {
     let rect = menu.rect([1270.0, 750.0], [1280.0, 760.0], 1.0);
     assert!(rect[0] >= 0.0 && rect[1] >= 0.0 && rect[0] + rect[2] <= 1280.0 && rect[1] + rect[3] <= 760.0, "{rect:?}");
 }
+
+#[test]
+fn the_version_goes_up_only_when_a_choice_changes() {
+    let mut all = PanelSettings::default();
+    let v0 = all.version();
+    all.set("One", "weights", "b");
+    let v1 = all.version();
+    assert!(v1 > v0);
+    all.set("One", "weights", "b");
+    assert_eq!(all.version(), v1, "the same choice again changes nothing");
+    assert!(all.set_state("One", "zoom", "200"));
+    assert!(!all.set_state("One", "zoom", "200"));
+    assert_eq!(all.version(), v1, "remembered state is not a setting");
+}
+
+#[test]
+fn saving_replaces_the_file_whole_and_leaves_no_temporary_behind() {
+    let dir = std::env::temp_dir().join(format!("scopecreep-save-test-{}", std::process::id()));
+    let path = dir.join("nested").join("panel-settings");
+    scopecreep::settings::save(&path, "first\n").unwrap();
+    scopecreep::settings::save(&path, "second\n").unwrap();
+    assert_eq!(std::fs::read_to_string(&path).unwrap(), "second\n");
+    let names: Vec<_> = std::fs::read_dir(path.parent().unwrap()).unwrap().map(|e| e.unwrap().file_name()).collect();
+    assert_eq!(names, ["panel-settings"]);
+    let _ = std::fs::remove_dir_all(&dir);
+}
