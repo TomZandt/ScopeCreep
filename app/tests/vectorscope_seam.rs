@@ -439,6 +439,52 @@ fn the_outer_ring_is_a_hue_wheel_in_the_colour_that_lands_at_each_point() {
 }
 
 #[test]
+fn the_trace_glows_where_it_is_dense_and_a_stray_pixel_is_faint_and_the_soft_spread_can_be_turned_off() {
+    let mut b = Bench::new("glow");
+    let width = 2000;
+    // A dense blob of mid grey-blue pixels with one stray pixel far from it (and from any target or line).
+    let (w, h) = (1920u32, 1080u32);
+    let mut pixels = solid(w, h, [0.4, 0.45, 0.6]);
+    pixels[0] = 0.5;
+    pixels[1] = 0.1;
+    pixels[2] = 0.3;
+    let render = |b: &mut Bench| {
+        b.play(w, h, &pixels);
+        let (image, panels) = b.render(width, 900, 1.0);
+        (image, PlotSquare::new(panels[b.index(V100)].content, 1.0))
+    };
+    let (image, square) = render(&mut b);
+    let level = |image: &[u8], at: [f32; 2]| pixel(image, width, at).iter().copied().max().unwrap();
+    let [cb, cr] = cb_cr([0.4, 0.45, 0.6]);
+    let dense = level(&image, square.position(cb, cr, Zoom::X1));
+    let [cb, cr] = cb_cr([0.5, 0.1, 0.3]);
+    let stray_at = square.position(cb, cr, Zoom::X1);
+    let stray = brightest_any(&image, width, stray_at);
+    assert!(dense > 150, "the dense colour glows: {dense}");
+    assert!(stray > 15 && stray < dense / 2, "a stray pixel is visible but faint: {stray} against {dense}");
+    // The soft spread: a pixel next to the stray one is lit with it on and dark with it off.
+    let next = [stray_at[0] + 1.0, stray_at[1]];
+    let with = level(&image, next);
+    let panel = b.set.name(b.index(V100));
+    b.choose(panel, "spread", "off");
+    let (image, square) = render(&mut b);
+    let _ = square;
+    let without = level(&image, next);
+    assert!(with > without + 5 || without <= 20, "spread on lights the neighbour: {with} against {without}");
+}
+
+/// The brightest channel in the 5 x 5 pixels around `at`.
+fn brightest_any(image: &[u8], width: u32, at: [f32; 2]) -> u8 {
+    let mut best = 0;
+    for dy in -2..=2 {
+        for dx in -2..=2 {
+            best = best.max(pixel(image, width, [at[0] + dx as f32, at[1] + dy as f32]).iter().copied().max().unwrap());
+        }
+    }
+    best
+}
+
+#[test]
 fn the_trace_brightness_setting_makes_a_sparse_colour_brighter_or_dimmer() {
     let mut b = Bench::new("brightness");
     let width = 2000;
@@ -486,5 +532,5 @@ fn the_menu_offers_trace_brightness_targets_and_the_skin_tone_line_with_sensible
     let b = Bench::new("menu");
     let defs = b.set.setting_defs(b.index(V100));
     let keys: Vec<_> = defs.iter().map(|d| (d.key, d.choices.iter().map(|c| c.value).collect::<Vec<_>>())).collect();
-    assert_eq!(keys, [("brightness", vec!["normal", "bright", "dim"]), ("targets", vec!["75", "100"]), ("skin-line", vec!["on", "off"])]);
+    assert_eq!(keys, [("brightness", vec!["normal", "bright", "dim"]), ("spread", vec!["on", "off"]), ("targets", vec!["75", "100"]), ("skin-line", vec!["on", "off"])]);
 }

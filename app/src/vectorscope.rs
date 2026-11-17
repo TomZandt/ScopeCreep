@@ -67,13 +67,15 @@ pub fn bar_targets(weights: [f64; 3], level: f64) -> [[f64; 2]; 6] {
 pub const TARGETS_SETTING: &str = "targets";
 pub const SKIN_LINE_SETTING: &str = "skin-line";
 pub const BRIGHTNESS_SETTING: &str = "brightness";
+pub const SPREAD_SETTING: &str = "spread";
 
-const SETTINGS: [SettingDef; 3] = [
+const SETTINGS: [SettingDef; 4] = [
     SettingDef {
         key: BRIGHTNESS_SETTING,
         label: "Trace brightness",
         choices: &[Choice { value: "normal", text: "Normal" }, Choice { value: "bright", text: "Brighter" }, Choice { value: "dim", text: "Dimmer" }],
     },
+    SettingDef { key: SPREAD_SETTING, label: "Soft spread", choices: &[Choice { value: "on", text: "On" }, Choice { value: "off", text: "Off" }] },
     SettingDef { key: TARGETS_SETTING, label: "Colour targets", choices: &[Choice { value: "75", text: "75 % bars" }, Choice { value: "100", text: "100 % bars" }] },
     SettingDef { key: SKIN_LINE_SETTING, label: "Skin-tone line", choices: &[Choice { value: "on", text: "On" }, Choice { value: "off", text: "Off" }] },
 ];
@@ -86,6 +88,7 @@ struct Config {
     bars: f64,
     skin_line: bool,
     gain: f32,
+    spread: bool,
 }
 
 /// Where the plot goes inside a Panel's display area, in pixels: a square, centred. Left, top, width, height.
@@ -278,12 +281,34 @@ fn density(p: vec2<f32>) -> f32 {
     return sum;
 }
 
-// How bright the trace is for a count: logarithmic, and never invisible while even one pixel is there.
+// How bright the trace is for a count: a phosphor-style response, 1 - exp(-gain * density), where density is
+// relative to the picture spread evenly over a twentieth of the plot, so the look does not change with the Panel's
+// size or the picture's. Stray pixels stay visible but faint (never below 8 %).
 fn brightness(v: f32) -> f32 {
     if (v <= 0.0) {
         return 0.0;
     }
-    return clamp(max(0.25, log2(1.0 + v * placement.info.y) / log2(1.0 + placement.info.z / 2048.0)), 0.0, 1.0);
+    let even = max(placement.info.z / (placement.plot.z * placement.plot.w * 0.05), 1.0e-3);
+    return clamp(max(0.08, 1.0 - exp(-4.0 * placement.info.y * v / even)), 0.0, 1.0);
+}
+
+// The density under a plot pixel, spread a little over its neighbours (about 1 device pixel) when the soft spread
+// is on, so the trace reads as smooth tone instead of speckle.
+fn soft_density(p: vec2<f32>) -> f32 {
+    if (placement.rings.y < 0.5) {
+        return density(p);
+    }
+    var sum = 0.0;
+    for (var j = -1; j <= 1; j++) {
+        for (var i = -1; i <= 1; i++) {
+            let w = (2.0 - abs(f32(i))) * (2.0 - abs(f32(j))) / 16.0;
+            let q = p + vec2<f32>(f32(i), f32(j)) * max(1.0, placement.info.w);
+            if (q.x >= 0.0 && q.y >= 0.0 && q.x < placement.plot.z && q.y < placement.plot.w) {
+                sum += w * density(q);
+            }
+        }
+    }
+    return sum;
 }
 
 @fragment
@@ -328,7 +353,7 @@ fn fs(@builtin(position) position: vec4<f32>) -> @location(0) vec4<f32> {
         }
     }
     let rel = p - plot.xy;
-    var shown = brightness(density(rel));
+    var shown = brightness(soft_density(rel));
     // Colours off the chart sit on the plot's edge: drawn as a solid bar along it, as the waveform does.
     let band = max(3.0, 3.0 * placement.info.w);
     let to_edge = min(min(rel.x, plot.z - 1.0 - rel.x), min(rel.y, plot.w - 1.0 - rel.y));
@@ -412,7 +437,7 @@ impl Vectorscope {
             params: uniform("vectorscope params", PARAMS_BYTES),
             draw,
             placement: uniform("vectorscope placement", DRAW_UNIFORM_BYTES),
-            config: Arc::new(Mutex::new(Config { measurement: Measurement::default(), bars: 0.75, skin_line: true, gain: 1.0 })),
+            config: Arc::new(Mutex::new(Config { measurement: Measurement::default(), bars: 0.75, skin_line: true, gain: 1.0, spread: true })),
             state: Arc::new(Mutex::new(State { bins, pixels: 0, bound: None, draw_bound: None, measured: false })),
         }
     }
@@ -506,6 +531,7 @@ impl Display for Vectorscope {
             measurement: crate::output_conversion::measurement(context.colour_setup.clone(), context.luma),
             bars: if get(TARGETS_SETTING) == Some("100") { 1.0 } else { 0.75 },
             skin_line: get(SKIN_LINE_SETTING) != Some("off"),
+            spread: get(SPREAD_SETTING) != Some("off"),
             gain: match get(BRIGHTNESS_SETTING) {
                 Some("bright") => 4.0,
                 Some("dim") => 0.25,
@@ -548,6 +574,7 @@ impl Display for Vectorscope {
         let angle = SKIN_TONE_LINE_DEGREES.to_radians();
         placement[12..16].copy_from_slice(&[if config.skin_line { 1.0 } else { 0.0 }, angle.cos() as f32, angle.sin() as f32, TARGET_HALF as f32]);
         placement[16] = (RING / HALF_EXTENT) as f32;
+        placement[17] = if config.spread { 1.0 } else { 0.0 };
         for (i, [cb, cr]) in bar_targets(config.measurement.weights(), config.bars).iter().enumerate() {
             placement[20 + i * 4] = *cb as f32;
             placement[21 + i * 4] = *cr as f32;

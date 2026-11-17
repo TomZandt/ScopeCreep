@@ -16,3 +16,5 @@ The line was first drawn at an assumed 134.5 degrees (the traditional I-line res
 Not verified (a person at the app and Resolve): the look, comparison with Resolve's vectorscope, UHD 50 performance, very saturated pictures: https://github.com/TomZandt/scopecreep/issues/76
 
 Colours off the chart (further out than the plot reaches, which at 200 % is most saturated colours) are counted on the plot's edge, where the line from the middle to the colour leaves it, and drawn as a solid tinted bar there, as the waveform does for out-of-range pixels (added after v0.2.0; tests in app/tests/vectorscope_seam.rs).
+
+The trace uses the waveform's look (ADR 0017): a phosphor response 1 - exp(-gain * density) relative to the picture spread over a twentieth of the plot, a floor of 8 % for stray pixels, and an optional soft spread of about 1 device pixel (a weighted 3 x 3 read in the draw shader; the count pass is unchanged).
