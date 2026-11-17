@@ -90,6 +90,10 @@ _Avoid_: Chroma scope, colour wheel
 A line on a vectorscope from the middle at a fixed angle, where skin tones sit. Its angle is held in one shared constant (assumed 134.5° in BT.709 Cb/Cr until measured in Resolve, #60).
 _Avoid_: I-line (that is the composite-video name), flesh line
 
+**Skin Tone Panel**:
+A Picture View of the Output picture in grey in which pixels whose hue is near the Skin-tone line are lit yellow, drifting to green or magenta either side and fading to grey far from skin. Only hue matters, not brightness.
+_Avoid_: Skin tone indicator (Resolve's and others' name for their own tools)
+
 **Colour targets**:
 The six boxes on a vectorscope where red, yellow, green, cyan, magenta and blue colour bars land, for 75 % or 100 % bars (the user's choice).
 _Avoid_: Graticule (that is all the scale marks), boxes

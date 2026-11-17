@@ -22,6 +22,7 @@ pub mod arri_false_colour;
 pub mod black_and_white;
 pub mod gamut_warning;
 pub mod skin_tone;
+pub mod skin_tone_view;
 pub mod vectorscope;
 pub mod stops_false_colour;
 pub mod cie;

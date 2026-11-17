@@ -25,6 +25,8 @@ The format follows [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/
 - Two vectorscope Panels of the Output picture, at 100 % and 200 % (the same data at twice the radius). Cb/Cr use the Measured Space's luma weights, so they agree with the waveform; the trace has the waveform's phosphor-style response. Right-click for trace brightness, 75 % or 100 % colour-bar targets and the skin-tone line on or off. The skin-tone line is drawn at an assumed 134.5°, which is not yet checked against Resolve's own vectorscope; the label says so (#61, ADR 0018).
 - CIE chromaticity plot Panel: every pixel placed on the CIE 1931 xy diagram with the spectral locus, the Output Colour Space's gamut triangle and the Timeline Colour Space's (Rec.709, P3-D65, Rec.2020, DaVinci Wide Gamut, ACES AP1, from published primaries). Right-click for trace brightness and to hide the Timeline triangle; the label names both spaces (#62, ADR 0020).
 
+- Skin Tone Panel: the Output picture in grey, with pixels near the skin-tone line lit yellow, drifting to green or magenta either side and fading back to grey far from skin (and for near-neutral pixels). Only hue counts, not brightness. Right-click for the on-line tolerance (±5° by default, with the fade out to 4 times and grey beyond 6 times that). It uses the same assumed 134.5° line as the vectorscopes; the label says it is assumed (#63, ADR 0021).
+
 ### Changed
 
 - The waveform no longer takes the picture's shape and width: it fills its own Panel, so a picture column no longer sits exactly level with its trace column (#50, ADR 0012).
