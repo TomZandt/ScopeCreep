@@ -200,7 +200,7 @@ fn measure(@builtin(global_invocation_id) id: vec3<u32>) {
 "#;
 
 const PARAMS_BYTES: u64 = 48;
-const DRAW_UNIFORM_BYTES: u64 = 176;
+const DRAW_UNIFORM_BYTES: u64 = 192;
 
 const DRAW_SHADER: &str = r#"
 struct Placement {
@@ -210,16 +210,35 @@ struct Placement {
     opts: vec4<f32>,      // skin line on, its cos and sin, target box half size (Cb/Cr)
     rings: vec4<f32>,     // the outer ring as a fraction of the plot's radius
     targets: array<vec4<f32>, 6>,   // Cb, Cr of each colour target
+    weights: vec4<f32>,   // luma weights for R, G, B, to turn a position back into a colour
 };
 @group(0) @binding(0) var<uniform> placement: Placement;
 @group(0) @binding(1) var<storage, read> bins: array<u32>;
 
 const BINS: u32 = 1024u;
-// Neutral greys only: nothing on screen may tint the eye.
+// The plot, grid and skin-tone line are neutral greys; only the trace and the colour targets carry colour.
 const PLOT: vec3<f32> = vec3<f32>(0.035, 0.035, 0.035);
 const GRID: vec3<f32> = vec3<f32>(0.14, 0.14, 0.14);
 const MARK: vec3<f32> = vec3<f32>(0.30, 0.30, 0.30);
 const TRACE: vec3<f32> = vec3<f32>(0.86, 0.86, 0.86);
+// Targets and trace are tinted by the colour they stand for: the six bars, red, yellow, green, cyan, magenta, blue.
+const BARS: array<vec3<f32>, 6> = array<vec3<f32>, 6>(
+    vec3<f32>(1.0, 0.0, 0.0), vec3<f32>(1.0, 1.0, 0.0), vec3<f32>(0.0, 1.0, 0.0),
+    vec3<f32>(0.0, 1.0, 1.0), vec3<f32>(1.0, 0.0, 1.0), vec3<f32>(0.0, 0.0, 1.0));
+// How strongly the trace is tinted: its chroma is boosted so that a small saturation still reads as its hue.
+const TINT_BOOST: f32 = 2.0;
+const TINT_LUMA: f32 = 0.7;
+
+// The colour of a spot on the plot (Cb, Cr): the hue and saturation that put pixels there, at a fixed luma and
+// scaled so its strongest channel is full. The middle of the plot is white.
+fn tint(cb: f32, cr: f32) -> vec3<f32> {
+    let w = placement.weights.xyz;
+    let r = TINT_LUMA + cr * TINT_BOOST * 2.0 * (1.0 - w.x);
+    let b = TINT_LUMA + cb * TINT_BOOST * 2.0 * (1.0 - w.z);
+    let g = (TINT_LUMA - w.x * r - w.z * b) / w.y;
+    let c = clamp(vec3<f32>(r, g, b), vec3<f32>(0.0), vec3<f32>(1.0));
+    return c / max(max(c.r, c.g), max(c.b, 0.001)) * 0.95;
+}
 
 @vertex
 fn vs(@builtin(vertex_index) index: u32) -> @builtin(position) vec4<f32> {
@@ -285,10 +304,16 @@ fn fs(@builtin(position) position: vec4<f32>) -> @location(0) vec4<f32> {
         let c = vec2<f32>(placement.targets[i].x * k, -placement.targets[i].y * k);
         let d = max(abs(q.x - c.x), abs(q.y - c.y));
         if (d <= half_box + half_line && d > half_box - half_line) {
-            base = MARK;
+            base = BARS[i] * 0.7;
         }
     }
-    return vec4<f32>(mix(base, TRACE, brightness(density(p - plot.xy))), 1.0);
+    let shown = brightness(density(p - plot.xy));
+    var trace = TRACE;
+    if (shown > 0.0) {
+        let spot = (p - plot.xy + vec2<f32>(0.5, 0.5)) / plot.z;
+        trace = tint((spot.x - 0.5) * 2.0 * placement.info.x, (0.5 - spot.y) * 2.0 * placement.info.x);
+    }
+    return vec4<f32>(mix(base, trace, shown), 1.0);
 }
 "#;
 
@@ -495,6 +520,8 @@ impl Display for Vectorscope {
             placement[20 + i * 4] = *cb as f32;
             placement[21 + i * 4] = *cr as f32;
         }
+        let w = config.measurement.weights();
+        placement[44..48].copy_from_slice(&[w[0] as f32, w[1] as f32, w[2] as f32, 0.0]);
         self.queue.write_buffer(&self.placement, 0, bytemuck::cast_slice(&placement));
         pass.set_pipeline(&self.draw);
         pass.set_bind_group(0, state.draw_bound.as_ref().unwrap(), &[]);

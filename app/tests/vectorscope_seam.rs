@@ -319,6 +319,65 @@ fn the_colour_targets_are_drawn_where_the_chosen_bars_land() {
 }
 
 #[test]
+fn the_trace_is_tinted_by_the_colour_that_put_it_there_and_the_middle_is_white() {
+    let mut b = Bench::new("tint");
+    let width = 2000;
+    let cases: [([f32; 3], usize); 4] = [([0.75, 0.0, 0.0], 0), ([0.0, 0.75, 0.0], 1), ([0.0, 0.0, 0.75], 2), ([0.75, 0.0, 0.75], 3)];
+    for (rgb, which) in cases {
+        b.play(64, 36, &solid(64, 36, rgb));
+        let (image, panels) = b.render(width, 900, 1.0);
+        let square = PlotSquare::new(panels[b.index(V100)].content, 1.0);
+        let [cb, cr] = cb_cr([rgb[0] as f64, rgb[1] as f64, rgb[2] as f64]);
+        let [x, y] = square.position(cb, cr, Zoom::X1);
+        let p = pixel(&image, width, [x, y]);
+        let (hi, lo) = (p.iter().copied().max().unwrap(), p.iter().copied().min().unwrap());
+        assert!(hi > 120, "the {rgb:?} trace is lit: {p:?}");
+        if which < 3 {
+            assert_eq!(p[which], hi, "the {rgb:?} trace is tinted towards its own colour: {p:?}");
+        } else {
+            assert!(p[0] > p[1] && p[2] > p[1], "magenta is red and blue, not green: {p:?}");
+        }
+        assert!(hi as i32 - lo as i32 > 60, "and clearly tinted, not grey: {p:?}");
+    }
+    // Grey pixels land in the middle: white, not tinted.
+    b.play(64, 36, &solid(64, 36, [0.5, 0.5, 0.5]));
+    let (image, panels) = b.render(width, 900, 1.0);
+    let square = PlotSquare::new(panels[b.index(V100)].content, 1.0);
+    let [x, y] = square.position(0.0, 0.0, Zoom::X1);
+    let mut lit = [0u8; 3];
+    for dy in -1..=1 {
+        for dx in -1..=1 {
+            let p = pixel(&image, width, [x + dx as f32, y + dy as f32]);
+            if p[0] as u32 + p[1] as u32 + p[2] as u32 > lit.iter().map(|v| *v as u32).sum::<u32>() { lit = p; }
+        }
+    }
+    assert!(lit[0] > 150 && (lit[0] as i32 - lit[2] as i32).abs() < 40, "the middle is white: {lit:?}");
+}
+
+#[test]
+fn the_colour_target_boxes_carry_the_colour_they_stand_for() {
+    let mut b = Bench::new("target colours");
+    let width = 2000;
+    let (image, square, _) = black_frame_and_render(&mut b);
+    // The top edge of each box, in the order red, yellow, green, cyan, magenta, blue at 75 %.
+    let colours: [[f64; 3]; 6] = [[1.0, 0.0, 0.0], [1.0, 1.0, 0.0], [0.0, 1.0, 0.0], [0.0, 1.0, 1.0], [1.0, 0.0, 1.0], [0.0, 0.0, 1.0]];
+    for bar in colours {
+        let [cb, cr] = cb_cr(bar.map(|v| v * 0.75));
+        let [x, y] = square.position(cb, cr + 0.02, Zoom::X1);
+        let mut best = [0u8; 3];
+        for dy in -1..=1 {
+            for dx in -1..=1 {
+                let p = pixel(&image, width, [x + dx as f32, y + dy as f32]);
+                if p.iter().map(|v| *v as u32).sum::<u32>() > best.iter().map(|v| *v as u32).sum::<u32>() { best = p; }
+            }
+        }
+        for c in 0..3 {
+            if bar[c] > 0.5 { assert!(best[c] > 100, "the {bar:?} box has {c} lit: {best:?}"); } else { assert!(best[c] < 40, "the {bar:?} box has {c} dark: {best:?}"); }
+        }
+    }
+}
+
+#[test]
 fn the_trace_brightness_setting_makes_a_sparse_colour_brighter_or_dimmer() {
     let mut b = Bench::new("brightness");
     let width = 2000;

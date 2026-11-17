@@ -6,6 +6,10 @@ The format follows [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/
 
 ## [Unreleased]
 
+### Changed
+
+- The vectorscopes' trace is tinted by the colour that put each spot there (blue sky draws blue, the middle is white), and each of the six colour-target boxes is drawn in its own colour (red, yellow, green, cyan, magenta, blue). The plot, grid and skin-tone line stay neutral grey.
+
 ## [0.2.0] - 2026-11-17
 
 Milestone 2: every display in its own Panel. The Window is a grid of 14 Panels, all always visible (ADR 0011).
