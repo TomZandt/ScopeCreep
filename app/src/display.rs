@@ -136,7 +136,8 @@ impl DisplaySet {
     pub fn standard(device: &wgpu::Device, queue: &wgpu::Queue, target: wgpu::TextureFormat, filterable: bool) -> DisplaySet {
         let mut set = DisplaySet::default();
         set.register(Arc::new(crate::picture_view::PictureView::new(device, queue, target, filterable)));
-        set.register(Arc::new(Waveform::new(device, queue, target)));
+        let luma_waveform = Waveform::new(device, queue, target);
+        set.register(Arc::new(luma_waveform.clone()));
         set.register(Arc::new(crate::gamut_warning::GamutWarning::new(device, queue, target)));
         set.register(Arc::new(crate::highlight_neutrals::HighlightNeutrals::new(device, queue, target, filterable)));
         set.register(Arc::new(crate::channel_view::ChannelView::new(device, queue, target, filterable)));
@@ -148,7 +149,7 @@ impl DisplaySet {
         set.register(Arc::new(crate::skin_tone_view::SkinTone::new(device, queue, target, filterable)));
         set.register(Arc::new(crate::stops_false_colour::StopsFalseColour::new(device, queue, target)));
         set.register(Arc::new(crate::cie::CiePlot::new(device, queue, target)));
-        set.register(Arc::new(Waveform::new_colour(device, queue, target)));
+        set.register(Arc::new(Waveform::new_colour(device, queue, target, &luma_waveform)));
         set
     }
 

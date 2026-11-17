@@ -581,6 +581,7 @@ fn fs(@builtin(position) position: vec4<f32>) -> @location(0) vec4<f32> {
 }
 "#;
 
+#[derive(Clone)]
 struct Counts {
     buffer: wgpu::Buffer,
     columns: u32,
@@ -617,6 +618,9 @@ pub struct Waveform {
     accumulate: wgpu::ComputePipeline,
     /// Colour: the trace is tinted by the average colour of the pixels counted at each spot.
     colour: bool,
+    /// The Colour Waveform counts nothing itself: it reads the counts the luma waveform made of the same frame
+    /// (same pixels, same weights, same Levels) and adds only its colour sums.
+    source: Option<Arc<Mutex<State>>>,
     params: wgpu::Buffer,
     draw: wgpu::RenderPipeline,
     trace_pass: wgpu::RenderPipeline,
@@ -633,8 +637,12 @@ impl Waveform {
     }
 
     /// The Colour Waveform: the same plot, tinted by the average colour of the pixels counted at each spot (#59).
-    pub fn new_colour(device: &wgpu::Device, queue: &wgpu::Queue, target: wgpu::TextureFormat) -> Waveform {
-        Waveform::build(device, queue, target, true)
+    /// It shares the counts of `luma`, the luma waveform, which must measure each frame first (as the displays are
+    /// handed a frame in order) and be configured with the same Colour Setup and luma weights.
+    pub fn new_colour(device: &wgpu::Device, queue: &wgpu::Queue, target: wgpu::TextureFormat, luma: &Waveform) -> Waveform {
+        let mut colour = Waveform::build(device, queue, target, true);
+        colour.source = Some(luma.state.clone());
+        colour
     }
 
     fn build(device: &wgpu::Device, queue: &wgpu::Queue, target: wgpu::TextureFormat, colour: bool) -> Waveform {
@@ -696,6 +704,7 @@ impl Waveform {
             measure,
             accumulate,
             colour,
+            source: None,
             params,
             draw,
             trace_pass,
@@ -736,9 +745,18 @@ impl Waveform {
         params[32..40].copy_from_slice(bytemuck::cast_slice(&[scale as f32, offset as f32]));
         self.queue.write_buffer(&self.params, 0, &params);
 
+        // A Colour Waveform takes the luma waveform's counts of this frame (taken before its own lock: the luma
+        // waveform's state is never locked while this one is held). Nothing to do until they exist.
+        let shared = match &self.source {
+            Some(source) => match source.lock().unwrap().counts.clone() {
+                Some(counts) if counts.columns == frame.width => Some(counts),
+                _ => return,
+            },
+            None => None,
+        };
         let mut state = self.state.lock().unwrap();
         if state.counts.as_ref().is_none_or(|c| c.columns != frame.width) {
-            state.counts = Some(Counts {
+            state.counts = Some(shared.clone().unwrap_or_else(|| Counts {
                 buffer: self.device.create_buffer(&wgpu::BufferDescriptor {
                     label: Some("waveform counts"),
                     size: frame.width as u64 * ROWS as u64 * 4,
@@ -747,7 +765,7 @@ impl Waveform {
                 }),
                 columns: frame.width,
                 picture_height: frame.height,
-            });
+            }));
             // Plain waveforms never read the sums; a token buffer keeps the draw shader's bindings whole.
             let sums_size = if self.colour { frame.width as u64 * ROWS as u64 * 12 } else { 16 };
             state.sums = Some(self.device.create_buffer(&wgpu::BufferDescriptor {
@@ -762,6 +780,11 @@ impl Waveform {
             state.trace_bound = None;
         }
         state.counts.as_mut().unwrap().picture_height = frame.height;
+        if let Some(shared) = shared {
+            // The same buffer as the luma waveform's, unless it was made again since.
+            state.counts = Some(shared);
+            return self.measure_colour(&mut state, encoder, frame);
+        }
         if state.bound.as_ref().is_none_or(|(id, _)| *id != frame.texture_id) {
             let view = frame.texture.create_view(&Default::default());
             let bind_group = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
@@ -780,10 +803,14 @@ impl Waveform {
         pass.set_bind_group(0, &state.bound.as_ref().unwrap().1, &[]);
         pass.dispatch_workgroups(frame.width.div_ceil(2), 1, 1);
         drop(pass);
-        if !self.colour {
-            return;
+        if self.colour {
+            self.measure_colour(&mut state, encoder, frame);
         }
-        // The colour pass: the same pixels into the same rows, adding their colours. The sums start from zero.
+    }
+
+    /// The Colour Waveform's second pass: the same pixels into the same rows as the counts, adding their colours.
+    fn measure_colour(&self, state: &mut State, encoder: &mut wgpu::CommandEncoder, frame: &GpuFrame) {
+        // The sums start from zero.
         let sums = state.sums.clone().unwrap();
         encoder.clear_buffer(&sums, 0, None);
         if state.bound_colour.as_ref().is_none_or(|(id, _)| *id != frame.texture_id) {
