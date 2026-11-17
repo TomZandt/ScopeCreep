@@ -299,8 +299,14 @@ fn fs(@builtin(position) position: vec4<f32>) -> @location(0) vec4<f32> {
     let r = length(q);
     var base = PLOT;
     let outer = placement.rings.x * radius;
-    if (abs(q.x) <= half_line || abs(q.y) <= half_line || abs(r - outer) <= half_line || abs(r - outer / 2.0) <= half_line) {
+    if (abs(q.x) <= half_line || abs(q.y) <= half_line || abs(r - outer / 2.0) <= half_line) {
         base = GRID;
+    }
+    // The outer ring is a hue wheel: each point is the colour that lands there, muted so it never competes with the
+    // trace.
+    if (abs(r - outer) <= half_line * 2.0) {
+        let d = q / max(r, 0.001);
+        base = tint(d.x * 0.5, -d.y * 0.5) * 0.7;
     }
     // The skin-tone line, from the middle to the outer ring.
     if (placement.opts.x > 0.5) {

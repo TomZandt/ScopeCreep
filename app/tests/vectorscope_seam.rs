@@ -408,6 +408,37 @@ fn colours_off_the_chart_are_drawn_as_a_solid_bar_on_the_plots_edge_where_they_l
 }
 
 #[test]
+fn the_outer_ring_is_a_hue_wheel_in_the_colour_that_lands_at_each_point() {
+    let mut b = Bench::new("ring");
+    let width = 2000;
+    let (image, square, _) = black_frame_and_render(&mut b);
+    let ring = square.radius() * (scopecreep::vectorscope::RING / scopecreep::vectorscope::HALF_EXTENT) as f32;
+    let at = |degrees: f64| {
+        let [cx, cy] = square.centre();
+        let (s, c) = degrees.to_radians().sin_cos();
+        let (x, y) = (cx + ring * c as f32, cy - ring * s as f32);
+        let mut best = [0u8; 3];
+        for dy in -2..=2 {
+            for dx in -2..=2 {
+                let p = pixel(&image, width, [x + dx as f32, y + dy as f32]);
+                if p.iter().map(|v| *v as u32).sum::<u32>() > best.iter().map(|v| *v as u32).sum::<u32>() { best = p; }
+            }
+        }
+        best
+    };
+    // Blue is at about -9 degrees (right), red at about 104, green at about 241 and yellow at about 167.
+    let blue = at(-9.0);
+    assert!(blue[2] > 120 && blue[0] < 90, "blue where blue lands: {blue:?}");
+    let red = at(104.0);
+    assert!(red[0] > 120 && red[1] < 90 && red[2] < 90, "red where red lands: {red:?}");
+    let green = at(241.0);
+    assert!(green[1] > 120 && green[0] < 90 && green[2] < 90, "green where green lands: {green:?}");
+    let yellow = at(167.0);
+    assert!(yellow[0] > 120 && yellow[1] > 120 && yellow[2] < 90, "yellow where yellow lands: {yellow:?}");
+    assert!(blue.iter().max().unwrap() < &200, "muted, never brighter than the trace: {blue:?}");
+}
+
+#[test]
 fn the_trace_brightness_setting_makes_a_sparse_colour_brighter_or_dimmer() {
     let mut b = Bench::new("brightness");
     let width = 2000;
