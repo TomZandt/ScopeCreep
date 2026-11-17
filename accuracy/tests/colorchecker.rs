@@ -91,7 +91,7 @@ fn the_same_chart_in_every_space_is_the_same_light() {
         assert_eq!(a.encoded, a.linear, "ACEScg is linear");
         assert_eq!(b.linear, b.rec709_linear, "Rec.709 light is its own linear");
         for c in 0..3 {
-            assert!((b.encoded[c] - b.linear[c].max(0.0).powf(1.0 / 2.4)).abs() < 1e-12, "Rec.709 Gamma 2.4 encoding");
+            assert!((b.encoded[c] - b.linear[c].signum() * b.linear[c].abs().powf(1.0 / 2.4)).abs() < 1e-12, "Rec.709 Gamma 2.4 encoding, mirrored about zero");
         }
         assert_eq!(a.y, b.y);
         assert_eq!(a.rec709_luma, b.rec709_luma);

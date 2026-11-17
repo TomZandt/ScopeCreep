@@ -88,6 +88,10 @@ pub trait Display: Send + Sync {
     /// Measure (Scopes) or take (Picture Views) `frame`, which is already on the GPU. Called on the Feed thread
     /// for every frame, into the one command encoder of that frame.
     fn on_frame(&self, encoder: &mut wgpu::CommandEncoder, frame: &GpuFrame);
+    /// Take the Timeline Colour Space frame, before Output Conversion, for displays that measure scene light
+    /// (Stops False Colour, ADR 0009). Called right after [`Display::on_frame`] for the same frame. Nothing by
+    /// default.
+    fn on_timeline_frame(&self, _encoder: &mut wgpu::CommandEncoder, _frame: &GpuFrame) {}
     /// Take the Colour Setup and the settings, from the next frame on.
     fn configure(&self, context: &DisplayContext);
     /// The settings the display offers in its right-click menu, each with its choices (the first is the
@@ -140,6 +144,7 @@ impl DisplaySet {
         set.register(Arc::new(crate::black_and_white::BlackAndWhite::new(device, queue, target, filterable)));
         set.register(Arc::new(crate::vectorscope::Vectorscope::new(device, queue, target, crate::vectorscope::Zoom::X1)));
         set.register(Arc::new(crate::vectorscope::Vectorscope::new(device, queue, target, crate::vectorscope::Zoom::X2)));
+        set.register(Arc::new(crate::stops_false_colour::StopsFalseColour::new(device, queue, target)));
         set
     }
 
@@ -168,6 +173,13 @@ impl DisplaySet {
     pub fn on_frame(&self, encoder: &mut wgpu::CommandEncoder, frame: &GpuFrame) {
         for display in &self.displays {
             display.on_frame(encoder, frame);
+        }
+    }
+
+    /// Hand the Timeline Colour Space frame (before Output Conversion) to every display.
+    pub fn on_timeline_frame(&self, encoder: &mut wgpu::CommandEncoder, frame: &GpuFrame) {
+        for display in &self.displays {
+            display.on_timeline_frame(encoder, frame);
         }
     }
 

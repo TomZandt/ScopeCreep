@@ -51,7 +51,7 @@ impl TimelineSpace {
             TimelineSpace::AcesCct => transfer::acescct_encode(linear),
             TimelineSpace::AcesCg => linear,
             TimelineSpace::DavinciIntermediate => transfer::di_encode(linear),
-            TimelineSpace::Rec709Gamma24 => transfer::gamma_encode(linear, 2.4),
+            TimelineSpace::Rec709Gamma24 => linear.signum() * transfer::gamma_encode(linear.abs(), 2.4),
         }
     }
 }
@@ -159,6 +159,16 @@ fn bradford(xyz: V3, from: V3, to: V3) -> V3 {
     let (cone, src, dst) = (vmul(xyz, &m), vmul(from, &m), vmul(to, &m));
     let scaled = [cone[0] * dst[0] / src[0], cone[1] * dst[1] / src[1], cone[2] * dst[2] / src[2]];
     vmul(scaled, &colour::invert(&m))
+}
+
+/// The weights that give the Y of a colour in `c`'s linear RGB once it is adapted (Bradford) to the D65 white the
+/// chart's table of Y uses. For a D65 space they are its luma weights; for ACES they differ by a hair for coloured
+/// patches, because the ACES white is not D65. Neutrals are unchanged.
+pub fn luma_weights_adapted_to_d65(c: &Chromaticities) -> V3 {
+    let m = colour::rgb_to_xyz(c);
+    let d65 = white_xyz(&REC709);
+    let column = |j: usize| bradford(m[j], white_xyz(c), d65)[1];
+    [column(0), column(1), column(2)]
 }
 
 fn linear_rgb(xyz_d50: V3, c: &Chromaticities) -> V3 {

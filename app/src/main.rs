@@ -283,6 +283,8 @@ impl AppWindow {
                             // Every display sees the picture after Output Conversion: one upload, one conversion.
                             let picture = conversion.convert(encoder, gpu_frame);
                             displays.on_frame(encoder, picture);
+                            // Stops False Colour measures scene light: the frame before Output Conversion.
+                            displays.on_timeline_frame(encoder, gpu_frame);
                             scope_frames += 1;
                         });
                         shown = true;
@@ -299,11 +301,23 @@ impl AppWindow {
                     if now_chosen != chosen {
                         chosen = now_chosen;
                         displays.configure(&context, &chosen);
-                        conversion.again(uploader.frame(), |encoder, picture| displays.on_frame(encoder, picture));
+                        let timeline = uploader.frame().cloned();
+                        conversion.again(uploader.frame(), |encoder, picture| {
+                            displays.on_frame(encoder, picture);
+                            if let Some(t) = &timeline {
+                                displays.on_timeline_frame(encoder, t);
+                            }
+                        });
                         shown = true;
                     }
                     // A Colour Setup that arrives or changes while Resolve is stopped converts the frame on screen.
-                    shown |= conversion.follow(setup.as_ref(), uploader.frame(), |encoder, picture| displays.on_frame(encoder, picture));
+                    let timeline = uploader.frame().cloned();
+                    shown |= conversion.follow(setup.as_ref(), uploader.frame(), |encoder, picture| {
+                        displays.on_frame(encoder, picture);
+                        if let Some(t) = &timeline {
+                            displays.on_timeline_frame(encoder, t);
+                        }
+                    });
                     let now = Texts {
                         labels: displays.labels(),
                         status: if status.feed == FeedState::Connected { status.status_line() } else { String::new() },

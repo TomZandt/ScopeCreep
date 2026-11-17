@@ -137,6 +137,15 @@ _Avoid_: Zone (ARRI's and EL Zone's word for their own schemes)
 False Colour by stops above and below middle grey, in scene light decoded from the Timeline Colour Space.
 _Avoid_: EL Zone (a trademark scopecreep does not use), zone system
 
+**Full zones**:
+Stops False Colour's default mode: 15 zones, whole stops out to six either side of middle grey, with half-stop zones beside the grey zone, each in its own colour.
+
+**Grey and +1 stop**:
+Stops False Colour's chart mode: a black and white picture where pixels within a sixth of a stop of middle grey are green and within a sixth of a stop of one stop over are pink. The ColorChecker routine (neutral 5 green, neutral 6.5 pink).
+
+**Timeline Colour Space frame**:
+The Feed's frame as Resolve sends it, before Output Conversion. Stops False Colour measures this one; every other display sees the Output picture.
+
 **Loupe**:
 A movable square on a Picture View that shows the picture under it magnified, so single pixels (and noise) can be seen. Its zoom is of source pixels, in device pixels of the screen: at 200 % each picture pixel is 2 × 2 device pixels, whatever the Panel's size. It lives on the Channel view.
 
