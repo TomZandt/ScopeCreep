@@ -123,11 +123,14 @@ fn a_point_inside_a_panel_is_not_on_a_border() {
 #[test]
 fn border_positions_survive_a_restart() {
     let mut grid = PanelGrid::new(14);
-    grid.drag(Border::Column { row: 1, after: 2 }, [700.0, 300.0], AREA, GAP, [60.0, 60.0]);
-    grid.drag(Border::Row { after: 1 }, [300.0, 500.0], AREA, GAP, [60.0, 60.0]);
+    grid.drag(Border::Column { row: 1, after: 2 }, [700.0, 300.0], AREA, GAP, min_panel_size(1.0));
+    grid.drag(Border::Row { after: 1 }, [300.0, 500.0], AREA, GAP, min_panel_size(1.0));
     assert_ne!(grid.cells(AREA, GAP), PanelGrid::new(14).cells(AREA, GAP), "the drags moved something");
     let restored = PanelGrid::from_text(14, &grid.to_text());
-    assert_eq!(restored.cells(AREA, GAP), grid.cells(AREA, GAP));
+    // Renormalising may move a position by a rounding error, no more.
+    for (a, b) in restored.cells(AREA, GAP).iter().zip(grid.cells(AREA, GAP)) {
+        assert!(a.iter().zip(b).all(|(x, y)| (x - y).abs() < 0.01), "{a:?} vs {b:?}");
+    }
 }
 
 #[test]
@@ -188,4 +191,40 @@ fn the_14_panel_grid_at_default_window_size_keeps_every_display_usable() {
         let p = PanelLayout::new(cell, 1.0, 1);
         assert!(p.content[2] >= 100.0 && p.content[3] >= 100.0, "{cell:?} -> {p:?}");
     }
+}
+
+#[test]
+fn a_long_label_is_cut_off_rather_than_spilling_out_of_its_panel() {
+    // 14 Panels at 1280x760 with a label that wraps onto 12 lines.
+    for cell in PanelGrid::new(14).cells([12.0, 12.0, 1256.0, 700.0], 12.0) {
+        let p = PanelLayout::new(cell, 1.0, 12);
+        assert!(p.label[1] + p.label[3] <= cell[1] + cell[3] + 0.01, "label inside its cell: {cell:?} -> {p:?}");
+        assert!(p.content[3] >= 80.0 - 0.01, "the display keeps a sensible height: {p:?}");
+        assert!(p.label[3] >= 30.0 - 0.01, "a whole line fits");
+    }
+}
+
+#[test]
+fn a_label_that_fits_keeps_all_its_lines() {
+    let p = PanelLayout::new([0.0, 0.0, 400.0, 300.0], 1.0, 4);
+    assert!((p.label[3] - (30.0 + 3.0 * 12.5 * 1.4)).abs() < 0.01);
+}
+
+#[test]
+fn saved_positions_that_leave_a_panel_too_small_are_ignored() {
+    let default = PanelGrid::new(2);
+    // Valid weights add up to 1, but the second Panel would be 12 px wide.
+    let squashed = "panels 2\nrows 1\ncolumns 0.99 0.01\n";
+    assert_eq!(PanelGrid::from_text(2, squashed), default);
+    let squashed_rows = PanelGrid::new(14).to_text().replacen("rows 0.33333334 0.33333334 0.33333334", "rows 0.98 0.01 0.01", 1);
+    assert_eq!(PanelGrid::from_text(14, &squashed_rows), PanelGrid::new(14));
+}
+
+#[test]
+fn saved_positions_that_are_a_little_off_are_scaled_to_add_up_to_one() {
+    let grid = PanelGrid::from_text(2, "panels 2\nrows 1\ncolumns 0.5 0.505\n");
+    let cells = grid.cells(AREA, GAP);
+    assert_fills(&grid, 2);
+    assert!((cells[0][2] + cells[1][2] + GAP - AREA[2]).abs() < 0.01);
+    assert!(cells[0][2] < cells[1][2]);
 }

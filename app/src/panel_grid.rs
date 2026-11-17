@@ -11,9 +11,15 @@
 /// Logical pixels: the label's text size, and the label strip's height for one line.
 pub const LABEL_SIZE: f32 = 12.5;
 pub const LABEL_STRIP: f32 = 30.0;
-/// The smallest a Panel can be dragged to, in logical pixels (width, height): the display still has room for its
-/// scale and the label a whole line.
-const MIN_PANEL: [f32; 2] = [120.0, 100.0];
+/// The least height a display keeps, in logical pixels, however many lines its label wraps onto.
+pub const MIN_DISPLAY: f32 = 80.0;
+/// The smallest a Panel can be dragged to, in logical pixels (width, height): the display keeps [`MIN_DISPLAY`]
+/// above a label of one line.
+const MIN_PANEL: [f32; 2] = [120.0, MIN_DISPLAY + LABEL_STRIP];
+/// The window the saved border positions are checked against (logical pixels, the Panel area and the gap between
+/// Panels): the default window size. A saved position that would leave a Panel under its minimum here is rubbish.
+const REFERENCE_AREA: [f32; 2] = [1256.0, 700.0];
+const REFERENCE_GAP: f32 = 12.0;
 
 /// The smallest a Panel can be at `scale` device pixels per logical pixel.
 pub fn min_panel_size(scale: f32) -> [f32; 2] {
@@ -155,15 +161,22 @@ impl PanelGrid {
         if lines.next()? != format!("panels {panels}") {
             return None;
         }
-        let weights = |line: &str, key: &str, count: usize| -> Option<Vec<f32>> {
+        // Weights that add up to 1 (give or take rounding), none of which leaves a Panel under its minimum size in
+        // the reference window; they are scaled to add up to exactly 1.
+        let weights = |line: &str, key: &str, count: usize, total: f32, min: f32| -> Option<Vec<f32>> {
             let values: Vec<f32> = line.strip_prefix(key)?.split_whitespace().map(|v| v.parse().ok()).collect::<Option<_>>()?;
             let sum: f32 = values.iter().sum();
-            (values.len() == count && values.iter().all(|v| v.is_finite() && *v > 0.0) && (sum - 1.0).abs() < 0.01).then_some(values)
+            let usable = total - REFERENCE_GAP * count.saturating_sub(1) as f32;
+            let sane = values.len() == count
+                && values.iter().all(|v| v.is_finite() && *v > 0.0)
+                && (sum - 1.0).abs() < 0.01
+                && values.iter().all(|v| v / sum * usable >= min);
+            sane.then(|| values.iter().map(|v| v / sum).collect())
         };
-        let row_weights = weights(lines.next()?, "rows ", default.rows.len())?;
+        let row_weights = weights(lines.next()?, "rows ", default.rows.len(), REFERENCE_AREA[1], MIN_PANEL[1])?;
         let mut column_weights = Vec::new();
         for &count in &default.rows {
-            column_weights.push(weights(lines.next()?, "columns ", count)?);
+            column_weights.push(weights(lines.next()?, "columns ", count, REFERENCE_AREA[0], MIN_PANEL[0])?);
         }
         Some(PanelGrid { rows: default.rows, row_weights, column_weights })
     }
@@ -178,10 +191,14 @@ pub struct PanelLayout {
 
 impl PanelLayout {
     /// The layout inside `cell` at `scale` device pixels per logical pixel, for a label that wraps onto `lines`
-    /// lines. The label keeps its full height however small the Panel; the display takes what is left (at least a
-    /// pixel).
+    /// lines. The label has its first line always and as many more as fit while the display keeps
+    /// [`MIN_DISPLAY`]; lines past that are cut off (the label is clipped to its strip), so the label never spills
+    /// out of the Panel. The display takes what is left (at least a pixel).
     pub fn new([left, top, width, height]: [f32; 4], scale: f32, lines: usize) -> PanelLayout {
-        let strip = LABEL_STRIP * scale + (lines.max(1) - 1) as f32 * LABEL_SIZE * scale * 1.4;
+        let line = LABEL_SIZE * scale * 1.4;
+        let room = (height - MIN_DISPLAY * scale - LABEL_STRIP * scale).max(0.0);
+        let extra = ((lines.max(1) - 1) as f32).min((room / line).floor());
+        let strip = LABEL_STRIP * scale + extra * line;
         let content = (height - strip).max(1.0);
         PanelLayout { content: [left, top, width.max(1.0), content], label: [left, top + content, width.max(1.0), strip] }
     }
