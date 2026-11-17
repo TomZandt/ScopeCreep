@@ -89,7 +89,7 @@ impl Bench {
         }
         let known = self.monitor.status().colour_setup();
         let colour_label = known.as_ref().map_or("Colour Setup unknown".to_string(), |c| c.setup.timeline.clone());
-        let context = DisplayContext { colour_setup: known, colour_label, settings: settings.resolve(self.display.name(), self.display.setting_defs()) };
+        let context = DisplayContext { colour_setup: known, colour_label, settings: settings.resolve(self.display.name(), self.display.setting_defs()), ..DisplayContext::default() };
         self.display.configure(&context);
     }
 

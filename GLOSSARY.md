@@ -101,6 +101,9 @@ _Avoid_: Scope (for false colour), filter, LUT view
 **Highlight Neutrals**:
 A Picture View that shows the Output picture in Luma grey and pixels whose red, green and blue are nearly equal (within a tolerance, a share of the full signal range, 3 % by default) in green, for checking that whites and greys are balanced.
 _Avoid_: White balance check, neutral finder
+**Black and white**:
+The Picture View that shows the Output picture as greys equal to Luma, with the same weights as the waveform (including its luma weights setting), so a grey on screen lines up with its trace.
+_Avoid_: Greyscale, desaturated view, monochrome
 
 **Colour Waveform**:
 A waveform whose trace is tinted by the colour of the pixels plotted at each point, so a green scene gives a green trace. A Scope in its own Panel, beside the plain Luma waveform.

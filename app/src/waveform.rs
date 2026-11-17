@@ -10,7 +10,7 @@
 //! and white (1.0) at 940, full (data) levels at 0 and 1023. Resolve hands the Sender the same values either way.
 use crate::colour_setup::{KnownColourSetup, Levels, Provenance};
 use crate::gpu_frame::GpuFrame;
-use crate::settings::{Choice, SettingDef};
+use crate::settings::{Choice, SettingDef, Settings};
 use std::sync::{Arc, Mutex};
 
 /// Code values on the 10-bit scale: 0 to 1023.
@@ -174,8 +174,9 @@ impl Measurement {
         }
     }
 
-    /// The waveform's quiet label: the scale, the Measured Space and the luma weights in use.
-    pub fn label(&self) -> String {
+    /// The part of a label that says what Luma is: the Measured Space and the weights in use. The waveform's and
+    /// the black-and-white Panel's labels share it, so the two always name the same weights.
+    pub fn weights_label(&self) -> String {
         let [r, g, b] = self.weights();
         let name = self.space.name();
         // Assumed means the picture is not converted into a known Output Colour Space: the values are measured as
@@ -185,13 +186,18 @@ impl Measurement {
             LumaWeights::FromPrimaries => "from primaries",
             LumaWeights::MatchResolve => "to match Resolve",
         };
+        format!("{space}  ·  Y = {r:.4} R + {g:.4} G + {b:.4} B {how}")
+    }
+
+    /// The waveform's quiet label: the scale, the Measured Space and the luma weights in use.
+    pub fn label(&self) -> String {
         let range = self.levels.range_label();
         let scale = match self.levels_from {
             None => format!("{range} assumed"),
             Some(Provenance::Project) => range.to_string(),
             Some(Provenance::Manual) => format!("{range} set manually"),
         };
-        format!("Luma  ·  10-bit {scale}  ·  {space}  ·  Y = {r:.4} R + {g:.4} G + {b:.4} B {how}")
+        format!("Luma  ·  10-bit {scale}  ·  {}", self.weights_label())
     }
 }
 
@@ -796,8 +802,20 @@ impl Waveform {
 /// The key of the luma weights setting.
 pub const LUMA_SETTING: &str = "luma";
 
+/// What the luma waveform is called: its Panel's settings are kept under this name.
+pub const NAME: &str = "Luma waveform";
+
+/// The luma weights the waveform's `luma` setting chooses. Every display that shows Luma follows it, so a grey
+/// you see lines up with its trace on the waveform.
+pub fn luma_weights_of(settings: &Settings) -> LumaWeights {
+    match settings.get(LUMA_SETTING).map(String::as_str) {
+        Some("match-resolve") => LumaWeights::MatchResolve,
+        _ => LumaWeights::FromPrimaries,
+    }
+}
+
 /// The luma waveform's right-click menu: how Luma is weighted (ADR 0004). The label names the weights in use.
-const SETTINGS: [SettingDef; 3] = [
+pub const SETTINGS: [SettingDef; 3] = [
     SettingDef {
         key: LUMA_SETTING,
         label: "Luma weights",
@@ -842,7 +860,7 @@ pub const SCALE_SIZE: f32 = 11.0;
 
 impl crate::display::Display for Waveform {
     fn name(&self) -> &'static str {
-        "Luma waveform"
+        NAME
     }
 
     fn on_frame(&self, encoder: &mut wgpu::CommandEncoder, frame: &GpuFrame) {
@@ -852,10 +870,7 @@ impl crate::display::Display for Waveform {
     fn configure(&self, context: &crate::display::DisplayContext) {
         // The waveform measures in the Colour Setup's Output Colour Space (the default Measured Space), with the
         // luma weights the user chose (ADR 0004).
-        let luma = match context.settings.get(LUMA_SETTING).map(String::as_str) {
-            Some("match-resolve") => LumaWeights::MatchResolve,
-            _ => LumaWeights::FromPrimaries,
-        };
+        let luma = luma_weights_of(&context.settings);
         self.set_look(look_from(&context.settings));
         self.set_measurement(crate::output_conversion::measurement(context.colour_setup.clone(), luma));
     }
@@ -863,6 +878,7 @@ impl crate::display::Display for Waveform {
     fn setting_defs(&self) -> &'static [SettingDef] {
         &SETTINGS
     }
+
 
     fn label(&self) -> String {
         Waveform::label(self)

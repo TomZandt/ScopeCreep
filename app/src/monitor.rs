@@ -187,7 +187,7 @@ impl Status {
 
     /// What every display needs to know about the Colour Setup.
     pub fn display_context(&self) -> crate::display::DisplayContext {
-        crate::display::DisplayContext { colour_setup: self.colour_setup(), colour_label: self.colour_label(), settings: Default::default() }
+        crate::display::DisplayContext { colour_setup: self.colour_setup(), colour_label: self.colour_label(), ..Default::default() }
     }
 
     /// The quiet label of the Picture View.
