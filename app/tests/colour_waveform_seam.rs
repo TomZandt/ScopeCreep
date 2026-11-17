@@ -1,0 +1,251 @@
+//! The Colour Waveform (#59), driven at the Feed seam: synthetic frames go in through the synthetic writer, the
+//! app's Feed monitor hands them to the GPU exactly as the app does, and the tests look at what the Panel
+//! measured, what it drew and its label. Needs a GPU.
+use scopecreep::display::{DisplayContext, DisplaySet};
+use scopecreep::gpu_frame::FrameUploader;
+use scopecreep::monitor::Monitor;
+use scopecreep::panel_grid::{PanelGrid, PanelLayout};
+use scopecreep::settings::PanelSettings;
+use scopecreep::waveform::{Measurement, PlotLayout, WaveformCounts};
+use scopecreep_feed::{FeedWriter, FrameMeta, now_ns};
+use std::path::PathBuf;
+use std::sync::{Mutex, MutexGuard, OnceLock};
+
+const MS: u64 = 1_000_000;
+const TARGET: wgpu::TextureFormat = wgpu::TextureFormat::Rgba8Unorm;
+
+fn gpu() -> (MutexGuard<'static, ()>, wgpu::Device, wgpu::Queue) {
+    static GPU: OnceLock<(wgpu::Device, wgpu::Queue)> = OnceLock::new();
+    static TURN: Mutex<()> = Mutex::new(());
+    let turn = TURN.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+    let (device, queue) = GPU.get_or_init(|| {
+        let instance = wgpu::Instance::new(wgpu::InstanceDescriptor::new_without_display_handle_from_env());
+        let adapter = pollster::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions { power_preference: wgpu::PowerPreference::HighPerformance, ..Default::default() }))
+            .expect("these tests need a GPU");
+        pollster::block_on(adapter.request_device(&wgpu::DeviceDescriptor { label: Some("display tests"), ..Default::default() })).unwrap()
+    });
+    (turn, device.clone(), queue.clone())
+}
+
+struct Bench {
+    path: PathBuf,
+    writer: FeedWriter,
+    monitor: Monitor,
+    uploader: FrameUploader,
+    set: DisplaySet,
+    device: wgpu::Device,
+    queue: wgpu::Queue,
+    now: u64,
+    frame: f64,
+    _gpu_turn: MutexGuard<'static, ()>,
+}
+
+impl Bench {
+    fn new(name: &str) -> Bench {
+        let path = PathBuf::from(format!("/dev/shm/scopecreep-colour-waveform-test-{}-{}", std::process::id(), name));
+        let _ = std::fs::remove_file(&path);
+        let (turn, device, queue) = gpu();
+        let writer = FeedWriter::create(&path, 4, 1920 * 1080 * 16).unwrap();
+        Bench {
+            monitor: Monitor::new(&path),
+            uploader: FrameUploader::new(&device, &queue),
+            set: DisplaySet::standard(&device, &queue, TARGET, false),
+            path,
+            writer,
+            device,
+            queue,
+            now: now_ns(),
+            frame: 86400.0,
+            _gpu_turn: turn,
+        }
+    }
+
+    /// Resolve plays one frame (RGBA, bottom row first) and the app has a moment to take it.
+    fn play(&mut self, width: u32, height: u32, pixels: &[f32]) {
+        let meta = FrameMeta { width, height, frame_time: self.frame, frame_rate: 24.0, render_ns: self.now, sender_instance: 1 };
+        self.writer.write_frame(&meta, pixels).unwrap();
+        self.frame += 1.0;
+        for _ in 0..50 {
+            self.now += MS;
+            let (uploader, set) = (&mut self.uploader, &self.set);
+            self.monitor.poll(self.now, &mut |frame| uploader.upload(frame, |encoder, gpu_frame| set.on_frame(encoder, gpu_frame)));
+        }
+    }
+
+    /// Draw every display into its Panel of a `width` × `height` target, as the window does, and read it back
+    /// (RGBA8, rows top first).
+    fn render(&self, width: u32, height: u32, scale: f32) -> (Vec<u8>, Vec<PanelLayout>) {
+        let cells = PanelGrid::new(self.set.len()).cells([0.0, 0.0, width as f32, height as f32], 8.0 * scale);
+        let panels: Vec<PanelLayout> = cells.iter().map(|c| PanelLayout::new(*c, scale, 1)).collect();
+        let target = self.device.create_texture(&wgpu::TextureDescriptor {
+            label: None,
+            size: wgpu::Extent3d { width, height, depth_or_array_layers: 1 },
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format: TARGET,
+            usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_SRC,
+            view_formats: &[],
+        });
+        let view = target.create_view(&Default::default());
+        let mut encoder = self.device.create_command_encoder(&Default::default());
+        {
+            let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: None,
+                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                    view: &view,
+                    depth_slice: None,
+                    resolve_target: None,
+                    ops: wgpu::Operations { load: wgpu::LoadOp::Clear(wgpu::Color::BLACK), store: wgpu::StoreOp::Store },
+                })],
+                depth_stencil_attachment: None,
+                timestamp_writes: None,
+                occlusion_query_set: None,
+                multiview_mask: None,
+            });
+            for (i, panel) in panels.iter().enumerate() {
+                self.set.draw(&mut pass, i, panel.content, [width as f32, height as f32], scale);
+            }
+        }
+        let row = (width * 4).next_multiple_of(256);
+        let readback = self.device.create_buffer(&wgpu::BufferDescriptor { label: None, size: (row * height) as u64, usage: wgpu::BufferUsages::MAP_READ | wgpu::BufferUsages::COPY_DST, mapped_at_creation: false });
+        encoder.copy_texture_to_buffer(
+            target.as_image_copy(),
+            wgpu::TexelCopyBufferInfo { buffer: &readback, layout: wgpu::TexelCopyBufferLayout { offset: 0, bytes_per_row: Some(row), rows_per_image: None } },
+            wgpu::Extent3d { width, height, depth_or_array_layers: 1 },
+        );
+        self.queue.submit([encoder.finish()]);
+        readback.map_async(wgpu::MapMode::Read, .., |_| {});
+        self.device.poll(wgpu::PollType::wait_indefinitely()).unwrap();
+        let mapped = readback.get_mapped_range(..).unwrap();
+        let image = (0..height as usize).flat_map(|y| mapped[y * row as usize..y * row as usize + width as usize * 4].to_vec()).collect();
+        (image, panels)
+    }
+}
+
+impl Drop for Bench {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_file(&self.path);
+    }
+}
+
+const COLOUR: &str = "Colour waveform";
+const LUMA: &str = "Luma waveform";
+
+fn index_of(b: &Bench, name: &str) -> usize {
+    b.set.names().iter().position(|n| *n == name).unwrap_or_else(|| panic!("a {name} Panel is registered"))
+}
+
+fn counts_of(b: &Bench, name: &str) -> WaveformCounts {
+    *b.set.read_back(index_of(b, name)).and_then(|r| r.downcast::<WaveformCounts>().ok()).expect("a waveform reads back")
+}
+
+fn solid(width: u32, height: u32, rgb: [f32; 3]) -> Vec<f32> {
+    (0..width * height).flat_map(|_| [rgb[0], rgb[1], rgb[2], 1.0]).collect()
+}
+
+fn pixel(image: &[u8], width: u32, x: f32, y: f32) -> [u8; 3] {
+    let i = (y as usize * width as usize + x as usize) * 4;
+    [image[i], image[i + 1], image[i + 2]]
+}
+
+/// The code every pixel of the first column landed on (the frame must be one code).
+fn the_code(counts: &WaveformCounts, height: u32) -> u32 {
+    (0..1024).find(|&code| counts.at(0, code) == height).expect("every pixel of the column is on one code")
+}
+
+/// What the Colour waveform drew at `code` of the middle picture column.
+fn drawn_at_code(b: &Bench, code: u32) -> [u8; 3] {
+    let (image, panels) = b.render(1280, 760, 1.0);
+    let layout = PlotLayout::new(panels[index_of(b, COLOUR)].content, 1.0);
+    pixel(&image, 1280, layout.x_of_column(960, 1920).floor(), layout.y_of_code(code).floor())
+}
+
+/// A colour's channels against its strongest: the colour without its brightness.
+fn proportions([r, g, b]: [u8; 3]) -> [f32; 3] {
+    let top = r.max(g).max(b) as f32;
+    [r as f32 / top, g as f32 / top, b as f32 / top]
+}
+
+#[test]
+fn a_frame_of_one_flat_colour_draws_a_trace_of_that_colour_at_its_luma_code() {
+    let mut b = Bench::new("flat");
+    b.play(1920, 1080, &solid(1920, 1080, [0.2, 0.8, 0.3]));
+    let code = the_code(&counts_of(&b, COLOUR), 1080);
+    let [r, g, bl] = proportions(drawn_at_code(&b, code));
+    assert!((r - 0.25).abs() < 0.05 && (g - 1.0).abs() < 1e-6 && (bl - 0.375).abs() < 0.05, "a green trace: {r} {g} {bl}");
+    let away = drawn_at_code(&b, code + 80);
+    assert!(away.iter().all(|&c| c < 40), "the rest of the plot stays dark: {away:?}");
+}
+
+#[test]
+fn two_colours_at_the_same_luma_in_one_column_blend_to_their_average_at_that_spot() {
+    let mut b = Bench::new("blend");
+    let w = Measurement::default().weights().map(|w| w as f32);
+    let a = [0.6f32, 0.3, 0.2];
+    let luma = w[0] * a[0] + w[1] * a[1] + w[2] * a[2];
+    let (r2, b2) = (0.1f32, 0.5f32);
+    let c = [r2, (luma - w[0] * r2 - w[2] * b2) / w[1], b2];
+    let two: Vec<f32> = (0..1080u32)
+        .flat_map(|row| {
+            let p = if row % 2 == 0 { a } else { c };
+            (0..1920).flat_map(move |_| [p[0], p[1], p[2], 1.0])
+        })
+        .collect();
+    b.play(1920, 1080, &two);
+    let code = the_code(&counts_of(&b, COLOUR), 1080);
+    let blended = drawn_at_code(&b, code);
+    let average = [(a[0] + c[0]) / 2.0, (a[1] + c[1]) / 2.0, (a[2] + c[2]) / 2.0];
+    b.play(1920, 1080, &solid(1920, 1080, average));
+    let flat = drawn_at_code(&b, the_code(&counts_of(&b, COLOUR), 1080));
+    for i in 0..3 {
+        assert!((blended[i] as i32 - flat[i] as i32).abs() <= 3, "blended {blended:?} against the average drawn flat {flat:?}");
+    }
+}
+
+#[test]
+fn the_traces_positions_match_the_luma_waveforms_counts() {
+    let mut b = Bench::new("positions");
+    let busy: Vec<f32> = (0..1080u32).flat_map(|row| (0..1920u32).flat_map(move |x| [(x % 256) as f32 / 255.0, row as f32 / 1079.0, ((x + row) % 97) as f32 / 96.0, 1.0])).collect();
+    b.play(1920, 1080, &busy);
+    assert_eq!(counts_of(&b, COLOUR), counts_of(&b, LUMA));
+}
+
+#[test]
+fn trace_brightness_and_soft_spread_change_the_drawing_but_not_the_label() {
+    let mut b = Bench::new("settings");
+    let i = index_of(&b, COLOUR);
+    let keys: Vec<&str> = b.set.setting_defs(i).iter().map(|d| d.key).collect();
+    assert_eq!(keys, ["brightness", "spread"]);
+    let ramp: Vec<f32> = (0..1080u32).flat_map(|row| (0..1920).flat_map(move |_| [row as f32 / 1079.0, 0.3, 1.0 - row as f32 / 1079.0, 1.0])).collect();
+    b.play(1920, 1080, &ramp);
+    let lit = |b: &Bench, settings: &PanelSettings| {
+        b.set.configure(&DisplayContext::default(), settings);
+        let (image, panels) = b.render(1280, 760, 1.0);
+        let c = panels[i].content;
+        (0..c[3] as u32)
+            .flat_map(|dy| (0..c[2] as u32).map(move |dx| (dx, dy)))
+            .map(|(dx, dy)| pixel(&image, 1280, c[0] + dx as f32, c[1] + dy as f32).iter().map(|&v| v as u64).sum::<u64>())
+            .sum::<u64>()
+    };
+    let mut settings = PanelSettings::default();
+    let normal = lit(&b, &settings);
+    let label = b.set.labels()[i].clone();
+    settings.set(COLOUR, "brightness", "brighter");
+    let brighter = lit(&b, &settings);
+    settings.set(COLOUR, "brightness", "dimmer");
+    let dimmer = lit(&b, &settings);
+    assert!(dimmer < normal && normal < brighter, "dimmer {dimmer} < normal {normal} < brighter {brighter}");
+    settings.set(COLOUR, "brightness", "normal");
+    settings.set(COLOUR, "spread", "off");
+    assert_ne!(lit(&b, &settings), normal, "the soft spread changes the drawing");
+    assert_eq!(b.set.labels()[i], label, "drawing settings do not change the label");
+}
+
+#[test]
+fn the_label_says_what_the_colour_waveform_is_and_names_the_luma_weights() {
+    let b = Bench::new("label");
+    let label = b.set.labels()[index_of(&b, COLOUR)].clone();
+    assert!(label.starts_with("Colour waveform"), "{label}");
+    assert!(label.contains("Y = "), "{label}");
+}

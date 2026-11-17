@@ -147,6 +147,7 @@ impl DisplaySet {
         set.register(Arc::new(crate::skin_tone_view::SkinTone::new(device, queue, target, filterable)));
         set.register(Arc::new(crate::stops_false_colour::StopsFalseColour::new(device, queue, target)));
         set.register(Arc::new(crate::cie::CiePlot::new(device, queue, target)));
+        set.register(Arc::new(Waveform::new_colour(device, queue, target)));
         set
     }
 

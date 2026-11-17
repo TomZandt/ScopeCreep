@@ -33,6 +33,7 @@ What we learned by testing, kept in the repo so it isn't lost when an issue thre
 | [53](53-waveform-look.md) | Milestone 2: does the waveform's phosphor look follow density, keep strays faint and edge rows clear, and look the same in any Panel size (headless)? |
 | [54](54-black-and-white-picture-view.md) | Milestone 2: is every ColorChecker patch drawn black and white at the Luma the waveform traces for it, and does it follow the waveform's luma weights (headless)? |
 | [56](56-gamut-legal-warning.md) | Milestone 2: does the gamut/legal warning tint, limit, tolerate (R103) and label correctly (headless)? |
+| [59](59-colour-waveform.md) | Milestone 2: does the Colour Waveform tint each spot by the average colour of its pixels at the luma waveform's positions, with the same settings (headless)? |
 | [61](61-vectorscopes.md) | Milestone 2: do the vectorscopes land bars and ColorChecker hues on target, at twice the radius, with the assumed skin-tone line (headless)? |
 | [63](63-skin-tone-panel.md) | Milestone 2: does the Skin Tone Panel colour ColorChecker skin by hue against the assumed line, keep neutrals and far hues grey, go green and magenta with distance, and follow its tolerance (headless)? |
 | [58](58-stops-false-colour.md) | Milestone 2: does Stops False Colour measure the ColorChecker's published stops in every supported Timeline Colour Space, and do both modes paint the right zones (headless)? |

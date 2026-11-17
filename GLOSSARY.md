@@ -123,6 +123,7 @@ _Avoid_: Greyscale, desaturated view, monochrome
 
 **Colour Waveform**:
 A waveform whose trace is tinted by the colour of the pixels plotted at each point, so a green scene gives a green trace. A Scope in its own Panel, beside the plain Luma waveform.
+Its spots are at the luma waveform's positions; each one's tint is the average colour of the pixels counted there, brought to the neutral trace's strength so grey draws as the luma trace does.
 _Avoid_: Colourised waveform, RGB waveform, parade (that shows channels side by side)
 
 **False Colour**:
