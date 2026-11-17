@@ -17,7 +17,7 @@ Pre-alpha. Nothing to install yet.
 |---|---|---|
 | 0 | Colour and performance checks against Resolve (throwaway prototypes) | Done ([report](docs/stage0-report.md)) |
 | 1 | Feed plus clean picture plus luma waveform (Linux, NVIDIA) | Released in v0.1.0 |
-| 2 | Every display in its own Panel: 14 Panels (waveforms, vectorscopes, CIE plot, false colour, skin tone and more) | Built on `main`, unreleased: [open checks in Resolve](https://github.com/TomZandt/scopecreep/issues?q=is%3Aissue+is%3Aopen+label%3Aready-for-human) (skin-tone angle #60, chart clip #66, UHD 50 #67) |
+| 2 | Every display in its own Panel: 14 Panels (waveforms, vectorscopes, CIE plot, false colour, skin tone and more) | Released in v0.2.0; [open checks in Resolve](https://github.com/TomZandt/scopecreep/issues?q=is%3Aissue+is%3Aopen+label%3Aready-for-human) remain (skin-tone angle #60, chart clip #66) |
 | Later | Parade, histogram, HDR, Setup Checklist, Capture, Windows/macOS, installers, licensing | Decided, parked |
 
 ## Development (Linux, NVIDIA)

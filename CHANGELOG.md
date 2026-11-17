@@ -6,6 +6,10 @@ The format follows [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-11-17
+
+Milestone 2: every display in its own Panel. The Window is a grid of 14 Panels, all always visible (ADR 0011).
+
 ### Added
 
 - The Window is a grid of Panels: the clean picture and the luma waveform each have their own Panel with its label under it, in an ordered grid sized to the number of displays that fills the Window. Drag the borders between Panels to resize them; the positions are remembered between sessions (`~/.config/scopecreep/panel-grid`). Every Panel shows the same Viewer Frame, uploaded to the GPU once. Labels and scale numbers keep their size at small Panel sizes and draw at the screen's scale on HiDPI screens (#50).
@@ -42,6 +46,15 @@ The format follows [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/
 ### Removed
 
 - The `--luma` command-line option: the luma weights are now the luma waveform's setting in its right-click menu (#51).
+
+### Known limitations
+
+- Resolve's own skin-tone line angle has not been measured: the vectorscopes and the Skin Tone Panel use an assumed 134.5° and say so (#60, ADR 0018).
+- Nothing in milestone 2 has been compared by eye with Resolve's own scopes or checked on a real monitor, on HiDPI, or with a real mouse; those checks are open as `ready-for-human` issues (#66, #68-#76, #78-#81).
+- Each Panel's own GPU time per UHD frame has not been measured (#82). All 14 Panels together keep Resolve at 50 fps at UHD 50 (#67).
+- The CIE plot's spectral locus points are typed from the CIE 1931 table and not yet checked against it (#77). sRGB output is decoded as gamma 2.4 and HLG without its system gamma in the CIE plot; its label says so (ADR 0020).
+- Stops False Colour on ACEScg, ACEScc and Rec.709 Gamma 2.4 timelines is not yet checked against Resolve's frames (#79).
+- A Panel smaller than the frame is sampled nearest-neighbour in the gamut/legal warning, so a single offending pixel can be missed (ADR 0014).
 
 ## [0.1.0] - 2026-11-16
 
@@ -114,6 +127,7 @@ Stage 0: colour and performance checks. Nothing here is the product yet; it is t
 - ADR 0003: "Resolve never waits" is proven at UHD float, 23.976 to 60 fps, on the CUDA path.
 - ADR 0004: Resolve's waveform uses Rec.709 weights for P3; offered as a Match Resolve mode.
 
-[Unreleased]: https://github.com/TomZandt/scopecreep/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/TomZandt/scopecreep/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/TomZandt/scopecreep/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/TomZandt/scopecreep/compare/v0.0.0...v0.1.0
 [0.0.0]: https://github.com/TomZandt/scopecreep/releases/tag/v0.0.0
