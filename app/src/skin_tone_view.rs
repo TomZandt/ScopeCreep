@@ -13,7 +13,6 @@ use crate::gpu_frame::GpuFrame;
 use crate::output_conversion::{Plan, measurement};
 use crate::settings::{Choice, SettingDef};
 use crate::skin_tone::SKIN_TONE_LINE_DEGREES;
-use crate::waveform::LumaWeights;
 use std::sync::{Arc, Mutex};
 
 pub const TOLERANCE_SETTING: &str = "tolerance";
@@ -187,7 +186,7 @@ impl Display for SkinTone {
         let setup = context.colour_setup.as_ref().map(|c| &c.setup);
         let plan = Plan::for_setup(setup);
         // The weights the vectorscope uses, so the hue here is the angle the vectorscope shows.
-        let [r, g, b] = measurement(context.colour_setup.clone(), LumaWeights::FromPrimaries).weights();
+        let [r, g, b] = measurement(context.colour_setup.clone(), context.luma).weights();
         let degrees = context.settings.get(TOLERANCE_SETTING).cloned().unwrap_or_else(|| DEFAULT_TOLERANCE.into());
         let tolerance = degrees.parse::<f32>().unwrap_or(5.0);
         // The picture is the Output picture only once it has been converted (ADR 0007).

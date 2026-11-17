@@ -296,6 +296,28 @@ fn the_luma_weights_setting_changes_the_counts_and_the_label_for_a_coloured_fram
 }
 
 #[test]
+fn every_display_that_shows_luma_follows_the_waveforms_luma_weights() {
+    let b = Bench::new("luma-everywhere");
+    let waveform = b.set.name(1);
+    let following = ["ARRI-style False Colour", "Saturation heatmap", "Vectorscope 100 %", "Vectorscope 200 %"];
+    let label_of = |b: &Bench, prefix: &str| b.set.labels().into_iter().find(|l| l.starts_with(prefix)).unwrap_or_else(|| panic!("no label starts with {prefix}"));
+    let mut settings = PanelSettings::default();
+    b.set.configure(&p3_d65_setup(), &settings);
+    for prefix in following {
+        let label = label_of(&b, prefix);
+        assert!(label.contains("0.6917 G"), "{prefix} uses P3-D65's own weights by default: {label}");
+    }
+    settings.set(waveform, "luma", "match-resolve");
+    b.set.configure(&p3_d65_setup(), &settings);
+    for prefix in following {
+        let label = label_of(&b, prefix);
+        assert!(label.contains("0.7152 G"), "{prefix} follows the waveform to Resolve's weights: {label}");
+        assert!(!label.contains("from primaries"), "{prefix} does not claim weights it is not using: {label}");
+    }
+    assert!(label_of(&b, "Vectorscope 100 %").contains("to match Resolve"));
+}
+
+#[test]
 fn the_trace_brightness_and_soft_spread_settings_change_the_drawing_but_not_the_label_or_counts() {
     let mut b = Bench::new("look-settings");
     let name = b.set.name(1);

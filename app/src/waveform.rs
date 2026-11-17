@@ -182,11 +182,15 @@ impl Measurement {
         // Assumed means the picture is not converted into a known Output Colour Space: the values are measured as
         // sent, like the Picture View's "as sent, no Output Conversion", and must not read as a Rec.709 measurement.
         let space = if self.assumed { format!("{name} assumed, measured as sent, unconverted") } else { name.to_string() };
-        let how = match self.luma {
+        format!("{space}  ·  Y = {r:.4} R + {g:.4} G + {b:.4} B {}", self.weights_how())
+    }
+
+    /// How the weights were chosen, for a label: "from primaries" or "to match Resolve".
+    pub fn weights_how(&self) -> &'static str {
+        match self.luma {
             LumaWeights::FromPrimaries => "from primaries",
             LumaWeights::MatchResolve => "to match Resolve",
-        };
-        format!("{space}  ·  Y = {r:.4} R + {g:.4} G + {b:.4} B {how}")
+        }
     }
 
     /// The waveform's quiet label: the scale, the Measured Space and the luma weights in use.

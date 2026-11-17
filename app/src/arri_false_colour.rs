@@ -9,7 +9,6 @@ use crate::display::{Display, DisplayContext, ScaleText};
 use crate::gpu_frame::GpuFrame;
 use crate::output_conversion;
 use crate::settings::{Choice, SettingDef};
-use crate::waveform::LumaWeights;
 use std::sync::{Arc, Mutex};
 
 /// One band of the table: a name, its edges in percent of full-range Luma, and the colour it is shown in.
@@ -249,7 +248,7 @@ impl Display for ArriFalseColour {
     fn configure(&self, context: &DisplayContext) {
         // The Output picture's Luma, weighted as the luma waveform weights it (ADR 0004): Rec.709 is assumed, and
         // the label says so, until the Colour Setup is known and the picture is converted.
-        let measurement = output_conversion::measurement(context.colour_setup.clone(), LumaWeights::FromPrimaries);
+        let measurement = output_conversion::measurement(context.colour_setup.clone(), context.luma);
         let weights = measurement.weights();
         let space = if measurement.assumed { format!("{} assumed, unconverted", measurement.space.name()) } else { measurement.space.name().to_string() };
         let mut state = self.state.lock().unwrap();

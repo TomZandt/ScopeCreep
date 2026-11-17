@@ -9,7 +9,6 @@ use crate::display::{Display, DisplayContext};
 use crate::gpu_frame::GpuFrame;
 use crate::output_conversion::{Plan, measurement};
 use crate::settings::{Choice, SettingDef};
-use crate::waveform::LumaWeights;
 use std::sync::{Arc, Mutex};
 
 pub const TOLERANCE_SETTING: &str = "tolerance";
@@ -167,7 +166,7 @@ impl Display for HighlightNeutrals {
     fn configure(&self, context: &DisplayContext) {
         let setup = context.colour_setup.as_ref().map(|c| &c.setup);
         let plan = Plan::for_setup(setup);
-        let [r, g, b] = measurement(context.colour_setup.clone(), LumaWeights::FromPrimaries).weights();
+        let [r, g, b] = measurement(context.colour_setup.clone(), context.luma).weights();
         let percent = context.settings.get(TOLERANCE_SETTING).cloned().unwrap_or_else(|| "3".into());
         let tolerance = percent.parse::<f32>().map_or(0.03, |p| p / 100.0);
         // The picture is the Output picture only once it has been converted (ADR 0007).

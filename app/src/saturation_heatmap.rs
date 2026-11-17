@@ -12,7 +12,6 @@ use crate::muted_palette;
 use crate::output_conversion;
 use crate::settings::{Choice, SettingDef};
 use crate::vectorscope::RING;
-use crate::waveform::LumaWeights;
 use std::sync::{Arc, Mutex};
 
 pub const SCALE_SETTING: &str = "scale";
@@ -205,7 +204,7 @@ impl Display for SaturationHeatmap {
     }
 
     fn configure(&self, context: &DisplayContext) {
-        let measurement = output_conversion::measurement(context.colour_setup.clone(), LumaWeights::FromPrimaries);
+        let measurement = output_conversion::measurement(context.colour_setup.clone(), context.luma);
         let weights = measurement.weights();
         let space = if measurement.assumed { format!("{} assumed, unconverted", measurement.space.name()) } else { measurement.space.name().to_string() };
         let scale = context.settings.get(SCALE_SETTING).and_then(|v| v.parse::<f64>().ok()).unwrap_or(100.0);

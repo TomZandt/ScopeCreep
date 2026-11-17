@@ -12,7 +12,7 @@ use crate::display::{Display, DisplayContext};
 use crate::gpu_frame::GpuFrame;
 use crate::settings::{Choice, SettingDef};
 use crate::skin_tone::SKIN_TONE_LINE_DEGREES;
-use crate::waveform::{LumaWeights, Measurement};
+use crate::waveform::Measurement;
 use std::sync::{Arc, Mutex};
 
 /// Bins across (and down) the plot.
@@ -391,8 +391,9 @@ impl Vectorscope {
         let name = m.space.name();
         let space = if m.assumed { format!("{name} assumed, measured as sent, unconverted") } else { name.to_string() };
         let mut label = format!(
-            "{}  ·  Cb/Cr  ·  {space}  ·  Y = {r:.4} R + {g:.4} G + {b:.4} B from primaries  ·  {} % targets",
+            "{}  ·  Cb/Cr  ·  {space}  ·  Y = {r:.4} R + {g:.4} G + {b:.4} B {}  ·  {} % targets",
             self.zoom.name(),
+            m.weights_how(),
             (config.bars * 100.0).round()
         );
         if config.skin_line {
@@ -445,7 +446,7 @@ impl Display for Vectorscope {
     fn configure(&self, context: &DisplayContext) {
         let get = |key: &str| context.settings.get(key).map(String::as_str);
         *self.config.lock().unwrap() = Config {
-            measurement: crate::output_conversion::measurement(context.colour_setup.clone(), LumaWeights::FromPrimaries),
+            measurement: crate::output_conversion::measurement(context.colour_setup.clone(), context.luma),
             bars: if get(TARGETS_SETTING) == Some("100") { 1.0 } else { 0.75 },
             skin_line: get(SKIN_LINE_SETTING) != Some("off"),
             gain: match get(BRIGHTNESS_SETTING) {

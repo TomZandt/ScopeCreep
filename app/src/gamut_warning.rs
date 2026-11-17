@@ -14,7 +14,7 @@ use crate::colour_setup::Provenance;
 use crate::display::{Display, DisplayContext};
 use crate::gpu_frame::GpuFrame;
 use crate::settings::{Choice, SettingDef};
-use crate::waveform::{LumaWeights, Measurement};
+use crate::waveform::Measurement;
 use std::sync::{Arc, Mutex};
 
 /// EBU R103: signals up to -5 % and 105 % are tolerated.
@@ -128,7 +128,7 @@ impl Warning {
             low: percent(LOW_SETTING, 0.10),
             high: percent(HIGH_SETTING, 0.90),
             r103: context.settings.get(R103_SETTING).is_some_and(|v| v == "on"),
-            measurement: crate::output_conversion::measurement(context.colour_setup.clone(), LumaWeights::FromPrimaries),
+            measurement: crate::output_conversion::measurement(context.colour_setup.clone(), context.luma),
         }
     }
 
