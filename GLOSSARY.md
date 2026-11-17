@@ -97,3 +97,11 @@ _Avoid_: EL Zone (a trademark scopecreep does not use), zone system
 **Loupe**:
 A movable square on a Picture View that shows the picture under it magnified, so single pixels (and noise) can be seen.
 _Avoid_: PiP, magnifier, zoom window
+
+**ColorChecker frame**:
+A test picture of a ColorChecker Classic chart (six patches across, four down), built in code in a named Timeline Colour Space and fed through the synthetic Feed writer. Every Patch carries the values it should read, so every display can be checked against it. Never stored as an image file.
+_Avoid_: Test image, chart file, colour-nuke EXR
+
+**Patch**:
+One of the 24 coloured squares of a ColorChecker frame, numbered 1 to 24 left to right and top to bottom. The six greys are 19 to 24; neutral 5 (22) is 19.06 % Y, not 18 %.
+_Avoid_: Swatch, chip, tile
