@@ -229,11 +229,11 @@ fn the_100_percent_vectorscope_shows_the_whole_picture_and_the_200_percent_only_
     let (w, h, pixels, _) = bars(1.0);
     b.play(w, h, &pixels);
     assert_eq!(b.counts(V100).total(), 6 * 360, "at 100 % every full-strength bar is on the plot");
-    assert_eq!(b.counts(V100).on_edge(), 0, "and none is on its edge");
-    // At 200 % a full-strength bar is further out than the plot reaches: those pixels are off the chart, so they
-    // are counted on the plot's edge, not wrapped round and not lost.
-    assert_eq!(b.counts(V200).total(), 6 * 360);
-    assert_eq!(b.counts(V200).on_edge(), 6 * 360, "every full-strength bar is further out than the 200 % plot reaches");
+    assert_eq!(b.counts(V100).clipped_total(), 0, "full-strength bars are not clipping");
+    // At 200 % a full-strength bar is further out than the plot reaches: those pixels are off the plot, not wrapped,
+    // and not clipping either: clipping does not depend on the zoom.
+    assert!(b.counts(V200).total() < 6 * 360);
+    assert_eq!(b.counts(V200).clipped_total(), 0, "and the 200 % Panel does not call them clipping");
 }
 
 #[test]
@@ -381,30 +381,39 @@ fn the_colour_target_boxes_carry_the_colour_they_stand_for() {
 }
 
 #[test]
-fn colours_off_the_chart_are_drawn_as_a_solid_bar_on_the_plots_edge_where_they_leave_it() {
+fn colours_beyond_the_100_percent_bars_mark_the_ring_at_their_hue_at_either_zoom_and_the_zoom_alone_never_does() {
     let mut b = Bench::new("clipping");
     let width = 2000;
-    // Fully clipped red at twice full strength: Cb -0.23, Cr 1.0, far above the 0.55 the plot reaches.
-    let top_bar = |b: &mut Bench, rgb: [f32; 3]| -> Option<(f32, [u8; 3])> {
-        b.play(64, 36, &solid(64, 36, rgb));
-        let (image, panels) = b.render(width, 900, 1.0);
-        let square = PlotSquare::new(panels[b.index(V100)].content, 1.0);
-        let y = square.plot[1] + 1.0;
-        let mut best: Option<(f32, [u8; 3])> = None;
-        let mut x = square.plot[0];
-        while x < square.plot[0] + square.plot[2] {
-            let p = pixel(&image, width, [x, y]);
-            if p.iter().map(|v| *v as u32).sum::<u32>() > 300 && best.is_none_or(|(_, q)| p[0] > q[0]) {
-                best = Some(((x - square.plot[0]) / square.plot[2], p));
+    let ring_pixel = |image: &[u8], square: &PlotSquare, degrees: f64| {
+        let [cx, cy] = square.centre();
+        let (s, c) = degrees.to_radians().sin_cos();
+        let ring = square.ring_radius();
+        // The outermost lit pixel across the ring's thickness there: a clipping mark is thicker than the ring.
+        let mut thick = 0;
+        for k in -8..=8 {
+            let (x, y) = (cx + (ring + k as f32) * c as f32, cy - (ring + k as f32) * s as f32);
+            if pixel(image, width, [x, y]).iter().map(|v| *v as u32).sum::<u32>() > 250 {
+                thick += 1;
             }
-            x += 1.0;
         }
-        best
+        thick
     };
-    let (at, p) = top_bar(&mut b, [2.0, 0.0, 0.0]).expect("the clipped red is drawn on the top edge");
-    assert!((at - 0.386).abs() < 0.03, "where the line from the middle to the colour leaves the plot: {at}");
-    assert!(p[0] > 150 && p[0] > p[1] + 80 && p[0] > p[2] + 80, "it is red, solid: {p:?}");
-    assert!(top_bar(&mut b, [0.75, 0.0, 0.0]).is_none(), "a colour on the chart draws nothing on the edge");
+    // Red at twice full strength is beyond the 100 % bars (Cb -0.23, Cr 1.0: 102.9 degrees).
+    b.play(64, 36, &solid(64, 36, [2.0, 0.0, 0.0]));
+    for (panel, name) in [(V100, "100 %"), (V200, "200 %")] {
+        assert!(b.counts(panel).clipped_total() > 0, "{name}: clipping is counted");
+        let degrees = b.counts(panel).clipped_peak_degrees().expect("a peak");
+        assert!((degrees - 102.9).abs() < 1.0, "{name}: at red's hue: {degrees}");
+        let (image, panels) = b.render(width, 900, 1.0);
+        let square = PlotSquare::new(panels[b.index(panel)].content, 1.0);
+        assert!(ring_pixel(&image, &square, 102.9) >= 5, "{name}: the ring is thick and lit at red's hue: {}", ring_pixel(&image, &square, 102.9));
+        assert!(ring_pixel(&image, &square, 282.9) <= 3, "{name}: and plain on the opposite side: {}", ring_pixel(&image, &square, 282.9));
+    }
+    // Full-strength colours (even the green and magenta bars that reach furthest) are not clipping at either zoom.
+    let (w, h, pixels, _) = bars(1.0);
+    b.play(w, h, &pixels);
+    assert_eq!(b.counts(V100).clipped_total(), 0);
+    assert_eq!(b.counts(V200).clipped_total(), 0);
 }
 
 #[test]

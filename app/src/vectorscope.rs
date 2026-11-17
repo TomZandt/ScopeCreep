@@ -130,6 +130,8 @@ impl PlotSquare {
 pub struct VectorscopeCounts {
     half_extent: f64,
     counts: Vec<u32>,
+    /// Pixels beyond the outer ring (clipping), by hue angle: 720 bins from -180 degrees counter-clockwise.
+    clipped: Vec<u32>,
 }
 
 impl VectorscopeCounts {
@@ -137,12 +139,16 @@ impl VectorscopeCounts {
     pub fn at(&self, x: u32, y: u32) -> u32 {
         self.counts[(y * BINS + x) as usize]
     }
-    /// Pixels in the outermost bins: colours off the chart, counted where they leave it.
-    pub fn on_edge(&self) -> u64 {
-        let last = BINS - 1;
-        (0..BINS).flat_map(|i| [(i, 0), (i, last), (0, i), (last, i)]).map(|(x, y)| self.at(x, y) as u64).sum()
+    /// Pixels beyond the outer ring, the same at either zoom: clipping.
+    pub fn clipped_total(&self) -> u64 {
+        self.clipped.iter().map(|&c| c as u64).sum()
     }
-    /// Every pixel counted (only a colour that is not a number, or impossibly far out, is not).
+    /// The hue angle (degrees, 0 at +Cb, counter-clockwise) of the clipping bin with the most pixels, if any.
+    pub fn clipped_peak_degrees(&self) -> Option<f64> {
+        let (best, at) = self.clipped.iter().enumerate().fold((0, 0), |(b, a), (i, &c)| if c > b { (c, i) } else { (b, a) });
+        (best > 0).then(|| (at as f64 + 0.5) / 720.0 * 360.0 - 180.0)
+    }
+    /// Every pixel counted on the plot.
     pub fn total(&self) -> u64 {
         self.counts.iter().map(|&c| c as u64).sum()
     }
@@ -190,6 +196,8 @@ struct Params {
 @group(0) @binding(2) var<storage, read_write> bins: array<atomic<u32>>;
 
 const BINS: f32 = 1024.0;
+const RING: f32 = 0.5;   // the outer ring, in Cb/Cr
+const CLIP: f32 = 0.6;   // past the furthest a full-strength Rec.709 bar reaches (green and magenta, 0.596)
 
 @compute @workgroup_size(16, 16)
 fn measure(@builtin(global_invocation_id) id: vec3<u32>) {
@@ -202,20 +210,21 @@ fn measure(@builtin(global_invocation_id) id: vec3<u32>) {
     let v = 0.5 - (rgb.r - y) * params.scale.z * params.scale.x * 0.5;
     if (u >= 0.0 && u < 1.0 && v >= 0.0 && v < 1.0) {
         atomicAdd(&bins[u32(v * BINS) * 1024u + u32(u * BINS)], 1u);
-        return;
     }
-    // Off the chart: counted on the plot's edge, where the line from the middle to the colour leaves it, so that
-    // it is never hidden. (Not a number, or too far to place: not counted.)
-    let du = u - 0.5;
-    let dv = v - 0.5;
-    let m = max(abs(du), abs(dv));
-    if (du == du && dv == dv && m > 0.5 && m < 1.0e6) {
-        let k = 0.4995 / m;
-        atomicAdd(&bins[u32((0.5 + dv * k) * BINS) * 1024u + u32((0.5 + du * k) * BINS)], 1u);
+    // Clipping: a colour beyond the furthest a full-strength bar reaches, whatever the zoom, is counted by its hue angle
+    // after the plot's bins. (Not a number, or too far to place: not counted.)
+    let cb = (rgb.b - y) * params.scale.y;
+    let cr = (rgb.r - y) * params.scale.z;
+    let reach = length(vec2<f32>(cb, cr));
+    if (reach == reach && reach > CLIP && reach < 1.0e6) {
+        let turn = (atan2(cr, cb) + 3.14159265) / 6.2831853;
+        atomicAdd(&bins[1048576u + min(u32(turn * 720.0), 719u)], 1u);
     }
 }
 "#;
 
+/// Hue-angle bins for clipping, after the plot's bins.
+const CLIP_BINS: u32 = 720;
 const PARAMS_BYTES: u64 = 48;
 const DRAW_UNIFORM_BYTES: u64 = 192;
 
@@ -333,6 +342,19 @@ fn fs(@builtin(position) position: vec4<f32>) -> @location(0) vec4<f32> {
         let d = q / max(r, 0.001);
         base = tint(d.x * 0.5, -d.y * 0.5) * 0.7;
     }
+    // Clipping: where colours beyond the 100 % bars have this hue, the ring is thicker and brighter, at either zoom.
+    if (abs(r - outer) <= half_line * 5.0) {
+        let turn = (atan2(-q.y, q.x) + 3.14159265) / 6.2831853;
+        let at = i32(min(turn * 720.0, 719.0));
+        var clipped = 0u;
+        for (var j = -2; j <= 2; j++) {
+            clipped += bins[1048576u + u32((at + j + 720) % 720)];
+        }
+        if (clipped > 0u) {
+            let d = q / max(r, 0.001);
+            base = tint(d.x * 0.5, -d.y * 0.5) * 0.95;
+        }
+    }
     // The skin-tone line, from the middle to the outer ring.
     if (placement.opts.x > 0.5) {
         let dir = vec2<f32>(placement.opts.y, -placement.opts.z);
@@ -353,18 +375,7 @@ fn fs(@builtin(position) position: vec4<f32>) -> @location(0) vec4<f32> {
         }
     }
     let rel = p - plot.xy;
-    var shown = brightness(soft_density(rel));
-    // Colours off the chart sit on the plot's edge: drawn as a solid bar along it, as the waveform does.
-    let band = max(3.0, 3.0 * placement.info.w);
-    let to_edge = min(min(rel.x, plot.z - 1.0 - rel.x), min(rel.y, plot.w - 1.0 - rel.y));
-    if (to_edge < band) {
-        let snapped = vec2<f32>(
-            select(select(rel.x, 0.0, rel.x < band), plot.z - 1.0, rel.x > plot.z - 1.0 - band),
-            select(select(rel.y, 0.0, rel.y < band), plot.w - 1.0, rel.y > plot.w - 1.0 - band));
-        if (density(snapped) > 0.0) {
-            shown = 1.0;
-        }
-    }
+    let shown = brightness(soft_density(rel));
     var trace = TRACE;
     if (shown > 0.0) {
         let spot = (p - plot.xy + vec2<f32>(0.5, 0.5)) / plot.z;
@@ -425,7 +436,7 @@ impl Vectorscope {
         });
         let bins = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("vectorscope bins"),
-            size: BINS as u64 * BINS as u64 * 4,
+            size: (BINS as u64 * BINS as u64 + CLIP_BINS as u64) * 4,
             usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_SRC | wgpu::BufferUsages::COPY_DST,
             mapped_at_creation: false,
         });
@@ -460,8 +471,9 @@ impl Vectorscope {
         self.queue.submit([encoder.finish()]);
         readback.map_async(wgpu::MapMode::Read, .., |_| {});
         self.device.poll(wgpu::PollType::wait_indefinitely()).expect("the GPU finishes");
-        let counts = bytemuck::cast_slice(&readback.get_mapped_range(..).expect("mapped")).to_vec();
-        VectorscopeCounts { half_extent: self.zoom.half_extent(), counts }
+        let all: Vec<u32> = bytemuck::cast_slice(&readback.get_mapped_range(..).expect("mapped")).to_vec();
+        let (counts, clipped) = all.split_at((BINS * BINS) as usize);
+        VectorscopeCounts { half_extent: self.zoom.half_extent(), counts: counts.to_vec(), clipped: clipped.to_vec() }
     }
 
     /// The quiet label (ADR 0007): the Measured Space and weights in use, the targets, and the skin-tone
@@ -473,7 +485,7 @@ impl Vectorscope {
         let name = m.space.name();
         let space = if m.assumed { format!("{name} assumed, measured as sent, unconverted") } else { name.to_string() };
         let mut label = format!(
-            "{}  ·  Cb/Cr  ·  {space}  ·  Y = {r:.4} R + {g:.4} G + {b:.4} B {}  ·  {} % targets  ·  colours off the chart sit on the edge",
+            "{}  ·  Cb/Cr  ·  {space}  ·  Y = {r:.4} R + {g:.4} G + {b:.4} B {}  ·  {} % targets  ·  colours beyond the 100 % bars mark the ring",
             self.zoom.name(),
             m.weights_how(),
             (config.bars * 100.0).round()

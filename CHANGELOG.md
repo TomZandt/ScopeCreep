@@ -8,7 +8,7 @@ The format follows [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/
 
 ### Changed
 
-- Colours off the chart on the vectorscopes are shown instead of dropped: they are drawn as a solid bar on the plot's edge, where the line from the middle to the colour leaves it, in the colour's own tint, the way the waveform shows out-of-range pixels. At 200 % that is every colour beyond half the 100 % range.
+- The vectorscopes show clipping: where colours go beyond the furthest a full-strength Rec.709 bar reaches, the outer ring turns thicker and brighter at their hue, in their tint, the way the waveform marks out-of-range pixels. It does not depend on the zoom: the 200 % Panel only magnifies, so a colour that merely falls off its edge is not called clipping.
 - The vectorscopes read like a phosphor scope, as the waveform does: brightness follows how many pixels land in each spot (relative to the picture's size and the Panel's, so the look holds at any size), stray pixels stay faint instead of a grey haze, and a soft spread of about 1 pixel (right-click "Soft spread", on by default) turns speckle into smooth tone.
 - The vectorscopes' outer ring is a hue wheel: each point of it is the colour that lands there, muted so it does not compete with the trace. The inner ring, crosshair and skin-tone line stay neutral grey.
 - The skin-tone line on the vectorscopes and the Skin Tone Panel is at 123°, the angle Resolve 21.2's own vectorscope draws its line at (measured, #60), not the 134.5° first assumed. Skin now sits on it: the ColorChecker's dark skin is 2° and light skin 5° from the line.
