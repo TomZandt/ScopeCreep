@@ -86,6 +86,14 @@ _Avoid_: Monitor, meter, graph
 The single brightness value a Scope plots per pixel: a weighted sum of the encoded red, green and blue values, with weights set by the Measured Space's primaries and white point. A **Match Resolve** mode instead uses the weights Resolve's own waveform uses (Rec.709 weights for Rec.709 and P3 outputs, Rec.2020 weights for Rec.2020 and Rec.2100).
 _Avoid_: Luminance (that is linear light, not this), brightness, Y (on its own)
 
+**Trace density**:
+How many pixels land in one spot of a waveform, measured against what that Panel and frame size lead us to expect (an even spread over all codes). The trace's brightness follows it like a phosphor scope, so the same frame looks the same brightness in a large and a small Panel.
+_Avoid_: Intensity, heat
+
+**Soft spread**:
+A blur of the waveform trace of about 1 device pixel, on by default and switchable off in the Panel's settings. Drawing only: it never changes what is measured.
+_Avoid_: Glow, blur, smoothing
+
 **Picture View**:
 A display that shows the Feed as an image, either untouched (the clean picture) or remapped for inspection (false colour, black and white).
 _Avoid_: Scope (for false colour), filter, LUT view

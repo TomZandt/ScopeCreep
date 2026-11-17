@@ -5,7 +5,7 @@
 use scopecreep::gpu_frame::FrameUploader;
 use scopecreep::monitor::Monitor;
 use scopecreep::colour_setup::{Levels, Provenance};
-use scopecreep::waveform::{LumaWeights, MeasuredSpace, Measurement, PlotLayout, Waveform, WaveformCounts};
+use scopecreep::waveform::{Brightness, Look, LumaWeights, MeasuredSpace, Measurement, PlotLayout, Waveform, WaveformCounts};
 use scopecreep_feed::{FeedWriter, FrameMeta, now_ns};
 use std::path::PathBuf;
 use std::sync::{Mutex, MutexGuard, OnceLock};
@@ -366,4 +366,121 @@ fn the_legal_lines_mark_black_and_white_for_the_levels_in_use() {
     let [at_64, at_940, black, white, between] = graticule_at(&mut b, &[64, 940, 0, 1023, 600])[..] else { unreachable!() };
     assert_eq!((at_64, at_940), (between, between), "full levels: no line at 64 or 940");
     assert!(black > between + 20 && white > between + 20, "full levels: lines at 0 and 1023 ({black}, {white}, plot {between})");
+}
+
+// ------------------------------------------------------------------ the phosphor look (#53)
+
+/// Drawn brightness (the red byte, 0 to 255) of the plot at `code`'s row, in the screen column of picture column
+/// `column`.
+fn drawn_at(image: &[u8], width: u32, layout: &PlotLayout, column: u32, columns: u32, code: u32) -> f32 {
+    let (x, y) = (layout.x_of_column(column, columns) as usize, layout.y_of_code(code).floor() as usize);
+    image[(y * width as usize + x) * 4] as f32
+}
+
+/// The mean of `drawn_at` over the codes in `codes`, across picture columns `from..to`.
+fn mean_drawn(image: &[u8], width: u32, layout: &PlotLayout, columns: u32, codes: std::ops::Range<u32>, from: u32, to: u32) -> f32 {
+    let mut sum = 0.0;
+    let mut n = 0.0;
+    for code in codes {
+        for column in (from..to).step_by(7) {
+            sum += drawn_at(image, width, layout, column, columns, code);
+            n += 1.0;
+        }
+    }
+    sum / n
+}
+
+fn look(brightness: Brightness, spread: bool) -> Look {
+    Look { brightness, spread }
+}
+
+/// A frame whose tones thin out towards white: code = 1023 · (row / height)², so each column holds many pixels
+/// at low codes and few at high codes.
+fn thinning_gradient() -> Vec<f32> {
+    picture(1920, 1080, |_, from_top| {
+        let t = from_top as f32 / 1079.0;
+        grey((1023.0 * t * t).round() as u32)
+    })
+}
+
+const PLOT_W: u32 = 800;
+const PLOT_H: u32 = 500;
+
+#[test]
+fn the_trace_is_brighter_where_more_pixels_land_and_is_not_a_flat_floor() {
+    let mut b = Bench::new("phosphor-density");
+    b.play(1920, 1080, &thinning_gradient());
+    b.waveform.set_look(look(Brightness::Normal, false));
+    let image = draw(&b, PLOT_W, PLOT_H);
+    let layout = PlotLayout::new([0.0, 0.0, PLOT_W as f32, PLOT_H as f32], 1.0);
+    let dense = mean_drawn(&image, PLOT_W, &layout, 1920, 40..80, 1000, 1400);
+    let sparse = mean_drawn(&image, PLOT_W, &layout, 1920, 880..920, 1000, 1400);
+    let floor = (0.035 + 0.08 * (0.86 - 0.035)) * 255.0;
+    assert!(dense > sparse * 1.5, "dense codes {dense}, sparse codes {sparse}");
+    assert!(sparse >= floor - 2.0, "sparse still shows at the floor: {sparse} (floor {floor})");
+    assert!(dense > floor + 20.0, "dense is well above the floor: {dense}");
+}
+
+#[test]
+fn one_stray_pixel_shows_in_the_plot_but_is_clearly_dimmer_than_a_dense_area() {
+    let mut b = Bench::new("phosphor-stray");
+    // Mid grey everywhere, and one pixel at code 800 in column 1000.
+    b.play(1920, 1080, &picture(1920, 1080, |x, from_top| if (x, from_top) == (1000, 300) { grey(800) } else { grey(600) }));
+    b.waveform.set_look(look(Brightness::Normal, false));
+    let image = draw(&b, PLOT_W, PLOT_H);
+    let layout = PlotLayout::new([0.0, 0.0, PLOT_W as f32, PLOT_H as f32], 1.0);
+    let (stray, dense) = (drawn_at(&image, PLOT_W, &layout, 1000, 1920, 800), drawn_at(&image, PLOT_W, &layout, 1000, 1920, 600));
+    let empty = drawn_at(&image, PLOT_W, &layout, 1000, 1920, 700);
+    assert!(stray >= 0.035 * 255.0 + 0.07 * 0.825 * 255.0, "the stray pixel shows (at least about 8 %): {stray}, empty {empty}");
+    assert!(stray < dense * 0.5, "and is clearly dimmer than a dense area: {stray} against {dense}");
+}
+
+#[test]
+fn trace_brightness_changes_the_drawn_brightness() {
+    let mut b = Bench::new("phosphor-gain");
+    b.play(1920, 1080, &thinning_gradient());
+    let layout = PlotLayout::new([0.0, 0.0, PLOT_W as f32, PLOT_H as f32], 1.0);
+    let mut means = Vec::new();
+    for brightness in [Brightness::Dimmer, Brightness::Normal, Brightness::Brighter] {
+        b.waveform.set_look(look(brightness, false));
+        let image = draw(&b, PLOT_W, PLOT_H);
+        means.push(mean_drawn(&image, PLOT_W, &layout, 1920, 40..400, 1000, 1400));
+    }
+    assert!(means[0] < means[1] && means[1] < means[2], "dimmer < normal < brighter: {means:?}");
+}
+
+#[test]
+fn soft_spread_off_draws_a_code_on_its_own_row_and_on_spreads_it_by_about_one_pixel() {
+    let mut b = Bench::new("phosphor-spread");
+    b.play(1920, 1080, &picture(1920, 1080, |_, _| grey(600)));
+    // A plot exactly 1024 pixels tall: one row per code.
+    let (width, height) = (400, 1024 + 22);
+    let layout = PlotLayout::new([0.0, 0.0, width as f32, height as f32], 1.0);
+    let rows = |look: Look| {
+        b.waveform.set_look(look);
+        let image = draw(&b, width, height);
+        [-4i32, -2, -1, 0, 1, 2, 4].map(|d| drawn_at(&image, width, &layout, 1000, 1920, (600 + d) as u32))
+    };
+    let off = rows(look(Brightness::Normal, false));
+    let on = rows(look(Brightness::Normal, true));
+    let base = off[0];
+    assert!(off[3] > 200.0 && off[2] == base && off[4] == base && off[1] == base, "off: only the code's own row is lit {off:?}");
+    assert!(on[2] > base + 10.0 && on[4] > base + 10.0, "on: the next rows are lit {on:?}");
+    assert!(on[1] == base && on[5] == base && on[0] == base && on[6] == base, "on: nothing beyond about 1 pixel {on:?}");
+    assert!(on[3] < off[3] + 1.0 && on[3] > 150.0, "the code's own row stays bright {on:?}");
+}
+
+#[test]
+fn the_same_frame_looks_the_same_brightness_in_a_large_and_a_small_panel() {
+    let mut b = Bench::new("phosphor-size");
+    b.play(1920, 1080, &picture(1920, 1080, |_, from_top| grey((from_top as f32 * 1023.0 / 1079.0).round() as u32)));
+    b.waveform.set_look(look(Brightness::Normal, false));
+    let mean = |width: u32, height: u32| {
+        let image = draw(&b, width, height);
+        let layout = PlotLayout::new([0.0, 0.0, width as f32, height as f32], 1.0);
+        mean_drawn(&image, width, &layout, 1920, 300..700, 800, 1200)
+    };
+    let (small, large) = (mean(400, 300), mean(800, 600));
+    assert!(small > 40.0 && large > 40.0, "the trace is drawn in both: {small}, {large}");
+    assert!((small - large).abs() <= 0.15 * large, "small panel {small}, large panel {large}");
 }

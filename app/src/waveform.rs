@@ -195,6 +195,39 @@ impl Measurement {
     }
 }
 
+/// How bright the trace is drawn: the gain of the phosphor response (#53).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Brightness {
+    Normal,
+    Dimmer,
+    Brighter,
+}
+
+impl Brightness {
+    /// The gain in `1 - exp(-gain * density)`, where density is 1 for a trace spread evenly over every code.
+    fn gain(self) -> f32 {
+        match self {
+            Brightness::Dimmer => 0.12,
+            Brightness::Normal => 0.25,
+            Brightness::Brighter => 0.6,
+        }
+    }
+}
+
+/// How the waveform is drawn. Drawing only: it never changes what is measured or what the label says.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Look {
+    pub brightness: Brightness,
+    /// A soft spread of about 1 device pixel, done in a separate pass into a texture.
+    pub spread: bool,
+}
+
+impl Default for Look {
+    fn default() -> Look {
+        Look { brightness: Brightness::Normal, spread: true }
+    }
+}
+
 const PARAMS_BYTES: u64 = 48;
 
 const MEASURE_SHADER: &str = r#"
@@ -340,7 +373,9 @@ pub fn marks_that_fit(marks: &[(f32, u32)], line: f32) -> Vec<bool> {
     shown
 }
 
-const DRAW_UNIFORM_BYTES: u64 = 96;
+const TRACE_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::R16Float;
+
+const DRAW_UNIFORM_BYTES: u64 = 112;
 
 const DRAW_SHADER: &str = r#"
 struct Placement {
@@ -350,9 +385,11 @@ struct Placement {
     below: vec4<f32>,
     info: vec4<f32>,      // waveform columns, picture height, device pixels per logical pixel
     legal: vec4<f32>,     // the codes of black and white for the Levels in use
+    look: vec4<f32>,      // the gain of the phosphor response, 1 when the soft spread is on
 };
 @group(0) @binding(0) var<uniform> placement: Placement;
 @group(0) @binding(1) var<storage, read> counts: array<u32>;
+@group(0) @binding(2) var trace: texture_2d<f32>;   // the plot's trace brightness (main pass only)
 
 const ROWS: u32 = 1026u;
 // Neutral greys only: nothing on screen may tint the eye.
@@ -395,12 +432,13 @@ fn density(x: f32, first_row: u32, end_row: u32) -> f32 {
     return sum / sampled;
 }
 
-// How bright the trace is for a density: logarithmic, and never invisible while even one pixel is there.
-fn brightness(v: f32, floor_level: f32) -> f32 {
+// Phosphor response: 1 - exp(-gain * density), where density is relative to what the Panel and frame size lead
+// us to expect (see `expected`), and never invisible while even one pixel is there.
+fn phosphor(v: f32, expected: f32, floor_level: f32) -> f32 {
     if (v <= 0.0) {
         return 0.0;
     }
-    return clamp(max(floor_level, log2(1.0 + v) / log2(1.0 + placement.info.y / 8.0)), 0.0, 1.0);
+    return clamp(max(floor_level, 1.0 - exp(-placement.look.x * v / expected)), 0.0, 1.0);
 }
 
 fn y_of_code(code: f32) -> f32 {
@@ -409,6 +447,44 @@ fn y_of_code(code: f32) -> f32 {
 
 fn on_line(y: f32, code: f32) -> bool {
     return floor(y_of_code(code)) == y;
+}
+
+// The plot's trace: the expected density for a screen row is the pixels a column would hold in that many codes
+// if its tones were spread evenly over all 1024 (picture height / 1024 per code).
+fn trace_at(p: vec2<f32>) -> f32 {
+    let bottom = placement.plot.y + placement.plot.w;
+    let first = u32(clamp(floor((bottom - p.y - 1.0) / placement.plot.w * 1024.0), 0.0, 1023.0));
+    let end = u32(clamp(max(ceil((bottom - p.y) / placement.plot.w * 1024.0), f32(first) + 1.0), 1.0, 1024.0));
+    let expected = placement.info.y * f32(end - first) / 1024.0;
+    return phosphor(density(p.x, first + 1u, end + 1u), expected, 0.08);
+}
+
+@vertex
+fn vs_trace(@builtin(vertex_index) index: u32) -> @builtin(position) vec4<f32> {
+    let corner = vec2<f32>(f32(index & 1u), f32((index >> 1u) & 1u));
+    return vec4<f32>(corner.x * 2.0 - 1.0, 1.0 - corner.y * 2.0, 0.0, 1.0);
+}
+
+// Pass 1: the trace's brightness, one value per device pixel of the plot, into a texture.
+@fragment
+fn fs_trace(@builtin(position) position: vec4<f32>) -> @location(0) vec4<f32> {
+    return vec4<f32>(trace_at(floor(position.xy) + floor(placement.plot.xy)), 0.0, 0.0, 1.0);
+}
+
+// Pass 2 reads it back, spread by at most 1 device pixel when the soft spread is on.
+fn soft(q: vec2<f32>) -> f32 {
+    let size = vec2<i32>(textureDimensions(trace));
+    let at = vec2<i32>(q);
+    let centre = textureLoad(trace, clamp(at, vec2<i32>(0), size - vec2<i32>(1)), 0).r;
+    if (placement.look.y < 0.5) {
+        return centre;
+    }
+    var sum = 0.6 * centre;
+    sum += 0.1 * textureLoad(trace, clamp(at + vec2<i32>(1, 0), vec2<i32>(0), size - vec2<i32>(1)), 0).r;
+    sum += 0.1 * textureLoad(trace, clamp(at - vec2<i32>(1, 0), vec2<i32>(0), size - vec2<i32>(1)), 0).r;
+    sum += 0.1 * textureLoad(trace, clamp(at + vec2<i32>(0, 1), vec2<i32>(0), size - vec2<i32>(1)), 0).r;
+    sum += 0.1 * textureLoad(trace, clamp(at - vec2<i32>(0, 1), vec2<i32>(0), size - vec2<i32>(1)), 0).r;
+    return max(sum, centre);   // a faint stray pixel never fades below the floor
 }
 
 @fragment
@@ -426,13 +502,13 @@ fn fs(@builtin(position) position: vec4<f32>) -> @location(0) vec4<f32> {
         let bottom = placement.plot.y + placement.plot.w;
         let first = u32(clamp(floor((bottom - p.y - 1.0) / placement.plot.w * 1024.0), 0.0, 1023.0));
         let end = u32(clamp(max(ceil((bottom - p.y) / placement.plot.w * 1024.0), f32(first) + 1.0), 1.0, 1024.0));
-        return vec4<f32>(mix(base, TRACE, brightness(density(p.x, first + 1u, end + 1u), 0.25)), 1.0);
+        return vec4<f32>(mix(base, TRACE, soft(p - floor(placement.plot.xy))), 1.0);
     }
     if (inside(p, placement.above)) {
-        return vec4<f32>(mix(EDGE, TRACE, brightness(density(p.x, ROWS - 1u, ROWS), 0.8)), 1.0);
+        return vec4<f32>(mix(EDGE, TRACE, phosphor(density(p.x, ROWS - 1u, ROWS), placement.info.y / placement.plot.w, 0.8)), 1.0);
     }
     if (inside(p, placement.below)) {
-        return vec4<f32>(mix(EDGE, TRACE, brightness(density(p.x, 0u, 1u), 0.8)), 1.0);
+        return vec4<f32>(mix(EDGE, TRACE, phosphor(density(p.x, 0u, 1u), placement.info.y / placement.plot.w, 0.8)), 1.0);
     }
     discard;
 }
@@ -445,10 +521,19 @@ struct Counts {
     picture_height: u32,
 }
 
+/// The plot's trace brightness, drawn in its own pass (one value per device pixel of the plot) and read by the
+/// main pass, which spreads it when asked.
+struct Trace {
+    view: wgpu::TextureView,
+    size: [u32; 2],
+}
+
 struct State {
     counts: Option<Counts>,
     bound: Option<(u64, wgpu::BindGroup)>,
     draw_bound: Option<wgpu::BindGroup>,
+    trace: Option<Trace>,
+    trace_bound: Option<wgpu::BindGroup>,
 }
 
 /// The waveform's GPU state. Cheap to clone: the Feed thread measures through one clone while the window thread
@@ -460,8 +545,10 @@ pub struct Waveform {
     measure: wgpu::ComputePipeline,
     params: wgpu::Buffer,
     draw: wgpu::RenderPipeline,
+    trace_pass: wgpu::RenderPipeline,
     placement: wgpu::Buffer,
     measurement: Arc<Mutex<Measurement>>,
+    look: Arc<Mutex<Look>>,
     state: Arc<Mutex<State>>,
 }
 
@@ -495,6 +582,17 @@ impl Waveform {
             multiview_mask: None,
             cache: None,
         });
+        let trace_pass = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+            label: Some("waveform trace"),
+            layout: None,
+            vertex: wgpu::VertexState { module: &shader, entry_point: Some("vs_trace"), buffers: &[], compilation_options: Default::default() },
+            primitive: wgpu::PrimitiveState { topology: wgpu::PrimitiveTopology::TriangleStrip, ..Default::default() },
+            depth_stencil: None,
+            multisample: wgpu::MultisampleState::default(),
+            fragment: Some(wgpu::FragmentState { module: &shader, entry_point: Some("fs_trace"), targets: &[Some(TRACE_FORMAT.into())], compilation_options: Default::default() }),
+            multiview_mask: None,
+            cache: None,
+        });
         let placement = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("waveform placement"),
             size: DRAW_UNIFORM_BYTES,
@@ -507,15 +605,22 @@ impl Waveform {
             measure,
             params,
             draw,
+            trace_pass,
             placement,
             measurement: Arc::new(Mutex::new(Measurement::default())),
-            state: Arc::new(Mutex::new(State { counts: None, bound: None, draw_bound: None })),
+            look: Arc::new(Mutex::new(Look::default())),
+            state: Arc::new(Mutex::new(State { counts: None, bound: None, draw_bound: None, trace: None, trace_bound: None })),
         }
     }
 
     /// What to measure in from the next frame on (from the Colour Setup, or the user's choice of luma weights).
     pub fn set_measurement(&self, measurement: Measurement) {
         *self.measurement.lock().unwrap() = measurement;
+    }
+
+    /// How to draw from the next draw on (brightness and soft spread; never what is measured).
+    pub fn set_look(&self, look: Look) {
+        *self.look.lock().unwrap() = look;
     }
 
     pub fn measurement(&self) -> Measurement {
@@ -552,6 +657,7 @@ impl Waveform {
             });
             state.bound = None;
             state.draw_bound = None;
+            state.trace_bound = None;
         }
         state.counts.as_mut().unwrap().picture_height = frame.height;
         if state.bound.as_ref().is_none_or(|(id, _)| *id != frame.texture_id) {
@@ -583,19 +689,51 @@ impl Waveform {
             return;
         }
         let (columns, picture_height) = (counts.columns, counts.picture_height);
+        let layout = PlotLayout::new(area, scale);
+        // The trace texture covers the plot, one texel per device pixel.
+        let trace_size = [layout.plot[2].ceil().max(1.0) as u32, layout.plot[3].ceil().max(1.0) as u32];
+        if state.trace.as_ref().is_none_or(|t| t.size != trace_size) {
+            let texture = self.device.create_texture(&wgpu::TextureDescriptor {
+                label: Some("waveform trace"),
+                size: wgpu::Extent3d { width: trace_size[0], height: trace_size[1], depth_or_array_layers: 1 },
+                mip_level_count: 1,
+                sample_count: 1,
+                dimension: wgpu::TextureDimension::D2,
+                format: TRACE_FORMAT,
+                usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING,
+                view_formats: &[],
+            });
+            state.trace = Some(Trace { view: texture.create_view(&Default::default()), size: trace_size });
+            state.trace_bound = None;
+            state.draw_bound = None;
+        }
         if state.draw_bound.is_none() {
+            let counts = state.counts.as_ref().unwrap();
             let bind_group = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
                 label: Some("waveform draw"),
                 layout: &self.draw.get_bind_group_layout(0),
                 entries: &[
                     wgpu::BindGroupEntry { binding: 0, resource: self.placement.as_entire_binding() },
                     wgpu::BindGroupEntry { binding: 1, resource: counts.buffer.as_entire_binding() },
+                    wgpu::BindGroupEntry { binding: 2, resource: wgpu::BindingResource::TextureView(&state.trace.as_ref().unwrap().view) },
                 ],
             });
             state.draw_bound = Some(bind_group);
         }
-        let layout = PlotLayout::new(area, scale);
+        if state.trace_bound.is_none() {
+            let counts = state.counts.as_ref().unwrap();
+            let bind_group = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
+                label: Some("waveform trace"),
+                layout: &self.trace_pass.get_bind_group_layout(0),
+                entries: &[
+                    wgpu::BindGroupEntry { binding: 0, resource: self.placement.as_entire_binding() },
+                    wgpu::BindGroupEntry { binding: 1, resource: counts.buffer.as_entire_binding() },
+                ],
+            });
+            state.trace_bound = Some(bind_group);
+        }
         let clip = |px: f32, size: f32| px / size * 2.0 - 1.0;
+        let look = *self.look.lock().unwrap();
         let mut placement = [0f32; (DRAW_UNIFORM_BYTES / 4) as usize];
         placement[..4].copy_from_slice(&[clip(left, surface[0]), -clip(top, surface[1]), clip(left + width, surface[0]), -clip(top + height, surface[1])]);
         placement[4..8].copy_from_slice(&layout.plot);
@@ -604,7 +742,32 @@ impl Waveform {
         placement[16..19].copy_from_slice(&[columns as f32, picture_height as f32, scale]);
         let (black, white) = self.measurement().levels.black_and_white();
         placement[20..22].copy_from_slice(&[black as f32, white as f32]);
+        placement[24..26].copy_from_slice(&[look.brightness.gain(), if look.spread { 1.0 } else { 0.0 }]);
         self.queue.write_buffer(&self.placement, 0, bytemuck::cast_slice(&placement));
+
+        // Pass 1, on its own: the trace's brightness into the texture. It is submitted ahead of the caller's
+        // commands, which read the texture.
+        let mut encoder = self.device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: Some("waveform trace") });
+        {
+            let mut trace_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: Some("waveform trace"),
+                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                    view: &state.trace.as_ref().unwrap().view,
+                    depth_slice: None,
+                    resolve_target: None,
+                    ops: wgpu::Operations { load: wgpu::LoadOp::Clear(wgpu::Color::BLACK), store: wgpu::StoreOp::Store },
+                })],
+                depth_stencil_attachment: None,
+                timestamp_writes: None,
+                occlusion_query_set: None,
+                multiview_mask: None,
+            });
+            trace_pass.set_pipeline(&self.trace_pass);
+            trace_pass.set_bind_group(0, state.trace_bound.as_ref().unwrap(), &[]);
+            trace_pass.draw(0..4, 0..1);
+        }
+        self.queue.submit([encoder.finish()]);
+
         pass.set_pipeline(&self.draw);
         pass.set_bind_group(0, state.draw_bound.as_ref().unwrap(), &[]);
         pass.draw(0..4, 0..1);
@@ -634,14 +797,45 @@ impl Waveform {
 pub const LUMA_SETTING: &str = "luma";
 
 /// The luma waveform's right-click menu: how Luma is weighted (ADR 0004). The label names the weights in use.
-const SETTINGS: [SettingDef; 1] = [SettingDef {
-    key: LUMA_SETTING,
-    label: "Luma weights",
-    choices: &[
-        Choice { value: "primaries", text: "From the Measured Space's primaries" },
-        Choice { value: "match-resolve", text: "Match Resolve's waveform" },
-    ],
-}];
+const SETTINGS: [SettingDef; 3] = [
+    SettingDef {
+        key: LUMA_SETTING,
+        label: "Luma weights",
+        choices: &[
+            Choice { value: "primaries", text: "From the Measured Space's primaries" },
+            Choice { value: "match-resolve", text: "Match Resolve's waveform" },
+        ],
+    },
+    SettingDef {
+        key: BRIGHTNESS_SETTING,
+        label: "Trace brightness",
+        choices: &[
+            Choice { value: "normal", text: "Normal" },
+            Choice { value: "dimmer", text: "Dimmer" },
+            Choice { value: "brighter", text: "Brighter" },
+        ],
+    },
+    SettingDef {
+        key: SPREAD_SETTING,
+        label: "Soft spread",
+        choices: &[Choice { value: "on", text: "On (about 1 pixel)" }, Choice { value: "off", text: "Off" }],
+    },
+];
+
+/// The key of the trace brightness setting.
+pub const BRIGHTNESS_SETTING: &str = "brightness";
+/// The key of the soft spread setting.
+pub const SPREAD_SETTING: &str = "spread";
+
+/// How the waveform is drawn, from its settings (a value that is not a choice falls back to the default).
+pub fn look_from(settings: &crate::settings::Settings) -> Look {
+    let brightness = match settings.get(BRIGHTNESS_SETTING).map(String::as_str) {
+        Some("dimmer") => Brightness::Dimmer,
+        Some("brighter") => Brightness::Brighter,
+        _ => Brightness::Normal,
+    };
+    Look { brightness, spread: settings.get(SPREAD_SETTING).map(String::as_str) != Some("off") }
+}
 
 /// Logical pixels: the size of the numbers on the scale.
 pub const SCALE_SIZE: f32 = 11.0;
@@ -662,6 +856,7 @@ impl crate::display::Display for Waveform {
             Some("match-resolve") => LumaWeights::MatchResolve,
             _ => LumaWeights::FromPrimaries,
         };
+        self.set_look(look_from(&context.settings));
         self.set_measurement(crate::output_conversion::measurement(context.colour_setup.clone(), luma));
     }
 

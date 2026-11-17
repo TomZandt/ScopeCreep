@@ -30,6 +30,7 @@ What we learned by testing, kept in the repo so it isn't lost when an issue thre
 | [51](51-panel-settings-menu.md) | Milestone 2: do Panel settings persist per Panel, and does the luma weights setting change the measurement and the label (headless)? |
 | [65](65-highlight-neutrals.md) | Milestone 2: are all six ColorChecker greys green and no coloured patch green, and does a known channel offset turn green only once the tolerance covers it (headless)? |
 | [57](57-arri-false-colour.md) | Milestone 2: does ARRI False Colour show each ColorChecker patch in the research table's band, change band at each edge, and toggle its legend (headless)? |
+| [53](53-waveform-look.md) | Milestone 2: does the waveform's phosphor look follow density, keep strays faint and edge rows clear, and look the same in any Panel size (headless)? |
 
 ## Adding findings
 

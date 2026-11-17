@@ -268,8 +268,9 @@ fn code_of_solid(b: &mut Bench, rgb: [f32; 3]) -> u32 {
 fn the_waveform_offers_luma_weights_and_the_first_is_from_primaries() {
     let b = Bench::new("luma-menu");
     let defs = b.set.setting_defs(1);
-    assert_eq!(defs.len(), 1);
-    assert_eq!(defs[0].key, "luma");
+    assert_eq!(defs.iter().map(|d| d.key).collect::<Vec<_>>(), ["luma", "brightness", "spread"]);
+    assert_eq!(defs[1].choices[0].value, "normal", "trace brightness starts normal");
+    assert_eq!(defs[2].choices[0].value, "on", "the soft spread starts on");
     assert_eq!(defs[0].choices.iter().map(|c| c.value).collect::<Vec<_>>(), ["primaries", "match-resolve"]);
     assert!(b.set.setting_defs(0).is_empty(), "the clean picture has no settings, so no menu");
 }
@@ -292,6 +293,35 @@ fn the_luma_weights_setting_changes_the_counts_and_the_label_for_a_coloured_fram
     assert!(b.set.labels()[1].contains("0.7152 G"), "the label names the weights in use: {}", b.set.labels()[1]);
     assert!(match_resolve.abs_diff((64.0_f64 + 876.0 * 0.7152).round() as u32) <= 1, "Rec.709 green weight: code {match_resolve}");
     assert_ne!(from_primaries, match_resolve);
+}
+
+#[test]
+fn the_trace_brightness_and_soft_spread_settings_change_the_drawing_but_not_the_label_or_counts() {
+    let mut b = Bench::new("look-settings");
+    let name = b.set.name(1);
+    // A vertical grey ramp: moderate density everywhere, so the trace brightness can show.
+    let ramp: Vec<f32> = (0..1080u32).flat_map(|row| (0..1920).flat_map(move |_| [row as f32 / 1079.0, row as f32 / 1079.0, row as f32 / 1079.0, 1.0])).collect();
+    b.play(1920, 1080, &ramp);
+    let lit = |b: &Bench, settings: &PanelSettings| {
+        b.set.configure(&DisplayContext::default(), settings);
+        let (image, panels) = b.render(1280, 760, 1.0);
+        let c = panels[1].content;
+        let sum: u64 = (0..c[3] as u32).flat_map(|dy| (0..c[2] as u32).map(move |dx| (dx, dy))).map(|(dx, dy)| pixel(&image, 1280, c[0] + dx as f32, c[1] + dy as f32)[0] as u64).sum();
+        sum
+    };
+    let mut settings = PanelSettings::default();
+    let normal = lit(&b, &settings);
+    let label = b.set.labels()[1].clone();
+    settings.set(name, "brightness", "brighter");
+    let brighter = lit(&b, &settings);
+    settings.set(name, "brightness", "dimmer");
+    let dimmer = lit(&b, &settings);
+    assert!(dimmer < normal && normal < brighter, "dimmer {dimmer} < normal {normal} < brighter {brighter}");
+    settings.set(name, "brightness", "normal");
+    settings.set(name, "spread", "off");
+    let unspread = lit(&b, &settings);
+    assert_ne!(unspread, normal, "the soft spread changes the drawing");
+    assert_eq!(b.set.labels()[1], label, "drawing settings do not change what the label claims");
 }
 
 #[test]

@@ -86,6 +86,7 @@ DaVinci Resolve                                 scopecreep app (Rust + wgpu)
   - [0014](docs/adr/0014-gamut-warning-judges-every-channel-in-fractions-of-the-levels-range.md): the gamut/legal warning judges every channel, in fractions of the Levels' range
   - [0015](docs/adr/0015-display-state-is-remembered-beside-the-settings.md): what a display moves by hand (the Loupe) is remembered beside the settings, not as a setting
   - [0016](docs/adr/0016-arri-style-band-edges-and-out-of-gamut-luma.md): ARRI-style bands take Luma as the picture has it, include lower edges, and have open ends
+  - [0017](docs/adr/0017-waveform-brightness-is-relative-density-with-a-phosphor-response.md): the waveform's brightness is density relative to the Panel and frame, with a phosphor response and a separate soft spread pass
 - [docs/findings/](docs/findings/): what testing showed, one file per ticket.
 - [docs/research/](docs/research/): what public sources say, with dates and links.
 
