@@ -82,6 +82,18 @@ _Avoid_: Preferences, options, properties
 A display that measures the Feed's pixel values, such as a waveform, RGB parade or vectorscope.
 _Avoid_: Monitor, meter, graph
 
+**Vectorscope**:
+A Scope that plots each pixel's colour as Cb across and Cr up, so hue is the angle and saturation the distance from the middle. Two Panels show it: at 100 % the whole picture, at 200 % the same data at twice the radius. Cb/Cr use the Measured Space's luma weights.
+_Avoid_: Chroma scope, colour wheel
+
+**Skin-tone line**:
+A line on a vectorscope from the middle at a fixed angle, where skin tones sit. Its angle is held in one shared constant (assumed 134.5° in BT.709 Cb/Cr until measured in Resolve, #60).
+_Avoid_: I-line (that is the composite-video name), flesh line
+
+**Colour targets**:
+The six boxes on a vectorscope where red, yellow, green, cyan, magenta and blue colour bars land, for 75 % or 100 % bars (the user's choice).
+_Avoid_: Graticule (that is all the scale marks), boxes
+
 **Luma**:
 The single brightness value a Scope plots per pixel: a weighted sum of the encoded red, green and blue values, with weights set by the Measured Space's primaries and white point. A **Match Resolve** mode instead uses the weights Resolve's own waveform uses (Rec.709 weights for Rec.709 and P3 outputs, Rec.2020 weights for Rec.2020 and Rec.2100).
 _Avoid_: Luminance (that is linear light, not this), brightness, Y (on its own)

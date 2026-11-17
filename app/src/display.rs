@@ -138,6 +138,8 @@ impl DisplaySet {
         set.register(Arc::new(crate::channel_view::ChannelView::new(device, queue, target, filterable)));
         set.register(Arc::new(crate::arri_false_colour::ArriFalseColour::new(device, queue, target)));
         set.register(Arc::new(crate::black_and_white::BlackAndWhite::new(device, queue, target, filterable)));
+        set.register(Arc::new(crate::vectorscope::Vectorscope::new(device, queue, target, crate::vectorscope::Zoom::X1)));
+        set.register(Arc::new(crate::vectorscope::Vectorscope::new(device, queue, target, crate::vectorscope::Zoom::X2)));
         set
     }
 

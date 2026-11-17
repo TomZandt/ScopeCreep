@@ -21,6 +21,8 @@ The format follows [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/
 
 - ARRI False Colour Panel: the Output picture painted by its Luma in the Rec.709 percentage bands third parties publish as ARRI's (purple, blue, green, pink, yellow, red; everything else in grey). Its label says the bands are not ARRI's specification and that scopecreep is not affiliated with ARRI; the right-click menu turns the legend on or off (#57, ADR 0016).
 
+- Two vectorscope Panels of the Output picture, at 100 % and 200 % (the same data at twice the radius). Cb/Cr use the Measured Space's luma weights, so they agree with the waveform; the trace has the waveform's phosphor-style response. Right-click for trace brightness, 75 % or 100 % colour-bar targets and the skin-tone line on or off. The skin-tone line is drawn at an assumed 134.5°, which is not yet checked against Resolve's own vectorscope; the label says so (#61, ADR 0018).
+
 ### Changed
 
 - The waveform no longer takes the picture's shape and width: it fills its own Panel, so a picture column no longer sits exactly level with its trace column (#50, ADR 0012).
