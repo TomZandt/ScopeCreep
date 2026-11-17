@@ -15,5 +15,6 @@ pub mod display;
 pub mod settings;
 pub mod flat_rects;
 pub mod picture_view;
+pub mod highlight_neutrals;
 pub mod waveform;
 pub mod gamut_warning;

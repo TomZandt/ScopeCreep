@@ -13,6 +13,7 @@ The format follows [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/
 - Right-click a Panel for its settings, remembered per Panel between sessions (`~/.config/scopecreep/panel-settings`). A Panel with no settings shows no menu. The luma waveform offers its luma weights, from the Measured Space's primaries (default) or matching Resolve's own waveform, and its label names the weights in use (#51, ADR 0013).
 
 - A gamut/legal warning Panel: the Output picture's Luma in black and white, fading to red from 90 % up to legal white (solid above it) and to blue from 10 % down to legal black (solid below it), with every channel checked so out-of-gamut colours show too. Right-click for the two thresholds and EBU R103 tolerance (-5 % to 105 %); the label names the Levels and any tolerance in use (#56).
+- Highlight Neutrals Panel: the Output picture in grey, with pixels whose red, green and blue are nearly equal shown in green, for checking that whites and greys are balanced. Right-click for the tolerance (3 % by default, from 0.5 % to 10 %); the label says which (#65).
 
 ### Changed
 

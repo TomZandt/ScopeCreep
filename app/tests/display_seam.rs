@@ -168,7 +168,7 @@ fn middle(rect: [f32; 4]) -> (f32, f32) {
 #[test]
 fn the_window_has_the_clean_picture_the_luma_waveform_and_the_gamut_warning_in_that_order() {
     let b = Bench::new("order");
-    assert_eq!(b.set.names(), ["Clean picture", "Luma waveform", "Gamut/legal warning"]);
+    assert_eq!(b.set.names()[..3], ["Clean picture", "Luma waveform", "Gamut/legal warning"]);
 }
 
 #[test]
@@ -191,16 +191,17 @@ fn every_display_gets_the_same_viewer_frame_from_one_upload() {
 #[test]
 fn a_new_display_is_one_module_registered_and_gets_everything_a_display_gets() {
     let mut b = Bench::new("register");
+    let before = b.set.len();
     let recorder = Arc::new(Recorder { frames: Default::default(), context: Default::default() });
     b.set.register(recorder.clone());
-    assert_eq!(b.set.len(), 4);
-    assert_eq!(b.set.names()[3], "Recorder");
-    assert_eq!(b.set.labels()[3], "Recorder label");
+    assert_eq!(b.set.len(), before + 1);
+    assert_eq!(b.set.names()[before], "Recorder");
+    assert_eq!(b.set.labels()[before], "Recorder label");
     let context = DisplayContext { colour_label: "Colour Setup unknown".into(), ..DisplayContext::default() };
     b.set.configure(&context, &PanelSettings::default());
     assert_eq!(recorder.context.lock().unwrap().as_ref().unwrap().colour_label, "Colour Setup unknown");
-    assert_eq!(b.set.read_back(3).is_none(), true, "a Picture View has nothing to read back");
-    assert_eq!(b.set.scale_texts(3, [0.0, 0.0, 200.0, 200.0], 1.0), Vec::<ScaleText>::new());
+    assert_eq!(b.set.read_back(before).is_none(), true, "a Picture View has nothing to read back");
+    assert_eq!(b.set.scale_texts(before, [0.0, 0.0, 200.0, 200.0], 1.0), Vec::<ScaleText>::new());
 }
 
 #[test]

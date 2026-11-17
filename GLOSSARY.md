@@ -90,6 +90,10 @@ _Avoid_: Luminance (that is linear light, not this), brightness, Y (on its own)
 A display that shows the Feed as an image, either untouched (the clean picture) or remapped for inspection (false colour, black and white).
 _Avoid_: Scope (for false colour), filter, LUT view
 
+**Highlight Neutrals**:
+A Picture View that shows the Output picture in Luma grey and pixels whose red, green and blue are nearly equal (within a tolerance, a share of the full signal range, 3 % by default) in green, for checking that whites and greys are balanced.
+_Avoid_: White balance check, neutral finder
+
 **Colour Waveform**:
 A waveform whose trace is tinted by the colour of the pixels plotted at each point, so a green scene gives a green trace. A Scope in its own Panel, beside the plain Luma waveform.
 _Avoid_: Colourised waveform, RGB waveform, parade (that shows channels side by side)
