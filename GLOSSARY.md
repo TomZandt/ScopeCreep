@@ -117,3 +117,11 @@ _Avoid_: Test image, chart file, colour-nuke EXR
 **Patch**:
 One of the 24 coloured squares of a ColorChecker frame, numbered 1 to 24 left to right and top to bottom. The six greys are 19 to 24; neutral 5 (22) is 19.06 % Y, not 18 %.
 _Avoid_: Swatch, chip, tile
+
+**Gamut/legal warning**:
+A Picture View showing the Output picture's Luma in black and white, with problem pixels coloured: red from the upper threshold up to legal white (solid above it), blue from the lower threshold down to legal black (solid below it). Every channel is checked as well as Luma, so a colour outside the Output Colour Space's gamut is caught. Percentages are of the Levels' range.
+_Avoid_: Zebras, clipping indicator, safe colour
+
+**EBU R103 tolerance**:
+An option on the gamut/legal warning that widens the limits from 0 % and 100 % to -5 % and 105 %, the excursion the EBU's R103 recommendation allows.
+_Avoid_: Broadcast safe

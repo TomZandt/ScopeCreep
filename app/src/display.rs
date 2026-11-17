@@ -89,6 +89,7 @@ impl DisplaySet {
         let mut set = DisplaySet::default();
         set.register(Arc::new(crate::picture_view::PictureView::new(device, queue, target, filterable)));
         set.register(Arc::new(Waveform::new(device, queue, target)));
+        set.register(Arc::new(crate::gamut_warning::GamutWarning::new(device, queue, target)));
         set
     }
 
