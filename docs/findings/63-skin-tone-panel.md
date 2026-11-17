@@ -10,6 +10,6 @@ What the Skin Tone Panel ticket (#63) verified, headlessly (no Resolve involved:
 ## Notes
 
 - Mid-fade colours are blends: between yellow and magenta the pixel passes through salmon. See ADR 0021.
-- The angle is assumed (ADR 0018, #60).
+- The line was first assumed at 134.5° (ADR 0018); Resolve draws it at 123° ([60](60-skin-tone-line.md)), which moved dark skin to −2.3° and light skin to −5.2° from the line. The figures above are from the first run.
 
 Not verified (a person at the app and Resolve): the look on real footage and skin, the colour directions as a colorist expects, UHD 50 performance: https://github.com/TomZandt/scopecreep/issues/80

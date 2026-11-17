@@ -276,7 +276,7 @@ fn black_frame_and_render(b: &mut Bench) -> (Vec<u8>, PlotSquare, PanelLayout) {
 
 #[test]
 fn the_skin_tone_line_is_drawn_at_the_recorded_angle_and_can_be_turned_off() {
-    assert_eq!(SKIN_TONE_LINE_DEGREES, 134.5, "the assumed angle (#60), held in one shared constant");
+    assert_eq!(SKIN_TONE_LINE_DEGREES, 123.0, "the angle measured in Resolve 21.2 (#60), held in one shared constant");
     let mut b = Bench::new("skin");
     let (on, square, _) = black_frame_and_render(&mut b);
     let width = 2000;
@@ -405,7 +405,7 @@ fn the_label_names_the_measured_space_the_weights_the_targets_and_the_assumed_an
     assert!(assumed.contains("Rec.709 assumed, measured as sent, unconverted"), "{assumed}");
     assert!(assumed.contains("Y = 0.2126 R + 0.7152 G + 0.0722 B"), "{assumed}");
     assert!(assumed.contains("75 % targets"), "{assumed}");
-    assert!(assumed.contains("134.5° (assumed)"), "{assumed}");
+    assert!(assumed.contains("123° (as Resolve 21.2 draws it)"), "{assumed}");
     assert!(!assumed.contains("Resolve"), "the angle is not claimed to match Resolve: {assumed}");
     assert!(b.label(V200).starts_with("Vectorscope 200 %"));
 

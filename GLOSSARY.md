@@ -91,7 +91,7 @@ A Picture View that colours each pixel of the Output picture by its distance fro
 _Avoid_: Chroma map, saturation false colour
 
 **Skin-tone line**:
-A line on a vectorscope from the middle at a fixed angle, where skin tones sit. Its angle is held in one shared constant (assumed 134.5° in BT.709 Cb/Cr until measured in Resolve, #60).
+A line on a vectorscope from the middle at a fixed angle, where skin tones sit. Its angle is held in one shared constant (123° in BT.709 Cb/Cr, the angle Resolve 21.2's own vectorscope draws its line at, #60).
 _Avoid_: I-line (that is the composite-video name), flesh line
 
 **Skin Tone Panel**:

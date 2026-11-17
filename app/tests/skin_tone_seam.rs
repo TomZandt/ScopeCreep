@@ -225,13 +225,12 @@ fn the_dark_and_light_skin_patches_are_coloured_by_their_hue_against_the_line_an
                 let shown = pixel(&image, width, x, y);
                 let what = format!("patch {} {} ({offset:+.1} deg from the line) shows {shown:?}", patch.number, patch.name);
                 match patch.number {
-                    // Dark skin and light skin sit 14 to 17 degrees below the assumed line: part way from yellow to
-                    // magenta (salmon), so coloured, no longer yellow and leaning to the magenta side.
-                    1 | 2 => assert!(offset < -10.0 && !is_grey(shown) && !is_yellow(shown) && magenta_excess(shown) > -10, "{what}"),
-                    // Orange is within 3 degrees of the line.
-                    7 => assert!(is_yellow(shown), "{what}"),
-                    // Orange yellow is 15 degrees above it: green side.
-                    12 => assert!(green_excess(shown) > 10, "{what}"),
+                    // Dark skin sits 2 degrees below the line Resolve draws: yellow. Light skin is 5 degrees below it,
+                    // at the edge of the band: still coloured (yellow just starting to fade).
+                    1 => assert!(is_yellow(shown), "{what}"),
+                    2 => assert!(!is_grey(shown), "{what}"),
+                    // Orange is 9 degrees above the line: coloured, leaning to the green side.
+                    7 => assert!(!is_grey(shown) && green_excess(shown) > 0, "{what}"),
                     // The neutral patches have no hue to speak of.
                     19..=24 => assert!(is_grey(shown), "{what}"),
                     // Blue sky, foliage, blue flower, green, cyan and the others 30 degrees or more away stay grey.
@@ -297,8 +296,7 @@ fn the_tolerance_is_a_list_of_choices_with_five_degrees_first_and_the_label_name
     let label = b.display.label();
     assert!(label.starts_with("Skin tone"), "{label}");
     assert!(label.contains("±5°") && label.contains("±20°") && label.contains("±30°"), "{label}");
-    assert!(label.contains("134.5° (assumed)"), "{label}");
-    assert!(!label.contains("Resolve"), "the angle is not claimed to match Resolve: {label}");
+    assert!(label.contains("123° (as Resolve 21.2 draws it)"), "{label}");
     assert!(label.contains("Output picture") && label.contains("DaVinci WG/Intermediate") && label.contains("Output Conversion"), "{label}");
     b.configure(Some("10"));
     let label = b.display.label();

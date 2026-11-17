@@ -17,3 +17,7 @@ Spec #49 asks for a skin-tone line "at the same angle as Resolve's vectorscope".
 
 - #60 stays open until a person measures Resolve's line; if it differs, only the constant (and its label wording) changes.
 - The 100 % and 200 % vectorscopes draw their rings and the skin-tone line in the same place on screen; the 200 % Panel's data is simply twice as far out.
+
+## Update 2026-11-17
+
+#60 was measured ([findings](../findings/60-skin-tone-line.md)): Resolve 21.2's vectorscope draws its line at 123.3° (± 0.5°) on screen, not 134.5°. The constant is now 123.0 and the label says "as Resolve 21.2 draws it". The decision to keep the angle in one shared constant stands; only its value and label wording changed.

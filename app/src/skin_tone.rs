@@ -3,8 +3,6 @@
 
 /// The angle of the skin-tone line in BT.709 Cb/Cr: `atan2(Cr, Cb)` in degrees, 0 at +Cb, counter-clockwise.
 ///
-/// ASSUMED, not measured: it is the traditional I-line (123° in the composite U/V plane) rescaled to BT.709
-/// Cb/Cr (docs/research/colorchecker-reference-values.md). What angle Resolve's own vectorscope draws has not
-/// been measured yet; until a person checks it at Resolve, labels and docs must not say this matches Resolve.
-// TODO(#60): replace with the angle measured in Resolve, and update the label wording if it now matches.
-pub const SKIN_TONE_LINE_DEGREES: f64 = 134.5;
+/// Measured from Resolve 21.2's own vectorscope with "Show Skin Tone Indicator" on: the line is drawn at 123.3°
+/// (± 0.5°) on screen, the traditional I-line angle, so this is 123° (docs/findings/60-skin-tone-line.md, ADR 0018).
+pub const SKIN_TONE_LINE_DEGREES: f64 = 123.0;

@@ -407,8 +407,8 @@ impl Vectorscope {
         VectorscopeCounts { half_extent: self.zoom.half_extent(), counts }
     }
 
-    /// The quiet label (ADR 0007): the Measured Space and weights in use, the targets, and the assumed skin-tone
-    /// angle. It never says the angle matches Resolve's: that has not been measured (#60).
+    /// The quiet label (ADR 0007): the Measured Space and weights in use, the targets, and the skin-tone
+    /// angle, which was measured in Resolve 21.2 (#60).
     fn make_label(&self) -> String {
         let config = self.config();
         let m = config.measurement;
@@ -422,7 +422,7 @@ impl Vectorscope {
             (config.bars * 100.0).round()
         );
         if config.skin_line {
-            label += &format!("  ·  skin-tone line {SKIN_TONE_LINE_DEGREES}° (assumed)");
+            label += &format!("  ·  skin-tone line {SKIN_TONE_LINE_DEGREES}° (as Resolve 21.2 draws it)");
         }
         label
     }

@@ -3,7 +3,7 @@
 //! neutral pixels and for hues far from skin. Only hue matters, not brightness, so it works for every skin tone.
 //!
 //! Hue is the angle of the pixel's Cb/Cr (the vectorscope's, with the same luma weights), measured from the
-//! shared [`SKIN_TONE_LINE_DEGREES`], which is assumed and not yet checked against Resolve (#60, ADR 0018). The
+//! shared [`SKIN_TONE_LINE_DEGREES`], which is the angle Resolve 21.2's own vectorscope draws its line at (#60, ADR 0018). The
 //! tolerance `t` is a list of choices (ADR 0013, ADR 0021): yellow within `t` of the line, the colour fading in
 //! (yellow to green or magenta) out to 4 t, then fading back to grey, which it is beyond 6 t. At the default 5
 //! degrees that is the spec's 5, 20 and 30. Towards a larger Cb/Cr angle (towards yellow) is green, the other way
@@ -200,7 +200,7 @@ impl Display for SkinTone {
     }
 
     /// States only what is proven (ADR 0007): the bands in degrees from the line, and that the line's angle is
-    /// assumed. It never says the angle matches Resolve's (#60).
+    /// measured in Resolve 21.2 (#60).
     fn label(&self) -> String {
         if self.picture.lock().unwrap().is_none() {
             return "Skin tone".to_string();
@@ -208,7 +208,7 @@ impl Display for SkinTone {
         let config = self.config.lock().unwrap();
         let t: f32 = config.tolerance;
         format!(
-            "Skin tone  ·  yellow within ±{}° of the skin-tone line {SKIN_TONE_LINE_DEGREES}° (assumed), green or magenta out to ±{}°, grey beyond ±{}° and where saturation is low  ·  {}",
+            "Skin tone  ·  yellow within ±{}° of the skin-tone line {SKIN_TONE_LINE_DEGREES}° (as Resolve 21.2 draws it), green or magenta out to ±{}°, grey beyond ±{}° and where saturation is low  ·  {}",
             config.degrees,
             t * 4.0,
             t * 6.0,

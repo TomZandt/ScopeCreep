@@ -17,7 +17,7 @@ Pre-alpha. Nothing to install yet.
 |---|---|---|
 | 0 | Colour and performance checks against Resolve (throwaway prototypes) | Done ([report](docs/stage0-report.md)) |
 | 1 | Feed plus clean picture plus luma waveform (Linux, NVIDIA) | Released in v0.1.0 |
-| 2 | Every display in its own Panel: 14 Panels (waveforms, vectorscopes, CIE plot, false colour, skin tone and more) | Released in v0.2.0; [open checks in Resolve](https://github.com/TomZandt/scopecreep/issues?q=is%3Aissue+is%3Aopen+label%3Aready-for-human) remain (skin-tone angle #60, chart clip #66) |
+| 2 | Every display in its own Panel: 14 Panels (waveforms, vectorscopes, CIE plot, false colour, skin tone and more) | Released in v0.2.0; [open checks in Resolve](https://github.com/TomZandt/scopecreep/issues?q=is%3Aissue+is%3Aopen+label%3Aready-for-human) remain (chart clip #66) |
 | Later | Parade, histogram, HDR, Setup Checklist, Capture, Windows/macOS, installers, licensing | Decided, parked |
 
 ## Development (Linux, NVIDIA)
@@ -88,7 +88,7 @@ DaVinci Resolve                                 scopecreep app (Rust + wgpu)
   - [0015](docs/adr/0015-display-state-is-remembered-beside-the-settings.md): what a display moves by hand (the Loupe) is remembered beside the settings, not as a setting
   - [0016](docs/adr/0016-arri-style-band-edges-and-out-of-gamut-luma.md): ARRI-style bands take Luma as the picture has it, include lower edges, and have open ends
   - [0017](docs/adr/0017-waveform-brightness-is-relative-density-with-a-phosphor-response.md): the waveform's brightness is density relative to the Panel and frame, with a phosphor response and a separate soft spread pass
-  - [0018](docs/adr/0018-vectorscope-skin-tone-angle-is-assumed-and-shared.md): the vectorscope skin-tone line's angle is assumed, held in one shared constant, and never labelled as matching Resolve
+  - [0018](docs/adr/0018-vectorscope-skin-tone-angle-is-assumed-and-shared.md): the vectorscope skin-tone line's angle sits in one shared constant (first assumed at 134.5°, now measured from Resolve at 123°)
   - [0019](docs/adr/0019-stops-false-colour-decodes-the-timeline-frame-as-it-draws.md): Stops False Colour takes the Timeline Colour Space frame and decodes it as it draws
   - [0020](docs/adr/0020-cie-plot-reads-the-output-encoding-as-light.md): the CIE plot reads the Output encoding as light, decoded by the Output Colour Space's name
   - [0021](docs/adr/0021-skin-tone-tolerance-is-choices-scaled-from-one-width.md): the Skin Tone Panel's tolerance is a list of choices that scale one width, and its tints fade through each other
