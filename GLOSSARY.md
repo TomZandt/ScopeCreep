@@ -66,6 +66,14 @@ _Avoid_: App (for the screen area), screen, workspace
 One area of the Window that shows one Scope or Picture View. Every display has its own Panel, so everything can be seen at once; the Panels sit in an ordered grid whose borders the user can drag.
 _Avoid_: Pane, view, tile, window (for one display)
 
+**Display**:
+The shape every Scope and Picture View shares in the code: created for the target format, measures or takes the Viewer Frame already on the GPU, draws into its Panel, takes its settings and the Colour Setup, reports its label, and (Scopes) can be read back for tests. A new Scope or Picture View is one module with this shape, registered once.
+_Avoid_: Widget, plugin, module (for a display)
+
+**Panel grid**:
+The ordered grid the Panels sit in. Its shape depends only on how many displays there are (rows as equal as possible, every row filling the width), so border positions the user dragged stay valid at any window size.
+_Avoid_: Layout (on its own), dock
+
 **Scope**:
 A display that measures the Feed's pixel values, such as a waveform, RGB parade or vectorscope.
 _Avoid_: Monitor, meter, graph

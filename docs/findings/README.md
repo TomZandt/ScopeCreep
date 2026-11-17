@@ -25,6 +25,7 @@ What we learned by testing, kept in the repo so it isn't lost when an issue thre
 | [20](20-performance-benchmark.md) | Does the Sender, or the Sender plus the app, slow Resolve down at UHD 50 fps? |
 | [52](52-colorchecker-test-frames.md) | Do the ColorChecker test frames match the research table, and do their grey patches reach the waveform where the Output Conversion says? |
 | [46](46-sender-colour-setup-controls.md) | Can the Sender node grey out its manual Colour Setup controls, and can it show the project's values in them? |
+| [50](50-panel-grid.md) | Milestone 2: does the Panel grid fill, drag, remember and draw correctly (headless)? |
 
 ## Adding findings
 

@@ -6,6 +6,14 @@ The format follows [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/
 
 ## [Unreleased]
 
+### Added
+
+- The Window is a grid of Panels: the clean picture and the luma waveform each have their own Panel with its label under it, in an ordered grid sized to the number of displays that fills the Window. Drag the borders between Panels to resize them; the positions are remembered between sessions (`~/.config/scopecreep/panel-grid`). Every Panel shows the same Viewer Frame, uploaded to the GPU once. Labels and scale numbers keep their size at small Panel sizes and draw at the screen's scale on HiDPI screens (#50).
+
+### Changed
+
+- The waveform no longer takes the picture's shape and width: it fills its own Panel, so a picture column no longer sits exactly level with its trace column (#50, ADR 0012).
+
 ## [0.1.0] - 2026-11-16
 
 Milestone 1: the Feed from Resolve to the app, the Output Conversion, and the luma waveform.

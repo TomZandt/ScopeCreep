@@ -4,7 +4,9 @@
 //! `output_conversion` makes from it, drawn scaled to fit. Nothing else is done to it: the Output Colour Space
 //! values go to the screen as they are (clamped to 0..1 by the display surface, which is not sRGB-encoded for
 //! that reason).
-use scopecreep::gpu_frame::GpuFrame;
+use crate::display::{Display, DisplayContext};
+use crate::gpu_frame::GpuFrame;
+use crate::output_conversion::Plan;
 use std::sync::{Arc, Mutex};
 
 const SHADER: &str = r#"
@@ -56,6 +58,8 @@ pub struct PictureView {
     sampler: wgpu::Sampler,
     placement: wgpu::Buffer,
     picture: Arc<Mutex<Option<Picture>>>,
+    /// The Colour Setup and conversion part of the label, from the last [`DisplayContext`].
+    label_tail: Arc<Mutex<String>>,
 }
 
 impl PictureView {
@@ -118,7 +122,9 @@ impl PictureView {
             usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
             mapped_at_creation: false,
         });
-        PictureView { device: device.clone(), queue: queue.clone(), pipeline, layout, sampler, placement, picture: Arc::new(Mutex::new(None)) }
+        let view = PictureView { device: device.clone(), queue: queue.clone(), pipeline, layout, sampler, placement, picture: Arc::new(Mutex::new(None)), label_tail: Arc::new(Mutex::new(String::new())) };
+        view.configure(&DisplayContext::default());
+        view
     }
 
     /// Show the Feed frame [`FrameUploader`](scopecreep::gpu_frame::FrameUploader) put on the GPU. Called on
@@ -147,10 +153,32 @@ impl PictureView {
     pub fn frame_size(&self) -> Option<[u32; 2]> {
         self.picture.lock().unwrap().as_ref().map(|p| [p.width, p.height])
     }
+}
 
-    /// Draw the picture, scaled to fit inside `area` (left, top, width, height in pixels of a `surface`-sized
-    /// target) with its shape kept. Draws nothing until a frame has arrived.
-    pub fn draw(&self, pass: &mut wgpu::RenderPass<'_>, area: [f32; 4], surface: [f32; 2]) {
+impl Display for PictureView {
+    fn name(&self) -> &'static str {
+        "Clean picture"
+    }
+
+    fn on_frame(&self, _encoder: &mut wgpu::CommandEncoder, frame: &GpuFrame) {
+        self.show(frame);
+    }
+
+    fn configure(&self, context: &DisplayContext) {
+        // What was done to the picture, and how far it can be trusted (ticket #17): never more than is proven.
+        let conversion = Plan::for_setup(context.colour_setup.as_ref().map(|c| &c.setup));
+        *self.label_tail.lock().unwrap() = format!("{}  ·  {}", context.colour_label, conversion.label());
+    }
+
+    fn label(&self) -> String {
+        match self.frame_size() {
+            Some([w, h]) => format!("Clean picture  ·  {w} × {h}  ·  {}", self.label_tail.lock().unwrap()),
+            None => "Clean picture".to_string(),
+        }
+    }
+
+    /// Draw the picture, scaled to fit inside `area` with its shape kept.
+    fn draw(&self, pass: &mut wgpu::RenderPass<'_>, area: [f32; 4], surface: [f32; 2], _scale: f32) {
         let guard = self.picture.lock().unwrap();
         let Some(picture) = guard.as_ref() else { return };
         let [left, top, width, height] = area;

@@ -292,7 +292,7 @@ const EDGE_GAP: f32 = 6.0;
 impl PlotLayout {
     /// The layout inside `area` (left, top, width, height) at `scale` device pixels per logical pixel. The gutter
     /// keeps its full width (the scale's numbers stay readable however small the panel), so the plot is exactly
-    /// the waveform panel [`crate::layout::WindowLayout`] sets beside it.
+    /// the waveform's Panel display area.
     pub fn new([left, top, width, height]: [f32; 4], scale: f32) -> PlotLayout {
         let gutter = (crate::layout::GUTTER * scale).round().min((width - 1.0).max(0.0));
         let (row, gap) = ((EDGE_ROW * scale).round(), (EDGE_GAP * scale).round());
@@ -627,5 +627,63 @@ impl Waveform {
         self.device.poll(wgpu::PollType::wait_indefinitely()).expect("the GPU finishes");
         let data = bytemuck::cast_slice(&readback.get_mapped_range(..).expect("mapped")).to_vec();
         WaveformCounts { columns: counts.columns, counts: data }
+    }
+}
+
+/// Logical pixels: the size of the numbers on the scale.
+pub const SCALE_SIZE: f32 = 11.0;
+
+impl crate::display::Display for Waveform {
+    fn name(&self) -> &'static str {
+        "Luma waveform"
+    }
+
+    fn on_frame(&self, encoder: &mut wgpu::CommandEncoder, frame: &GpuFrame) {
+        self.measure(encoder, frame);
+    }
+
+    fn configure(&self, context: &crate::display::DisplayContext) {
+        // The waveform measures in the Colour Setup's Output Colour Space (the default Measured Space).
+        self.set_measurement(crate::output_conversion::measurement(context.colour_setup.clone(), context.luma));
+    }
+
+    fn label(&self) -> String {
+        Waveform::label(self)
+    }
+
+    fn draw(&self, pass: &mut wgpu::RenderPass<'_>, area: [f32; 4], surface: [f32; 2], scale: f32) {
+        Waveform::draw(self, pass, area, surface, scale);
+    }
+
+    /// The codes the Levels name, and the edge rows, left out where they would overlap: black and white stay
+    /// longest, then the edge rows, then the middle.
+    fn scale_texts(&self, area: [f32; 4], scale: f32) -> Vec<crate::display::ScaleText> {
+        if self.state.lock().unwrap().counts.is_none() {
+            return Vec::new();
+        }
+        let plot = PlotLayout::new(area, scale);
+        let codes = self.measurement().levels.scale_marks();
+        let middle = |r: [f32; 4]| r[1] + r[3] / 2.0;
+        // (text, height on screen, rank: lower matters more)
+        let marks = [
+            ("> 1023".to_string(), middle(plot.above()), 1),
+            (codes[0].to_string(), plot.y_of_code(codes[0]), 0),
+            (codes[1].to_string(), plot.y_of_code(codes[1]), 2),
+            (codes[2].to_string(), plot.y_of_code(codes[2]), 0),
+            ("< 0".to_string(), middle(plot.below()), 1),
+        ];
+        let placed: Vec<(f32, u32)> = marks.iter().map(|(_, y, rank)| (*y, *rank)).collect();
+        let shown = marks_that_fit(&placed, SCALE_SIZE * scale * 1.3);
+        let width = ((crate::layout::GUTTER - 6.0) * scale).max(1.0);
+        marks
+            .into_iter()
+            .zip(shown)
+            .filter(|(_, shown)| *shown)
+            .map(|((text, top, _), _)| crate::display::ScaleText { text, left: area[0], top, width, right_aligned: true })
+            .collect()
+    }
+
+    fn read_back(&self) -> Option<Box<dyn std::any::Any>> {
+        Some(Box::new(self.counts()))
     }
 }
