@@ -168,3 +168,11 @@ _Avoid_: Zebras, clipping indicator, safe colour
 **EBU R103 tolerance**:
 An option on the gamut/legal warning that widens the limits from 0 % and 100 % to -5 % and 105 %, the excursion the EBU's R103 recommendation allows.
 _Avoid_: Broadcast safe
+
+**CIE plot**:
+A Panel placing each pixel's chromaticity on the CIE 1931 xy diagram, with the spectral locus and the gamut triangles of the Output and Timeline Colour Spaces.
+_Avoid_: Gamut scope, horseshoe, chromaticity scope
+
+**Gamut triangle**:
+The triangle of a colour space's red, green and blue primaries on the CIE plot. A pixel outside the Output Colour Space's triangle is outside what the deliverable can show.
+_Avoid_: Gamut box, colour space outline

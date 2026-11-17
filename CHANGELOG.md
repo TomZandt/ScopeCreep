@@ -23,6 +23,7 @@ The format follows [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/
 - Stops False Colour Panel: each pixel painted by how many stops it is above or below middle grey, measured in scene light decoded from the Timeline Colour Space with that space's own curve (ACEScct, ACEScc, ACEScg, DaVinci Intermediate; Rec.709 Gamma 2.4 works too, with its label saying the stops are approximated). Right-click it for its mode, full zones (whole stops out to six either side of grey, half-stop zones beside grey) or grey and +1 stop (a black and white picture with 18 % grey green and one stop over pink, for the ColorChecker routine), and for the legend on or off (#58, ADR 0009, ADR 0010).
 
 - Two vectorscope Panels of the Output picture, at 100 % and 200 % (the same data at twice the radius). Cb/Cr use the Measured Space's luma weights, so they agree with the waveform; the trace has the waveform's phosphor-style response. Right-click for trace brightness, 75 % or 100 % colour-bar targets and the skin-tone line on or off. The skin-tone line is drawn at an assumed 134.5°, which is not yet checked against Resolve's own vectorscope; the label says so (#61, ADR 0018).
+- CIE chromaticity plot Panel: every pixel placed on the CIE 1931 xy diagram with the spectral locus, the Output Colour Space's gamut triangle and the Timeline Colour Space's (Rec.709, P3-D65, Rec.2020, DaVinci Wide Gamut, ACES AP1, from published primaries). Right-click for trace brightness and to hide the Timeline triangle; the label names both spaces (#62, ADR 0020).
 
 ### Changed
 

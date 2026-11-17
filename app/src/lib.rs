@@ -24,3 +24,4 @@ pub mod gamut_warning;
 pub mod skin_tone;
 pub mod vectorscope;
 pub mod stops_false_colour;
+pub mod cie;

@@ -145,6 +145,7 @@ impl DisplaySet {
         set.register(Arc::new(crate::vectorscope::Vectorscope::new(device, queue, target, crate::vectorscope::Zoom::X1)));
         set.register(Arc::new(crate::vectorscope::Vectorscope::new(device, queue, target, crate::vectorscope::Zoom::X2)));
         set.register(Arc::new(crate::stops_false_colour::StopsFalseColour::new(device, queue, target)));
+        set.register(Arc::new(crate::cie::CiePlot::new(device, queue, target)));
         set
     }
 
