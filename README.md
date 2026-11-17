@@ -2,7 +2,7 @@
 
 Real-time, professional-grade video scopes for DaVinci Resolve, on their own screen.
 
-scopecreep takes the picture Resolve is playing (the **Feed**) and shows it next to **Scopes** (waveform, parade, vectorscope) and **Picture Views** (clean picture, false colour) in a separate app. The goals:
+scopecreep takes the picture Resolve is playing (the **Feed**) and shows it next to **Scopes** (luma and colour waveform, vectorscopes, CIE chromaticity) and **Picture Views** (clean picture, channel view with a Loupe, black and white, gamut warning, false colour, skin tone, saturation, neutrals) in a separate app. The goals:
 
 - **Accurate.** Every pixel is measured at full resolution in 32-bit float, in the project's actual colour space. Anything that isn't exact is labelled as approximated.
 - **Invisible.** Turning scopecreep on must not change Resolve's playback frame rate.
@@ -17,7 +17,8 @@ Pre-alpha. Nothing to install yet.
 |---|---|---|
 | 0 | Colour and performance checks against Resolve (throwaway prototypes) | Done ([report](docs/stage0-report.md)) |
 | 1 | Feed plus clean picture plus luma waveform (Linux, NVIDIA) | Released in v0.1.0 |
-| Later | Parade, vectorscope, false colour, HDR, Setup Checklist, Capture, Windows/macOS, installers, licensing | Decided, parked |
+| 2 | Every display in its own Panel: 14 Panels (waveforms, vectorscopes, CIE plot, false colour, skin tone and more) | Built on `main`, unreleased: [open checks in Resolve](https://github.com/TomZandt/scopecreep/issues?q=is%3Aissue+is%3Aopen+label%3Aready-for-human) (skin-tone angle #60, chart clip #66, UHD 50 #67) |
+| Later | Parade, histogram, HDR, Setup Checklist, Capture, Windows/macOS, installers, licensing | Decided, parked |
 
 ## Development (Linux, NVIDIA)
 
@@ -25,7 +26,7 @@ Pre-alpha. Nothing to install yet.
 |---|---|---|
 | Feed protocol | `feed/PROTOCOL.md`, `feed/include/scopecreep_feed.h`, `feed/` crate | The shared-memory ring between Sender and app: spec, C header (Sender), Rust reader and synthetic writer (app, tests) |
 | Sender | `sender/` | C++ OFX plugin, Resolve's CUDA render path, async pinned copy into the Feed |
-| App | `app/` | Rust + wgpu: one window, the Picture View of the latest Feed frame beside its luma waveform (GPU, every pixel, full resolution) |
+| App | `app/` | Rust + wgpu: one window, a grid of 14 Panels (Scopes and Picture Views) all showing the latest Feed frame (GPU, every pixel, full resolution) |
 
 ```sh
 cargo test                       # Feed protocol (Rust and C against each other) and the app, driven at the Feed seam (waveform tests need a GPU)
