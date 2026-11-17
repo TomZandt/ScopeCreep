@@ -45,6 +45,38 @@ pub struct ScaleText {
     pub right_aligned: bool,
 }
 
+/// What the pointer does over a Panel, in device pixels of the window.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum Pointer {
+    /// The left button went down here.
+    Down([f32; 2]),
+    /// The pointer moved here (with the left button down, if it went down on the display).
+    Move([f32; 2]),
+    /// The left button went up.
+    Up,
+    /// The scroll wheel turned over `at`; `lines` is positive for scrolling up (several for a fast turn, fractions
+    /// for a smooth wheel).
+    Wheel { at: [f32; 2], lines: f32 },
+}
+
+/// What a display made of a [`Pointer`] event.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct PointerResult {
+    /// The display took the event: the window does not use it for anything else.
+    pub used: bool,
+    /// State to remember (key, value), for [`Display::state_keys`].
+    pub remember: Vec<(&'static str, String)>,
+}
+
+/// For tests: what the Channel view drew.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct ChannelViewDrawn {
+    /// The Loupe's square (left, top, width, height in device pixels).
+    pub loupe: [f32; 4],
+    /// Its zoom in percent of source pixels.
+    pub zoom: u32,
+}
+
 /// A Scope or Picture View. Cheap to clone and shared between the Feed thread (measures) and the window thread
 /// (draws), so every method takes `&self`.
 pub trait Display: Send + Sync {
@@ -60,6 +92,15 @@ pub trait Display: Send + Sync {
     /// default, and a Panel with no settings shows no menu.
     fn setting_defs(&self) -> &'static [SettingDef] {
         &[]
+    }
+    /// What the display remembers between sessions besides its menu choices (a Loupe's position and zoom). They
+    /// reach [`Display::configure`] in the context's settings, and leave through [`PointerResult::remember`].
+    fn state_keys(&self) -> &'static [&'static str] {
+        &[]
+    }
+    /// The pointer over the display's `area` (see [`Display::draw`]). Ignored by default.
+    fn pointer(&self, _area: [f32; 4], _scale: f32, _event: Pointer) -> PointerResult {
+        PointerResult::default()
     }
     /// The quiet label: what the display shows, and how far it can be trusted (ADR 0007).
     fn label(&self) -> String;
@@ -91,6 +132,7 @@ impl DisplaySet {
         set.register(Arc::new(Waveform::new(device, queue, target)));
         set.register(Arc::new(crate::gamut_warning::GamutWarning::new(device, queue, target)));
         set.register(Arc::new(crate::highlight_neutrals::HighlightNeutrals::new(device, queue, target, filterable)));
+        set.register(Arc::new(crate::channel_view::ChannelView::new(device, queue, target, filterable)));
         set
     }
 
@@ -125,7 +167,8 @@ impl DisplaySet {
     /// Give every display the Colour Setup and its own settings (`settings` holds every Panel's choices).
     pub fn configure(&self, context: &DisplayContext, settings: &PanelSettings) {
         for display in &self.displays {
-            let own = DisplayContext { settings: settings.resolve(display.name(), display.setting_defs()), ..context.clone() };
+            let mut own = DisplayContext { settings: settings.resolve(display.name(), display.setting_defs()), ..context.clone() };
+            own.settings.extend(settings.state_of(display.name(), display.state_keys()));
             display.configure(&own);
         }
     }
@@ -152,6 +195,16 @@ impl DisplaySet {
 
     pub fn scale_texts(&self, index: usize, area: [f32; 4], scale: f32) -> Vec<ScaleText> {
         self.displays[index].scale_texts(area, scale)
+    }
+
+    /// The pointer over the display in Panel `index`.
+    pub fn pointer(&self, index: usize, area: [f32; 4], scale: f32, event: Pointer) -> PointerResult {
+        self.displays[index].pointer(area, scale, event)
+    }
+
+    /// Whether the display in Panel `index` wants the pointer (it has state to move).
+    pub fn takes_pointer(&self, index: usize) -> bool {
+        !self.displays[index].state_keys().is_empty()
     }
 
     pub fn read_back(&self, index: usize) -> Option<Box<dyn Any>> {

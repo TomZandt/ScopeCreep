@@ -111,7 +111,10 @@ False Colour by stops above and below middle grey, in scene light decoded from t
 _Avoid_: EL Zone (a trademark scopecreep does not use), zone system
 
 **Loupe**:
-A movable square on a Picture View that shows the picture under it magnified, so single pixels (and noise) can be seen.
+A movable square on a Picture View that shows the picture under it magnified, so single pixels (and noise) can be seen. Its zoom is of source pixels, in device pixels of the screen: at 200 % each picture pixel is 2 × 2 device pixels, whatever the Panel's size. It lives on the Channel view.
+
+**Channel view**:
+The Panel showing one channel of the Output picture (blue by default, or red or green) as grey, with the Loupe on top, for inspecting noise.
 _Avoid_: PiP, magnifier, zoom window
 
 **ColorChecker frame**:

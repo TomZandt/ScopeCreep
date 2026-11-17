@@ -29,14 +29,39 @@ pub type Settings = BTreeMap<String, String>;
 
 /// Every Panel's settings, by the display's name. Holds only what the user chose; a Panel that has never been
 /// set up is on its defaults.
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Debug, Default)]
 pub struct PanelSettings {
     panels: BTreeMap<String, BTreeMap<String, String>>,
+    /// What a display remembers that the menu does not offer (a Loupe's position and zoom): free values the
+    /// display checks itself (ADR 0015). Kept apart so that changing it never re-measures the frame.
+    state: BTreeMap<String, BTreeMap<String, String>>,
 }
+
+/// Equal when the menu's choices are: remembered state is not a setting.
+impl PartialEq for PanelSettings {
+    fn eq(&self, other: &PanelSettings) -> bool {
+        self.panels == other.panels
+    }
+}
+impl Eq for PanelSettings {}
+
+/// How remembered state is marked in the saved text.
+const STATE_PREFIX: &str = "state:";
 
 impl PanelSettings {
     pub fn set(&mut self, panel: &str, key: &str, value: &str) {
         self.panels.entry(panel.to_string()).or_default().insert(key.to_string(), value.to_string());
+    }
+
+    /// Remember a value a display keeps for itself (not a menu choice).
+    pub fn set_state(&mut self, panel: &str, key: &str, value: &str) {
+        self.state.entry(panel.to_string()).or_default().insert(key.to_string(), value.to_string());
+    }
+
+    /// `panel`'s remembered values for `keys`, as a display reads them; those never remembered are left out.
+    pub fn state_of(&self, panel: &str, keys: &[&str]) -> Settings {
+        let Some(own) = self.state.get(panel) else { return Settings::new() };
+        keys.iter().filter_map(|k| own.get(*k).map(|v| (k.to_string(), v.clone()))).collect()
     }
 
     /// `panel`'s settings for the settings it offers (`defs`): the user's choice, or the default when there is
@@ -60,6 +85,11 @@ impl PanelSettings {
                 text += &format!("{panel}\t{key}\t{value}\n");
             }
         }
+        for (panel, state) in &self.state {
+            for (key, value) in state {
+                text += &format!("{panel}\t{STATE_PREFIX}{key}\t{value}\n");
+            }
+        }
         text
     }
 
@@ -70,7 +100,10 @@ impl PanelSettings {
             let mut parts = line.split('\t');
             if let (Some(panel), Some(key), Some(value), None) = (parts.next(), parts.next(), parts.next(), parts.next()) {
                 if !panel.is_empty() && !key.is_empty() && !value.is_empty() {
-                    settings.set(panel, key, value);
+                    match key.strip_prefix(STATE_PREFIX) {
+                        Some(key) => settings.set_state(panel, key, value),
+                        None => settings.set(panel, key, value),
+                    }
                 }
             }
         }

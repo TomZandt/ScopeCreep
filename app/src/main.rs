@@ -16,7 +16,7 @@
 //! puts the frames to show on the GPU once, converts them once, hands that one frame to every display, and wakes
 //! the window. The window thread only draws.
 use glyphon::{Attrs, Buffer, Cache, Color, ColorMode, Family, FontSystem, Metrics, Resolution, Shaping, SwashCache, TextArea, TextAtlas, TextBounds, TextRenderer, Viewport};
-use scopecreep::display::{DisplayContext, DisplaySet};
+use scopecreep::display::{DisplayContext, DisplaySet, Pointer};
 use scopecreep::gpu_frame::FrameUploader;
 use scopecreep::layout::MARGIN;
 use scopecreep::monitor::{FeedState, Monitor};
@@ -32,7 +32,7 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use winit::application::ApplicationHandler;
 use winit::dpi::LogicalSize;
-use winit::event::{ElementState, MouseButton, WindowEvent};
+use winit::event::{ElementState, MouseButton, MouseScrollDelta, WindowEvent};
 use winit::event_loop::{ActiveEventLoop, EventLoop, EventLoopProxy};
 use winit::window::{CursorIcon, Window, WindowId};
 
@@ -155,6 +155,10 @@ struct AppWindow {
     menu_texts: Vec<Text>,
     /// Where each Panel was last drawn (device pixels), for a right-click to find its Panel in.
     cells: Vec<[f32; 4]>,
+    /// Where each Panel's display was last drawn (device pixels), for the pointer to hand to displays that use it.
+    contents: Vec<[f32; 4]>,
+    /// The Panel whose display holds the pointer (a Loupe being dragged), if any.
+    pointer_panel: Option<usize>,
     /// The border being dragged, if any.
     drag: Option<Border>,
     cursor: [f32; 2],
@@ -332,6 +336,8 @@ impl AppWindow {
             menu_renderer,
             menu_texts: Vec::new(),
             cells: Vec::new(),
+            contents: Vec::new(),
+            pointer_panel: None,
             drag: None,
             cursor: [0.0, 0.0],
             grid_area: [0.0; 4],
@@ -366,7 +372,9 @@ impl AppWindow {
 
     fn pointer_moved(&mut self, x: f32, y: f32) {
         self.cursor = [x, y];
-        if let Some(border) = self.drag {
+        if let Some(panel) = self.pointer_panel {
+            self.display_pointer(panel, Pointer::Move(self.cursor));
+        } else if let Some(border) = self.drag {
             self.grid.drag(border, self.cursor, self.grid_area, self.grid_gap, min_panel_size(self.scale));
             self.window.request_redraw();
         } else {
@@ -422,6 +430,43 @@ impl AppWindow {
         self.window.request_redraw();
     }
 
+    /// Give a display the pointer: what it asks to remember is kept with the Panel settings (and written to the
+    /// file once the movement is done), and the window draws again. Returns whether the display took the event.
+    fn display_pointer(&mut self, panel: usize, event: Pointer) -> bool {
+        let Some(area) = self.contents.get(panel).copied() else { return false };
+        let result = self.displays.pointer(panel, area, self.scale, event);
+        if result.used {
+            let mut settings = self.settings.lock().unwrap();
+            let name = self.displays.name(panel);
+            for (key, value) in &result.remember {
+                settings.set_state(name, key, value);
+            }
+            if !result.remember.is_empty() && !matches!(event, Pointer::Move(_)) {
+                if let Some(path) = settings_file() {
+                    if let Some(dir) = path.parent() {
+                        let _ = std::fs::create_dir_all(dir);
+                    }
+                    if let Err(e) = std::fs::write(&path, settings.to_text()) {
+                        eprintln!("scopecreep: cannot remember the Panel settings: {e}");
+                    }
+                }
+            }
+            self.window.request_redraw();
+        }
+        result.used
+    }
+
+    /// The scroll wheel: over a display that uses it (a Loupe's zoom), else nothing.
+    fn wheel(&mut self, lines: f32) {
+        if self.menu.is_some() {
+            return;
+        }
+        let panel = self.contents.iter().position(|c| Menu::contains(*c, self.cursor)).filter(|p| self.displays.takes_pointer(*p));
+        if let Some(panel) = panel {
+            self.display_pointer(panel, Pointer::Wheel { at: self.cursor, lines });
+        }
+    }
+
     fn button(&mut self, state: ElementState) {
         if self.menu.is_some() {
             if state == ElementState::Pressed {
@@ -430,8 +475,22 @@ impl AppWindow {
             return;
         }
         match state {
-            ElementState::Pressed => self.drag = self.border_under_pointer(),
+            ElementState::Pressed => {
+                // A display that uses the pointer (a Loupe) gets it first; else a border may be grabbed.
+                let panel = self.contents.iter().position(|c| Menu::contains(*c, self.cursor)).filter(|p| self.displays.takes_pointer(*p));
+                if let Some(panel) = panel {
+                    if self.display_pointer(panel, Pointer::Down(self.cursor)) {
+                        self.pointer_panel = Some(panel);
+                        return;
+                    }
+                }
+                self.drag = self.border_under_pointer();
+            }
             ElementState::Released => {
+                if let Some(panel) = self.pointer_panel.take() {
+                    self.display_pointer(panel, Pointer::Up);
+                    return;
+                }
                 if self.drag.take().is_some() {
                     // Remember the border positions.
                     if let Some(path) = grid_file() {
@@ -480,6 +539,7 @@ impl AppWindow {
             }
             panels.push(PanelLayout::new(*cell, scale, lines));
         }
+        self.contents = panels.iter().map(|p| p.content).collect();
         let status_width = width - 2.0 * margin;
         self.status.set(&mut self.font_system, &texts.status, LABEL_SIZE, scale, status_width, None, true);
         let (notice_size, notice_width, align, notice_wrap) = if notice_in_status {
@@ -675,6 +735,10 @@ impl ApplicationHandler<Wake> for App {
             WindowEvent::CursorMoved { position, .. } => w.pointer_moved(position.x as f32, position.y as f32),
             WindowEvent::MouseInput { state, button: MouseButton::Left, .. } => w.button(state),
             WindowEvent::MouseInput { state: ElementState::Pressed, button: MouseButton::Right, .. } => w.right_click(),
+            WindowEvent::MouseWheel { delta, .. } => w.wheel(match delta {
+                MouseScrollDelta::LineDelta(_, y) => y,
+                MouseScrollDelta::PixelDelta(p) => p.y as f32 / 40.0,
+            }),
             WindowEvent::RedrawRequested => w.draw(),
             WindowEvent::CloseRequested => {
                 w.close();
