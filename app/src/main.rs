@@ -2,13 +2,12 @@
 //! latest Feed frame and the luma waveform for now, each with a quiet label under it, and a quiet status line
 //! along the bottom (Resolve's playback rate, dropped frames, the Sender driving the Feed). The borders between
 //! Panels can be dragged and are remembered. Every display shows the Feed after Output Conversion, in the Output
-//! Colour Space, whenever the Colour Setup has one (`output_conversion.rs`).
+//! Colour Space, whenever the Colour Setup has one (`output_conversion.rs`). Right-click a Panel for its settings,
+//! which are remembered per Panel (`~/.config/scopecreep/panel-settings`).
 //!
-//!   scopecreep [--feed <path>] [--luma primaries|match-resolve] [--no-scripting]
+//!   scopecreep [--feed <path>] [--no-scripting]
 //!
 //!   --feed           default: $SCOPECREEP_FEED, else /dev/shm/scopecreep-feed
-//!   --luma           luma weights (ADR 0004): from the Measured Space's primaries (the default), or the weights
-//!                    Resolve's own waveform uses
 //!   --no-scripting   never read the project by Resolve scripting (the Colour Setup then comes only from the
 //!                    Sender node's manual override). Resolve's Python: $SCOPECREEP_RESOLVE_PYTHON, else
 //!                    /opt/resolve/bin/ResolvePython.
@@ -24,7 +23,9 @@ use scopecreep::monitor::{FeedState, Monitor};
 use scopecreep::output_conversion::OutputConversion;
 use scopecreep::panel_grid::{Border, LABEL_SIZE, PanelGrid, PanelLayout, min_panel_size};
 use scopecreep::resolve_helper::ScriptHelper;
-use scopecreep::waveform::{DEFAULT_LUMA_WEIGHTS, LumaWeights, SCALE_SIZE};
+use scopecreep::flat_rects::FlatRects;
+use scopecreep::settings::{Menu, MenuRow, PanelSettings, MENU_ROW};
+use scopecreep::waveform::SCALE_SIZE;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
@@ -66,38 +67,34 @@ fn grid_file() -> Option<PathBuf> {
     Some(base.join("scopecreep").join("panel-grid"))
 }
 
+/// Where the Panels' settings are remembered, next to the border positions.
+fn settings_file() -> Option<PathBuf> {
+    grid_file().map(|p| p.with_file_name("panel-settings"))
+}
+
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut feed = scopecreep_feed::default_path();
     let mut scripting = true;
-    let mut luma = DEFAULT_LUMA_WEIGHTS;
     let mut args = std::env::args().skip(1);
     while let Some(arg) = args.next() {
         match arg.as_str() {
             "--feed" => feed = args.next().ok_or("--feed needs a path")?.into(),
             "--no-scripting" => scripting = false,
-            "--luma" => {
-                luma = match args.next().as_deref() {
-                    Some("primaries") => LumaWeights::FromPrimaries,
-                    Some("match-resolve") => LumaWeights::MatchResolve,
-                    _ => return Err("--luma is primaries or match-resolve".into()),
-                }
-            }
             "--version" => {
                 println!("scopecreep {} (Feed protocol {}.{})", env!("CARGO_PKG_VERSION"), scopecreep_feed::VERSION_MAJOR, scopecreep_feed::VERSION_MINOR);
                 return Ok(());
             }
-            _ => return Err(format!("unknown argument {arg}. Usage: scopecreep [--feed <path>] [--luma primaries|match-resolve] [--no-scripting]").into()),
+            _ => return Err(format!("unknown argument {arg}. Usage: scopecreep [--feed <path>] [--no-scripting]").into()),
         }
     }
     let event_loop = EventLoop::<Wake>::with_user_event().build()?;
-    let mut app = App { feed, luma, scripting, proxy: event_loop.create_proxy(), window: None };
+    let mut app = App { feed, scripting, proxy: event_loop.create_proxy(), window: None };
     event_loop.run_app(&mut app)?;
     Ok(())
 }
 
 struct App {
     feed: PathBuf,
-    luma: LumaWeights,
     scripting: bool,
     proxy: EventLoopProxy<Wake>,
     window: Option<AppWindow>,
@@ -149,6 +146,15 @@ struct AppWindow {
     config: wgpu::SurfaceConfiguration,
     displays: DisplaySet,
     grid: PanelGrid,
+    /// Every Panel's settings, shared with the Feed thread (which gives them to the displays).
+    settings: Arc<Mutex<PanelSettings>>,
+    /// The right-click menu, while open, with where it opened.
+    menu: Option<(Menu, [f32; 2])>,
+    flat: FlatRects,
+    menu_renderer: TextRenderer,
+    menu_texts: Vec<Text>,
+    /// Where each Panel was last drawn (device pixels), for a right-click to find its Panel in.
+    cells: Vec<[f32; 4]>,
     /// The border being dragged, if any.
     drag: Option<Border>,
     cursor: [f32; 2],
@@ -172,7 +178,7 @@ struct AppWindow {
 }
 
 impl AppWindow {
-    fn new(window: Arc<Window>, event_loop: &ActiveEventLoop, feed: PathBuf, luma: LumaWeights, scripting: bool, proxy: EventLoopProxy<Wake>) -> Result<AppWindow, Box<dyn std::error::Error>> {
+    fn new(window: Arc<Window>, event_loop: &ActiveEventLoop, feed: PathBuf, scripting: bool, proxy: EventLoopProxy<Wake>) -> Result<AppWindow, Box<dyn std::error::Error>> {
         // WGPU_BACKEND and friends are honoured, for trying another graphics backend.
         let instance = wgpu::Instance::new(wgpu::InstanceDescriptor::new_with_display_handle_from_env(Box::new(event_loop.owned_display_handle())));
         let surface = instance.create_surface(window.clone()).map_err(|e| format!("no drawing surface: {e}"))?;
@@ -203,13 +209,16 @@ impl AppWindow {
         surface.configure(&device, &config);
 
         let displays = DisplaySet::standard(&device, &queue, format, filterable);
-        displays.configure(&DisplayContext { luma, ..DisplayContext::default() });
+        let settings = Arc::new(Mutex::new(settings_file().and_then(|path| std::fs::read_to_string(path).ok()).map_or_else(PanelSettings::default, |text| PanelSettings::from_text(&text))));
+        displays.configure(&DisplayContext::default(), &settings.lock().unwrap());
         let grid = grid_file().and_then(|path| std::fs::read_to_string(path).ok()).map_or_else(|| PanelGrid::new(displays.len()), |text| PanelGrid::from_text(displays.len(), &text));
         let mut font_system = FontSystem::new();
         let cache = Cache::new(&device);
         let viewport = Viewport::new(&device, &cache);
         let mut atlas = TextAtlas::with_color_mode(&device, &queue, &cache, format, if format.is_srgb() { ColorMode::Accurate } else { ColorMode::Web });
         let text_renderer = TextRenderer::new(&mut atlas, &device, wgpu::MultisampleState::default(), None);
+        let menu_renderer = TextRenderer::new(&mut atlas, &device, wgpu::MultisampleState::default(), None);
+        let flat = FlatRects::new(&device, &queue, format);
         let status = Text::new(&mut font_system);
         let notice = Text::new(&mut font_system);
         let panel_texts = (0..displays.len()).map(|_| PanelText { label: Text::new(&mut font_system), scale: Vec::new(), lines: 1 }).collect();
@@ -217,7 +226,7 @@ impl AppWindow {
         let texts = Arc::new(Mutex::new(Texts::default()));
         let stop = Arc::new(AtomicBool::new(false));
         let feed_thread = {
-            let (texts, stop, displays) = (texts.clone(), stop.clone(), displays.clone());
+            let (texts, stop, displays, settings) = (texts.clone(), stop.clone(), displays.clone(), settings.clone());
             let mut uploader = FrameUploader::new(&device, &queue);
             let mut conversion = OutputConversion::new(&device, &queue);
             std::thread::Builder::new().name("feed".into()).spawn(move || {
@@ -233,7 +242,8 @@ impl AppWindow {
                 // Frames put on the GPU and handed to the displays.
                 let mut scope_frames = 0u64;
                 // Displays measure in the Colour Setup's Output Colour Space (the default Measured Space).
-                let mut context = DisplayContext { luma, ..DisplayContext::default() };
+                let mut context = DisplayContext::default();
+                let mut chosen = settings.lock().unwrap().clone();
                 let mut last = Texts::default();
                 // SCOPECREEP_STATUS_LOG=1: one line a second on stderr with what the app made of the Feed (diagnostics).
                 let status_log = std::env::var_os("SCOPECREEP_STATUS_LOG").is_some_and(|v| v != "0");
@@ -275,10 +285,18 @@ impl AppWindow {
                     });
                     let status = monitor.status();
                     let setup = status.colour_setup().map(|c| c.setup);
-                    let now_context = status.display_context(luma);
+                    let now_context = status.display_context();
                     if now_context != context {
                         context = now_context;
-                        displays.configure(&context);
+                        displays.configure(&context, &chosen);
+                    }
+                    // A setting changed in a menu measures the frame on screen again, even with Resolve stopped.
+                    let now_chosen = settings.lock().unwrap().clone();
+                    if now_chosen != chosen {
+                        chosen = now_chosen;
+                        displays.configure(&context, &chosen);
+                        conversion.again(uploader.frame(), |encoder, picture| displays.on_frame(encoder, picture));
+                        shown = true;
                     }
                     // A Colour Setup that arrives or changes while Resolve is stopped converts the frame on screen.
                     shown |= conversion.follow(setup.as_ref(), uploader.frame(), |encoder, picture| displays.on_frame(encoder, picture));
@@ -308,6 +326,12 @@ impl AppWindow {
             config,
             displays,
             grid,
+            settings,
+            menu: None,
+            flat,
+            menu_renderer,
+            menu_texts: Vec::new(),
+            cells: Vec::new(),
             drag: None,
             cursor: [0.0, 0.0],
             grid_area: [0.0; 4],
@@ -354,7 +378,57 @@ impl AppWindow {
         }
     }
 
+    /// Right button: open the menu of the Panel under the pointer (none for a Panel without settings, or off a
+    /// Panel), or close the one that is open.
+    fn right_click(&mut self) {
+        let was_open = self.menu.take().is_some();
+        let hit = self.cells.iter().position(|c| Menu::contains(*c, self.cursor));
+        if let Some(panel) = hit {
+            let current = self.displays.settings_of(panel, &self.settings.lock().unwrap());
+            self.menu = Menu::new(panel, self.displays.setting_defs(panel), &current).map(|menu| (menu, self.cursor));
+        }
+        if was_open || self.menu.is_some() {
+            self.window.request_redraw();
+        }
+    }
+
+    fn menu_rect(&self) -> Option<[f32; 4]> {
+        let (menu, at) = self.menu.as_ref()?;
+        Some(menu.rect(*at, [self.config.width as f32, self.config.height as f32], self.scale))
+    }
+
+    /// Left button while a menu is open: a click on a choice picks it (and remembers it); a click on a heading or
+    /// the menu's padding leaves it open; any other click closes it.
+    fn menu_click(&mut self) {
+        let (Some((menu, _)), Some(rect)) = (self.menu.as_ref(), self.menu_rect()) else { return };
+        let choice = menu.choice_at(rect, self.cursor, self.scale);
+        if let Some((key, value)) = choice {
+            let name = self.displays.name(menu.panel);
+            let mut settings = self.settings.lock().unwrap();
+            settings.set(name, key, value);
+            if let Some(path) = settings_file() {
+                if let Some(dir) = path.parent() {
+                    let _ = std::fs::create_dir_all(dir);
+                }
+                if let Err(e) = std::fs::write(&path, settings.to_text()) {
+                    eprintln!("scopecreep: cannot remember the Panel settings: {e}");
+                }
+            }
+        }
+        if choice.is_none() && Menu::contains(rect, self.cursor) {
+            return;
+        }
+        self.menu = None;
+        self.window.request_redraw();
+    }
+
     fn button(&mut self, state: ElementState) {
+        if self.menu.is_some() {
+            if state == ElementState::Pressed {
+                self.menu_click();
+            }
+            return;
+        }
         match state {
             ElementState::Pressed => self.drag = self.border_under_pointer(),
             ElementState::Released => {
@@ -387,6 +461,7 @@ impl AppWindow {
         // The Panels fill the window above the status line, with a margin round them and between them.
         let area = [margin, margin, (width - 2.0 * margin).max(1.0), (height - status_height - margin).max(1.0)];
         let cells = self.grid.cells(area, margin);
+        self.cells = cells.clone();
         self.grid_area = area;
         self.grid_gap = margin;
 
@@ -470,6 +545,45 @@ impl AppWindow {
             eprintln!("scopecreep: text could not be prepared: {e}");
         }
 
+        // The right-click menu, over everything: its rectangles, then its own text (so it sits above the Panels' text).
+        let mut rects: Vec<([f32; 4], [f32; 4])> = Vec::new();
+        let mut menu_areas: Vec<(usize, f32, f32, bool)> = Vec::new();
+        if let (Some((menu, _)), Some(rect)) = (self.menu.as_ref(), self.menu_rect()) {
+            while self.menu_texts.len() < menu.rows.len() {
+                self.menu_texts.push(Text::new(&mut self.font_system));
+            }
+            rects.push(([rect[0] - scale, rect[1] - scale, rect[2] + 2.0 * scale, rect[3] + 2.0 * scale], [0.30, 0.30, 0.30, 1.0]));
+            rects.push((rect, [0.11, 0.11, 0.11, 1.0]));
+            let text_left = rect[0] + 26.0 * scale;
+            for (i, row) in menu.rows.iter().enumerate() {
+                let top = Menu::row_top(rect, i, scale);
+                let (text, heading) = match row {
+                    MenuRow::Heading(text) => (text.as_str(), true),
+                    MenuRow::Choice { text, on, .. } => {
+                        let row_rect = [rect[0], top, rect[2], MENU_ROW * scale];
+                        if Menu::contains(row_rect, self.cursor) {
+                            rects.push((row_rect, [0.20, 0.20, 0.20, 1.0]));
+                        }
+                        if *on {
+                            let side = 6.0 * scale;
+                            rects.push(([rect[0] + 12.0 * scale, top + (MENU_ROW * scale - side) / 2.0, side, side], [0.86, 0.86, 0.86, 1.0]));
+                        }
+                        (text.as_str(), false)
+                    }
+                };
+                self.menu_texts[i].set(&mut self.font_system, text, LABEL_SIZE, scale, rect[2] - 34.0 * scale, None, false);
+                menu_areas.push((i, if heading { rect[0] + 10.0 * scale } else { text_left }, top + (MENU_ROW * scale - line) / 2.0, heading));
+            }
+        }
+        self.flat.set([width, height], &rects);
+        let menu_text_areas: Vec<TextArea> = menu_areas
+            .iter()
+            .map(|(i, left, top, heading)| TextArea { buffer: &self.menu_texts[*i].buffer, left: *left, top: *top, scale: 1.0, bounds: whole, default_color: if *heading { LABEL_COLOUR } else { NOTICE_COLOUR }, custom_glyphs: &[] })
+            .collect();
+        if let Err(e) = self.menu_renderer.prepare(&self.device, &self.queue, &mut self.font_system, &mut self.atlas, &self.viewport, menu_text_areas, &mut self.swash_cache) {
+            eprintln!("scopecreep: menu text could not be prepared: {e}");
+        }
+
         let frame = match self.surface.get_current_texture() {
             wgpu::CurrentSurfaceTexture::Success(frame) => frame,
             wgpu::CurrentSurfaceTexture::Timeout | wgpu::CurrentSurfaceTexture::Occluded => return,
@@ -502,6 +616,10 @@ impl AppWindow {
             if let Err(e) = self.text_renderer.render(&self.atlas, &self.viewport, &mut pass) {
                 eprintln!("scopecreep: text could not be drawn: {e}");
             }
+            self.flat.draw(&mut pass);
+            if let Err(e) = self.menu_renderer.render(&self.atlas, &self.viewport, &mut pass) {
+                eprintln!("scopecreep: menu text could not be drawn: {e}");
+            }
         }
         self.queue.submit([encoder.finish()]);
         self.queue.present(frame);
@@ -530,7 +648,7 @@ impl ApplicationHandler<Wake> for App {
         let made = event_loop
             .create_window(attributes)
             .map_err(Into::into)
-            .and_then(|window| AppWindow::new(Arc::new(window), event_loop, self.feed.clone(), self.luma, self.scripting, self.proxy.clone()));
+            .and_then(|window| AppWindow::new(Arc::new(window), event_loop, self.feed.clone(), self.scripting, self.proxy.clone()));
         match made {
             Ok(window) => self.window = Some(window),
             Err(e) => {
@@ -556,6 +674,7 @@ impl ApplicationHandler<Wake> for App {
             }
             WindowEvent::CursorMoved { position, .. } => w.pointer_moved(position.x as f32, position.y as f32),
             WindowEvent::MouseInput { state, button: MouseButton::Left, .. } => w.button(state),
+            WindowEvent::MouseInput { state: ElementState::Pressed, button: MouseButton::Right, .. } => w.right_click(),
             WindowEvent::RedrawRequested => w.draw(),
             WindowEvent::CloseRequested => {
                 w.close();

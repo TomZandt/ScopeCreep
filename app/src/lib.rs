@@ -12,5 +12,7 @@ pub mod gpu_frame;
 pub mod layout;
 pub mod panel_grid;
 pub mod display;
+pub mod settings;
+pub mod flat_rects;
 pub mod picture_view;
 pub mod waveform;

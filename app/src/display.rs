@@ -12,7 +12,8 @@
 //! once) and hands that one [`GpuFrame`] to every display.
 use crate::colour_setup::KnownColourSetup;
 use crate::gpu_frame::GpuFrame;
-use crate::waveform::{DEFAULT_LUMA_WEIGHTS, LumaWeights, Waveform};
+use crate::settings::{PanelSettings, SettingDef, Settings};
+use crate::waveform::Waveform;
 use std::any::Any;
 use std::sync::Arc;
 
@@ -23,13 +24,13 @@ pub struct DisplayContext {
     pub colour_setup: Option<KnownColourSetup>,
     /// What the Colour Setup part of a label says, including why it is missing when it is.
     pub colour_label: String,
-    /// How Luma is weighted (ADR 0004).
-    pub luma: LumaWeights,
+    /// This display's own settings (the right-click menu's choices), one valid value for each setting it offers.
+    pub settings: Settings,
 }
 
 impl Default for DisplayContext {
     fn default() -> DisplayContext {
-        DisplayContext { colour_setup: None, colour_label: "Colour Setup unknown".into(), luma: DEFAULT_LUMA_WEIGHTS }
+        DisplayContext { colour_setup: None, colour_label: "Colour Setup unknown".into(), settings: Settings::new() }
     }
 }
 
@@ -54,6 +55,12 @@ pub trait Display: Send + Sync {
     fn on_frame(&self, encoder: &mut wgpu::CommandEncoder, frame: &GpuFrame);
     /// Take the Colour Setup and the settings, from the next frame on.
     fn configure(&self, context: &DisplayContext);
+    /// The settings the display offers in its right-click menu, each with its choices (the first is the
+    /// default). Only sensible values: a display never offers a setting that could make it mislead. None by
+    /// default, and a Panel with no settings shows no menu.
+    fn setting_defs(&self) -> &'static [SettingDef] {
+        &[]
+    }
     /// The quiet label: what the display shows, and how far it can be trusted (ADR 0007).
     fn label(&self) -> String;
     /// Draw into `area` (left, top, width, height in pixels of a `surface`-sized target) at `scale` device pixels
@@ -113,10 +120,28 @@ impl DisplaySet {
         }
     }
 
-    pub fn configure(&self, context: &DisplayContext) {
+    /// Give every display the Colour Setup and its own settings (`settings` holds every Panel's choices).
+    pub fn configure(&self, context: &DisplayContext, settings: &PanelSettings) {
         for display in &self.displays {
-            display.configure(context);
+            let own = DisplayContext { settings: settings.resolve(display.name(), display.setting_defs()), ..context.clone() };
+            display.configure(&own);
         }
+    }
+
+    /// The settings the display in Panel `index` offers.
+    pub fn setting_defs(&self, index: usize) -> &'static [SettingDef] {
+        self.displays[index].setting_defs()
+    }
+
+    /// The settings the display in Panel `index` is using, given everyone's choices.
+    pub fn settings_of(&self, index: usize, settings: &PanelSettings) -> Settings {
+        let display = &self.displays[index];
+        settings.resolve(display.name(), display.setting_defs())
+    }
+
+    /// What the display in Panel `index` is called (its settings are kept under this name).
+    pub fn name(&self, index: usize) -> &'static str {
+        self.displays[index].name()
     }
 
     pub fn draw(&self, pass: &mut wgpu::RenderPass<'_>, index: usize, area: [f32; 4], surface: [f32; 2], scale: f32) {

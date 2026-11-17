@@ -29,7 +29,7 @@ Pre-alpha. Nothing to install yet.
 
 ```sh
 cargo test                       # Feed protocol (Rust and C against each other) and the app, driven at the Feed seam (waveform tests need a GPU)
-cargo run -p scopecreep          # the app (reads /dev/shm/scopecreep-feed, or $SCOPECREEP_FEED); --luma match-resolve for Resolve's luma weights; --no-scripting to never read the project by Resolve scripting
+cargo run -p scopecreep          # the app (reads /dev/shm/scopecreep-feed, or $SCOPECREEP_FEED); right-click a Panel for its settings (the luma waveform's luma weights, for one); --no-scripting to never read the project by Resolve scripting
 cargo run -p scopecreep-feed --bin feed-synth   # a moving test card into the Feed, no Resolve needed
 
 make -C sender                   # build the Sender (needs /opt/cuda and Resolve's OpenFX headers)
@@ -82,6 +82,7 @@ DaVinci Resolve                                 scopecreep app (Rust + wgpu)
   - [0010](docs/adr/0010-false-colour-schemes-are-not-licensed-or-named.md): third-party false colour schemes are modelled, not licensed, and never claimed
   - [0011](docs/adr/0011-every-display-has-its-own-panel.md): every display has its own Panel, always visible, in a fixed grid
   - [0012](docs/adr/0012-panel-grid-shape-follows-display-count.md): the Panel grid's shape follows the number of displays, not the window, and Panels fill their cells
+  - [0013](docs/adr/0013-panel-settings-are-kept-by-display-name-and-offered-as-choices.md): Panel settings are lists of choices, kept by display name in a text file, in a menu the app draws itself
 - [docs/findings/](docs/findings/): what testing showed, one file per ticket.
 - [docs/research/](docs/research/): what public sources say, with dates and links.
 

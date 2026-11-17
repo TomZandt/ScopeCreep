@@ -10,6 +10,7 @@
 //! and white (1.0) at 940, full (data) levels at 0 and 1023. Resolve hands the Sender the same values either way.
 use crate::colour_setup::{KnownColourSetup, Levels, Provenance};
 use crate::gpu_frame::GpuFrame;
+use crate::settings::{Choice, SettingDef};
 use std::sync::{Arc, Mutex};
 
 /// Code values on the 10-bit scale: 0 to 1023.
@@ -17,8 +18,7 @@ pub const CODES: u32 = 1024;
 /// Counts per waveform column: below 0, codes 0 to 1023, above 1023.
 const ROWS: u32 = CODES + 2;
 
-/// The luma weights the product uses unless the user picks otherwise. The product owner may switch this to
-/// [`LumaWeights::MatchResolve`] (Stage 0 report, open question): this line is the only change needed.
+/// The luma weights the waveform uses until the user picks otherwise (the first choice of its menu).
 pub const DEFAULT_LUMA_WEIGHTS: LumaWeights = LumaWeights::FromPrimaries;
 
 /// How the luma weights are chosen for the Measured Space (ADR 0004).
@@ -630,6 +630,19 @@ impl Waveform {
     }
 }
 
+/// The key of the luma weights setting.
+pub const LUMA_SETTING: &str = "luma";
+
+/// The luma waveform's right-click menu: how Luma is weighted (ADR 0004). The label names the weights in use.
+const SETTINGS: [SettingDef; 1] = [SettingDef {
+    key: LUMA_SETTING,
+    label: "Luma weights",
+    choices: &[
+        Choice { value: "primaries", text: "From the Measured Space's primaries" },
+        Choice { value: "match-resolve", text: "Match Resolve's waveform" },
+    ],
+}];
+
 /// Logical pixels: the size of the numbers on the scale.
 pub const SCALE_SIZE: f32 = 11.0;
 
@@ -643,8 +656,17 @@ impl crate::display::Display for Waveform {
     }
 
     fn configure(&self, context: &crate::display::DisplayContext) {
-        // The waveform measures in the Colour Setup's Output Colour Space (the default Measured Space).
-        self.set_measurement(crate::output_conversion::measurement(context.colour_setup.clone(), context.luma));
+        // The waveform measures in the Colour Setup's Output Colour Space (the default Measured Space), with the
+        // luma weights the user chose (ADR 0004).
+        let luma = match context.settings.get(LUMA_SETTING).map(String::as_str) {
+            Some("match-resolve") => LumaWeights::MatchResolve,
+            _ => LumaWeights::FromPrimaries,
+        };
+        self.set_measurement(crate::output_conversion::measurement(context.colour_setup.clone(), luma));
+    }
+
+    fn setting_defs(&self) -> &'static [SettingDef] {
+        &SETTINGS
     }
 
     fn label(&self) -> String {

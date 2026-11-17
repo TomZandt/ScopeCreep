@@ -185,9 +185,9 @@ impl Status {
         }
     }
 
-    /// What every display needs to know about the Colour Setup (and the user's luma choice).
-    pub fn display_context(&self, luma: crate::waveform::LumaWeights) -> crate::display::DisplayContext {
-        crate::display::DisplayContext { colour_setup: self.colour_setup(), colour_label: self.colour_label(), luma }
+    /// What every display needs to know about the Colour Setup.
+    pub fn display_context(&self) -> crate::display::DisplayContext {
+        crate::display::DisplayContext { colour_setup: self.colour_setup(), colour_label: self.colour_label(), settings: Default::default() }
     }
 
     /// The quiet label of the Picture View.

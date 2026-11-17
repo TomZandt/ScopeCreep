@@ -74,6 +74,10 @@ _Avoid_: Widget, plugin, module (for a display)
 The ordered grid the Panels sit in. Its shape depends only on how many displays there are (rows as equal as possible, every row filling the width), so border positions the user dragged stay valid at any window size.
 _Avoid_: Layout (on its own), dock
 
+**Panel settings**:
+The choices a display offers in its Panel's right-click menu, each from a short list so a display can't be set up to mislead. Kept per Panel between sessions. A setting that changes what is measured is named in the Panel's label.
+_Avoid_: Preferences, options, properties
+
 **Scope**:
 A display that measures the Feed's pixel values, such as a waveform, RGB parade or vectorscope.
 _Avoid_: Monitor, meter, graph

@@ -380,13 +380,19 @@ impl OutputConversion {
             return false;
         }
         self.plan = plan;
+        self.again(on_screen, then);
+        true
+    }
+
+    /// Convert the frame on screen again and let `then` record what reads it. For when something other than the
+    /// frame changed what the displays measure (a setting), with Resolve stopped and no new frame coming.
+    pub fn again(&mut self, on_screen: Option<&GpuFrame>, then: impl FnOnce(&mut wgpu::CommandEncoder, &GpuFrame)) {
         if let Some(frame) = on_screen {
             let mut encoder = self.device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: Some("output conversion again") });
             let shown = self.convert(&mut encoder, frame);
             then(&mut encoder, shown);
             self.queue.submit([encoder.finish()]);
         }
-        true
     }
 
     pub fn plan(&self) -> &Plan {
