@@ -148,6 +148,25 @@ impl PictureView {
         }
     }
 
+    /// What was done to the picture, and how far it can be trusted (ticket #17): never more than is proven.
+    fn label_tail(context: &DisplayContext) -> String {
+        let conversion = Plan::for_setup(context.colour_setup.as_ref().map(|c| &c.setup));
+        format!("{}  ·  {}", context.colour_label, conversion.label())
+    }
+
+    fn label_with(size: Option<[u32; 2]>, tail: &str) -> String {
+        match size {
+            Some([w, h]) => format!("Clean picture  ·  {w} × {h}  ·  {tail}"),
+            None => "Clean picture".to_string(),
+        }
+    }
+
+    /// The label the Picture View shows for a frame of `size` under `context`: the one source of that text, which
+    /// [`Display::label`] gives too (for tests and tools that have no GPU to make a Picture View on).
+    pub fn label_for(size: Option<[u32; 2]>, context: &DisplayContext) -> String {
+        Self::label_with(size, &Self::label_tail(context))
+    }
+
     /// The size of the frame on screen (width, height), once one has arrived: the window lays the panels out in
     /// its shape, so they follow a change of timeline resolution.
     pub fn frame_size(&self) -> Option<[u32; 2]> {
@@ -165,16 +184,11 @@ impl Display for PictureView {
     }
 
     fn configure(&self, context: &DisplayContext) {
-        // What was done to the picture, and how far it can be trusted (ticket #17): never more than is proven.
-        let conversion = Plan::for_setup(context.colour_setup.as_ref().map(|c| &c.setup));
-        *self.label_tail.lock().unwrap() = format!("{}  ·  {}", context.colour_label, conversion.label());
+        *self.label_tail.lock().unwrap() = Self::label_tail(context);
     }
 
     fn label(&self) -> String {
-        match self.frame_size() {
-            Some([w, h]) => format!("Clean picture  ·  {w} × {h}  ·  {}", self.label_tail.lock().unwrap()),
-            None => "Clean picture".to_string(),
-        }
+        Self::label_with(self.frame_size(), &self.label_tail.lock().unwrap())
     }
 
     /// Draw the picture, scaled to fit inside `area` with its shape kept.

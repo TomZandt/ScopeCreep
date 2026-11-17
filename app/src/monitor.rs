@@ -9,7 +9,6 @@
 use crate::playback_rate::PlaybackRate;
 use crate::senders::{Arbiter, SenderKey};
 use crate::colour_setup::{ColourSetup, KnownColourSetup, Provenance};
-use crate::output_conversion::Plan;
 use crate::project::{Outcome, ProjectReader, ProjectReading};
 use crate::viewer_gate::{Timing, ViewerGate};
 use scopecreep_feed::{FeedReader, FeedStats, Frame, OpenError, SenderInfo};
@@ -188,18 +187,6 @@ impl Status {
     /// What every display needs to know about the Colour Setup.
     pub fn display_context(&self) -> crate::display::DisplayContext {
         crate::display::DisplayContext { colour_setup: self.colour_setup(), colour_label: self.colour_label(), ..Default::default() }
-    }
-
-    /// The quiet label of the Picture View.
-    pub fn picture_label(&self) -> String {
-        match &self.picture {
-            // What was done to the picture, and how far it can be trusted (ticket #17): never more than is proven.
-            Some(p) => {
-                let conversion = Plan::for_setup(self.colour_setup().map(|c| c.setup).as_ref());
-                format!("Clean picture  ·  {} × {}  ·  {}  ·  {}", p.width, p.height, self.colour_label(), conversion.label())
-            }
-            None => "Clean picture".to_string(),
-        }
     }
 
     /// The quiet status line: playback rate, dropped frames and the Sender driving the Feed.

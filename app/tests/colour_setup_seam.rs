@@ -174,7 +174,8 @@ impl Bench {
         self.writer.as_mut().unwrap().set_colour_setup(text.map(|t| SentColourSetup::new(Provenance::Manual, t)));
     }
     fn label(&self) -> String {
-        self.monitor.status().picture_label()
+        let status = self.monitor.status();
+        scopecreep::picture_view::PictureView::label_for(status.picture.as_ref().map(|p| [p.width, p.height]), &status.display_context())
     }
     fn colour_label(&self) -> Option<String> {
         self.monitor.status().colour_setup().map(|c| c.label())

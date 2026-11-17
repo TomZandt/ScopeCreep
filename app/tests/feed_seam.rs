@@ -84,7 +84,8 @@ impl Bench {
         self.shown.iter().map(|s| s.0).collect()
     }
     fn label(&self) -> String {
-        self.monitor.status().picture_label()
+        let status = self.monitor.status();
+        scopecreep::picture_view::PictureView::label_for(status.picture.as_ref().map(|p| [p.width, p.height]), &status.display_context())
     }
     fn notice(&self) -> String {
         self.monitor.status().notice().unwrap_or_default()

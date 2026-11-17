@@ -94,7 +94,7 @@ fn run() -> Result<(), String> {
         let read = status.project_state == ProjectState::Read && status.project.as_ref().is_some_and(|p| p.project == project);
         let Some(i) = wanted.iter().position(|(_, t)| (t - picture.frame_time).abs() < 1e-6) else { continue };
         let (Some(frame), true) = (uploader.frame(), read) else { continue };
-        let label = status.picture_label();
+        let label = scopecreep::picture_view::PictureView::label_for(Some([picture.width, picture.height]), &status.display_context());
         let rgb = conversion.read_shown(frame);
         let (clip, _) = wanted.remove(i);
         let path = out.join(format!("{clip}.exr"));
