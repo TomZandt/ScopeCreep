@@ -86,6 +86,10 @@ _Avoid_: Monitor, meter, graph
 A Scope that plots each pixel's colour as Cb across and Cr up, so hue is the angle and saturation the distance from the middle. Two Panels show it: at 100 % the whole picture, at 200 % the same data at twice the radius. Cb/Cr use the Measured Space's luma weights.
 _Avoid_: Chroma scope, colour wheel
 
+**Saturation heatmap**:
+A Picture View that colours each pixel of the Output picture by its distance from neutral on the vectorscope's scale (100 % is the vectorscope's outer ring), from cool (neutral) to warm (very saturated), in the muted palette shared with the Skin Tone Panel.
+_Avoid_: Chroma map, saturation false colour
+
 **Skin-tone line**:
 A line on a vectorscope from the middle at a fixed angle, where skin tones sit. Its angle is held in one shared constant (assumed 134.5° in BT.709 Cb/Cr until measured in Resolve, #60).
 _Avoid_: I-line (that is the composite-video name), flesh line

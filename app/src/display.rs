@@ -144,6 +144,7 @@ impl DisplaySet {
         set.register(Arc::new(crate::black_and_white::BlackAndWhite::new(device, queue, target, filterable)));
         set.register(Arc::new(crate::vectorscope::Vectorscope::new(device, queue, target, crate::vectorscope::Zoom::X1)));
         set.register(Arc::new(crate::vectorscope::Vectorscope::new(device, queue, target, crate::vectorscope::Zoom::X2)));
+        set.register(Arc::new(crate::saturation_heatmap::SaturationHeatmap::new(device, queue, target)));
         set.register(Arc::new(crate::skin_tone_view::SkinTone::new(device, queue, target, filterable)));
         set.register(Arc::new(crate::stops_false_colour::StopsFalseColour::new(device, queue, target)));
         set.register(Arc::new(crate::cie::CiePlot::new(device, queue, target)));
