@@ -229,8 +229,11 @@ fn the_100_percent_vectorscope_shows_the_whole_picture_and_the_200_percent_only_
     let (w, h, pixels, _) = bars(1.0);
     b.play(w, h, &pixels);
     assert_eq!(b.counts(V100).total(), 6 * 360, "at 100 % every full-strength bar is on the plot");
-    // At 200 % a full-strength bar is further out than the plot reaches: those pixels are off it, not wrapped.
-    assert!(b.counts(V200).total() < 6 * 360);
+    assert_eq!(b.counts(V100).on_edge(), 0, "and none is on its edge");
+    // At 200 % a full-strength bar is further out than the plot reaches: those pixels are off the chart, so they
+    // are counted on the plot's edge, not wrapped round and not lost.
+    assert_eq!(b.counts(V200).total(), 6 * 360);
+    assert_eq!(b.counts(V200).on_edge(), 6 * 360, "every full-strength bar is further out than the 200 % plot reaches");
 }
 
 #[test]
@@ -378,6 +381,33 @@ fn the_colour_target_boxes_carry_the_colour_they_stand_for() {
 }
 
 #[test]
+fn colours_off_the_chart_are_drawn_as_a_solid_bar_on_the_plots_edge_where_they_leave_it() {
+    let mut b = Bench::new("clipping");
+    let width = 2000;
+    // Fully clipped red at twice full strength: Cb -0.23, Cr 1.0, far above the 0.55 the plot reaches.
+    let top_bar = |b: &mut Bench, rgb: [f32; 3]| -> Option<(f32, [u8; 3])> {
+        b.play(64, 36, &solid(64, 36, rgb));
+        let (image, panels) = b.render(width, 900, 1.0);
+        let square = PlotSquare::new(panels[b.index(V100)].content, 1.0);
+        let y = square.plot[1] + 1.0;
+        let mut best: Option<(f32, [u8; 3])> = None;
+        let mut x = square.plot[0];
+        while x < square.plot[0] + square.plot[2] {
+            let p = pixel(&image, width, [x, y]);
+            if p.iter().map(|v| *v as u32).sum::<u32>() > 300 && best.is_none_or(|(_, q)| p[0] > q[0]) {
+                best = Some(((x - square.plot[0]) / square.plot[2], p));
+            }
+            x += 1.0;
+        }
+        best
+    };
+    let (at, p) = top_bar(&mut b, [2.0, 0.0, 0.0]).expect("the clipped red is drawn on the top edge");
+    assert!((at - 0.386).abs() < 0.03, "where the line from the middle to the colour leaves the plot: {at}");
+    assert!(p[0] > 150 && p[0] > p[1] + 80 && p[0] > p[2] + 80, "it is red, solid: {p:?}");
+    assert!(top_bar(&mut b, [0.75, 0.0, 0.0]).is_none(), "a colour on the chart draws nothing on the edge");
+}
+
+#[test]
 fn the_trace_brightness_setting_makes_a_sparse_colour_brighter_or_dimmer() {
     let mut b = Bench::new("brightness");
     let width = 2000;
@@ -398,7 +428,7 @@ fn the_trace_brightness_setting_makes_a_sparse_colour_brighter_or_dimmer() {
 }
 
 #[test]
-fn the_label_names_the_measured_space_the_weights_the_targets_and_the_assumed_angle() {
+fn the_label_names_the_measured_space_the_weights_the_targets_and_the_angle() {
     let mut b = Bench::new("label");
     let assumed = b.label(V100);
     assert!(assumed.starts_with("Vectorscope 100 %  ·  Cb/Cr"), "{assumed}");
@@ -406,7 +436,6 @@ fn the_label_names_the_measured_space_the_weights_the_targets_and_the_assumed_an
     assert!(assumed.contains("Y = 0.2126 R + 0.7152 G + 0.0722 B"), "{assumed}");
     assert!(assumed.contains("75 % targets"), "{assumed}");
     assert!(assumed.contains("123° (as Resolve 21.2 draws it)"), "{assumed}");
-    assert!(!assumed.contains("Resolve"), "the angle is not claimed to match Resolve: {assumed}");
     assert!(b.label(V200).starts_with("Vectorscope 200 %"));
 
     let setup = ColourSetup::new(Some(Science::Yrgb), "P3-D65".into(), "P3-D65".into(), None, None, None, Some(Levels::Video));

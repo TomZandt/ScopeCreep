@@ -134,7 +134,12 @@ impl VectorscopeCounts {
     pub fn at(&self, x: u32, y: u32) -> u32 {
         self.counts[(y * BINS + x) as usize]
     }
-    /// Every pixel counted (pixels outside the plot are not).
+    /// Pixels in the outermost bins: colours off the chart, counted where they leave it.
+    pub fn on_edge(&self) -> u64 {
+        let last = BINS - 1;
+        (0..BINS).flat_map(|i| [(i, 0), (i, last), (0, i), (last, i)]).map(|(x, y)| self.at(x, y) as u64).sum()
+    }
+    /// Every pixel counted (only a colour that is not a number, or impossibly far out, is not).
     pub fn total(&self) -> u64 {
         self.counts.iter().map(|&c| c as u64).sum()
     }
@@ -192,9 +197,18 @@ fn measure(@builtin(global_invocation_id) id: vec3<u32>) {
     let y = dot(rgb, params.weights.xyz);
     let u = (rgb.b - y) * params.scale.y * params.scale.x * 0.5 + 0.5;
     let v = 0.5 - (rgb.r - y) * params.scale.z * params.scale.x * 0.5;
-    // Not a number, or off the plot: not counted.
     if (u >= 0.0 && u < 1.0 && v >= 0.0 && v < 1.0) {
         atomicAdd(&bins[u32(v * BINS) * 1024u + u32(u * BINS)], 1u);
+        return;
+    }
+    // Off the chart: counted on the plot's edge, where the line from the middle to the colour leaves it, so that
+    // it is never hidden. (Not a number, or too far to place: not counted.)
+    let du = u - 0.5;
+    let dv = v - 0.5;
+    let m = max(abs(du), abs(dv));
+    if (du == du && dv == dv && m > 0.5 && m < 1.0e6) {
+        let k = 0.4995 / m;
+        atomicAdd(&bins[u32((0.5 + dv * k) * BINS) * 1024u + u32((0.5 + du * k) * BINS)], 1u);
     }
 }
 "#;
@@ -307,7 +321,19 @@ fn fs(@builtin(position) position: vec4<f32>) -> @location(0) vec4<f32> {
             base = BARS[i] * 0.7;
         }
     }
-    let shown = brightness(density(p - plot.xy));
+    let rel = p - plot.xy;
+    var shown = brightness(density(rel));
+    // Colours off the chart sit on the plot's edge: drawn as a solid bar along it, as the waveform does.
+    let band = max(3.0, 3.0 * placement.info.w);
+    let to_edge = min(min(rel.x, plot.z - 1.0 - rel.x), min(rel.y, plot.w - 1.0 - rel.y));
+    if (to_edge < band) {
+        let snapped = vec2<f32>(
+            select(select(rel.x, 0.0, rel.x < band), plot.z - 1.0, rel.x > plot.z - 1.0 - band),
+            select(select(rel.y, 0.0, rel.y < band), plot.w - 1.0, rel.y > plot.w - 1.0 - band));
+        if (density(snapped) > 0.0) {
+            shown = 1.0;
+        }
+    }
     var trace = TRACE;
     if (shown > 0.0) {
         let spot = (p - plot.xy + vec2<f32>(0.5, 0.5)) / plot.z;
@@ -416,7 +442,7 @@ impl Vectorscope {
         let name = m.space.name();
         let space = if m.assumed { format!("{name} assumed, measured as sent, unconverted") } else { name.to_string() };
         let mut label = format!(
-            "{}  ·  Cb/Cr  ·  {space}  ·  Y = {r:.4} R + {g:.4} G + {b:.4} B {}  ·  {} % targets",
+            "{}  ·  Cb/Cr  ·  {space}  ·  Y = {r:.4} R + {g:.4} G + {b:.4} B {}  ·  {} % targets  ·  colours off the chart sit on the edge",
             self.zoom.name(),
             m.weights_how(),
             (config.bars * 100.0).round()

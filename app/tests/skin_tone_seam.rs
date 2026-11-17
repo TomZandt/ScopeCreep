@@ -286,7 +286,7 @@ fn the_tolerance_widens_and_narrows_the_on_line_band() {
 }
 
 #[test]
-fn the_tolerance_is_a_list_of_choices_with_five_degrees_first_and_the_label_names_the_bands_and_the_assumed_angle() {
+fn the_tolerance_is_a_list_of_choices_with_five_degrees_first_and_the_label_names_the_bands_and_the_angle() {
     let mut b = Bench::new("label", Some(DWG_REC709));
     let defs = b.display.setting_defs();
     assert_eq!(defs.len(), 1);

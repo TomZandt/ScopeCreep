@@ -8,6 +8,7 @@ The format follows [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/
 
 ### Changed
 
+- Colours off the chart on the vectorscopes are shown instead of dropped: they are drawn as a solid bar on the plot's edge, where the line from the middle to the colour leaves it, in the colour's own tint, the way the waveform shows out-of-range pixels. At 200 % that is every colour beyond half the 100 % range.
 - The skin-tone line on the vectorscopes and the Skin Tone Panel is at 123°, the angle Resolve 21.2's own vectorscope draws its line at (measured, #60), not the 134.5° first assumed. Skin now sits on it: the ColorChecker's dark skin is 2° and light skin 5° from the line.
 - The vectorscopes' trace is tinted by the colour that put each spot there (blue sky draws blue, the middle is white), and each of the six colour-target boxes is drawn in its own colour (red, yellow, green, cyan, magenta, blue). The plot, grid and skin-tone line stay neutral grey.
 
