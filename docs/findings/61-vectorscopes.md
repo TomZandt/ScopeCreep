@@ -16,3 +16,5 @@ The line was first drawn at an assumed 134.5 degrees (the traditional I-line res
 Not verified (a person at the app and Resolve): the look, comparison with Resolve's vectorscope, UHD 50 performance, very saturated pictures: https://github.com/TomZandt/scopecreep/issues/76
 
 Clipping: pixels beyond the furthest a full-strength Rec.709 bar reaches (0.6 in Cb/Cr; green and magenta bars reach 0.596) are counted by hue angle (720 bins, after the plot's bins) and mark the outer ring, thicker and brighter in their tint at that hue, at either zoom. It is the same at 100 % and 200 %: the 200 % Panel only magnifies, so a colour falling off its edge is not clipping (added after v0.2.0; tests in app/tests/vectorscope_seam.rs).
+
+The outer ring is at 0.6 in Cb/Cr and the plot's edge at 0.66 (first 0.5 and 0.55): the six full-strength bars reach 0.50 to 0.596, so a ring at 0.5 left four of them outside it. The ring is also where clipping starts.

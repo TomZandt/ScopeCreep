@@ -18,3 +18,7 @@ Spec #49 asks for 100 % on the heatmap to be "the vectorscope's 100 % target". A
 
 - A pixel's percentage is the vectorscope's radius for it; it is read the same way in both Panels.
 - Pixels in the Output picture past the ring (green and magenta bars, wide-gamut colours) are all drawn at the warm end at the default scale; the 150 % and 200 % scales separate them.
+
+## Update 2026-11-17
+
+The vectorscope ring moved from 0.5 to 0.6 Cb/Cr, the furthest a full-strength Rec.709 bar reaches, so that every legal bar is inside it. The heatmap follows the ring, so 100 % is now 0.6: green and magenta full-strength bars read 99 %, the other four 84 to 86 %, and nothing legal is over 100 %.

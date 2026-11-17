@@ -17,11 +17,13 @@ use std::sync::{Arc, Mutex};
 
 /// Bins across (and down) the plot.
 pub const BINS: u32 = 1024;
-/// Cb and Cr at the plot's edge at 100 %: a little past 0.5, so that the 100 % bars (up to about 0.51 from the
-/// middle) and slightly over-saturated pictures stay inside.
-pub const HALF_EXTENT: f64 = 0.55;
-/// The outer ring at 100 %, in Cb/Cr. At 200 % the ring is drawn in the same place, so it stands for half this.
-pub const RING: f64 = 0.5;
+/// Cb and Cr at the plot's edge at 100 %: a little past the outer ring, so that the ring is whole and slightly
+/// over-saturated pictures stay inside.
+pub const HALF_EXTENT: f64 = 0.66;
+/// The outer ring at 100 %, in Cb/Cr: the furthest a full-strength Rec.709 bar reaches (green and magenta, 0.596),
+/// so every legal bar is inside it and colours beyond it are clipping. At 200 % the ring is drawn in the same
+/// place, so it stands for half this.
+pub const RING: f64 = 0.6;
 /// How far a colour target box reaches from the target's middle, in Cb/Cr.
 pub const TARGET_HALF: f64 = 0.02;
 
@@ -196,8 +198,7 @@ struct Params {
 @group(0) @binding(2) var<storage, read_write> bins: array<atomic<u32>>;
 
 const BINS: f32 = 1024.0;
-const RING: f32 = 0.5;   // the outer ring, in Cb/Cr
-const CLIP: f32 = 0.6;   // past the furthest a full-strength Rec.709 bar reaches (green and magenta, 0.596)
+const RING: f32 = 0.6;   // the outer ring, in Cb/Cr: past it, a colour is clipping
 
 @compute @workgroup_size(16, 16)
 fn measure(@builtin(global_invocation_id) id: vec3<u32>) {
@@ -216,7 +217,7 @@ fn measure(@builtin(global_invocation_id) id: vec3<u32>) {
     let cb = (rgb.b - y) * params.scale.y;
     let cr = (rgb.r - y) * params.scale.z;
     let reach = length(vec2<f32>(cb, cr));
-    if (reach == reach && reach > CLIP && reach < 1.0e6) {
+    if (reach == reach && reach > RING && reach < 1.0e6) {
         let turn = (atan2(cr, cb) + 3.14159265) / 6.2831853;
         atomicAdd(&bins[1048576u + min(u32(turn * 720.0), 719u)], 1u);
     }

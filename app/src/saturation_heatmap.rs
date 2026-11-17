@@ -3,7 +3,7 @@
 //!
 //! Saturation is the distance from neutral on the vectorscope's scale: Cb/Cr from the Measured Space's luma
 //! weights (ADR 0004), each running -0.5 to 0.5, and the distance `sqrt(Cb^2 + Cr^2)` as a share of the
-//! vectorscope's outer ring ([`crate::vectorscope::RING`], 0.5). So 100 % is the vectorscope's 100 % ring, near
+//! vectorscope's outer ring ([`crate::vectorscope::RING`], 0.6). So 100 % is the vectorscope's 100 % ring, near
 //! where 100 % colour bars sit (ADR 0023), and a grey is 0 %. The scale setting is the percentage at the warm
 //! end; more saturated pixels stay at the warm end.
 use crate::display::{Display, DisplayContext, ScaleText};

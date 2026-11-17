@@ -134,11 +134,11 @@ fn solid(width: u32, height: u32, rgb: [f32; 3]) -> Vec<f32> {
 }
 
 /// BT.709 Cb and Cr from the standard's own constants (1.8556, 1.5748), and the distance from neutral as a share
-/// of the vectorscope's 100 % ring (Cb/Cr 0.5).
+/// of the vectorscope's 100 % ring (Cb/Cr 0.6).
 fn percent(rgb: [f64; 3]) -> f64 {
     let y = 0.2126 * rgb[0] + 0.7152 * rgb[1] + 0.0722 * rgb[2];
     let (cb, cr) = ((rgb[2] - y) / 1.8556, (rgb[0] - y) / 1.5748);
-    cb.hypot(cr) / 0.5 * 100.0
+    cb.hypot(cr) / scopecreep::vectorscope::RING * 100.0
 }
 
 /// Where on the scale a drawn colour sits (0 cool to 1 warm), by finding the palette colour nearest to it.
@@ -235,8 +235,9 @@ fn colour_bars_at_100_percent_sit_at_the_100_percent_point_and_75_percent_bars_b
         for (i, c) in colours.iter().enumerate() {
             let got = pixel(&image, w, i as u32 * 10 + 5, 18);
             let at = percent(*c);
-            // Bars scale with their level, and 100 % bars are within a fifth of the 100 % point (green and
-            // magenta are the furthest out, at 119 %).
+            // Bars scale with their level, and 100 % bars are within a fifth of the 100 % point (the ring is at the
+            // furthest bar, so green and magenta are at 99 % and red, yellow, cyan and blue at 84 to 86 %).
+
             assert!((at / level - 100.0).abs() <= 20.0, "bar {i} at {at:.1} %");
             assert_on_palette(got, (at / 100.0).min(1.0) as f32, &format!("{level} bar {i}"));
         }
