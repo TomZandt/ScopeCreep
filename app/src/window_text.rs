@@ -104,7 +104,13 @@ pub fn panel_title(display_name: &str, context: &DisplayContext, full: String) -
     let setting = |key: &str| context.settings.get(key).map(String::as_str);
     let (name, tags): (String, Vec<String>) = match display_name {
         "Clean picture" => ("Clean picture".into(), conversion_tags(context)),
-        crate::waveform::NAME => ("Luma waveform".into(), waveform_tags(context)),
+        crate::waveform::NAME => {
+            // The channels drawn, when not just Luma.
+            let channels = crate::waveform::Channels::from_setting(setting(crate::waveform::CHANNELS_SETTING));
+            let mut tags = if channels.is_default() { Vec::new() } else { vec![channels.names()] };
+            tags.extend(waveform_tags(context));
+            ("Luma waveform".into(), tags)
+        }
         crate::waveform::COLOUR_NAME => ("Colour waveform".into(), waveform_tags(context)),
         "Black and white" => ("Black and white".into(), measurement_tags(context)),
         "ARRI False Colour" => ("ARRI False Colour".into(), measurement_tags(context)),

@@ -5,7 +5,8 @@
 mod common;
 use common::{Rig, TARGET};
 use scopecreep::colour_setup::{Levels, Provenance};
-use scopecreep::waveform::{Brightness, Look, LumaWeights, MeasuredSpace, Measurement, PlotLayout, Waveform, WaveformCounts};
+use scopecreep::components::Channel;
+use scopecreep::waveform::{Brightness, Channels, Look, LumaWeights, MeasuredSpace, Measurement, PlotLayout, Waveform, WaveformCounts};
 
 /// A stand-in Resolve (the synthetic writer), the app's Feed monitor, and the app's GPU side of the Feed: the
 /// frame upload and the waveform.
@@ -380,4 +381,106 @@ fn the_same_frame_looks_the_same_brightness_in_a_large_and_a_small_panel() {
     let (small, large) = (mean(400, 300), mean(800, 600));
     assert!(small > 40.0 && large > 40.0, "the trace is drawn in both: {small}, {large}");
     assert!((small - large).abs() <= 0.15 * large, "small panel {small}, large panel {large}");
+}
+
+// ------------------------------------------------------------------ the Y R G B chips (#117)
+
+fn channels(y: bool, r: bool, g: bool, b: bool) -> Channels {
+    Channels { y, r, g, b }
+}
+
+/// A picture whose red, green and blue are each flat at their own code (0 to 1023).
+fn flat_codes(width: u32, height: u32, [r, g, b]: [u32; 3]) -> Vec<f32> {
+    picture(width, height, |_, _| [r as f32 / 1023.0, g as f32 / 1023.0, b as f32 / 1023.0])
+}
+
+#[test]
+fn each_channels_trace_lands_at_that_channels_code() {
+    let mut b = Bench::new("channelcodes");
+    b.waveform.set_channels(channels(true, true, true, true));
+    b.play(4, 6, &flat_codes(4, 6, [200, 600, 900]));
+    for (channel, code) in [(Channel::R, 200), (Channel::G, 600), (Channel::B, 900)] {
+        let counts = b.waveform.channel_counts(channel);
+        assert_eq!(counts.columns(), 4);
+        for x in 0..4 {
+            assert_eq!(counts.at(x, code), 6, "{channel:?}: column {x} at its code {code}");
+            assert_eq!((counts.below(x), counts.above(x)), (0, 0));
+        }
+        assert_eq!(counts.total(), 24, "{channel:?}: every pixel counted once");
+    }
+    assert_eq!(b.waveform.counts().total(), 24, "Luma is measured from the same frame");
+}
+
+#[test]
+fn out_of_range_is_counted_per_channel() {
+    let mut b = Bench::new("channeledge");
+    b.waveform.set_channels(channels(false, true, true, true));
+    // Red over white, green under black, blue in range; on the middle column only.
+    b.play(3, 2, &picture(3, 2, |x, _| if x == 1 { [1.2, -0.1, 0.5] } else { [0.5, 0.5, 0.5] }));
+    let (r, g, bl) = (b.waveform.channel_counts(Channel::R), b.waveform.channel_counts(Channel::G), b.waveform.channel_counts(Channel::B));
+    assert_eq!((r.above(1), r.below(1)), (2, 0));
+    assert_eq!((g.above(1), g.below(1)), (0, 2));
+    assert_eq!((bl.above(1), bl.below(1)), (0, 0));
+    assert_eq!((r.above(0), g.below(0)), (0, 0));
+}
+
+#[test]
+fn the_channels_are_drawn_in_their_own_colour_and_edge_rows_show_each_ones_out_of_range() {
+    let mut b = Bench::new("channeldraw");
+    // Red and blue on, green off: red is flat at 700 and runs over white in one column, blue is flat at 300.
+    b.waveform.set_channels(channels(false, true, false, true));
+    b.play(1920, 1080, &picture(1920, 1080, |x, _| [if x == 1000 { 1.3 } else { 700.0 / 1023.0 }, 0.0, 300.0 / 1023.0]));
+    let (width, height) = (800, 500);
+    let image = draw(&b, width, height);
+    let layout = PlotLayout::new([0.0, 0.0, width as f32, height as f32], 1.0);
+    let pixel = |x: f32, y: f32| {
+        let at = (y as usize * width as usize + x as usize) * 4;
+        [image[at] as i32, image[at + 1] as i32, image[at + 2] as i32]
+    };
+    let x = layout.x_of_column(400, 1920);
+    let red = pixel(x, layout.y_of_code(700));
+    let blue = pixel(x, layout.y_of_code(300));
+    assert!(red[0] > 100 && red[0] > red[1] + 40 && red[0] > red[2] + 40, "red trace is red: {red:?}");
+    assert!(blue[2] > 100 && blue[2] > blue[0] + 40, "blue trace is blue: {blue:?}");
+    let green_row = pixel(x, layout.y_of_code(500));
+    assert!(green_row[1] < 40, "no green trace is drawn with G off: {green_row:?}");
+    let above = layout.above();
+    let edge = pixel(layout.x_of_column(1000, 1920), above[1] + above[3] / 2.0);
+    assert!(edge[0] > 100 && edge[0] > edge[2] + 40, "red out of range lights the top edge row in red: {edge:?}");
+    let quiet = pixel(layout.x_of_column(1400, 1920), above[1] + above[3] / 2.0);
+    assert!(quiet[0] < 64, "elsewhere the top edge row stays dark: {quiet:?}");
+}
+
+#[test]
+fn luma_alone_is_the_default_and_a_setting_with_no_chip_on_falls_back_to_it() {
+    assert_eq!(Channels::default(), channels(true, false, false, false));
+    assert_eq!(Channels::from_setting(None), Channels::default());
+    assert_eq!(Channels::from_setting(Some("")), Channels::default());
+    assert_eq!(Channels::from_setting(Some("rb")), channels(false, true, false, true));
+    assert!(Channels::default().is_default());
+    assert_eq!(channels(true, true, false, true).names(), "Y R B");
+}
+
+#[test]
+fn the_label_names_the_channels_when_not_just_luma_and_keeps_the_weights_only_with_luma() {
+    use scopecreep::display::Display;
+    let b = Bench::new("channellabel");
+    assert!(Display::label(&b.waveform).starts_with("Luma  ·  10-bit"));
+    b.waveform.set_channels(channels(false, true, true, false));
+    let label = Display::label(&b.waveform);
+    assert!(label.starts_with("R G  ·  10-bit"), "{label}");
+    assert!(!label.contains("Y ="), "no luma weights without Luma: {label}");
+    b.waveform.set_channels(channels(true, true, false, false));
+    assert!(Display::label(&b.waveform).contains("Y = "));
+}
+
+#[test]
+fn turning_the_colour_channels_off_stops_measuring_them() {
+    let mut b = Bench::new("channeloff");
+    b.waveform.set_channels(channels(true, true, false, false));
+    b.play(2, 2, &flat_codes(2, 2, [300, 300, 300]));
+    assert_eq!(b.waveform.channel_counts(Channel::R).total(), 4);
+    b.waveform.set_channels(channels(true, false, false, false));
+    b.play(2, 2, &flat_codes(2, 2, [300, 300, 300]));
+    assert_eq!(b.waveform.channel_counts(Channel::R).columns(), 0, "the R, G and B counts are gone with their chips");
 }

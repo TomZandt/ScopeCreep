@@ -828,8 +828,8 @@ impl AppWindow {
                 // A chip or the settings button on a title bar takes the press before the bar can be dragged.
                 match self.toolbar_hit() {
                     Some(ToolbarHit::Chip(panel, chip)) => {
-                        if let Some((key, value)) = self.toolbars.get(panel).and_then(|t| t.click(chip)) {
-                            self.choose(panel, key, value);
+                        if let Some((key, value)) = self.toolbars.get(panel).and_then(|t| t.click(chip)).map(|(k, v)| (k, v.to_string())) {
+                            self.choose(panel, key, &value);
                         }
                         return;
                     }

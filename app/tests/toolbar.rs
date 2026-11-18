@@ -131,3 +131,77 @@ fn the_channel_shows_in_the_tags_and_luma_says_so() {
     assert_eq!(tags(Some("red"))[0], "Red");
     assert_eq!(tags(None)[0], "Blue");
 }
+
+// ------------------------------------------------------------------ the luma waveform's chips (#117)
+
+mod waveform_chips {
+    use scopecreep::settings::PanelSettings;
+    use scopecreep::toolbar::{Toolbar, popover_defs};
+    use scopecreep::waveform::{CHANNELS_SETTING, NAME, SETTINGS, TOOLBAR};
+
+    fn on(toolbar: &Toolbar) -> String {
+        toolbar.chips.iter().zip(&toolbar.on).filter(|(_, on)| **on).map(|(c, _)| c.text.as_str()).collect()
+    }
+
+    fn click(settings: &mut PanelSettings, chip: usize) -> String {
+        let toolbar = Toolbar::new(&TOOLBAR, &settings.resolve(NAME, &SETTINGS));
+        let (key, value) = toolbar.click(chip).expect("a chip sets the setting");
+        assert_eq!(key, CHANNELS_SETTING);
+        settings.set(NAME, key, value);
+        on(&Toolbar::new(&TOOLBAR, &settings.resolve(NAME, &SETTINGS)))
+    }
+
+    #[test]
+    fn luma_is_on_by_default_and_the_chips_combine() {
+        let mut settings = PanelSettings::default();
+        assert_eq!(on(&Toolbar::new(&TOOLBAR, &settings.resolve(NAME, &SETTINGS))), "Y");
+        assert_eq!(click(&mut settings, 1), "YR");
+        assert_eq!(click(&mut settings, 3), "YRB");
+        assert_eq!(click(&mut settings, 0), "RB", "Y off, the others stay");
+        assert_eq!(click(&mut settings, 2), "RGB");
+    }
+
+    #[test]
+    fn at_least_one_chip_stays_on() {
+        let mut settings = PanelSettings::default();
+        assert_eq!(click(&mut settings, 0), "Y", "the only chip on cannot be turned off");
+        click(&mut settings, 2);
+        click(&mut settings, 0);
+        assert_eq!(click(&mut settings, 2), "G");
+    }
+
+    #[test]
+    fn every_combination_is_a_valid_setting_and_is_remembered_per_panel() {
+        let mut settings = PanelSettings::default();
+        click(&mut settings, 1);
+        click(&mut settings, 3);
+        let back = PanelSettings::from_text(&settings.to_text());
+        assert_eq!(on(&Toolbar::new(&TOOLBAR, &back.resolve(NAME, &SETTINGS))), "YRB");
+        for mask in 1u8..16 {
+            let value: String = ["y", "r", "g", "b"].iter().enumerate().filter(|(i, _)| mask >> i & 1 == 1).map(|(_, c)| *c).collect();
+            let mut s = PanelSettings::default();
+            s.set(NAME, CHANNELS_SETTING, &value);
+            assert_eq!(s.resolve(NAME, &SETTINGS)[CHANNELS_SETTING], value);
+        }
+    }
+
+    #[test]
+    fn the_popover_keeps_the_other_settings() {
+        let left = popover_defs(&SETTINGS, &TOOLBAR);
+        assert!(left.iter().all(|d| d.key != CHANNELS_SETTING));
+        assert_eq!(left.len(), SETTINGS.len() - 1);
+    }
+
+    #[test]
+    fn the_tags_name_the_channels_when_not_just_luma() {
+        use scopecreep::display::DisplayContext;
+        use scopecreep::settings::Settings;
+        let tags = |value: Option<&str>| {
+            let settings: Settings = value.map(|v| [(CHANNELS_SETTING.to_string(), v.to_string())].into()).unwrap_or_default();
+            scopecreep::window_text::panel_title(NAME, &DisplayContext { settings, ..DisplayContext::default() }, String::new()).tags
+        };
+        assert!(!tags(None).contains(&"Y".to_string()) && !tags(Some("y")).iter().any(|t| t == "Y"));
+        assert_eq!(tags(Some("rg"))[0], "R G");
+        assert_eq!(tags(Some("yrgb"))[0], "Y R G B");
+    }
+}

@@ -200,13 +200,22 @@ impl Measurement {
 
     /// The same label under another title (the Colour Waveform's).
     pub fn label_titled(&self, title: &str) -> String {
+        self.label_for(title, true)
+    }
+
+    /// The label under `title`, without the luma weights when Luma is not drawn.
+    pub fn label_for(&self, title: &str, with_luma: bool) -> String {
         let range = self.levels.range_label();
         let scale = match self.levels_from {
             None => format!("{range} assumed"),
             Some(Provenance::Project) => range.to_string(),
             Some(Provenance::Manual) => format!("{range} set manually"),
         };
-        format!("{title}  ·  10-bit {scale}  ·  {}", self.weights_label())
+        if with_luma {
+            format!("{title}  ·  10-bit {scale}  ·  {}", self.weights_label())
+        } else {
+            format!("{title}  ·  10-bit {scale}")
+        }
     }
 }
 
@@ -243,6 +252,55 @@ impl Default for Look {
     }
 }
 
+/// Which channels the waveform draws, from its Y R G B chips: any combination, at least one (Luma by default).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Channels {
+    pub y: bool,
+    pub r: bool,
+    pub g: bool,
+    pub b: bool,
+}
+
+impl Default for Channels {
+    fn default() -> Channels {
+        Channels { y: true, r: false, g: false, b: false }
+    }
+}
+
+impl Channels {
+    /// From the setting's value: the letters of the chips that are on ("y", "rb", ...). Anything with no chip on
+    /// is the default.
+    pub fn from_setting(value: Option<&str>) -> Channels {
+        let on = |c: char| value.is_some_and(|v| v.contains(c));
+        let channels = Channels { y: on('y'), r: on('r'), g: on('g'), b: on('b') };
+        if channels.any() { channels } else { Channels::default() }
+    }
+
+    pub fn any(&self) -> bool {
+        self.y || self.r || self.g || self.b
+    }
+
+    /// Whether any of R, G and B is on: the frame then needs the second measuring pass.
+    pub fn colour_channels(&self) -> bool {
+        self.r || self.g || self.b
+    }
+
+    /// Bits 0 to 3: Y, R, G, B.
+    fn mask(&self) -> u32 {
+        self.y as u32 | (self.r as u32) << 1 | (self.g as u32) << 2 | (self.b as u32) << 3
+    }
+
+    /// Only Luma: what the title bar need not name.
+    pub fn is_default(&self) -> bool {
+        *self == Channels::default()
+    }
+
+    /// The channels on, named for a tag: "Y", "R G", "Y R G B".
+    pub fn names(&self) -> String {
+        [(self.y, "Y"), (self.r, "R"), (self.g, "G"), (self.b, "B")].iter().filter(|(on, _)| *on).map(|(_, n)| *n).collect::<Vec<_>>().join(" ")
+    }
+}
+
 const PARAMS_BYTES: u64 = 48;
 
 const MEASURE_SHADER: &str = r#"
@@ -255,20 +313,23 @@ struct Params {
 @group(0) @binding(1) var frame: texture_2d<f32>;
 @group(0) @binding(2) var<storage, read_write> counts: array<u32>;
 @group(0) @binding(3) var<storage, read_write> sums: array<atomic<u32>>;   // the colour pass only: R, G, B per count
+@group(0) @binding(4) var<storage, read_write> rgb_counts: array<u32>;     // the channel pass only: R, G, B counts, one block each
 
 const ROWS: u32 = 1026u;
 const COLUMNS: u32 = 2u;    // picture columns per workgroup
 const LANES: u32 = 128u;    // threads per picture column
 
 // The count row a pixel lands in: below code 0 (and NaN: not a value at all), codes 0 to 1023, above code 1023.
-fn row_of(rgb: vec3<f32>) -> u32 {
-    let code = dot(rgb, params.weights.xyz) * params.levels.x + params.levels.y;
+fn row_of_code(code: f32) -> u32 {
     if (code >= 1023.5) {
         return ROWS - 1u;
     } else if (code >= -0.5) {
         return u32(code + 0.5) + 1u;
     }
     return 0u;
+}
+fn row_of(rgb: vec3<f32>) -> u32 {
+    return row_of_code(dot(rgb, params.weights.xyz) * params.levels.x + params.levels.y);
 }
 var<workgroup> local_counts: array<atomic<u32>, 2052>;   // COLUMNS * ROWS
 
@@ -292,6 +353,34 @@ fn measure(@builtin(local_invocation_id) local: vec3<u32>, @builtin(local_invoca
         let column = group.x * COLUMNS + i / ROWS;
         if (column < params.size.x) {
             counts[column * ROWS + i % ROWS] = atomicLoad(&local_counts[i]);
+        }
+    }
+}
+
+// The channel chips' pass: the same counting for each of R, G and B on its own (one workgroup row per channel,
+// those the mask in size.z names), into one block of `rgb_counts` per channel. Every count is written, zeros too.
+@compute @workgroup_size(2, 128)
+fn measure_rgb(@builtin(local_invocation_id) local: vec3<u32>, @builtin(local_invocation_index) index: u32, @builtin(workgroup_id) group: vec3<u32>) {
+    let channel = group.y;
+    if (((params.size.z >> channel) & 1u) == 0u) {
+        return;
+    }
+    for (var i = index; i < COLUMNS * ROWS; i += COLUMNS * LANES) {
+        atomicStore(&local_counts[i], 0u);
+    }
+    workgroupBarrier();
+    let x = group.x * COLUMNS + local.x;
+    if (x < params.size.x) {
+        for (var y = local.y; y < params.size.y; y += LANES) {
+            let rgb = textureLoad(frame, vec2<u32>(x, y), 0).rgb;
+            atomicAdd(&local_counts[local.x * ROWS + row_of_code(rgb[channel] * params.levels.x + params.levels.y)], 1u);
+        }
+    }
+    workgroupBarrier();
+    for (var i = index; i < COLUMNS * ROWS; i += COLUMNS * LANES) {
+        let column = group.x * COLUMNS + i / ROWS;
+        if (column < params.size.x) {
+            rgb_counts[(channel * params.size.x + column) * ROWS + i % ROWS] = atomicLoad(&local_counts[i]);
         }
     }
 }
@@ -410,7 +499,7 @@ pub fn marks_that_fit(marks: &[(f32, u32)], line: f32) -> Vec<bool> {
 
 const TRACE_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba16Float;
 
-const DRAW_UNIFORM_BYTES: u64 = 112;
+const DRAW_UNIFORM_BYTES: u64 = 160;
 
 const DRAW_SHADER: &str = r#"
 struct Placement {
@@ -420,12 +509,16 @@ struct Placement {
     below: vec4<f32>,
     info: vec4<f32>,      // waveform columns, picture height, device pixels per logical pixel
     legal: vec4<f32>,     // the codes of black and white for the Levels in use
-    look: vec4<f32>,      // the gain of the phosphor response, 1 when the soft spread is on, 1 for the Colour Waveform
+    look: vec4<f32>,      // the gain of the phosphor response, 1 when the soft spread is on, 1 for the Colour Waveform, the chips on (bits: Y R G B)
+    red: vec4<f32>,       // the channels' trace colours
+    green: vec4<f32>,
+    blue: vec4<f32>,
 };
 @group(0) @binding(0) var<uniform> placement: Placement;
 @group(0) @binding(1) var<storage, read> counts: array<u32>;
 @group(0) @binding(2) var trace: texture_2d<f32>;   // the plot's trace: brightness-weighted colour, brightness (main pass only)
 @group(0) @binding(3) var<storage, read> sums: array<u32>;   // the Colour Waveform's colour sums, 3 per count
+@group(0) @binding(4) var<storage, read> rgb_counts: array<u32>;   // the R, G and B counts, one block each
 
 const ROWS: u32 = 1026u;
 // Neutral greys only: nothing on screen may tint the eye.
@@ -454,14 +547,22 @@ fn columns_at(x: f32) -> vec2<u32> {
 }
 
 // Mean pixels per picture column in rows [first_row, end_row) of the counts, over the picture columns under x.
-fn density(x: f32, first_row: u32, end_row: u32) -> f32 {
+fn count_at(channel: u32, column: u32, row: u32) -> u32 {
+    if (channel == 0u) {
+        return counts[column * ROWS + row];
+    }
+    return rgb_counts[((channel - 1u) * u32(placement.info.x) + column) * ROWS + row];
+}
+
+// Channel 0 is Y (the luma counts), 1 to 3 are R, G, B.
+fn density(channel: u32, x: f32, first_row: u32, end_row: u32) -> f32 {
     let columns = columns_at(x);
     let step = max(1u, (columns.y - columns.x) / 64u);   // a very narrow panel samples the columns
     var sum = 0.0;
     var sampled = 0.0;
     for (var c = columns.x; c < columns.y; c += step) {
         for (var r = first_row; r < end_row; r++) {
-            sum += f32(counts[c * ROWS + r]);
+            sum += f32(count_at(channel, c, r));
         }
         sampled += 1.0;
     }
@@ -503,6 +604,40 @@ fn tint(x: f32, first_row: u32, end_row: u32) -> vec3<f32> {
     return average / top * TRACE.x;
 }
 
+fn channel_on(channel: u32) -> bool {
+    return ((u32(placement.look.w) >> channel) & 1u) == 1u;
+}
+
+// The trace colour of a channel: Y keeps the luma waveform's (tinted for the Colour Waveform), R, G, B their own.
+fn channel_colour(channel: u32, x: f32, first_row: u32, end_row: u32) -> vec3<f32> {
+    if (channel == 0u) {
+        return tint(x, first_row, end_row);
+    } else if (channel == 1u) {
+        return placement.red.xyz;
+    } else if (channel == 2u) {
+        return placement.green.xyz;
+    }
+    return placement.blue.xyz;
+}
+
+// What the chips that are on draw over rows [first_row, end_row) at screen column x, overlaid on one scale: the sum
+// of each channel's colour at its own phosphor brightness (xyz), and the strongest of the brightnesses (w).
+fn overlay(x: f32, first_row: u32, end_row: u32, expected: f32, floor_level: f32) -> vec4<f32> {
+    var rgb = vec3<f32>(0.0);
+    var strongest = 0.0;
+    for (var channel = 0u; channel < 4u; channel++) {
+        if (!channel_on(channel)) {
+            continue;
+        }
+        let brightness = phosphor(density(channel, x, first_row, end_row), expected, floor_level);
+        if (brightness > 0.0) {
+            rgb += brightness * channel_colour(channel, x, first_row, end_row);
+            strongest = max(strongest, brightness);
+        }
+    }
+    return vec4<f32>(min(rgb, vec3<f32>(1.0)), strongest);
+}
+
 fn y_of_code(code: f32) -> f32 {
     return placement.plot.y + placement.plot.w - (code + 0.5) / 1024.0 * placement.plot.w;
 }
@@ -518,11 +653,8 @@ fn trace_at(p: vec2<f32>) -> vec4<f32> {
     let first = u32(clamp(floor((bottom - p.y - 1.0) / placement.plot.w * 1024.0), 0.0, 1023.0));
     let end = u32(clamp(max(ceil((bottom - p.y) / placement.plot.w * 1024.0), f32(first) + 1.0), 1.0, 1024.0));
     let expected = placement.info.y * f32(end - first) / 1024.0;
-    let brightness = phosphor(density(p.x, first + 1u, end + 1u), expected, 0.08);
-    if (brightness <= 0.0) {
-        return vec4<f32>(0.0);
-    }
-    return vec4<f32>(brightness * tint(p.x, first + 1u, end + 1u), brightness);
+    let drawn = overlay(p.x, first + 1u, end + 1u, expected, 0.08);
+    return vec4<f32>(drawn.xyz, drawn.w);
 }
 
 @vertex
@@ -572,10 +704,12 @@ fn fs(@builtin(position) position: vec4<f32>) -> @location(0) vec4<f32> {
         return vec4<f32>(base * (1.0 - trace_here.a) + trace_here.rgb, 1.0);
     }
     if (inside(p, placement.above)) {
-        return vec4<f32>(mix(EDGE, tint(p.x, ROWS - 1u, ROWS), phosphor(density(p.x, ROWS - 1u, ROWS), placement.info.y / placement.plot.w, 0.8)), 1.0);
+        let drawn = overlay(p.x, ROWS - 1u, ROWS, placement.info.y / placement.plot.w, 0.8);
+        return vec4<f32>(EDGE * (1.0 - drawn.w) + drawn.xyz, 1.0);
     }
     if (inside(p, placement.below)) {
-        return vec4<f32>(mix(EDGE, tint(p.x, 0u, 1u), phosphor(density(p.x, 0u, 1u), placement.info.y / placement.plot.w, 0.8)), 1.0);
+        let drawn = overlay(p.x, 0u, 1u, placement.info.y / placement.plot.w, 0.8);
+        return vec4<f32>(EDGE * (1.0 - drawn.w) + drawn.xyz, 1.0);
     }
     discard;
 }
@@ -605,6 +739,9 @@ struct State {
     draw_bound: Option<wgpu::BindGroup>,
     trace: Option<Trace>,
     trace_bound: Option<wgpu::BindGroup>,
+    /// The R, G and B counts (three blocks as big as the counts), while any of those chips is on.
+    rgb: Option<wgpu::Buffer>,
+    rgb_bound: Option<(u64, wgpu::BindGroup)>,
 }
 
 /// The waveform's GPU state. Cheap to clone: the Feed thread measures through one clone while the window thread
@@ -616,6 +753,8 @@ pub struct Waveform {
     measure: wgpu::ComputePipeline,
     /// The Colour Waveform's second pass.
     accumulate: wgpu::ComputePipeline,
+    /// The channel chips' pass: R, G and B counted on their own.
+    measure_rgb: wgpu::ComputePipeline,
     /// Colour: the trace is tinted by the average colour of the pixels counted at each spot.
     colour: bool,
     /// The Colour Waveform counts nothing itself: it reads the counts the luma waveform made of the same frame
@@ -627,6 +766,7 @@ pub struct Waveform {
     placement: wgpu::Buffer,
     measurement: Arc<Mutex<Measurement>>,
     look: Arc<Mutex<Look>>,
+    channels: Arc<Mutex<Channels>>,
     state: Arc<Mutex<State>>,
 }
 
@@ -660,6 +800,14 @@ impl Waveform {
             layout: None,
             module: &shader,
             entry_point: Some("accumulate"),
+            compilation_options: Default::default(),
+            cache: None,
+        });
+        let measure_rgb = device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
+            label: Some("waveform channels"),
+            layout: None,
+            module: &shader,
+            entry_point: Some("measure_rgb"),
             compilation_options: Default::default(),
             cache: None,
         });
@@ -703,6 +851,7 @@ impl Waveform {
             queue: queue.clone(),
             measure,
             accumulate,
+            measure_rgb,
             colour,
             source: None,
             params,
@@ -711,7 +860,8 @@ impl Waveform {
             placement,
             measurement: Arc::new(Mutex::new(Measurement::default())),
             look: Arc::new(Mutex::new(Look::default())),
-            state: Arc::new(Mutex::new(State { counts: None, sums: None, bound_colour: None, bound: None, draw_bound: None, trace: None, trace_bound: None })),
+            channels: Arc::new(Mutex::new(Channels::default())),
+            state: Arc::new(Mutex::new(State { counts: None, sums: None, bound_colour: None, bound: None, draw_bound: None, trace: None, trace_bound: None, rgb: None, rgb_bound: None })),
         }
     }
 
@@ -723,6 +873,15 @@ impl Waveform {
     /// How to draw from the next draw on (brightness and soft spread; never what is measured).
     pub fn set_look(&self, look: Look) {
         *self.look.lock().unwrap() = look;
+    }
+
+    /// Which channels to measure and draw from the next frame on (the Colour Waveform only ever shows Luma).
+    pub fn set_channels(&self, channels: Channels) {
+        *self.channels.lock().unwrap() = if self.colour { Channels::default() } else { channels };
+    }
+
+    pub fn channels(&self) -> Channels {
+        *self.channels.lock().unwrap()
     }
 
     pub fn measurement(&self) -> Measurement {
@@ -741,7 +900,8 @@ impl Waveform {
         let (scale, offset) = measurement.levels.scale_and_offset();
         let mut params = [0u8; PARAMS_BYTES as usize];
         params[..16].copy_from_slice(bytemuck::cast_slice(&[r as f32, g as f32, b as f32, 0.0]));
-        params[16..24].copy_from_slice(bytemuck::cast_slice(&[frame.width, frame.height]));
+        let channels = self.channels();
+        params[16..28].copy_from_slice(bytemuck::cast_slice(&[frame.width, frame.height, channels.mask() >> 1]));
         params[32..40].copy_from_slice(bytemuck::cast_slice(&[scale as f32, offset as f32]));
         self.queue.write_buffer(&self.params, 0, &params);
 
@@ -806,6 +966,49 @@ impl Waveform {
         if self.colour {
             self.measure_colour(&mut state, encoder, frame);
         }
+        self.measure_channels(&mut state, encoder, frame, channels);
+    }
+
+    /// The R, G and B counts of this frame, for the chips that are on: one more pass over the frame, only while
+    /// one of them is. Turning them all off frees the counts.
+    fn measure_channels(&self, state: &mut State, encoder: &mut wgpu::CommandEncoder, frame: &GpuFrame, channels: Channels) {
+        if !channels.colour_channels() {
+            if state.rgb.take().is_some() {
+                state.rgb_bound = None;
+                state.draw_bound = None;
+                state.trace_bound = None;
+            }
+            return;
+        }
+        let size = frame.width as u64 * ROWS as u64 * 3 * 4;
+        if state.rgb.as_ref().is_none_or(|b| b.size() != size) {
+            state.rgb = Some(self.device.create_buffer(&wgpu::BufferDescriptor {
+                label: Some("waveform channel counts"),
+                size,
+                usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_SRC,
+                mapped_at_creation: false,
+            }));
+            state.rgb_bound = None;
+            state.draw_bound = None;
+            state.trace_bound = None;
+        }
+        if state.rgb_bound.as_ref().is_none_or(|(id, _)| *id != frame.texture_id) {
+            let view = frame.texture.create_view(&Default::default());
+            let bind_group = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
+                label: Some("waveform channels"),
+                layout: &self.measure_rgb.get_bind_group_layout(0),
+                entries: &[
+                    wgpu::BindGroupEntry { binding: 0, resource: self.params.as_entire_binding() },
+                    wgpu::BindGroupEntry { binding: 1, resource: wgpu::BindingResource::TextureView(&view) },
+                    wgpu::BindGroupEntry { binding: 4, resource: state.rgb.as_ref().unwrap().as_entire_binding() },
+                ],
+            });
+            state.rgb_bound = Some((frame.texture_id, bind_group));
+        }
+        let mut pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor { label: Some("waveform channels"), timestamp_writes: None });
+        pass.set_pipeline(&self.measure_rgb);
+        pass.set_bind_group(0, &state.rgb_bound.as_ref().unwrap().1, &[]);
+        pass.dispatch_workgroups(frame.width.div_ceil(2), 3, 1);
     }
 
     /// The Colour Waveform's second pass: the same pixels into the same rows as the counts, adding their colours.
@@ -870,6 +1073,7 @@ impl Waveform {
                     wgpu::BindGroupEntry { binding: 1, resource: counts.buffer.as_entire_binding() },
                     wgpu::BindGroupEntry { binding: 2, resource: wgpu::BindingResource::TextureView(&state.trace.as_ref().unwrap().view) },
                     wgpu::BindGroupEntry { binding: 3, resource: state.sums.as_ref().unwrap().as_entire_binding() },
+                    wgpu::BindGroupEntry { binding: 4, resource: state.rgb.as_ref().or(state.sums.as_ref()).unwrap().as_entire_binding() },
                 ],
             });
             state.draw_bound = Some(bind_group);
@@ -883,6 +1087,7 @@ impl Waveform {
                     wgpu::BindGroupEntry { binding: 0, resource: self.placement.as_entire_binding() },
                     wgpu::BindGroupEntry { binding: 1, resource: counts.buffer.as_entire_binding() },
                     wgpu::BindGroupEntry { binding: 3, resource: state.sums.as_ref().unwrap().as_entire_binding() },
+                    wgpu::BindGroupEntry { binding: 4, resource: state.rgb.as_ref().or(state.sums.as_ref()).unwrap().as_entire_binding() },
                 ],
             });
             state.trace_bound = Some(bind_group);
@@ -897,7 +1102,12 @@ impl Waveform {
         placement[16..19].copy_from_slice(&[columns as f32, picture_height as f32, scale]);
         let (black, white) = self.measurement().levels.black_and_white();
         placement[20..22].copy_from_slice(&[black as f32, white as f32]);
-        placement[24..27].copy_from_slice(&[look.brightness.gain(), if look.spread { 1.0 } else { 0.0 }, if self.colour { 1.0 } else { 0.0 }]);
+        let channels = self.channels();
+        let mask = if state.rgb.is_some() || !channels.colour_channels() { channels.mask() } else { channels.mask() & 1 };
+        placement[24..28].copy_from_slice(&[look.brightness.gain(), if look.spread { 1.0 } else { 0.0 }, if self.colour { 1.0 } else { 0.0 }, mask as f32]);
+        for (i, colour) in [crate::style::CHANNEL_R, crate::style::CHANNEL_G, crate::style::CHANNEL_B].into_iter().enumerate() {
+            placement[28 + i * 4..31 + i * 4].copy_from_slice(&colour);
+        }
         self.queue.write_buffer(&self.placement, 0, bytemuck::cast_slice(&placement));
 
         // Pass 1, on its own: the trace's brightness into the texture. It is submitted ahead of the caller's
@@ -928,22 +1138,44 @@ impl Waveform {
         pass.draw(0..4, 0..1);
     }
 
-    /// Read the waveform's contents back from the GPU (waits for it): for tests and diagnostics, not per frame.
-    pub fn counts(&self) -> WaveformCounts {
+    /// The counts of one of R, G or B (as the chips that are on measured them), read back like [`Waveform::counts`].
+    /// Empty until a frame has been measured with that chip on.
+    pub fn channel_counts(&self, channel: crate::components::Channel) -> WaveformCounts {
+        use crate::components::Channel;
+        let block = match channel {
+            Channel::R => 0,
+            Channel::G => 1,
+            Channel::B => 2,
+            Channel::Y => return self.counts(),
+        };
         let state = self.state.lock().unwrap();
-        let Some(counts) = &state.counts else { return WaveformCounts { columns: 0, counts: Vec::new() } };
+        let (Some(counts), Some(rgb)) = (&state.counts, &state.rgb) else { return WaveformCounts { columns: 0, counts: Vec::new() } };
+        let bytes = counts.columns as u64 * ROWS as u64 * 4;
+        let data = self.read_buffer(rgb, block * bytes, bytes);
+        WaveformCounts { columns: counts.columns, counts: data }
+    }
+
+    fn read_buffer(&self, buffer: &wgpu::Buffer, offset: u64, size: u64) -> Vec<u32> {
         let readback = self.device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("waveform readback"),
-            size: counts.buffer.size(),
+            size,
             usage: wgpu::BufferUsages::MAP_READ | wgpu::BufferUsages::COPY_DST,
             mapped_at_creation: false,
         });
         let mut encoder = self.device.create_command_encoder(&Default::default());
-        encoder.copy_buffer_to_buffer(&counts.buffer, 0, &readback, 0, None);
+        encoder.copy_buffer_to_buffer(buffer, offset, &readback, 0, Some(size));
         self.queue.submit([encoder.finish()]);
         readback.map_async(wgpu::MapMode::Read, .., |_| {});
         self.device.poll(wgpu::PollType::wait_indefinitely()).expect("the GPU finishes");
         let data = bytemuck::cast_slice(&readback.get_mapped_range(..).expect("mapped")).to_vec();
+        data
+    }
+
+    /// Read the waveform's contents back from the GPU (waits for it): for tests and diagnostics, not per frame.
+    pub fn counts(&self) -> WaveformCounts {
+        let state = self.state.lock().unwrap();
+        let Some(counts) = &state.counts else { return WaveformCounts { columns: 0, counts: Vec::new() } };
+        let data = self.read_buffer(&counts.buffer, 0, counts.buffer.size());
         WaveformCounts { columns: counts.columns, counts: data }
     }
 }
@@ -964,7 +1196,7 @@ pub fn luma_weights_of(settings: &Settings) -> LumaWeights {
 }
 
 /// The luma waveform's right-click menu: how Luma is weighted (ADR 0004). The label names the weights in use.
-pub const SETTINGS: [SettingDef; 3] = [
+pub const SETTINGS: [SettingDef; 4] = [
     SettingDef {
         key: LUMA_SETTING,
         label: "Luma weights",
@@ -987,7 +1219,44 @@ pub const SETTINGS: [SettingDef; 3] = [
         label: "Soft spread",
         choices: &[Choice { value: "on", text: "On (about 1 pixel)" }, Choice { value: "off", text: "Off" }],
     },
+    // Shown as the Y R G B chips on the title bar, not in the popover: the letters of the chips that are on.
+    SettingDef {
+        key: CHANNELS_SETTING,
+        label: "Channels",
+        choices: &[
+            Choice { value: "y", text: "Y" },
+            Choice { value: "r", text: "R" },
+            Choice { value: "g", text: "G" },
+            Choice { value: "b", text: "B" },
+            Choice { value: "yr", text: "Y R" },
+            Choice { value: "yg", text: "Y G" },
+            Choice { value: "yb", text: "Y B" },
+            Choice { value: "rg", text: "R G" },
+            Choice { value: "rb", text: "R B" },
+            Choice { value: "gb", text: "G B" },
+            Choice { value: "yrg", text: "Y R G" },
+            Choice { value: "yrb", text: "Y R B" },
+            Choice { value: "ygb", text: "Y G B" },
+            Choice { value: "rgb", text: "R G B" },
+            Choice { value: "yrgb", text: "Y R G B" },
+        ],
+    },
 ];
+
+/// The key of the channels setting: which of the Y R G B chips are on.
+pub const CHANNELS_SETTING: &str = "channels";
+
+/// The chips on the luma waveform's title bar: Y R G B, any combination, at least one on (#117).
+pub static TOOLBAR: [crate::toolbar::ToolbarDef; 1] = [crate::toolbar::ToolbarDef {
+    key: CHANNELS_SETTING,
+    mode: crate::components::ChipMode::Multiple,
+    chips: &[
+        crate::toolbar::ToolbarChip { value: "y", text: "Y", tooltip: "Luma (Y)", channel: Some(crate::components::Channel::Y) },
+        crate::toolbar::ToolbarChip { value: "r", text: "R", tooltip: "Red", channel: Some(crate::components::Channel::R) },
+        crate::toolbar::ToolbarChip { value: "g", text: "G", tooltip: "Green", channel: Some(crate::components::Channel::G) },
+        crate::toolbar::ToolbarChip { value: "b", text: "B", tooltip: "Blue", channel: Some(crate::components::Channel::B) },
+    ],
+}];
 
 /// What the Colour Waveform is called: its Panel's settings are kept under this name.
 pub const COLOUR_NAME: &str = "Colour waveform";
@@ -1029,6 +1298,7 @@ impl crate::display::Display for Waveform {
         // The Colour Waveform has no weights menu of its own: it follows the luma waveform's choice.
         let luma = if self.colour { context.luma } else { luma_weights_of(&context.settings) };
         self.set_look(look_from(&context.settings));
+        self.set_channels(Channels::from_setting(context.settings.get(CHANNELS_SETTING).map(String::as_str)));
         self.set_measurement(crate::output_conversion::measurement(context.colour_setup.clone(), luma));
     }
 
@@ -1036,8 +1306,18 @@ impl crate::display::Display for Waveform {
         if self.colour { &COLOUR_SETTINGS } else { &SETTINGS }
     }
 
+    fn toolbar_defs(&self) -> &'static [crate::toolbar::ToolbarDef] {
+        if self.colour { &[] } else { &TOOLBAR }
+    }
+
     fn label(&self) -> String {
-        if self.colour { self.measurement().label_titled("Colour waveform") } else { Waveform::label(self) }
+        if self.colour {
+            return self.measurement().label_titled("Colour waveform");
+        }
+        // The channels named when not just Luma; the luma weights only while Luma is drawn.
+        let channels = self.channels();
+        let title = if channels.is_default() { "Luma".to_string() } else { channels.names() };
+        self.measurement().label_for(&title, channels.y)
     }
 
     fn draw(&self, pass: &mut wgpu::RenderPass<'_>, area: [f32; 4], surface: [f32; 2], scale: f32) {

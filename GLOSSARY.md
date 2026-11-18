@@ -94,7 +94,7 @@ _Avoid_: Widget, control (for the whole set)
 A small toggle on a title bar: a letter or short word, grey when off, the accent (or its channel's colour for R, G, B, Y) when on.
 
 **Toolbar**:
-The settings a display marks to show as chips on its Panel's title bar (the Channel view's Y R G B). The popover holds the settings that are not on the toolbar.
+The settings a display marks to show as chips on its Panel's title bar (the Channel view's Y R G B, one at a time; the luma waveform's Y R G B, any combination with at least one on). The popover holds the settings that are not on the toolbar.
 
 **Legend strip**:
 The colour scale of a display, always horizontal: under the picture, full width, read left to right.
