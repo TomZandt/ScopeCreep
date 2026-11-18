@@ -96,6 +96,7 @@ DaVinci Resolve                                 scopecreep app (Rust + wgpu)
   - [0022](docs/adr/0022-colour-waveform-tint-is-the-average-colour-at-the-luma-waveforms-positions.md): the Colour Waveform is the luma waveform's counts tinted by the average colour of the pixels counted at each spot
   - [0023](docs/adr/0023-heatmap-saturation-is-a-share-of-the-vectorscope-ring.md): the saturation heatmap's 100 % is the vectorscope's ring (Cb/Cr 0.6 since the ring moved), not each colour's own bar
   - [0024](docs/adr/0024-the-last-sender-in-the-frame-drives-the-feed.md): the last Sender in the frame drives the Feed, and more than one active Sender is a warning
+  - [0026](docs/adr/0026-style-tokens-by-role-and-the-chrome-check.md): chrome draws only through style tokens named by role; measurement colours are data, exempt from the check
   - [0025](docs/adr/0025-skin-tone-panel-paints-solid-colours-on-the-natural-picture.md): the Skin Tone Panel paints solid flat colours on the picture's own colours (replaces ADR 0021's tints)
 - [docs/findings/](docs/findings/): what testing showed, one file per ticket.
 - [docs/research/](docs/research/): what public sources say, with dates and links.

@@ -9,8 +9,8 @@ The format follows [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/
 ### Changed
 
 - The saturation heatmap keeps the picture's shape: the picture is drawn as its Luma in grey and saturation is laid over it in a colour that gets stronger with saturation, from blue to red, so neutral areas stay grey and saturated areas stand out. The default scale is now 75 % so a normal graded picture uses most of it (#100).
+- The Window's chrome (menu, labels, scale numbers, status line, borders, gaps) takes its colours and sizes from one set of style tokens named by role, and a test fails if chrome code uses a raw colour or size. Nothing looks different (#114, ADR 0026).
 - The Skin Tone Panel reads at a glance: the picture keeps its own colours, and pixels near the skin-tone line are painted solid flat colours (yellow within the tolerance, green or magenta on either side out to six times it); neutral pixels and hues beyond keep their own colour (#101).
-
 - The vectorscopes' outer ring sits at the furthest a full-strength Rec.709 bar reaches (the green and magenta bars, 0.596 in Cb/Cr), so every legal bar is inside it, and the plot is a little bigger to fit it whole.
 - The vectorscopes show clipping: where colours go beyond the furthest a full-strength Rec.709 bar reaches, the outer ring turns thicker and brighter at their hue, in their tint, the way the waveform marks out-of-range pixels. It does not depend on the zoom: the 200 % Panel only magnifies, so a colour that merely falls off its edge is not called clipping.
 - The vectorscopes read like a phosphor scope, as the waveform does: brightness follows how many pixels land in each spot (relative to the picture's size and the Panel's, so the look holds at any size), stray pixels stay faint instead of a grey haze, and a soft spread of about 1 pixel (right-click "Soft spread", on by default) turns speckle into smooth tone.

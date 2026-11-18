@@ -21,11 +21,11 @@ use scopecreep::gpu_frame::FrameUploader;
 use scopecreep::layout::MARGIN;
 use scopecreep::monitor::{FeedState, Monitor};
 use scopecreep::output_conversion::OutputConversion;
-use scopecreep::panel_grid::{Border, LABEL_SIZE, PanelGrid, PanelLayout, min_panel_size};
+use scopecreep::panel_grid::{Border, PanelGrid, PanelLayout, min_panel_size};
 use scopecreep::resolve_helper::ScriptHelper;
 use scopecreep::flat_rects::FlatRects;
 use scopecreep::settings::{Menu, MenuRow, PanelSettings, MENU_ROW};
-use scopecreep::waveform::SCALE_SIZE;
+use scopecreep::style;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
@@ -37,16 +37,10 @@ use winit::event_loop::{ActiveEventLoop, EventLoop, EventLoopProxy};
 use winit::window::{CursorIcon, Window, WindowId};
 
 /// Neutral, dark, and the same on every channel: nothing around the picture may tint the eye.
-const BACKGROUND: wgpu::Color = wgpu::Color { r: 0.071, g: 0.071, b: 0.071, a: 1.0 };
-const LABEL_COLOUR: Color = Color::rgb(138, 138, 138);
-const NOTICE_COLOUR: Color = Color::rgb(176, 176, 176);
-/// Sizes in logical pixels.
-const NOTICE_SIZE: f32 = 15.0;
-/// Height of one row of the status line, under the Panels.
-const STATUS_ROW: f32 = 20.0;
-const SCALE_COLOUR: Color = Color::rgb(112, 112, 112);
-/// How far from a border's gap (logical pixels) a click still grabs it.
-const GRAB: f32 = 3.0;
+/// Chrome colours and sizes come from the style tokens (ADR 0026); this gives text colours to glyphon.
+fn text_colour(c: [u8; 3]) -> Color {
+    Color::rgb(c[0], c[1], c[2])
+}
 
 /// What the labels say, as the Feed thread last saw it.
 #[derive(Clone, Default, PartialEq)]
@@ -113,9 +107,9 @@ struct TextStyle {
 
 impl TextStyle {
     /// The quiet labels, the status line and the menu.
-    const LABEL: TextStyle = TextStyle { size: LABEL_SIZE, line: 1.4, align: None, wrap: true };
+    const LABEL: TextStyle = TextStyle { size: style::TYPE_LABEL, line: style::TYPE_LABEL_LINE, align: None, wrap: true };
     /// A notice on its own over the Panel.
-    const NOTICE: TextStyle = TextStyle { size: NOTICE_SIZE, line: 1.5, align: Some(glyphon::cosmic_text::Align::Center), wrap: true };
+    const NOTICE: TextStyle = TextStyle { size: style::TYPE_NOTICE, line: style::TYPE_NOTICE_LINE, align: Some(glyphon::cosmic_text::Align::Center), wrap: true };
 }
 
 /// A piece of text kept shaped until what it says, how it is set, or the room it has, changes.
@@ -126,7 +120,7 @@ struct Text {
 
 impl Text {
     fn new(font_system: &mut FontSystem) -> Text {
-        Text { buffer: Buffer::new(font_system, Metrics::new(LABEL_SIZE, LABEL_SIZE * 1.4)), key: None }
+        Text { buffer: Buffer::new(font_system, Metrics::new(style::TYPE_LABEL, style::TYPE_LABEL * style::TYPE_LABEL_LINE)), key: None }
     }
 
     /// Shape `text` in `style` (at `scale`) in `width` device pixels, unless it already is.
@@ -428,7 +422,7 @@ impl AppWindow {
 
     /// The border under the pointer, if any.
     fn border_under_pointer(&self) -> Option<Border> {
-        self.grid.border_at(self.grid_area, self.grid_gap, self.cursor, GRAB * self.scale)
+        self.grid.border_at(self.grid_area, self.grid_gap, self.cursor, style::SPACE_GRAB * self.scale)
     }
 
     fn pointer_moved(&mut self, x: f32, y: f32) {
@@ -578,7 +572,7 @@ impl AppWindow {
         // Along the bottom, under the Panels: the status line, and above it, while a picture is on screen, a
         // notice in the same quiet size (it never covers the picture).
         let notice_in_status = texts.has_picture && texts.notice.is_some();
-        let row = STATUS_ROW * scale;
+        let row = style::SPACE_STATUS_ROW * scale;
         let status_height = row * if notice_in_status { 2.0 } else { 1.0 };
         // The Panels fill the window above the status line, with a margin round them and between them.
         let area = [margin, margin, (width - 2.0 * margin).max(1.0), (height - status_height - margin).max(1.0)];
@@ -587,7 +581,7 @@ impl AppWindow {
         self.grid_area = area;
         self.grid_gap = margin;
 
-        let line = LABEL_SIZE * scale * 1.4;
+        let line = style::TYPE_LABEL * scale * style::TYPE_LABEL_LINE;
         // Each Panel: its label wrapped to the Panel's width (the Panel makes room for the lines), the display
         // above it, and the numbers on the display's scale.
         let mut panels = Vec::new();
@@ -622,7 +616,7 @@ impl AppWindow {
             (left + margin, (top + (height - notice_height) / 2.0).max(top))
         };
         // The scale's numbers, per Panel, shaped once and reused until they or the room change.
-        let scale_mark_line = SCALE_SIZE * scale * 1.3;
+        let scale_mark_line = style::TYPE_SCALE * scale * style::TYPE_SCALE_LINE;
         let mut marks: Vec<(usize, scopecreep::display::ScaleText)> = Vec::new();
         if texts.has_picture {
             for (i, panel) in panels.iter().enumerate() {
@@ -642,25 +636,25 @@ impl AppWindow {
         for (i, mark) in &marks {
             let n = used[*i];
             used[*i] += 1;
-            let style = TextStyle { size: SCALE_SIZE, line: 1.3, align: mark.right_aligned.then_some(glyphon::cosmic_text::Align::Right), wrap: false };
+            let style = TextStyle { size: style::TYPE_SCALE, line: style::TYPE_SCALE_LINE, align: mark.right_aligned.then_some(glyphon::cosmic_text::Align::Right), wrap: false };
             self.panel_texts[*i].scale[n].set(&mut self.font_system, &mark.text, style, scale, mark.width);
             mark_areas.push((*i, n, mark.left, mark.top - scale_mark_line / 2.0));
         }
 
         let mut areas = vec![
-            TextArea { buffer: &self.status.buffer, left: margin, top: status_top, scale: 1.0, bounds: whole, default_color: LABEL_COLOUR, custom_glyphs: &[] },
-            TextArea { buffer: &self.notice.buffer, left: notice_left, top: notice_top, scale: 1.0, bounds: whole, default_color: NOTICE_COLOUR, custom_glyphs: &[] },
+            TextArea { buffer: &self.status.buffer, left: margin, top: status_top, scale: 1.0, bounds: whole, default_color: text_colour(style::TEXT_SECONDARY), custom_glyphs: &[] },
+            TextArea { buffer: &self.notice.buffer, left: notice_left, top: notice_top, scale: 1.0, bounds: whole, default_color: text_colour(style::TEXT_PRIMARY), custom_glyphs: &[] },
         ];
         for (panel, text) in panels.iter().zip(&self.panel_texts) {
             let [left, top, w, h] = panel.label;
             // A label never spills out of its Panel.
             let bounds = TextBounds { left: left as i32, top: top as i32, right: (left + w).ceil() as i32, bottom: (top + h).ceil() as i32 };
-            areas.push(TextArea { buffer: &text.label.buffer, left, top: top + (scopecreep::panel_grid::LABEL_STRIP * scale - line) / 2.0, scale: 1.0, bounds, default_color: LABEL_COLOUR, custom_glyphs: &[] });
+            areas.push(TextArea { buffer: &text.label.buffer, left, top: top + (scopecreep::panel_grid::LABEL_STRIP * scale - line) / 2.0, scale: 1.0, bounds, default_color: text_colour(style::TEXT_SECONDARY), custom_glyphs: &[] });
         }
         for (i, n, left, top) in mark_areas {
             let c = panels[i].content;
             let bounds = TextBounds { left: c[0] as i32, top: c[1] as i32, right: (c[0] + c[2]).ceil() as i32, bottom: (c[1] + c[3]).ceil() as i32 };
-            areas.push(TextArea { buffer: &self.panel_texts[i].scale[n].buffer, left, top, scale: 1.0, bounds, default_color: SCALE_COLOUR, custom_glyphs: &[] });
+            areas.push(TextArea { buffer: &self.panel_texts[i].scale[n].buffer, left, top, scale: 1.0, bounds, default_color: text_colour(style::TEXT_MUTED), custom_glyphs: &[] });
         }
         self.viewport.update(&self.queue, Resolution { width: self.config.width, height: self.config.height });
         let prepared = self.text_renderer.prepare(&self.device, &self.queue, &mut self.font_system, &mut self.atlas, &self.viewport, areas, &mut self.swash_cache);
@@ -675,9 +669,10 @@ impl AppWindow {
             while self.menu_texts.len() < menu.rows.len() {
                 self.menu_texts.push(Text::new(&mut self.font_system));
             }
-            rects.push(([rect[0] - scale, rect[1] - scale, rect[2] + 2.0 * scale, rect[3] + 2.0 * scale], [0.30, 0.30, 0.30, 1.0]));
-            rects.push((rect, [0.11, 0.11, 0.11, 1.0]));
-            let text_left = rect[0] + 26.0 * scale;
+            let w = style::LINE_WEIGHT * scale;
+            rects.push(([rect[0] - w, rect[1] - w, rect[2] + 2.0 * w, rect[3] + 2.0 * w], style::rgba(style::LINE_BORDER)));
+            rects.push((rect, style::rgba(style::SURFACE_MENU)));
+            let text_left = rect[0] + style::SPACE_MENU_TEXT_LEFT * scale;
             for (i, row) in menu.rows.iter().enumerate() {
                 let top = Menu::row_top(rect, i, scale);
                 let (text, heading) = match row {
@@ -685,23 +680,23 @@ impl AppWindow {
                     MenuRow::Choice { text, on, .. } => {
                         let row_rect = [rect[0], top, rect[2], MENU_ROW * scale];
                         if Menu::contains(row_rect, self.cursor) {
-                            rects.push((row_rect, [0.20, 0.20, 0.20, 1.0]));
+                            rects.push((row_rect, style::rgba(style::STATE_HOVER)));
                         }
                         if *on {
-                            let side = 6.0 * scale;
-                            rects.push(([rect[0] + 12.0 * scale, top + (MENU_ROW * scale - side) / 2.0, side, side], [0.86, 0.86, 0.86, 1.0]));
+                            let side = style::SPACE_MENU_MARK * scale;
+                            rects.push(([rect[0] + style::SPACE_MENU_MARK_LEFT * scale, top + (MENU_ROW * scale - side) / 2.0, side, side], style::rgba(style::STATE_ON)));
                         }
                         (text.as_str(), false)
                     }
                 };
-                self.menu_texts[i].set(&mut self.font_system, text, TextStyle { wrap: false, ..TextStyle::LABEL }, scale, rect[2] - 34.0 * scale);
-                menu_areas.push((i, if heading { rect[0] + 10.0 * scale } else { text_left }, top + (MENU_ROW * scale - line) / 2.0, heading));
+                self.menu_texts[i].set(&mut self.font_system, text, TextStyle { wrap: false, ..TextStyle::LABEL }, scale, rect[2] - style::SPACE_MENU_TEXT_RIGHT * scale);
+                menu_areas.push((i, if heading { rect[0] + style::SPACE_MENU_HEADING_LEFT * scale } else { text_left }, top + (MENU_ROW * scale - line) / 2.0, heading));
             }
         }
         self.flat.set([width, height], &rects);
         let menu_text_areas: Vec<TextArea> = menu_areas
             .iter()
-            .map(|(i, left, top, heading)| TextArea { buffer: &self.menu_texts[*i].buffer, left: *left, top: *top, scale: 1.0, bounds: whole, default_color: if *heading { LABEL_COLOUR } else { NOTICE_COLOUR }, custom_glyphs: &[] })
+            .map(|(i, left, top, heading)| TextArea { buffer: &self.menu_texts[*i].buffer, left: *left, top: *top, scale: 1.0, bounds: whole, default_color: if *heading { text_colour(style::TEXT_SECONDARY) } else { text_colour(style::TEXT_PRIMARY) }, custom_glyphs: &[] })
             .collect();
         if let Err(e) = self.menu_renderer.prepare(&self.device, &self.queue, &mut self.font_system, &mut self.atlas, &self.viewport, menu_text_areas, &mut self.swash_cache) {
             eprintln!("scopecreep: menu text could not be prepared: {e}");
@@ -726,7 +721,7 @@ impl AppWindow {
                     view: &view,
                     depth_slice: None,
                     resolve_target: None,
-                    ops: wgpu::Operations { load: wgpu::LoadOp::Clear(BACKGROUND), store: wgpu::StoreOp::Store },
+                    ops: wgpu::Operations { load: wgpu::LoadOp::Clear(style::clear(style::SURFACE_WINDOW)), store: wgpu::StoreOp::Store },
                 })],
                 depth_stencil_attachment: None,
                 timestamp_writes: None,

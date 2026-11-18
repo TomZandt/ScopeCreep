@@ -9,17 +9,17 @@
 //! Sizes are in device pixels; rectangles are left, top, width, height.
 
 /// Logical pixels: the label's text size, and the label strip's height for one line.
-pub const LABEL_SIZE: f32 = 12.5;
-pub const LABEL_STRIP: f32 = 30.0;
+pub const LABEL_SIZE: f32 = crate::style::TYPE_LABEL;
+pub const LABEL_STRIP: f32 = crate::style::SPACE_LABEL_STRIP;
 /// The least height a display keeps, in logical pixels, however many lines its label wraps onto.
-pub const MIN_DISPLAY: f32 = 80.0;
+pub const MIN_DISPLAY: f32 = crate::style::SPACE_MIN_DISPLAY;
 /// The smallest a Panel can be dragged to, in logical pixels (width, height): the display keeps [`MIN_DISPLAY`]
 /// above a label of one line.
-const MIN_PANEL: [f32; 2] = [120.0, MIN_DISPLAY + LABEL_STRIP];
+const MIN_PANEL: [f32; 2] = [crate::style::SPACE_MIN_PANEL_WIDTH, MIN_DISPLAY + LABEL_STRIP];
 /// The window the saved border positions are checked against (logical pixels, the Panel area and the gap between
 /// Panels): the default window size. A saved position that would leave a Panel under its minimum here is rubbish.
-const REFERENCE_AREA: [f32; 2] = [1256.0, 700.0];
-const REFERENCE_GAP: f32 = 12.0;
+const REFERENCE_AREA: [f32; 2] = crate::style::SPACE_REFERENCE_AREA;
+const REFERENCE_GAP: f32 = crate::style::SPACE_REFERENCE_GAP;
 
 /// The smallest a Panel can be at `scale` device pixels per logical pixel.
 pub fn min_panel_size(scale: f32) -> [f32; 2] {

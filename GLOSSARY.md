@@ -62,6 +62,18 @@ _Avoid_: Onboarding, wizard, warnings panel, status page
 The whole scopecreep app on screen: every Panel, the labels and the status line.
 _Avoid_: App (for the screen area), screen, workspace
 
+**Chrome**:
+Everything the Window draws that is not a measurement: the menu, labels, scale numbers, status line, borders and gaps. It is neutral grey and draws only through the style tokens.
+_Avoid_: UI, theme
+
+**Style token**:
+A named colour or size by role (`TEXT_SECONDARY`, `SPACE_MARGIN`), kept in one module; chrome never uses a raw value.
+_Avoid_: Theme colour, constant
+
+**Measurement colour**:
+A colour that is data, not style: a false colour band, the heatmap palette, a skin tint, a trace colour. It lives with its display and is exempt from the style check.
+_Avoid_: Theme colour
+
 **Panel**:
 One area of the Window that shows one Scope or Picture View. Every display has its own Panel, so everything can be seen at once; the Panels sit in an ordered grid whose borders the user can drag.
 _Avoid_: Pane, view, tile, window (for one display)

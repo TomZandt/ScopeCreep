@@ -1012,7 +1012,7 @@ pub fn look_from(settings: &crate::settings::Settings) -> Look {
 }
 
 /// Logical pixels: the size of the numbers on the scale.
-pub const SCALE_SIZE: f32 = 11.0;
+pub const SCALE_SIZE: f32 = crate::style::TYPE_SCALE;
 
 impl crate::display::Display for Waveform {
     fn name(&self) -> &'static str {

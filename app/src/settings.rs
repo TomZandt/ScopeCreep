@@ -136,9 +136,9 @@ impl PanelSettings {
 }
 
 /// Logical pixels: the menu's size.
-pub const MENU_WIDTH: f32 = 230.0;
-pub const MENU_ROW: f32 = 24.0;
-pub const MENU_PAD: f32 = 6.0;
+pub const MENU_WIDTH: f32 = crate::style::SPACE_MENU_WIDTH;
+pub const MENU_ROW: f32 = crate::style::SPACE_MENU_ROW;
+pub const MENU_PAD: f32 = crate::style::SPACE_MENU_PAD;
 
 /// What one row of the menu says.
 #[derive(Clone, Debug, PartialEq, Eq)]
