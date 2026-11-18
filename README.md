@@ -17,7 +17,8 @@ Pre-alpha. Nothing to install yet.
 |---|---|---|
 | 0 | Colour and performance checks against Resolve (throwaway prototypes) | Done ([report](docs/stage0-report.md)) |
 | 1 | Feed plus clean picture plus luma waveform (Linux, NVIDIA) | Released in v0.1.0 |
-| 2 | Every display in its own Panel: 14 Panels (waveforms, vectorscopes, CIE plot, false colour, skin tone and more) | Released in v0.2.0; [open checks in Resolve](https://github.com/TomZandt/scopecreep/issues?q=is%3Aissue+is%3Aopen+label%3Aready-for-human) remain (chart clip #66) |
+| 2 | Every display in its own Panel: 14 Panels (waveforms, vectorscopes, CIE plot, false colour, skin tone and more) | Released in v0.2.0 |
+| 3 | A colourist's Window: the picture as the hero, arranged and saved layouts, title bars and one Colour Setup line, a style system with Panel toolbars and sliders, stronger Skin Tone and heatmap, following the scrub | Planned: specs [#94](https://github.com/TomZandt/scopecreep/issues/94), [#113](https://github.com/TomZandt/scopecreep/issues/113), [#83](https://github.com/TomZandt/scopecreep/issues/83), [#106](https://github.com/TomZandt/scopecreep/issues/106); backlog [#119](https://github.com/TomZandt/scopecreep/issues/119); checks at Resolve [#120](https://github.com/TomZandt/scopecreep/issues/120) |
 | Later | Parade, histogram, HDR, Setup Checklist, Capture, Windows/macOS, installers, licensing | Decided, parked |
 
 ## Development (Linux, NVIDIA)
@@ -93,7 +94,8 @@ DaVinci Resolve                                 scopecreep app (Rust + wgpu)
   - [0020](docs/adr/0020-cie-plot-reads-the-output-encoding-as-light.md): the CIE plot reads the Output encoding as light, decoded by the Output Colour Space's name
   - [0021](docs/adr/0021-skin-tone-tolerance-is-choices-scaled-from-one-width.md): the Skin Tone Panel's tolerance is a list of choices that scale one width, and its tints fade through each other
   - [0022](docs/adr/0022-colour-waveform-tint-is-the-average-colour-at-the-luma-waveforms-positions.md): the Colour Waveform is the luma waveform's counts tinted by the average colour of the pixels counted at each spot
-  - [0023](docs/adr/0023-heatmap-saturation-is-a-share-of-the-vectorscope-ring.md): the saturation heatmap's 100 % is the vectorscope's ring (Cb/Cr 0.5), not each colour's own bar
+  - [0023](docs/adr/0023-heatmap-saturation-is-a-share-of-the-vectorscope-ring.md): the saturation heatmap's 100 % is the vectorscope's ring (Cb/Cr 0.6 since the ring moved), not each colour's own bar
+  - [0024](docs/adr/0024-the-last-sender-in-the-frame-drives-the-feed.md): the last Sender in the frame drives the Feed, and more than one active Sender is a warning
 - [docs/findings/](docs/findings/): what testing showed, one file per ticket.
 - [docs/research/](docs/research/): what public sources say, with dates and links.
 
