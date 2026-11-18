@@ -29,6 +29,7 @@ What we learned by testing, kept in the repo so it isn't lost when an issue thre
 | [55](55-channel-view-and-loupe.md) | Milestone 2: does the Channel view draw the chosen channel, and does the Loupe magnify in exact blocks, move, stay inside, zoom 100 to 800 % and persist (headless)? |
 | [51](51-panel-settings-menu.md) | Milestone 2: do Panel settings persist per Panel, and does the luma weights setting change the measurement and the label (headless)? |
 | [65](65-highlight-neutrals.md) | Milestone 2: are all six ColorChecker greys green and no coloured patch green, and does a known channel offset turn green only once the tolerance covers it (headless)? |
+| [101](101-skin-tone-solid-colours.md) | Skin Tone: solid flat colours on the natural picture at the Feed seam |
 | [57](57-arri-false-colour.md) | Milestone 2: does ARRI False Colour show each ColorChecker patch in the research table's band, change band at each edge, and toggle its legend (headless)? |
 | [53](53-waveform-look.md) | Milestone 2: does the waveform's phosphor look follow density, keep strays faint and edge rows clear, and look the same in any Panel size (headless)? |
 | [54](54-black-and-white-picture-view.md) | Milestone 2: is every ColorChecker patch drawn black and white at the Luma the waveform traces for it, and does it follow the waveform's luma weights (headless)? |

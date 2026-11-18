@@ -95,7 +95,7 @@ A line on a vectorscope from the middle at a fixed angle, where skin tones sit. 
 _Avoid_: I-line (that is the composite-video name), flesh line
 
 **Skin Tone Panel**:
-A Picture View of the Output picture in grey in which pixels whose hue is near the Skin-tone line are lit yellow, drifting to green or magenta either side and fading to grey far from skin. Only hue matters, not brightness.
+A Picture View of the Output picture in its own colours in which pixels whose hue is near the Skin-tone line are painted solid flat yellow (on the line), green or magenta (either side, out to the outer band); other and near-neutral pixels keep their own colour. Only hue matters, not brightness.
 _Avoid_: Skin tone indicator (Resolve's and others' name for their own tools)
 
 **Colour targets**:

@@ -1,13 +1,13 @@
-//! The Skin Tone Panel (spec #49 stories 68-74): the Output picture in grey (Luma), with the pixels whose hue is
-//! near the skin-tone line lit up: yellow on the line, green or magenta as the hue drifts to either side, grey for
-//! neutral pixels and for hues far from skin. Only hue matters, not brightness, so it works for every skin tone.
+//! The Skin Tone Panel (spec #49 stories 68-74, #101): the Output picture in its own colours, with the pixels whose
+//! hue is near the skin-tone line painted solid flat colours: yellow on the line, green or magenta as the hue drifts
+//! to either side. Neutral pixels and hues far from skin keep their natural colour. Only hue matters, not
+//! brightness, so it works for every skin tone.
 //!
 //! Hue is the angle of the pixel's Cb/Cr (the vectorscope's, with the same luma weights), measured from the
 //! shared [`SKIN_TONE_LINE_DEGREES`], which is the angle Resolve 21.2's own vectorscope draws its line at (#60, ADR 0018). The
-//! tolerance `t` is a list of choices (ADR 0013, ADR 0021): yellow within `t` of the line, the colour fading in
-//! (yellow to green or magenta) out to 4 t, then fading back to grey, which it is beyond 6 t. At the default 5
-//! degrees that is the spec's 5, 20 and 30. Towards a larger Cb/Cr angle (towards yellow) is green, the other way
-//! magenta. The tints share one brightness and keep the grey's lightness, so the shape of the picture stays readable.
+//! tolerance `t` is a list of choices (ADR 0013, ADR 0021): yellow within `t` of the line, green or magenta from `t`
+//! out to 6 t, and the pixel's own colour beyond. At the default 5 degrees that is the spec's 5 and 30. Towards a
+//! larger Cb/Cr angle (towards yellow) is green, the other way magenta.
 use crate::display::{Display, DisplayContext};
 use crate::gpu_frame::GpuFrame;
 use crate::output_conversion::{Plan, measurement};
@@ -64,7 +64,6 @@ fn fs(in: VertexOut) -> @location(0) vec4<f32> {
     let rgb = textureLoad(picture, at, 0).rgb;
     let w = params.weights.xyz;
     let y = dot(rgb, w);
-    let grey = clamp(y, 0.0, 1.0);
     let cb = (rgb.b - y) / (2.0 * (1.0 - w.z));
     let cr = (rgb.r - y) / (2.0 * (1.0 - w.x));
     // Degrees from the skin-tone line, wrapped to -180..180: positive is towards yellow (green), negative towards red (magenta).
@@ -72,15 +71,14 @@ fn fs(in: VertexOut) -> @location(0) vec4<f32> {
     let offset = atan2(sin(turn), cos(turn)) * 180.0 / PI;
     let distance = abs(offset);
     let t = params.skin.x;
-    let to_side = clamp((distance - t) / (3.0 * t), 0.0, 1.0);
-    let to_grey = 1.0 - clamp((distance - 4.0 * t) / (2.0 * t), 0.0, 1.0);
-    // Nearly neutral pixels have no hue to speak of.
-    let strength = to_grey * smoothstep(0.01, 0.03, length(vec2<f32>(cb, cr)));
-    let yellow = vec3<f32>(0.70, 0.58, 0.10);
-    let green = vec3<f32>(0.20, 0.68, 0.35);
-    let magenta = vec3<f32>(0.85, 0.45, 0.80);
-    let tint = mix(yellow, select(magenta, green, offset > 0.0), to_side) * (0.4 + 0.6 * grey);
-    return vec4<f32>(mix(vec3<f32>(grey), tint, strength), 1.0);
+    // Solid flat colours, not blended: yellow within t of the line, then green or magenta out to 6 t. Beyond that, and
+    // where there is almost no hue, the pixel keeps its own colour.
+    let lit = distance <= 6.0 * t && length(vec2<f32>(cb, cr)) >= 0.02;
+    let yellow = vec3<f32>(1.0, 0.85, 0.0);
+    let green = vec3<f32>(0.1, 0.85, 0.2);
+    let magenta = vec3<f32>(0.95, 0.2, 0.85);
+    let flat_colour = select(select(magenta, green, offset > 0.0), yellow, distance <= t);
+    return vec4<f32>(select(rgb, flat_colour, lit), 1.0);
 }
 "#;
 
@@ -208,9 +206,8 @@ impl Display for SkinTone {
         let config = self.config.lock().unwrap();
         let t: f32 = config.tolerance;
         format!(
-            "Skin tone  ·  yellow within ±{}° of the skin-tone line {SKIN_TONE_LINE_DEGREES}° (as Resolve 21.2 draws it), green or magenta out to ±{}°, grey beyond ±{}° and where saturation is low  ·  {}",
+            "Skin tone  ·  yellow within ±{}° of the skin-tone line {SKIN_TONE_LINE_DEGREES}° (as Resolve 21.2 draws it), green or magenta out to ±{}°, the picture's own colour beyond and where saturation is low  ·  {}",
             config.degrees,
-            t * 4.0,
             t * 6.0,
             config.source
         )

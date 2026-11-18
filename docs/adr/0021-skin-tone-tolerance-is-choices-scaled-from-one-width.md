@@ -1,5 +1,7 @@
 # The Skin Tone Panel's tolerance is a list of choices that scale one width, and the tints fade through each other
 
+_Tint and fade rules superseded by [ADR 0025](0025-skin-tone-panel-paints-solid-colours-on-the-natural-picture.md); the list of choices stands._
+
 Spec #49 asks for "a tolerance slider" with about ±5° on the line, fading out to ±20° and gone beyond ±30°. ADR 0013 says every setting is a short list of named choices, never a free number.
 
 ## Decision

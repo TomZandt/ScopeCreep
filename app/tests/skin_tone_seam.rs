@@ -161,24 +161,23 @@ fn pixel(image: &[u8], width: u32, x: u32, y: u32) -> [u8; 3] {
     [image[i], image[i + 1], image[i + 2]]
 }
 
-/// Shown grey: all three channels equal.
-fn is_grey([r, g, b]: [u8; 3]) -> bool {
-    r == g && g == b
+/// Within a rounding step of a solid colour.
+fn is_solid(shown: [u8; 3], solid: [f32; 3]) -> bool {
+    shown.iter().zip(solid).all(|(&c, s)| (c as f32 - s * 255.0).abs() <= 2.0)
 }
 
-/// Yellow: red and green well above blue and about level with each other.
-fn is_yellow([r, g, b]: [u8; 3]) -> bool {
-    r as i32 > b as i32 + 60 && g as i32 > b as i32 + 50 && (r as i32 - g as i32).abs() < 40
+const YELLOW: [f32; 3] = [1.0, 0.85, 0.0];
+const GREEN: [f32; 3] = [0.1, 0.85, 0.2];
+const MAGENTA: [f32; 3] = [0.95, 0.2, 0.85];
+
+/// Painted by the Panel: one of its three solid colours.
+fn is_painted(shown: [u8; 3]) -> bool {
+    is_solid(shown, YELLOW) || is_solid(shown, GREEN) || is_solid(shown, MAGENTA)
 }
 
-/// How green: the green channel's lead over the others (negative when it trails).
-fn green_excess([r, g, b]: [u8; 3]) -> i32 {
-    g as i32 - (r as i32).max(b as i32)
-}
-
-/// How magenta: the lead of the weaker of red and blue over green.
-fn magenta_excess([r, g, b]: [u8; 3]) -> i32 {
-    (r as i32).min(b as i32) - g as i32
+/// Solid yellow, at full strength (not a tint mixed with grey).
+fn is_yellow(shown: [u8; 3]) -> bool {
+    is_solid(shown, YELLOW)
 }
 
 const DWG_REC709: &str = "timeline=DaVinci WG/Intermediate\noutput=Rec.709 Gamma 2.4\n";
@@ -210,7 +209,7 @@ fn offset_of(hue: f64) -> f64 {
 }
 
 #[test]
-fn the_dark_and_light_skin_patches_are_coloured_by_their_hue_against_the_line_and_the_rest_far_from_skin_stay_grey() {
+fn the_skin_patches_are_painted_solid_and_the_other_patches_keep_their_own_colour() {
     let (width, height) = (600u32, 400u32);
     let chart = ColorChecker::new(TimelineSpace::DavinciIntermediate);
     let frame = chart.frame(width, height);
@@ -225,46 +224,48 @@ fn the_dark_and_light_skin_patches_are_coloured_by_their_hue_against_the_line_an
                 let shown = pixel(&image, width, x, y);
                 let what = format!("patch {} {} ({offset:+.1} deg from the line) shows {shown:?}", patch.number, patch.name);
                 match patch.number {
-                    // Dark skin sits 2 degrees below the line Resolve draws: yellow. Light skin is 5 degrees below it,
-                    // at the edge of the band: still coloured (yellow just starting to fade).
+                    // Dark skin sits 2 degrees below the line Resolve draws: solid yellow.
                     1 => assert!(is_yellow(shown), "{what}"),
-                    2 => assert!(!is_grey(shown), "{what}"),
-                    // Orange is 9 degrees above the line: coloured, leaning to the green side.
-                    7 => assert!(!is_grey(shown) && green_excess(shown) > 0, "{what}"),
-                    // The neutral patches have no hue to speak of.
-                    19..=24 => assert!(is_grey(shown), "{what}"),
-                    // Blue sky, foliage, blue flower, green, cyan and the others 30 degrees or more away stay grey.
-                    _ if offset.abs() >= 30.0 => assert!(is_grey(shown), "{what}"),
+                    // Light skin is 5 degrees below it, at the edge of the on-line band: solid yellow or the magenta side.
+                    2 => assert!(is_yellow(shown) || is_solid(shown, MAGENTA), "{what}"),
+                    // Orange is 9 degrees above the line: solid green.
+                    7 => assert!(is_solid(shown, GREEN), "{what}"),
+                    // The neutral patches have no hue to speak of: their own (grey) colour.
+                    19..=24 => assert!(!is_painted(shown) && (shown[0] as i32 - shown[2] as i32).abs() <= 12, "{what}"),
+                    // Blue sky and the others 30 degrees or more away keep their own colour.
+                    _ if offset.abs() >= 30.0 => assert!(!is_painted(shown), "{what}"),
                     _ => {}
                 }
             }
         }
     }
+    // Blue sky keeps its own blue.
+    let r = frame.patch_rect(3);
+    let sky = pixel(&image, width, (r.x0 + r.x1) / 2, (r.y0 + r.y1) / 2);
+    assert!(sky[2] > sky[0] && sky[2] > sky[1], "blue sky stays blue: {sky:?}");
 }
 
 #[test]
-fn hues_a_few_degrees_either_side_of_the_line_go_green_and_magenta_with_strength_growing_with_distance() {
+fn hues_either_side_of_the_line_are_solid_green_and_solid_magenta_out_to_the_outer_band() {
     let mut b = Bench::new("sides", None);
     assert!(is_yellow(shown_at(&mut b, 0.0)), "on the line is yellow: {:?}", centre(&b));
-    let (g_near, g_far) = (green_excess(shown_at(&mut b, 8.0)), green_excess(shown_at(&mut b, 15.0)));
-    let (m_near, m_far) = (magenta_excess(shown_at(&mut b, -8.0)), magenta_excess(shown_at(&mut b, -15.0)));
-    assert!(g_far > g_near && g_far > 10, "green grows with distance: {g_near} then {g_far}");
-    assert!(m_far > m_near && m_far > 10, "magenta grows with distance: {m_near} then {m_far}");
-    // The other side's colour is not there: the green side is not magenta, the magenta side is not green.
-    assert!(magenta_excess(shown_at(&mut b, 15.0)) < 0);
-    assert!(green_excess(shown_at(&mut b, -15.0)) < 0);
+    for offset in [8.0, 15.0, 28.0] {
+        assert!(is_solid(shown_at(&mut b, offset), GREEN), "+{offset}: {:?}", centre(&b));
+        assert!(is_solid(shown_at(&mut b, -offset), MAGENTA), "-{offset}: {:?}", centre(&b));
+    }
 }
 
 #[test]
 fn hues_far_from_the_line_neutral_pixels_and_any_brightness_behave() {
     let mut b = Bench::new("far", None);
     for offset in [-60.0, -35.0, 35.0, 60.0, 120.0, 180.0] {
-        assert!(is_grey(shown_at(&mut b, offset)), "{offset} deg from the line stays grey: {:?}", centre(&b));
+        let shown = shown_at(&mut b, offset);
+        assert!(!is_painted(shown), "{offset} deg from the line keeps its own colour: {shown:?}");
     }
-    // A hue on the line but nearly neutral stays grey.
+    // A hue on the line but nearly neutral keeps its own (near-grey) colour.
     b.play(64, 36, &hue_frame(0.0, 0.5, 0.004));
-    assert!(is_grey(centre(&b)), "{:?}", centre(&b));
-    // Only hue matters: the same hue dark and light is lit the same way.
+    assert!(!is_painted(centre(&b)), "{:?}", centre(&b));
+    // Only hue matters: the same hue dark and light is painted the same way.
     for y in [0.15, 0.85] {
         b.play(64, 36, &hue_frame(0.0, y, 0.1));
         assert!(is_yellow(centre(&b)), "luma {y}: {:?}", centre(&b));
@@ -275,14 +276,18 @@ fn hues_far_from_the_line_neutral_pixels_and_any_brightness_behave() {
 fn the_tolerance_widens_and_narrows_the_on_line_band() {
     let mut b = Bench::new("tolerance", None);
     b.play(64, 36, &hue_frame(12.0, 0.5, 0.15));
-    // 12 degrees out at the default 5 degrees: part way to green.
-    assert!(green_excess(centre(&b)) > 10, "{:?}", centre(&b));
-    // Widen to 10: 12 is just off the line, still yellow.
+    // 12 degrees out at the default 5 degrees: green.
+    assert!(is_solid(centre(&b), GREEN), "{:?}", centre(&b));
+    // Widen to 10 (band out to 60): 12 is just off the line, still green; widen the line itself with 15 below.
     b.configure(Some("10"));
-    assert!(green_excess(centre(&b)) < 0 && is_yellow(centre(&b)), "{:?}", centre(&b));
-    // Narrow to 2: 12 is past the fade (8) and gone, grey.
+    assert!(is_solid(centre(&b), GREEN), "{:?}", centre(&b));
+    b.play(64, 36, &hue_frame(8.0, 0.5, 0.15));
+    b.configure(Some("10"));
+    assert!(is_yellow(centre(&b)), "{:?}", centre(&b));
+    // Narrow to 2 (band out to 12): 15 degrees out is past it and keeps its own colour.
+    b.play(64, 36, &hue_frame(15.0, 0.5, 0.15));
     b.configure(Some("2"));
-    assert!(is_grey(centre(&b)), "{:?}", centre(&b));
+    assert!(!is_painted(centre(&b)), "{:?}", centre(&b));
 }
 
 #[test]
@@ -295,12 +300,12 @@ fn the_tolerance_is_a_list_of_choices_with_five_degrees_first_and_the_label_name
     b.play(16, 9, &(0..16 * 9).flat_map(|_| [0.5, 0.5, 0.5, 1.0]).collect::<Vec<f32>>());
     let label = b.display.label();
     assert!(label.starts_with("Skin tone"), "{label}");
-    assert!(label.contains("±5°") && label.contains("±20°") && label.contains("±30°"), "{label}");
+    assert!(label.contains("±5°") && label.contains("±30°"), "{label}");
     assert!(label.contains("123° (as Resolve 21.2 draws it)"), "{label}");
     assert!(label.contains("Output picture") && label.contains("DaVinci WG/Intermediate") && label.contains("Output Conversion"), "{label}");
     b.configure(Some("10"));
     let label = b.display.label();
-    assert!(label.contains("±10°") && label.contains("±40°") && label.contains("±60°"), "{label}");
+    assert!(label.contains("±10°") && label.contains("±60°"), "{label}");
 }
 
 #[test]
