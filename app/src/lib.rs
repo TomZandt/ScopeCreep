@@ -32,3 +32,4 @@ pub mod muted_palette;
 pub mod saturation_heatmap;
 pub mod stops_false_colour;
 pub mod cie;
+pub mod window_text;

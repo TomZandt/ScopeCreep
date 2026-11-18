@@ -189,23 +189,77 @@ impl Status {
         crate::display::DisplayContext { colour_setup: self.colour_setup(), colour_label: self.colour_label(), ..Default::default() }
     }
 
-    /// The quiet status line: playback rate, dropped frames and the Sender driving the Feed.
-    pub fn status_line(&self) -> String {
-        let rate = match self.playback_rate {
+    /// The feeding timeline's name, once known (from the Sender, else the project as last read).
+    pub fn timeline_name(&self) -> Option<String> {
+        let sender = self.driving.as_ref().and_then(|d| d.names.as_ref()).map(|n| n.timeline.clone());
+        sender.or_else(|| self.project.as_ref().and_then(|p| p.timeline.clone())).filter(|t| !t.is_empty())
+    }
+
+    fn rate_text(&self) -> String {
+        match self.playback_rate {
             Some(r) => format!("{r:.2} fps"),
             None => "paused".to_string(),
-        };
-        let (slow, busy) = (self.dropped_app_slow, self.dropped_sender_busy);
-        let dropped = match (slow, busy) {
-            (0, 0) => "0 dropped".to_string(),
-            (n, 0) => format!("{n} dropped (app too slow)"),
-            (0, n) => format!("{n} dropped (Sender busy)"),
-            (s, b) => format!("{} dropped ({s} app too slow, {b} Sender busy)", s + b),
-        };
-        match &self.driving {
-            Some(d) => format!("{rate}  ·  {dropped}  ·  {}", d.long_name()),
-            None => format!("{rate}  ·  {dropped}"),
         }
+    }
+
+    /// The drops, short, or with why.
+    fn dropped_text(&self, why: bool) -> String {
+        let (slow, busy) = (self.dropped_app_slow, self.dropped_sender_busy);
+        match (slow, busy, why) {
+            (0, 0, _) => "0 dropped".to_string(),
+            (s, b, false) => format!("{} dropped", s + b),
+            (n, 0, true) => format!("{n} dropped (app too slow)"),
+            (0, n, true) => format!("{n} dropped (Sender busy)"),
+            (s, b, true) => format!("{} dropped ({s} app too slow, {b} Sender busy)", s + b),
+        }
+    }
+
+    /// The status line's choices, in order of priority: playback and performance only (rate, dropped frames and
+    /// why, the feeding timeline). Lower-priority parts drop first (the timeline, then why frames dropped), whole
+    /// parts only, so rate and drops stay visible at any width the window can have.
+    pub fn status_candidates(&self) -> Vec<String> {
+        let sep = crate::window_text::SEP;
+        let (rate, why, short) = (self.rate_text(), self.dropped_text(true), self.dropped_text(false));
+        let mut all = Vec::new();
+        if let Some(timeline) = self.timeline_name() {
+            all.push(format!("{rate}{sep}{why}{sep}{timeline}"));
+        }
+        all.push(format!("{rate}{sep}{why}"));
+        all.push(format!("{rate}{sep}{short}"));
+        all.dedup();
+        all
+    }
+
+    /// The status line: playback rate, dropped frames and why, and the timeline feeding the Window.
+    pub fn status_line(&self) -> String {
+        self.status_candidates().remove(0)
+    }
+
+    /// The status line's hover: what the line leaves out. The Sender driving the Feed with its instance, process,
+    /// Resolve version and timeline rate, any others, the project, and the Feed.
+    pub fn status_hover(&self) -> String {
+        let mut lines = Vec::new();
+        match &self.driving {
+            Some(d) => lines.push(d.long_name()),
+            None => lines.push("No Sender is driving the Feed".to_string()),
+        }
+        for other in &self.ignored {
+            lines.push(format!("Not shown: {}", other.short_name()));
+        }
+        if let Some(p) = &self.project {
+            lines.push(format!("Project {}{}  ·  {}", p.project, p.timeline.as_ref().map_or(String::new(), |t| format!(" › {t}")), p.product));
+        }
+        lines.push(format!("Feed {}  ·  {} shown, {} dropped", self.path.display(), self.viewer_frames, self.dropped));
+        lines.join("\n")
+    }
+
+    /// The Colour Setup line for the top of the Window.
+    pub fn top_bar(&self) -> String {
+        let unknown = match self.project_state {
+            ProjectState::NotYetRead => "Colour Setup read when playback stops",
+            _ => "Colour Setup unknown",
+        };
+        crate::window_text::top_bar(self.colour_setup().as_ref(), unknown)
     }
 
     /// One sentence when there is something the user needs to know, else nothing.

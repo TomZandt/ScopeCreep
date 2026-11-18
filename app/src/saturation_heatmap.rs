@@ -17,6 +17,8 @@ use std::sync::{Arc, Mutex};
 
 pub const SCALE_SETTING: &str = "scale";
 pub const LEGEND_SETTING: &str = "legend";
+/// The heatmap's default hot end, in percent, as its setting says it.
+pub const DEFAULT_SCALE: &str = "75";
 
 const SETTINGS: [SettingDef; 2] = [
     SettingDef {

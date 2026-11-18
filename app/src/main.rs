@@ -24,7 +24,8 @@ use scopecreep::output_conversion::OutputConversion;
 use scopecreep::panel_grid::{Border, PanelGrid, PanelLayout, Press, min_panel_size};
 use scopecreep::resolve_helper::ScriptHelper;
 use scopecreep::flat_rects::FlatRects;
-use scopecreep::components::{self, Prim};
+use scopecreep::components::{self, Align, BarKind, Prim, Tooltip};
+use scopecreep::window_text::{self, PanelTitle};
 use scopecreep::settings::{Menu, PanelSettings};
 use scopecreep::style;
 use std::path::PathBuf;
@@ -46,14 +47,25 @@ fn text_colour(c: [u8; 3]) -> Color {
 /// What the labels say, as the Feed thread last saw it.
 #[derive(Clone, Default, PartialEq)]
 struct Texts {
-    /// Each Panel's label, in Panel order.
-    labels: Vec<String>,
-    status: String,
+    /// Each Panel's title bar (name, tags, and the full label for its hover), in Panel order.
+    titles: Vec<PanelTitle>,
+    /// The Colour Setup line across the top.
+    top_bar: String,
+    /// The status line's choices, longest first (the window picks what fits), and its hover.
+    status: Vec<String>,
+    status_hover: String,
     notice: Option<String>,
     has_picture: bool,
 }
 
 struct Wake;
+
+/// What the pointer rests on that shows a hover: a Panel's title bar, or the status line.
+#[derive(Clone, Copy, Debug, PartialEq)]
+enum Hover {
+    Title(usize),
+    Status,
+}
 
 /// Where the border positions are remembered: `$XDG_CONFIG_HOME/scopecreep/panel-grid`, else
 /// `~/.config/scopecreep/panel-grid`.
@@ -143,6 +155,7 @@ impl Text {
 /// What a Panel's text is made of: its label (one line, in the title bar), and the numbers on its display's scale.
 struct PanelText {
     label: Text,
+    tags: Text,
     scale: Vec<Text>,
 }
 
@@ -185,7 +198,15 @@ struct AppWindow {
     text_renderer: TextRenderer,
     panel_texts: Vec<PanelText>,
     status: Text,
+    top_bar: Text,
     notice: Text,
+    /// What the pointer rests on that shows a hover (#99).
+    hover: Option<Hover>,
+    /// Each Panel's title bar and the status line as last drawn (device pixels), and the text a hover shows for each.
+    title_bars: Vec<[f32; 4]>,
+    title_hovers: Vec<String>,
+    status_bar: [f32; 4],
+    status_hover: String,
     stop: Arc<AtomicBool>,
     feed_thread: Option<std::thread::JoinHandle<()>>,
     // Last, so it outlives the surface made from it.
@@ -236,8 +257,9 @@ impl AppWindow {
         let menu_renderer = TextRenderer::new(&mut atlas, &device, wgpu::MultisampleState::default(), None);
         let flat = FlatRects::new(&device, &queue, format);
         let status = Text::new(&mut font_system);
+        let top_bar = Text::new(&mut font_system);
         let notice = Text::new(&mut font_system);
-        let panel_texts = (0..displays.len()).map(|_| PanelText { label: Text::new(&mut font_system), scale: Vec::new() }).collect();
+        let panel_texts = (0..displays.len()).map(|_| PanelText { label: Text::new(&mut font_system), tags: Text::new(&mut font_system), scale: Vec::new() }).collect();
 
         let texts = Arc::new(Mutex::new(Texts::default()));
         let stop = Arc::new(AtomicBool::new(false));
@@ -263,7 +285,7 @@ impl AppWindow {
                 let (mut seen_version, mut seen_state_version) = (chosen.version(), chosen.state_version());
                 // What the Feed's status said when last looked at, and the texts made from it.
                 let mut seen: Option<scopecreep::monitor::Status> = None;
-                let (mut status_text, mut notice, mut has_picture) = (String::new(), None, false);
+                let (mut status_text, mut status_hover, mut top_bar, mut notice, mut has_picture) = (Vec::new(), String::new(), String::new(), None, false);
                 let mut last = Texts::default();
                 // SCOPECREEP_STATUS_LOG=1: one line a second on stderr with what the app made of the Feed (diagnostics).
                 let status_log = std::env::var_os("SCOPECREEP_STATUS_LOG").is_some_and(|v| v != "0");
@@ -313,7 +335,10 @@ impl AppWindow {
                     if status_changed {
                         seen = Some(status.clone());
                         labels_stale = true;
-                        status_text = if status.feed == FeedState::Connected { status.status_line() } else { String::new() };
+                        let connected = status.feed == FeedState::Connected;
+                        status_text = if connected { status.status_candidates() } else { Vec::new() };
+                        status_hover = if connected { status.status_hover() } else { String::new() };
+                        top_bar = status.top_bar();
                         notice = status.notice();
                         has_picture = status.picture.is_some();
                         let now_context = status.display_context();
@@ -360,7 +385,7 @@ impl AppWindow {
                         }
                     }
                     if labels_stale {
-                        let now = Texts { labels: displays.labels(), status: status_text.clone(), notice: notice.clone(), has_picture };
+                        let now = Texts { titles: displays.titles(&context, &chosen), top_bar: top_bar.clone(), status: status_text.clone(), status_hover: status_hover.clone(), notice: notice.clone(), has_picture };
                         if now != last {
                             *texts.lock().unwrap() = now.clone();
                             last = now;
@@ -405,7 +430,13 @@ impl AppWindow {
             text_renderer,
             panel_texts,
             status,
+            top_bar,
             notice,
+            hover: None,
+            title_bars: Vec::new(),
+            title_hovers: Vec::new(),
+            status_bar: [0.0; 4],
+            status_hover: String::new(),
             stop,
             feed_thread: Some(feed_thread),
             window,
@@ -433,8 +464,26 @@ impl AppWindow {
         }
     }
 
+    /// Rest the hover on what is under the pointer: a Panel's title bar or the status line (never while a drag or
+    /// a Loupe holds the pointer).
+    fn update_hover(&mut self) {
+        let busy = self.pointer_panel.is_some() || self.drag.is_some() || self.panel_drag.is_some();
+        let hover = if busy {
+            None
+        } else if components::contains(self.status_bar, self.cursor) {
+            Some(Hover::Status)
+        } else {
+            self.title_bars.iter().position(|t| components::contains(*t, self.cursor)).map(Hover::Title)
+        };
+        if hover != self.hover {
+            self.hover = hover;
+            self.window.request_redraw();
+        }
+    }
+
     fn pointer_moved(&mut self, x: f32, y: f32) {
         self.cursor = [x, y];
+        self.update_hover();
         if let Some(panel) = self.pointer_panel {
             self.display_pointer(panel, Pointer::Move(self.cursor));
         } else if let Some(border) = self.drag {
@@ -598,7 +647,10 @@ impl AppWindow {
         let row = style::SPACE_STATUS_ROW * scale;
         let status_height = row * if notice_in_status { 2.0 } else { 1.0 };
         // The Panels fill the window above the status line, with a margin round them and between them.
-        let area = [margin, margin, (width - 2.0 * margin).max(1.0), (height - status_height - margin).max(1.0)];
+        // The Colour Setup is said once, in the bar across the top.
+        let top_height = BarKind::Top.height(scale);
+        let area_top = top_height + margin;
+        let area = [margin, area_top, (width - 2.0 * margin).max(1.0), (height - status_height - area_top).max(1.0)];
         let cells = self.grid.cells(area, margin);
         self.cells = cells.clone();
         self.grid_area = area;
@@ -608,16 +660,31 @@ impl AppWindow {
         // Each Panel: a thin border, its label on one line in the title bar (clipped to it), the display under
         // the bar, and the numbers on the display's scale.
         let mut panels = Vec::new();
+        // Where each name and its tags sit in the title bar (the tags go to the hover when they do not fit).
+        let mut title_parts: Vec<([f32; 4], Option<[f32; 4]>)> = Vec::new();
+        self.title_hovers.clear();
+        let max_chars = ((width / (style::SPACE_CHAR_WIDTH * scale)) as usize).saturating_sub(8).clamp(40, 110);
         for (i, cell) in cells.iter().enumerate() {
-            let label = texts.labels.get(i).map(String::as_str).unwrap_or("");
+            let title = texts.titles.get(i).cloned().unwrap_or_default();
             let panel = PanelLayout::new(*cell, scale);
-            let pad = style::SPACE_TITLE_PAD * scale;
-            self.panel_texts[i].label.set(&mut self.font_system, label, TextStyle { wrap: false, ..TextStyle::LABEL }, scale, (panel.title[2] - 2.0 * pad).max(1.0));
+            let (l, tags, all_shown) = window_text::lay_out_title(&title, panel.title, scale);
+            self.panel_texts[i].label.set(&mut self.font_system, &title.name, TextStyle { wrap: false, ..TextStyle::LABEL }, scale, l.name[2].max(1.0));
+            let tags_style = TextStyle { size: style::TYPE_SCALE, line: style::TYPE_SCALE_LINE, align: None, wrap: false };
+            self.panel_texts[i].tags.set(&mut self.font_system, &tags, tags_style, scale, l.tags.map_or(1.0, |t| t[2].max(1.0)));
+            self.title_hovers.push(window_text::hover_text(&title, l.name_cut || !all_shown, max_chars));
+            title_parts.push((l.name, l.tags));
             panels.push(panel);
         }
+        self.title_bars = panels.iter().map(|p| p.title).collect();
         self.contents = panels.iter().map(|p| p.content).collect();
         let status_width = width - 2.0 * margin;
-        self.status.set(&mut self.font_system, &texts.status, TextStyle::LABEL, scale, status_width);
+        // Playback and performance only: the longest choice that fits, whole parts only (never cut mid-word).
+        let status_line = window_text::fit_status(&texts.status, status_width, scale);
+        self.status.set(&mut self.font_system, status_line, TextStyle { wrap: false, ..TextStyle::LABEL }, scale, status_width);
+        self.status_bar = [0.0, height - row, width, row];
+        self.status_hover = texts.status_hover.clone();
+        let top_line = window_text::fit_parts(&texts.top_bar, width - 2.0 * style::SPACE_BAR_PAD * scale, scale);
+        self.top_bar.set(&mut self.font_system, &top_line, TextStyle { wrap: false, ..TextStyle::LABEL }, scale, (width - 2.0 * style::SPACE_BAR_PAD * scale).max(1.0));
         let (notice_style, notice_width) = if notice_in_status {
             (TextStyle::LABEL, status_width)
         } else {
@@ -664,11 +731,17 @@ impl AppWindow {
             TextArea { buffer: &self.status.buffer, left: margin, top: status_top, scale: 1.0, bounds: whole, default_color: text_colour(style::TEXT_SECONDARY), custom_glyphs: &[] },
             TextArea { buffer: &self.notice.buffer, left: notice_left, top: notice_top, scale: 1.0, bounds: whole, default_color: text_colour(style::TEXT_PRIMARY), custom_glyphs: &[] },
         ];
-        for (panel, text) in panels.iter().zip(&self.panel_texts) {
+        let top_pad = style::SPACE_BAR_PAD * scale;
+        areas.push(TextArea { buffer: &self.top_bar.buffer, left: top_pad, top: (top_height - line) / 2.0, scale: 1.0, bounds: whole, default_color: text_colour(style::TEXT_PRIMARY), custom_glyphs: &[] });
+        let tags_line = style::TYPE_SCALE * scale * style::TYPE_SCALE_LINE;
+        for ((panel, text), (name, tags)) in panels.iter().zip(&self.panel_texts).zip(&title_parts) {
             let [left, top, w, h] = panel.title;
             // A label never spills out of its title bar.
             let bounds = TextBounds { left: left as i32, top: top as i32, right: (left + w).ceil() as i32, bottom: (top + h).ceil() as i32 };
-            areas.push(TextArea { buffer: &text.label.buffer, left: left + style::SPACE_TITLE_PAD * scale, top: top + (h - line) / 2.0, scale: 1.0, bounds, default_color: text_colour(style::TEXT_SECONDARY), custom_glyphs: &[] });
+            areas.push(TextArea { buffer: &text.label.buffer, left: name[0], top: top + (h - line) / 2.0, scale: 1.0, bounds, default_color: text_colour(style::TEXT_PRIMARY), custom_glyphs: &[] });
+            if let Some(tags) = tags {
+                areas.push(TextArea { buffer: &text.tags.buffer, left: tags[0], top: top + (h - tags_line) / 2.0, scale: 1.0, bounds, default_color: text_colour(style::TEXT_MUTED), custom_glyphs: &[] });
+            }
         }
         for (i, n, left, top) in mark_areas {
             let c = panels[i].content;
@@ -684,6 +757,9 @@ impl AppWindow {
         // The right-click menu, drawn as the popover component, over everything: its rectangles, then its own text
         // (so it sits above the Panels' text).
         let mut rects: Vec<([f32; 4], [f32; 4])> = Vec::new();
+        // The top bar: its fill and the line under it.
+        rects.push(([0.0, 0.0, width, top_height], style::rgba(style::SURFACE_PANEL)));
+        rects.push(([0.0, top_height - (style::LINE_WEIGHT * scale).max(1.0), width, (style::LINE_WEIGHT * scale).max(1.0)], style::rgba(style::LINE_BORDER)));
         // Each Panel's thin border and the line under its title bar.
         for panel in &panels {
             for edge in panel.lines((style::LINE_WEIGHT * scale).max(1.0)) {
@@ -698,19 +774,36 @@ impl AppWindow {
             }
         }
         let mut menu_areas: Vec<(usize, f32, f32, [u8; 3])> = Vec::new();
+        // The menu over the Panels, or else the hover of what the pointer rests on, over everything.
+        let mut over: Vec<Prim> = Vec::new();
         if let (Some((menu, _)), Some(rect)) = (self.menu.as_ref(), self.menu_rect()) {
-            let mut texts_used = 0;
-            for prim in components::popover(menu, rect, self.cursor, scale) {
-                match prim {
-                    Prim::Rect { rect, colour } => rects.push((rect, colour)),
-                    Prim::Text { text, rect: at, colour, .. } => {
-                        if self.menu_texts.len() <= texts_used {
-                            self.menu_texts.push(Text::new(&mut self.font_system));
-                        }
-                        self.menu_texts[texts_used].set(&mut self.font_system, &text, TextStyle { wrap: false, ..TextStyle::LABEL }, scale, at[2]);
-                        menu_areas.push((texts_used, at[0], at[1] + (at[3] - line) / 2.0, colour));
-                        texts_used += 1;
+            over = components::popover(menu, rect, self.cursor, scale);
+        } else if let Some(hover) = self.hover {
+            let (anchor, text) = match hover {
+                Hover::Title(i) => (self.title_bars.get(i).copied(), self.title_hovers.get(i).cloned()),
+                Hover::Status => (Some(self.status_bar), Some(self.status_hover.clone())),
+            };
+            if let (Some(anchor), Some(text)) = (anchor, text.filter(|t| !t.is_empty())) {
+                let tip = Tooltip::new(&text);
+                over = tip.draw(tip.rect(anchor, [width, height], scale), scale);
+            }
+        }
+        let mut texts_used = 0;
+        for prim in over {
+            match prim {
+                Prim::Rect { rect, colour } => rects.push((rect, colour)),
+                Prim::Text { text, rect: at, colour, align, .. } => {
+                    if self.menu_texts.len() <= texts_used {
+                        self.menu_texts.push(Text::new(&mut self.font_system));
                     }
+                    let align = match align {
+                        Align::Left => None,
+                        Align::Centre => Some(glyphon::cosmic_text::Align::Center),
+                        Align::Right => Some(glyphon::cosmic_text::Align::Right),
+                    };
+                    self.menu_texts[texts_used].set(&mut self.font_system, &text, TextStyle { wrap: false, align, ..TextStyle::LABEL }, scale, at[2]);
+                    menu_areas.push((texts_used, at[0], at[1] + (at[3] - line) / 2.0, colour));
+                    texts_used += 1;
                 }
             }
         }
@@ -818,6 +911,11 @@ impl ApplicationHandler<Wake> for App {
                 MouseScrollDelta::LineDelta(_, y) => y,
                 MouseScrollDelta::PixelDelta(p) => p.y as f32 / 40.0,
             }),
+            WindowEvent::CursorLeft { .. } => {
+                if w.hover.take().is_some() {
+                    w.window.request_redraw();
+                }
+            }
             WindowEvent::RedrawRequested => w.draw(),
             WindowEvent::CloseRequested => {
                 w.close();

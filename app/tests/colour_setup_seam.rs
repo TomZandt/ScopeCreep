@@ -408,3 +408,21 @@ fn the_waveform_follows_the_project_levels_and_says_when_they_are_set_manually()
     b.wait(100 * MS);
     assert_eq!(scale_of(measuring(&b)), "10-bit Legal 64–940 set manually");
 }
+
+#[test]
+fn the_top_bar_and_the_status_line_follow_the_feed_and_the_project() {
+    let mut b = Bench::with_sender("top-bar");
+    assert_eq!(b.monitor.status().top_bar(), "Colour Setup read when playback stops  ·  as sent, no Output Conversion");
+    let settings = dwg("Rec.709 Gamma 2.4", "None");
+    b.helper_answers(project_answer("scopecreep-test-dwg-rec709", &settings.iter().map(|(k, v)| (*k, v.as_str())).collect::<Vec<_>>()));
+    b.play(2.0);
+    b.wait(SECOND + 100 * MS);
+    let status = b.monitor.status();
+    assert!(status.top_bar().starts_with("DaVinci WG/Intermediate → Rec.709 Gamma 2.4  ·  "), "{}", status.top_bar());
+    assert!(status.top_bar().ends_with("Output Conversion exact"), "{}", status.top_bar());
+    // The feeding timeline, from the project read, is on the status line; the Colour Setup is not.
+    assert_eq!(status.timeline_name().as_deref(), Some("Timeline 1"));
+    assert!(status.status_line().ends_with("  ·  Timeline 1"), "{}", status.status_line());
+    assert!(!status.status_line().contains("Rec.709"), "{}", status.status_line());
+    assert!(status.status_candidates().last().unwrap().starts_with("paused  ·  0 dropped"), "{:?}", status.status_candidates());
+}

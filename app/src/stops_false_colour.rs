@@ -442,6 +442,29 @@ impl Basis {
     }
 }
 
+/// The tags Stops False Colour's title bar needs (#99): its mode when not the default, "approximated" when it reads
+/// a display curve, "assumed" and "unconverted" when it reads a picture shown as sent, "not measured" when it
+/// cannot measure.
+pub fn reading_tags(context: &DisplayContext) -> Vec<String> {
+    let mut tags = Vec::new();
+    if context.settings.get(MODE_SETTING).map(String::as_str) == Some("grey-plus-one") {
+        tags.push("grey and +1 stop".to_string());
+    }
+    match Basis::for_setup(context.colour_setup.as_ref()) {
+        Basis::Timeline(curve) if curve.approximated() => tags.push("approximated".into()),
+        Basis::Timeline(_) => {}
+        Basis::Output { .. } => {
+            tags.push("approximated".into());
+            if context.colour_setup.as_ref().is_none_or(|c| crate::output_conversion::Plan::for_setup(Some(&c.setup)).method().is_none()) {
+                tags.push("assumed".into());
+                tags.push("unconverted".into());
+            }
+        }
+        Basis::Unreadable { .. } => tags.push("not measured".into()),
+    }
+    tags
+}
+
 /// What the Colour Setup and the settings made of the display.
 struct Config {
     basis: Basis,

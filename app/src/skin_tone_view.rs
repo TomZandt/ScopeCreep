@@ -18,7 +18,7 @@ use std::sync::{Arc, Mutex};
 
 pub const TOLERANCE_SETTING: &str = "tolerance";
 
-const DEFAULT_TOLERANCE: &str = "5";
+pub const DEFAULT_TOLERANCE: &str = "5";
 
 const SETTINGS: [SettingDef; 1] = [SettingDef {
     key: TOLERANCE_SETTING,

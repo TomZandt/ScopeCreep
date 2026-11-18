@@ -598,15 +598,17 @@ fn a_cache_fill_while_paused_is_not_reported_as_playback() {
 // ------------------------------------------------------------------- which Sender
 
 #[test]
-fn the_status_line_names_the_sender_driving_the_feed() {
+fn the_status_line_is_playback_and_performance_only_and_the_sender_is_its_hover() {
     let mut b = Bench::with_sender("named");
     b.play(0, 24, |_| 0);
     let pid = std::process::id();
-    assert!(
-        b.status_line().ends_with(&format!("  ·  Sender 1 · synthetic frame writer · process {pid} · 24 fps timeline")),
-        "{}",
-        b.status_line()
-    );
+    let line = b.status_line();
+    for left_out in ["Sender", "process", "synthetic frame writer", "fps timeline", &pid.to_string()] {
+        assert!(!line.contains(left_out), "{line} leaves out {left_out}");
+    }
+    assert!(line.ends_with("  ·  0 dropped"), "{line}");
+    let hover = b.monitor.status().status_hover();
+    assert!(hover.contains(&format!("Sender 1 · synthetic frame writer · process {pid} · 24 fps timeline")), "{hover}");
     assert_eq!(b.notice(), "");
 }
 
@@ -648,7 +650,8 @@ fn the_other_active_sender_is_flagged() {
         b.notice(),
         format!("Another Sender is active: Sender 2 (process {pid}). Showing Sender 1 (process {pid}) only. Keep one Sender, on the last timeline node.")
     );
-    assert!(b.status_line().contains("Sender 1 · "), "{}", b.status_line());
+    assert!(!b.status_line().contains("Sender"), "{}", b.status_line());
+    assert!(b.monitor.status().status_hover().contains("Sender 1 · "), "{}", b.monitor.status().status_hover());
 }
 
 #[test]

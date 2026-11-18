@@ -66,6 +66,18 @@ _Avoid_: App (for the screen area), screen, workspace
 Everything the Window draws that is not a measurement: the menu, labels, scale numbers, status line, borders and gaps. It is neutral grey and draws only through the style tokens.
 _Avoid_: UI, theme
 
+**Top bar**:
+The one line across the top of the Window that says the Colour Setup: Timeline → Output, Levels, where it came from, and whether Output Conversion is exact or approximated. The Panels do not repeat it.
+_Avoid_: header, toolbar
+
+**Title bar tag**:
+A short word in a Panel's title bar for state that changes how to read that Panel ("approximated", "unconverted", "Rec.709 assumed", a zoom, a non-default setting). Defaults are not tagged. The Panel's full label is its hover.
+_Avoid_: badge, subtitle
+
+**Status line**:
+The line along the bottom of the Window with playback and performance only: the rate, dropped frames and why, and the timeline feeding the Window. What it leaves out (Sender instance, process, versions) is its hover.
+_Avoid_: footer
+
 **Style token**:
 A named colour or size by role (`TEXT_SECONDARY`, `SPACE_MARGIN`), kept in one module; chrome never uses a raw value.
 _Avoid_: Theme colour, constant

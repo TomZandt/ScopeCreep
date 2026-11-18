@@ -192,6 +192,20 @@ impl DisplaySet {
         self.displays.iter().map(|d| d.label()).collect()
     }
 
+    /// Every Panel's title bar: its name and short tags (only state that changes how to read it), with the full
+    /// label for the hover (#99). `context` and `settings` are what [`DisplaySet::configure`] was given.
+    pub fn titles(&self, context: &DisplayContext, settings: &PanelSettings) -> Vec<crate::window_text::PanelTitle> {
+        let luma = crate::waveform::luma_weights_of(&settings.resolve(crate::waveform::NAME, &crate::waveform::SETTINGS));
+        self.displays
+            .iter()
+            .map(|display| {
+                let mut own = DisplayContext { settings: settings.resolve(display.name(), display.setting_defs()), luma, ..context.clone() };
+                own.settings.extend(settings.state_of(display.name(), display.state_keys()));
+                crate::window_text::panel_title(display.name(), &own, display.label())
+            })
+            .collect()
+    }
+
     /// Hand `frame` to every display.
     pub fn on_frame(&self, encoder: &mut wgpu::CommandEncoder, frame: &GpuFrame) {
         for display in &self.displays {

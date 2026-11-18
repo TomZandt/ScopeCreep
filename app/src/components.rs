@@ -390,9 +390,16 @@ impl Tooltip {
         Tooltip { text: text.to_string() }
     }
 
+    /// The lines of its text (`\n` breaks a line).
+    pub fn lines(&self) -> Vec<&str> {
+        self.text.split('\n').collect()
+    }
+
     pub fn size(&self, scale: f32) -> [f32; 2] {
         let (size, line) = Face::Label.metrics();
-        [text_width(&self.text, scale) + 2.0 * style::SPACE_TOOLTIP_PAD * scale, (size * line + 2.0 * style::SPACE_TOOLTIP_PAD) * scale]
+        let lines = self.lines();
+        let widest = lines.iter().map(|l| text_width(l, scale)).fold(0.0, f32::max);
+        [widest + 2.0 * style::SPACE_TOOLTIP_PAD * scale, (size * line * lines.len() as f32 + 2.0 * style::SPACE_TOOLTIP_PAD) * scale]
     }
 
     /// Where it goes for something at `anchor`: centred under it, above it when there is no room below, and
@@ -408,7 +415,18 @@ impl Tooltip {
 
     pub fn draw(&self, area: [f32; 4], scale: f32) -> Vec<Prim> {
         let mut prims: Vec<Prim> = framed(area, style::LINE_BORDER, style::SURFACE_MENU, scale).into();
-        prims.push(text(&self.text, area, Face::Label, style::TEXT_PRIMARY, Align::Centre));
+        let lines = self.lines();
+        if lines.len() == 1 {
+            prims.push(text(&self.text, area, Face::Label, style::TEXT_PRIMARY, Align::Centre));
+            return prims;
+        }
+        // Several lines, each left-aligned inside the padding.
+        let pad = style::SPACE_TOOLTIP_PAD * scale;
+        let (size, line) = Face::Label.metrics();
+        let row = size * line * scale;
+        for (i, l) in lines.iter().enumerate() {
+            prims.push(text(l, [area[0] + pad, area[1] + pad + row * i as f32, area[2] - 2.0 * pad, row], Face::Label, style::TEXT_PRIMARY, Align::Left));
+        }
         prims
     }
 }

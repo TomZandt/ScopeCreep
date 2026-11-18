@@ -56,3 +56,4 @@ Anything the ticket could not verify becomes a GitHub issue (or a comment on the
 | [95](95-panels-out-of-the-window.md) | Taking the gamut/legal warning, Highlight Neutrals and CIE plot out of the Window: what stays, and GPU memory when running tests beside Resolve |
 | [110](110-picture-stage.md) | Refactor: does every Picture View still draw the same through the shared Picture stage? |
 | [96](96-panel-layout.md) | Panels span cells: the default layout, minimum sizes at 1280 x 760, borders, saved layouts, title bar |
+| [99](99-window-text.md) | The Window's text: the Colour Setup once in a top bar, short title bars with only the tags a Panel needs, a performance-only status line |
