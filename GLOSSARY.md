@@ -116,9 +116,9 @@ _Avoid_: Renderer, canvas
 A black bar around the picture: whole rows at the top and bottom, or whole columns at the sides, in which every pixel is exactly black. The Picture stage finds them once per frame and draws them black on every Picture View. A black pixel inside the picture is not a matte.
 _Avoid_: Letterbox (that is one kind of matte), border
 
-**Panel grid** (the layout):
+**Panel grid**:
 The columns and rows the Panels sit in, each Panel at a cell with a span of columns and rows, every cell used. By default the clean picture spans 3 × 2 at the top left. Column and row sizes are weights, so border positions the user dragged stay valid at any window size. Each Panel has a thin border and a title bar with its label at its top.
-_Avoid_: Layout (on its own), dock
+_Avoid_: Layout for the grid (a Layout is a saved arrangement of it), dock
 
 **Layout** (named):
 An arrangement of the Panel grid saved in one of nine slots (Ctrl+Shift+1 to 9), shown again with Ctrl+1 to 9 or from the layout menu (right-click the status line), which also renames layouts and restores the default layout. A layout names its Panels, so one still opens after Panels are added or removed.
@@ -172,7 +172,7 @@ _Avoid_: Scope (for false colour), filter, LUT view
 A Picture View that shows the Output picture in Luma grey and pixels whose red, green and blue are nearly equal (within a tolerance, a share of the full signal range, 3 % by default) in green, for checking that whites and greys are balanced.
 _Avoid_: White balance check, neutral finder
 **Black and white**:
-The Picture View that shows the Output picture as greys equal to Luma, with the same weights as the waveform (including its luma weights setting), so a grey on screen lines up with its trace. Out of the Window since #118: the clean picture's B/W toggle does its job (code and tests kept).
+The Picture View that shows the Output picture as greys equal to Luma, with the same weights as the waveform (including its luma weights setting), so a grey on screen lines up with its trace. Not in the Window: the clean picture's B/W toggle does its job (code and tests kept).
 _Avoid_: Greyscale, desaturated view, monochrome
 
 **Colour Waveform**:

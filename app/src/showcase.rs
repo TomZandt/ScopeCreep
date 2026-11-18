@@ -16,14 +16,14 @@ pub struct Showcase {
 /// parts that are not states (popover, tooltip, title bars, bars, legend).
 pub fn showcase(scale: f32) -> Showcase {
     let margin = style::SPACE_MARGIN * scale;
-    let label_w = 140.0 * scale;
-    let column = 240.0 * scale;
-    let row = 36.0 * scale;
+    let label_w = style::SPACE_SHOWCASE_LABEL * scale;
+    let column = style::SPACE_SHOWCASE_COLUMN * scale;
+    let row = style::SPACE_SHOWCASE_ROW * scale;
     let width = margin * 2.0 + label_w + column * STATES.len() as f32;
     let mut prims = vec![];
     let caption = |t: &str, x: f32, y: f32, w: f32| text(t, [x, y, w, row], Face::Scale, style::TEXT_MUTED, Align::Left);
     let mut y = margin;
-    prims.push(rect([0.0, 0.0, width, 4000.0 * scale], style::SURFACE_WINDOW));
+    prims.push(rect([0.0, 0.0, width, style::SPACE_SHOWCASE_SHEET_HEIGHT * scale], style::SURFACE_WINDOW));
     for (i, state) in STATES.iter().enumerate() {
         prims.push(caption(&format!("{state:?}"), margin + label_w + column * i as f32, y, column));
     }
@@ -65,14 +65,14 @@ pub fn showcase(scale: f32) -> Showcase {
     let current = crate::settings::PanelSettings::default().resolve("sample", &defs);
     let menu = Menu::new(0, &defs, &current).expect("the sample has settings");
     let area = [margin + label_w, y, 0.0, 0.0];
-    let popover_rect = menu.rect([area[0], area[1]], [width, 4000.0 * scale], scale);
+    let popover_rect = menu.rect([area[0], area[1]], [width, style::SPACE_SHOWCASE_SHEET_HEIGHT * scale], scale);
     // The second choice of the first setting is under the pointer.
     let hover = [popover_rect[0] + popover_rect[2] / 2.0, Menu::row_top(popover_rect, 2, scale) + row / 4.0];
     prims.extend(popover(&menu, popover_rect, hover, scale));
     let tip = Tooltip::new("Red channel");
-    let anchor = Chip::channel("R", Channel::R).rect([margin + label_w + column + 40.0 * scale, y], scale);
+    let anchor = Chip::channel("R", Channel::R).rect([margin + label_w + column + style::SPACE_SHOWCASE_ANCHOR_OFFSET * scale, y], scale);
     prims.extend(Chip::channel("R", Channel::R).draw([anchor[0], anchor[1]], true, State::Hover, scale));
-    prims.extend(tip.draw(tip.rect(anchor, [width, 4000.0 * scale], scale), scale));
+    prims.extend(tip.draw(tip.rect(anchor, [width, style::SPACE_SHOWCASE_SHEET_HEIGHT * scale], scale), scale));
     y += popover_rect[3] + row * 0.5;
 
     // Panel frame with a wide and a narrow title bar.
@@ -80,12 +80,12 @@ pub fn showcase(scale: f32) -> Showcase {
     let bar_chips = vec![Chip::channel("Y", Channel::Y), Chip::channel("R", Channel::R), Chip::channel("G", Channel::G), Chip::channel("B", Channel::B)];
     let title = TitleBar { name: "Luma waveform".to_string(), tags: "Rec.709 weights, 100 %".to_string(), chips: bar_chips, settings_button: true };
     let states = [(true, State::Normal), (true, State::Normal), (false, State::Hover), (false, State::Normal)];
-    for (i, panel_width) in [460.0, 250.0].into_iter().enumerate() {
-        let frame = [margin + label_w + (460.0 * scale + margin) * i as f32, y + 2.0 * scale, panel_width * scale, 110.0 * scale];
+    for (i, panel_width) in [style::SPACE_SHOWCASE_PANEL_WIDE, style::SPACE_SHOWCASE_PANEL_NARROW].into_iter().enumerate() {
+        let frame = [margin + label_w + (style::SPACE_SHOWCASE_PANEL_WIDE * scale + margin) * i as f32, y + 2.0 * scale, panel_width * scale, style::SPACE_SHOWCASE_PANEL_HEIGHT * scale];
         prims.extend(panel_frame(frame, scale));
         prims.extend(title.draw(frame, &states, State::Normal, scale));
     }
-    y += 130.0 * scale;
+    y += style::SPACE_SHOWCASE_PANEL_STEP * scale;
 
     prims.push(caption("Top bar", margin, y, label_w));
     prims.extend(bar(BarKind::Top, margin + label_w, y, column * 4.0, "scopecreep", "Colour Setup: Rec.709 / Gamma 2.4", scale));

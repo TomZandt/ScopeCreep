@@ -122,7 +122,7 @@ pub struct ArriFalseColour {
 impl ArriFalseColour {
     pub fn new(device: &wgpu::Device, queue: &wgpu::Queue, target: wgpu::TextureFormat) -> ArriFalseColour {
         let stage = PictureStage::new::<[f32; 4]>(device, queue, target, false, Rule { label: "arri false colour", wgsl: rule(), has_legend: true });
-        let display = ArriFalseColour { stage, state: Arc::new(Mutex::new(State { legend: true, grey: true, weights: [0.2126, 0.7152, 0.0722], label: String::new() })) };
+        let display = ArriFalseColour { stage, state: Arc::new(Mutex::new(State { legend: true, grey: true, weights: crate::waveform::REC709_LUMA, label: String::new() })) };
         display.configure(&DisplayContext::default());
         display
     }

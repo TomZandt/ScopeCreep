@@ -528,7 +528,7 @@ pub fn settings_button(area: [f32; 4], state: State, scale: f32) -> Vec<Prim> {
     let step = 2.0 * dot;
     for i in 0..3 {
         let x = area[0] + area[2] / 2.0 + (i as f32 - 1.0) * step - dot / 2.0;
-        prims.push(rect([x, area[1] + (area[3] - dot) / 2.0, dot, dot], [colour[0] as f32 / 255.0, colour[1] as f32 / 255.0, colour[2] as f32 / 255.0]));
+        prims.push(rect([x, area[1] + (area[3] - dot) / 2.0, dot, dot], style::rgb(colour)));
     }
     prims
 }

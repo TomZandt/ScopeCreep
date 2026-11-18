@@ -18,6 +18,9 @@ pub const CODES: u32 = 1024;
 /// Counts per waveform column: below 0, codes 0 to 1023, above 1023.
 const ROWS: u32 = CODES + 2;
 
+/// The Rec.709 luma weights (R, G, B): the starting value of every display's weights before a Measurement sets them.
+pub const REC709_LUMA: [f64; 3] = [0.2126, 0.7152, 0.0722];
+
 /// The luma weights the waveform uses until the user picks otherwise (the first choice of its menu).
 pub const DEFAULT_LUMA_WEIGHTS: LumaWeights = LumaWeights::FromPrimaries;
 

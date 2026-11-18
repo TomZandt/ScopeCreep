@@ -267,7 +267,7 @@ impl PanelGrid {
 
     /// The layout `text` holds for the displays called `names`. A saved layout that is not this version's (a
     /// v0.2.0 grid), or does not make sense, is ignored: the default layout is used. A saved Panel that no longer
-    /// exists is dropped; a display missing from the saved layout is placed in the first free cell.
+    /// exists is dropped and a neighbour fills its cell; a display missing from the saved layout is placed in the first free cell.
     pub fn from_text(names: &[&str], text: &str) -> PanelGrid {
         Self::parse(names, text).unwrap_or_else(|| PanelGrid::default_for(names))
     }
@@ -316,7 +316,9 @@ impl PanelGrid {
             }
         }
         // A display the saved layout does not know takes the first free cell (reading order), or a new row.
+        let mut added = 0;
         for slot in placed.iter_mut().filter(|p| p.is_none()) {
+            added += 1;
             let free = (0..rows.len()).flat_map(|r| (0..columns.len()).map(move |c| (r, c))).find(|&(r, c)| !used[r][c]);
             let (row, column) = match free {
                 Some(cell) => cell,
@@ -333,13 +335,46 @@ impl PanelGrid {
             used[row][column..column + columns_wide].fill(true);
             *slot = Some(Place { column, row, columns: columns_wide, rows: 1 });
         }
-        // A saved layout that leaves a cell empty no longer fits these displays (a Panel went and left a hole, as
-        // when the two vectorscope Panels became one): the default is used.
-        if used.iter().flatten().any(|u| !u) {
+        // A layout that only lost Panels leaves holes: a neighbour widens (or deepens) into each one. If a display
+        // was also missing from the saved layout it is not the layout these displays were saved with (as when the
+        // two vectorscope Panels became one), so the default is used.
+        if used.iter().flatten().any(|u| !u) && (added > 0 || !close_holes(&mut placed, &mut used)) {
             return None;
         }
         Some(PanelGrid { columns, rows, places: placed.into_iter().flatten().collect() })
     }
+}
+
+/// Fill every empty cell by stretching a Panel over a whole edge of empty cells beside it. False if some cell
+/// cannot be reached that way.
+fn close_holes(placed: &mut [Option<Place>], used: &mut [Vec<bool>]) -> bool {
+    let (rows, columns) = (used.len(), used[0].len());
+    while used.iter().flatten().any(|u| !u) {
+        let free = |r: usize, c: usize| !used[r][c];
+        let mut grown = None;
+        for (i, p) in placed.iter().enumerate() {
+            let p = p.expect("every display is placed");
+            let (rs, cs) = (p.row..p.row + p.rows, p.column..p.column + p.columns);
+            let candidates = [
+                (p.column + p.columns < columns && rs.clone().all(|r| free(r, p.column + p.columns)), Place { columns: p.columns + 1, ..p }),
+                (p.column > 0 && rs.clone().all(|r| free(r, p.column - 1)), Place { column: p.column.saturating_sub(1), columns: p.columns + 1, ..p }),
+                (p.row + p.rows < rows && cs.clone().all(|c| free(p.row + p.rows, c)), Place { rows: p.rows + 1, ..p }),
+                (p.row > 0 && cs.clone().all(|c| free(p.row - 1, c)), Place { row: p.row.saturating_sub(1), rows: p.rows + 1, ..p }),
+            ];
+            if let Some((_, place)) = candidates.into_iter().find(|(ok, _)| *ok) {
+                grown = Some((i, place));
+                break;
+            }
+        }
+        let Some((i, place)) = grown else { return false };
+        for r in place.row..place.row + place.rows {
+            for c in place.column..place.column + place.columns {
+                used[r][c] = true;
+            }
+        }
+        placed[i] = Some(place);
+    }
+    true
 }
 
 /// What sits inside one Panel: a thin border round it, a title bar at its top holding the label, and the display

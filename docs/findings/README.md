@@ -59,3 +59,8 @@ Anything the ticket could not verify becomes a GitHub issue (or a comment on the
 | [98](98-named-layouts.md) | Named layouts: saved, recalled, renamed and kept at the pure seam; what a recalled layout does when Panels have changed |
 | [99](99-window-text.md) | The Window's text: the Colour Setup once in a top bar, short title bars with only the tags a Panel needs, a performance-only status line |
 | [117](117-luma-waveform-channels.md) | Does the luma waveform measure and draw R, G and B beside Luma at each channel's code, show out-of-range per channel in the edge rows, keep one chip on and remember the choice? |
+| [92](92-one-vectorscope-panel.md) | Does one Vectorscope Panel show both plots with one setting, one measurement and the same clipping, and what happens to old saved layouts and settings (headless)? |
+| [97](97-swap-panels.md) | Does dragging a Panel onto another swap cells and spans, remember it, and never confuse a border drag with a Panel drag (pure seam)? |
+| [107](107-shared-gpu-test-bench.md) | Refactor: does one shared GPU test bench replace the copied setup with the tests unchanged? |
+| [116](116-panel-toolbar.md) | Does the Channel view's Y R G B toolbar switch, remember, shrink on small Panels and show the right tags (pure seam)? |
+| [118](118-bw-toggle.md) | Does the B/W toggle switch the unpainted picture between Luma grey and colour without changing what a Panel paints? |

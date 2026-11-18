@@ -143,6 +143,22 @@ pub const SPACE_TAG_GAP: f32 = 10.0;
 /// A legend strip: the colour bar's height and the whole strip's (bar, then labels beneath).
 pub const SPACE_LEGEND_BAR: f32 = 8.0;
 pub const SPACE_LEGEND_HEIGHT: f32 = 26.0;
+/// The development showcase sheet (logical pixels): the row-label column, a state column, a row, the sheet's
+/// height, the wide and narrow sample Panels and their height and row step, and the tooltip anchor's offset.
+pub const SPACE_SHOWCASE_LABEL: f32 = 140.0;
+pub const SPACE_SHOWCASE_COLUMN: f32 = 240.0;
+pub const SPACE_SHOWCASE_ROW: f32 = 36.0;
+pub const SPACE_SHOWCASE_SHEET_HEIGHT: f32 = 4000.0;
+pub const SPACE_SHOWCASE_PANEL_WIDE: f32 = 460.0;
+pub const SPACE_SHOWCASE_PANEL_NARROW: f32 = 250.0;
+pub const SPACE_SHOWCASE_PANEL_HEIGHT: f32 = 110.0;
+pub const SPACE_SHOWCASE_PANEL_STEP: f32 = 130.0;
+pub const SPACE_SHOWCASE_ANCHOR_OFFSET: f32 = 40.0;
+
+/// A text colour (rgb 0 to 255) as a rectangle colour (rgb 0 to 1).
+pub fn rgb(c: [u8; 3]) -> Rgb {
+    c.map(|v| v as f32 / 255.0)
+}
 
 /// A colour as rgba for the flat rectangles.
 pub fn rgba(c: Rgb) -> [f32; 4] {

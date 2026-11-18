@@ -27,7 +27,7 @@ Pre-alpha. Nothing to install yet.
 |---|---|---|
 | Feed protocol | `feed/PROTOCOL.md`, `feed/include/scopecreep_feed.h`, `feed/` crate | The shared-memory ring between Sender and app: spec, C header (Sender), Rust reader and synthetic writer (app, tests) |
 | Sender | `sender/` | C++ OFX plugin, Resolve's CUDA render path, async pinned copy into the Feed |
-| App | `app/` | Rust + wgpu: one window, a layout of 9 Panels (the clean picture as the hero, one Vectorscope Panel showing 100 % and 200 % together) (the gamut/legal warning, Highlight Neutrals, the CIE plot and the Black and white Panel are built and tested but out of the Window, #95, #118; the clean picture, ARRI False Colour, Stops False Colour and Skin Tone have a B/W toggle instead) (Scopes and Picture Views) all showing the latest Feed frame (GPU, every pixel, full resolution) |
+| App | `app/` | Rust + wgpu: one window with a layout of 9 Panels (Scopes and Picture Views, the clean picture as the hero, one Vectorscope Panel showing 100 % and 200 % side by side), all showing the latest Feed frame (GPU, every pixel, full resolution). The gamut/legal warning, Highlight Neutrals, the CIE plot and the Black and white Panel are built and tested but not in the Window (#95, #118) |
 
 ```sh
 cargo test                       # Feed protocol (Rust and C against each other) and the app, driven at the Feed seam (waveform tests need a GPU)
@@ -96,10 +96,11 @@ DaVinci Resolve                                 scopecreep app (Rust + wgpu)
   - [0022](docs/adr/0022-colour-waveform-tint-is-the-average-colour-at-the-luma-waveforms-positions.md): the Colour Waveform is the luma waveform's counts tinted by the average colour of the pixels counted at each spot
   - [0023](docs/adr/0023-heatmap-saturation-is-a-share-of-the-vectorscope-ring.md): the saturation heatmap's 100 % is the vectorscope's ring (Cb/Cr 0.6 since the ring moved), not each colour's own bar
   - [0024](docs/adr/0024-the-last-sender-in-the-frame-drives-the-feed.md): the last Sender in the frame drives the Feed, and more than one active Sender is a warning
-  - [0027](docs/adr/0027-components-are-pure-drawings-of-rectangles-and-text.md): style components are pure descriptions that draw as rectangles and text; legends are horizontal only
-  - [0026](docs/adr/0026-style-tokens-by-role-and-the-chrome-check.md): chrome draws only through style tokens named by role; measurement colours are data, exempt from the check
   - [0025](docs/adr/0025-skin-tone-panel-paints-solid-colours-on-the-natural-picture.md): the Skin Tone Panel paints solid flat colours on the picture's own colours (replaces ADR 0021's tints)
+  - [0026](docs/adr/0026-style-tokens-by-role-and-the-chrome-check.md): chrome draws only through style tokens named by role; measurement colours are data, exempt from the check
+  - [0027](docs/adr/0027-components-are-pure-drawings-of-rectangles-and-text.md): style components are pure descriptions that draw as rectangles and text; legends are horizontal only
   - [0028](docs/adr/0028-every-picture-view-draws-through-one-picture-stage.md): every Picture View draws through one Picture stage (placement, flip, binding, legend strip); a view supplies its colour rule, values and legend
+  - [0029](docs/adr/0029-mattes-are-found-by-the-picture-stage-on-the-gpu.md): black mattes around the picture are found once per frame by the Picture stage on the GPU and stay black on every Picture View
   - [0030](docs/adr/0030-named-layouts-are-nine-slots-of-the-grid-text.md): named layouts are nine slots holding the grid's own saved text, recalled through the same checks
 - [docs/findings/](docs/findings/): what testing showed, one file per ticket.
 - [docs/research/](docs/research/): what public sources say, with dates and links.

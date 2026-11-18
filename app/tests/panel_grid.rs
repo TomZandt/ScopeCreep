@@ -257,6 +257,20 @@ fn a_panel_missing_from_a_saved_layout_takes_the_first_free_cell_or_a_new_row() 
     assert_fills(&grid);
 }
 
+#[test]
+fn a_layout_that_merely_lost_a_panel_still_recalls_with_the_hole_closed() {
+    // Saved with 9 Panels, recalled by a build without the Channel view: its cell is taken up by a neighbour.
+    let text = default_grid().to_text(&NAMES);
+    let names: Vec<&str> = NAMES.iter().copied().filter(|n| *n != "Channel view").collect();
+    let grid = PanelGrid::from_text(&names, &text);
+    assert_eq!(grid.places().len(), 8);
+    assert_ne!(grid, PanelGrid::default_for(&names), "the saved layout is recalled, not the default");
+    assert_fills(&grid);
+    // The Panels that were not next to the hole stay where they were.
+    let clean = grid.places()[0];
+    assert_eq!((clean.column, clean.row, clean.columns, clean.rows), (0, 0, 3, 2));
+}
+
 // ------------------------------------------------------------------ inside a Panel
 
 #[test]

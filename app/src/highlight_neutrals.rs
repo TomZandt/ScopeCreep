@@ -59,7 +59,7 @@ struct Config {
 
 impl Default for Config {
     fn default() -> Config {
-        Config { weights: [0.2126, 0.7152, 0.0722], percent: "3".into(), tolerance: 0.03, source: String::new() }
+        Config { weights: crate::waveform::REC709_LUMA.map(|v| v as f32), percent: "3".into(), tolerance: 0.03, source: String::new() }
     }
 }
 
