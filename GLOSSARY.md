@@ -180,6 +180,10 @@ A waveform whose trace is tinted by the colour of the pixels plotted at each poi
 Its spots are at the luma waveform's positions; each one's tint is the average colour of the pixels counted there, brought to the neutral trace's strength so grey draws as the luma trace does.
 _Avoid_: Colourised waveform, RGB waveform, parade (that shows channels side by side)
 
+**Colorise**:
+A chip on the luma waveform's title bar (default off, remembered per Panel, never a tag) that draws the Y trace in the average colour of the pixels counted at each spot (the Colour Waveform's rule); off, the trace is neutral. A drawing choice: counts and edge rows are the same either way. Resolve's own switch is spelt Colorize.
+_Avoid_: Colourise (as a tag or setting that changes the measurement)
+
 **False Colour**:
 A Picture View that paints each pixel by the band its value falls in, leaving the rest of the picture in grey.
 _Avoid_: Heatmap (for exposure), exposure overlay

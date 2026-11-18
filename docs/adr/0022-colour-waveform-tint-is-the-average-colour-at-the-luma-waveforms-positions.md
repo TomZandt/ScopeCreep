@@ -20,3 +20,7 @@
 
 - The colour pass uses global atomics, so a frame with very many pixels on one code may cost more than the count pass; UHD 50 with every Panel is checked by hand (#68).
 - Pixels outside 0 to 1 tint as if clamped: their position is still honest (edge rows), their colour is not extrapolated.
+
+## Note, 2026-11-18
+
+The tint rule now also serves the luma waveform's Colorise chip (#143, ADR 0032): the Y trace takes the same average colour at each position. The Colour Waveform Panel keeps its code.

@@ -611,7 +611,7 @@ fn channel_on(channel: u32) -> bool {
     return ((u32(placement.look.w) >> channel) & 1u) == 1u;
 }
 
-// The trace colour of a channel: Y keeps the luma waveform's (tinted for the Colour Waveform), R, G, B their own.
+// The trace colour of a channel: Y is tinted by the pixels' colour when asked, R, G, B take their channel colours.
 fn channel_colour(channel: u32, x: f32, first_row: u32, end_row: u32) -> vec3<f32> {
     if (channel == 0u) {
         return tint(x, first_row, end_row);
@@ -770,6 +770,9 @@ pub struct Waveform {
     measurement: Arc<Mutex<Measurement>>,
     look: Arc<Mutex<Look>>,
     channels: Arc<Mutex<Channels>>,
+    /// Colorise (ADR 0032): the Y trace takes the colour of the pixels; off, it is neutral. A drawing choice: the
+    /// counts are the same either way. (R, G and B follow it in #144.)
+    colorise: Arc<Mutex<bool>>,
     state: Arc<Mutex<State>>,
 }
 
@@ -864,6 +867,7 @@ impl Waveform {
             measurement: Arc::new(Mutex::new(Measurement::default())),
             look: Arc::new(Mutex::new(Look::default())),
             channels: Arc::new(Mutex::new(Channels::default())),
+            colorise: Arc::new(Mutex::new(false)),
             state: Arc::new(Mutex::new(State { counts: None, sums: None, bound_colour: None, bound: None, draw_bound: None, trace: None, trace_bound: None, rgb: None, rgb_bound: None })),
         }
     }
@@ -885,6 +889,21 @@ impl Waveform {
 
     pub fn channels(&self) -> Channels {
         *self.channels.lock().unwrap()
+    }
+
+    /// Colorise on or off from the next frame on (ADR 0032). The Colour Waveform is always tinted and ignores it.
+    pub fn set_colorise(&self, on: bool) {
+        *self.colorise.lock().unwrap() = on;
+    }
+
+    pub fn colorise(&self) -> bool {
+        *self.colorise.lock().unwrap()
+    }
+
+    /// Whether the Y trace is tinted, which needs the colour sums: the Colour Waveform always, the luma waveform
+    /// with Colorise on and Y showing.
+    fn tints_y(&self) -> bool {
+        self.colour || (self.colorise() && self.channels().y)
     }
 
     pub fn measurement(&self) -> Measurement {
@@ -929,8 +948,15 @@ impl Waveform {
                 columns: frame.width,
                 picture_height: frame.height,
             }));
-            // Plain waveforms never read the sums; a token buffer keeps the draw shader's bindings whole.
-            let sums_size = if self.colour { frame.width as u64 * ROWS as u64 * 12 } else { 16 };
+            state.bound = None;
+            state.draw_bound = None;
+            state.trace_bound = None;
+        }
+        state.counts.as_mut().unwrap().picture_height = frame.height;
+        // The colour sums exist only while the Y trace is tinted; a token buffer keeps the draw shader's bindings
+        // whole otherwise.
+        let sums_size = if self.tints_y() { frame.width as u64 * ROWS as u64 * 12 } else { 16 };
+        if state.sums.as_ref().is_none_or(|b| b.size() != sums_size) {
             state.sums = Some(self.device.create_buffer(&wgpu::BufferDescriptor {
                 label: Some("waveform colour sums"),
                 size: sums_size,
@@ -938,11 +964,9 @@ impl Waveform {
                 mapped_at_creation: false,
             }));
             state.bound_colour = None;
-            state.bound = None;
             state.draw_bound = None;
             state.trace_bound = None;
         }
-        state.counts.as_mut().unwrap().picture_height = frame.height;
         if let Some(shared) = shared {
             // The same buffer as the luma waveform's, unless it was made again since.
             state.counts = Some(shared);
@@ -966,7 +990,7 @@ impl Waveform {
         pass.set_bind_group(0, &state.bound.as_ref().unwrap().1, &[]);
         pass.dispatch_workgroups(frame.width.div_ceil(2), 1, 1);
         drop(pass);
-        if self.colour {
+        if self.tints_y() {
             self.measure_colour(&mut state, encoder, frame);
         }
         self.measure_channels(&mut state, encoder, frame, channels);
@@ -1107,7 +1131,7 @@ impl Waveform {
         placement[20..22].copy_from_slice(&[black as f32, white as f32]);
         let channels = self.channels();
         let mask = if state.rgb.is_some() || !channels.colour_channels() { channels.mask() } else { channels.mask() & 1 };
-        placement[24..28].copy_from_slice(&[look.brightness.gain(), if look.spread { 1.0 } else { 0.0 }, if self.colour { 1.0 } else { 0.0 }, mask as f32]);
+        placement[24..28].copy_from_slice(&[look.brightness.gain(), if look.spread { 1.0 } else { 0.0 }, if self.tints_y() { 1.0 } else { 0.0 }, mask as f32]);
         for (i, colour) in [crate::style::CHANNEL_R, crate::style::CHANNEL_G, crate::style::CHANNEL_B].into_iter().enumerate() {
             placement[28 + i * 4..31 + i * 4].copy_from_slice(&colour);
         }
@@ -1199,7 +1223,7 @@ pub fn luma_weights_of(settings: &Settings) -> LumaWeights {
 }
 
 /// The luma waveform's right-click menu: how Luma is weighted (ADR 0004). The label names the weights in use.
-pub const SETTINGS: [SettingDef; 4] = [
+pub const SETTINGS: [SettingDef; 5] = [
     SettingDef {
         key: LUMA_SETTING,
         label: "Luma weights",
@@ -1244,13 +1268,22 @@ pub const SETTINGS: [SettingDef; 4] = [
             Choice { value: "yrgb", text: "Y R G B" },
         ],
     },
+    // Shown as the Colorise chip on the title bar, not in the popover (ADR 0032). Off first: it is the default.
+    SettingDef {
+        key: COLORISE_SETTING,
+        label: "Colorise",
+        choices: &[Choice { value: crate::toolbar::TOGGLE_OFF, text: "Off" }, Choice { value: "on", text: "On" }],
+    },
 ];
+
+/// The key of the Colorise setting: whether the traces are drawn in colour.
+pub const COLORISE_SETTING: &str = "colorise";
 
 /// The key of the channels setting: which of the Y R G B chips are on.
 pub const CHANNELS_SETTING: &str = "channels";
 
 /// The chips on the luma waveform's title bar: Y R G B, any combination, at least one on (#117).
-pub static TOOLBAR: [crate::toolbar::ToolbarDef; 1] = [crate::toolbar::ToolbarDef {
+pub static TOOLBAR: [crate::toolbar::ToolbarDef; 2] = [crate::toolbar::ToolbarDef {
     key: CHANNELS_SETTING,
     mode: crate::components::ChipMode::Multiple,
     chips: &[
@@ -1259,6 +1292,15 @@ pub static TOOLBAR: [crate::toolbar::ToolbarDef; 1] = [crate::toolbar::ToolbarDe
         crate::toolbar::ToolbarChip { value: "g", text: "G", tooltip: "Green", channel: Some(crate::components::Channel::G) },
         crate::toolbar::ToolbarChip { value: "b", text: "B", tooltip: "Blue", channel: Some(crate::components::Channel::B) },
     ],
+}, crate::toolbar::ToolbarDef {
+    key: COLORISE_SETTING,
+    mode: crate::components::ChipMode::Toggle,
+    chips: &[crate::toolbar::ToolbarChip {
+        value: "on",
+        text: "Col",
+        tooltip: "Colorise: the Y trace takes the colour of the picture (off: white)",
+        channel: None,
+    }],
 }];
 
 /// What the Colour Waveform is called: its Panel's settings are kept under this name.
@@ -1302,6 +1344,7 @@ impl crate::display::Display for Waveform {
         let luma = if self.colour { context.luma } else { luma_weights_of(&context.settings) };
         self.set_look(look_from(&context.settings));
         self.set_channels(Channels::from_setting(context.settings.get(CHANNELS_SETTING).map(String::as_str)));
+        self.set_colorise(context.settings.get(COLORISE_SETTING).map(String::as_str) == Some("on"));
         self.set_measurement(crate::output_conversion::measurement(context.colour_setup.clone(), luma));
     }
 

@@ -12,6 +12,8 @@ The format follows [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/
 
 ### Added
 
+- Luma waveform: a Col chip on its title bar (hover: Colorise) draws the Y trace in the average colour of the pixels at each position, so you can tell the wall's spike from the jacket's; off by default, where the trace stays white. It is a drawing choice: the counts and edge rows are the same either way, it is remembered per Panel and is not in the tags. R, G and B traces keep their channel colours for now (#143, ADR 0032).
+
 - Luma waveform: Y R G B chips on its title bar draw any combination of Luma, red, green and blue, each in its channel's colour with the phosphor look, overlaid on one scale. The edge rows show out-of-range pixels per channel. At least one chip stays on, Luma is the default, the choice is remembered per Panel, and the tags name the channels when it is not just Luma. R, G and B are measured only while their chips are on (#117).
 
 - Panel toolbar: the Channel view's channel is a row of Y R G B chips on its title bar, one at a time (Y shows Luma as grey, with the waveform's weights, in the picture and in the Loupe). R, G and B light in their own colour when on and are grey when off; hovering a chip names it. The choice is remembered like every Panel setting and the channel is in the tags. The other settings (the Loupe size) open in a popover from a small settings button on the title bar, or by right-clicking the Panel. On a small Panel the chips stay, the name is cut short and the tags move to the hover (#116, ADR 0013).

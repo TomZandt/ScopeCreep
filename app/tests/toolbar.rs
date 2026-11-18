@@ -259,7 +259,7 @@ mod waveform_chips {
     fn the_popover_keeps_the_other_settings() {
         let left = popover_defs(&SETTINGS, &TOOLBAR);
         assert!(left.iter().all(|d| d.key != CHANNELS_SETTING));
-        assert_eq!(left.len(), SETTINGS.len() - 1);
+        assert_eq!(left.len(), SETTINGS.len() - 2);
     }
 
     #[test]
@@ -273,5 +273,88 @@ mod waveform_chips {
         assert!(!tags(None).contains(&"Y".to_string()) && !tags(Some("y")).iter().any(|t| t == "Y"));
         assert_eq!(tags(Some("rg"))[0], "R G");
         assert_eq!(tags(Some("yrgb"))[0], "Y R G B");
+    }
+}
+
+// ------------------------------------------------------------------ the luma waveform's Colorise chip (#143)
+
+mod colorise_chip {
+    use scopecreep::display::DisplayContext;
+    use scopecreep::panel_grid::PanelLayout;
+    use scopecreep::settings::{PanelSettings, Settings};
+    use scopecreep::toolbar::Toolbar;
+    use scopecreep::waveform::{CHANNELS_SETTING, COLORISE_SETTING, NAME, SETTINGS, TOOLBAR};
+    use scopecreep::window_text;
+
+    fn toolbar(settings: &PanelSettings) -> Toolbar {
+        Toolbar::new(&TOOLBAR, &settings.resolve(NAME, &SETTINGS))
+    }
+
+    /// Click chip `i`: what it sets, as the Panel stores it.
+    fn click(settings: &mut PanelSettings, i: usize) -> &'static str {
+        let toolbar = toolbar(settings);
+        let (key, value) = toolbar.click(i).unwrap();
+        let value = value.to_string();
+        settings.set(NAME, key, &value);
+        key
+    }
+
+    fn colorise_chip(toolbar: &Toolbar) -> usize {
+        toolbar.chips.iter().position(|c| c.text == "Col").expect("a Colorise chip")
+    }
+
+    #[test]
+    fn the_chip_is_off_by_default_and_a_click_toggles_it_each_way() {
+        let mut settings = PanelSettings::default();
+        let i = colorise_chip(&toolbar(&settings));
+        assert!(!toolbar(&settings).on[i]);
+        assert_eq!(click(&mut settings, i), COLORISE_SETTING);
+        assert!(toolbar(&settings).on[i]);
+        click(&mut settings, i);
+        assert!(!toolbar(&settings).on[i]);
+    }
+
+    #[test]
+    fn it_is_remembered_per_panel_and_does_not_disturb_the_y_r_g_b_chips() {
+        let mut settings = PanelSettings::default();
+        let i = colorise_chip(&toolbar(&settings));
+        click(&mut settings, i);
+        assert_eq!(click(&mut settings, 1), CHANNELS_SETTING);
+        let back = PanelSettings::from_text(&settings.to_text());
+        assert!(toolbar(&back).on[i], "Colorise is remembered");
+        assert_eq!(toolbar(&back).on[..4], [true, true, false, false], "Y and R still on");
+    }
+
+    #[test]
+    fn hovering_names_it_and_it_is_a_chip_not_a_popover_row() {
+        let t = toolbar(&PanelSettings::default());
+        assert!(t.tooltips[colorise_chip(&t)].starts_with("Colorise"), "{:?}", t.tooltips);
+        assert!(scopecreep::toolbar::popover_defs(&SETTINGS, &TOOLBAR).iter().all(|d| d.key != COLORISE_SETTING));
+    }
+
+    #[test]
+    fn colorise_is_never_a_tag() {
+        let tags = |value: &str| {
+            let settings: Settings = [(COLORISE_SETTING.to_string(), value.to_string())].into();
+            window_text::panel_title(NAME, &DisplayContext { settings, ..DisplayContext::default() }, String::new()).tags
+        };
+        assert_eq!(tags("on"), tags("off"));
+        assert!(!tags("on").iter().any(|t| t.to_lowercase().contains("coloris")));
+    }
+
+    #[test]
+    fn the_chips_stay_on_a_small_panels_title_bar_and_the_name_truncates_first() {
+        let t = toolbar(&PanelSettings::default());
+        let title = window_text::panel_title(NAME, &DisplayContext::default(), "the full label".into());
+        for scale in [1.0, 2.0] {
+            let small = PanelLayout::new([0.0, 0.0, 180.0 * scale, 200.0 * scale], scale).title;
+            let (l, _, _) = window_text::lay_out_toolbar_title(&title, &t.chips, true, small, scale);
+            assert_eq!(l.chips.len(), 5, "every chip is placed");
+            assert!(l.name_cut, "the name truncates");
+            for chip in &l.chips {
+                assert!(chip[0] >= small[0] && chip[0] + chip[2] <= small[0] + small[2] + 0.01, "{chip:?} stays inside {small:?}");
+            }
+            assert!(l.name[0] + l.name[2] <= l.chips[0][0], "the name stops before the first chip");
+        }
     }
 }

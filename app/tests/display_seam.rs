@@ -192,7 +192,7 @@ fn code_of_solid(b: &mut Bench, rgb: [f32; 3]) -> u32 {
 fn the_waveform_offers_luma_weights_and_the_first_is_from_primaries() {
     let b = Bench::new("luma-menu");
     let defs = b.set.setting_defs(1);
-    assert_eq!(defs.iter().map(|d| d.key).collect::<Vec<_>>(), ["luma", "brightness", "spread", "channels"]);
+    assert_eq!(defs.iter().map(|d| d.key).collect::<Vec<_>>(), ["luma", "brightness", "spread", "channels", "colorise"]);
     assert_eq!(defs[1].choices[0].value, "normal", "trace brightness starts normal");
     assert_eq!(defs[2].choices[0].value, "on", "the soft spread starts on");
     assert_eq!(defs[0].choices.iter().map(|c| c.value).collect::<Vec<_>>(), ["primaries", "match-resolve"]);

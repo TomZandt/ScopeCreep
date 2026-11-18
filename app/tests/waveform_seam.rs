@@ -484,3 +484,122 @@ fn turning_the_colour_channels_off_stops_measuring_them() {
     b.play(2, 2, &flat_codes(2, 2, [300, 300, 300]));
     assert_eq!(b.waveform.channel_counts(Channel::R).columns(), 0, "the R, G and B counts are gone with their chips");
 }
+
+// ------------------------------------------------------------------ Colorise (#143, ADR 0032)
+
+/// The drawn colour of the plot at `code` of picture column `column`.
+fn colour_at(image: &[u8], width: u32, layout: &PlotLayout, column: u32, columns: u32, code: u32) -> [i32; 3] {
+    let (x, y) = (layout.x_of_column(column, columns) as usize, layout.y_of_code(code).floor() as usize);
+    let at = (y * width as usize + x) * 4;
+    [image[at] as i32, image[at + 1] as i32, image[at + 2] as i32]
+}
+
+/// How far apart a drawn colour's strongest and weakest channels are: 0 for a neutral trace.
+fn spread_of([r, g, bl]: [i32; 3]) -> i32 {
+    r.max(g).max(bl) - r.min(g).min(bl)
+}
+
+/// A colour's channels against its strongest: the colour without its brightness.
+fn proportions([r, g, bl]: [f32; 3]) -> [f32; 3] {
+    let top = r.max(g).max(bl);
+    [r / top, g / top, bl / top]
+}
+
+#[test]
+fn colorise_is_off_by_default() {
+    let b = Bench::new("colorisedefault");
+    assert!(!b.waveform.colorise());
+}
+
+#[test]
+fn colorise_on_draws_a_y_trace_in_the_colour_of_the_pixels_and_off_it_is_neutral() {
+    let mut b = Bench::new("coloriseflat");
+    let colour = [0.2f32, 0.8, 0.3];
+    let counts = b.play(1920, 1080, &picture(1920, 1080, |_, _| colour));
+    let code = (0..1024).find(|&c| counts.at(0, c) == 1080).expect("one code");
+    let (width, height) = (800, 500);
+    let layout = PlotLayout::new([0.0, 0.0, width as f32, height as f32], 1.0);
+
+    let neutral = colour_at(&draw(&b, width, height), width, &layout, 960, 1920, code);
+    assert!(neutral[0] > 100 && spread_of(neutral) <= 3, "off: a white trace {neutral:?}");
+
+    b.waveform.set_colorise(true);
+    b.play(1920, 1080, &picture(1920, 1080, |_, _| colour));
+    let tinted = colour_at(&draw(&b, width, height), width, &layout, 960, 1920, code);
+    let [r, g, bl] = proportions(tinted.map(|v| v as f32));
+    assert!((r - 0.25).abs() < 0.06 && (g - 1.0).abs() < 1e-6 && (bl - 0.375).abs() < 0.06, "on: a green trace {tinted:?}");
+    let away = colour_at(&draw(&b, width, height), width, &layout, 960, 1920, code + 80);
+    assert!(away.iter().all(|&c| c < 40), "the rest of the plot stays dark: {away:?}");
+}
+
+#[test]
+fn colorise_on_a_colorchecker_frame_tints_each_patchs_trace_in_that_patchs_colour() {
+    use scopecreep_accuracy::colorchecker::{ColorChecker, Patch, TimelineSpace};
+    let mut b = Bench::new("colorisechart");
+    let chart = ColorChecker::new(TimelineSpace::Rec709Gamma24);
+    let frame = chart.frame(600, 400);
+    let (width, height) = (1200, 700);
+    let layout = PlotLayout::new([0.0, 0.0, width as f32, height as f32], 1.0);
+    let weights = Measurement::default().weights();
+    // Patches 13 (blue), 14 (green), 15 (red) and 16 (yellow): clearly coloured.
+    let patches: Vec<Patch> = chart.patches()[12..16].to_vec();
+    let at = |b: &Bench, p: &Patch| {
+        let r = frame.patch_rect(p.number);
+        let code = ((weights[0] * p.encoded[0] + weights[1] * p.encoded[1] + weights[2] * p.encoded[2]) * 1023.0).round() as u32;
+        colour_at(&draw(b, width, height), width, &layout, (r.x0 + r.x1) / 2, 600, code)
+    };
+    b.play(600, 400, &frame.pixels);
+    for p in &patches {
+        assert!(spread_of(at(&b, p)) <= 3, "off: patch {} {} is neutral", p.number, p.name);
+    }
+    b.waveform.set_colorise(true);
+    b.play(600, 400, &frame.pixels);
+    for p in &patches {
+        let want = proportions(p.encoded.map(|v| v as f32));
+        let got = proportions(at(&b, p).map(|v| v as f32));
+        for c in 0..3 {
+            assert!((want[c] - got[c]).abs() < 0.1, "patch {} {}: wanted {want:?}, drawn {got:?}", p.number, p.name);
+        }
+    }
+}
+
+#[test]
+fn colorise_changes_neither_the_counts_nor_which_edge_rows_light() {
+    let mut b = Bench::new("coloriseedge");
+    b.waveform.set_channels(channels(true, true, true, true));
+    let frame = picture(1920, 1080, |x, _| if x == 1000 { [1.3, -0.1, 0.4] } else { [0.7, 0.5, 0.3] });
+    let (width, height) = (800, 500);
+    let layout = PlotLayout::new([0.0, 0.0, width as f32, height as f32], 1.0);
+    let measured = |b: &mut Bench| {
+        let luma = b.play(1920, 1080, &frame);
+        [Channel::R, Channel::G, Channel::B].map(|c| b.waveform.channel_counts(c)).into_iter().chain([luma]).collect::<Vec<_>>()
+    };
+    let edge_lit = |image: &[u8]| {
+        let [above, below] = [layout.above(), layout.below()];
+        [1000u32, 1400].map(|column| {
+            let x = layout.x_of_column(column, 1920) as usize;
+            [above, below].map(|r| {
+                let y = (r[1] + r[3] / 2.0) as usize;
+                let at = (y * width as usize + x) * 4;
+                image[at].max(image[at + 1]).max(image[at + 2]) > 100
+            })
+        })
+    };
+    let off_counts = measured(&mut b);
+    let off_edges = edge_lit(&draw(&b, width, height));
+    b.waveform.set_colorise(true);
+    let on_counts = measured(&mut b);
+    let on_edges = edge_lit(&draw(&b, width, height));
+    assert_eq!(off_counts, on_counts, "counts are the same either way");
+    assert_eq!(off_edges, on_edges, "the same edge rows light either way");
+    assert_eq!(off_edges, [[true, true], [false, false]], "the out-of-range column lights both edge rows");
+}
+
+#[test]
+fn colorise_does_not_change_the_label() {
+    use scopecreep::display::Display;
+    let b = Bench::new("coloriselabel");
+    let off = Display::label(&b.waveform);
+    b.waveform.set_colorise(true);
+    assert_eq!(Display::label(&b.waveform), off);
+}
