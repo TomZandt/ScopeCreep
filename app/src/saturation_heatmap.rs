@@ -1,11 +1,11 @@
-//! The saturation heatmap (spec #49 stories 75-78, ticket #64): a Picture View that paints each pixel of the
-//! Output picture from cool (neutral) to warm (very saturated), in the shared muted palette.
+//! The saturation heatmap (spec #49 stories 75-78, ticket #64): a Picture View that draws the Output picture as its
+//! Luma in grey with saturation laid over it in a colour that gets stronger with saturation, cool to hot (#100).
 //!
 //! Saturation is the distance from neutral on the vectorscope's scale: Cb/Cr from the Measured Space's luma
 //! weights (ADR 0004), each running -0.5 to 0.5, and the distance `sqrt(Cb^2 + Cr^2)` as a share of the
 //! vectorscope's outer ring ([`crate::vectorscope::RING`], 0.6). So 100 % is the vectorscope's 100 % ring, near
-//! where 100 % colour bars sit (ADR 0023), and a grey is 0 %. The scale setting is the percentage at the warm
-//! end; more saturated pixels stay at the warm end.
+//! where 100 % colour bars sit (ADR 0023), and a grey is 0 %. The scale setting is the percentage at the hot
+//! end; more saturated pixels stay at the hot end.
 use crate::display::{Display, DisplayContext, ScaleText};
 use crate::gpu_frame::GpuFrame;
 use crate::muted_palette;
@@ -20,12 +20,12 @@ pub const LEGEND_SETTING: &str = "legend";
 const SETTINGS: [SettingDef; 2] = [
     SettingDef {
         key: SCALE_SETTING,
-        label: "Scale (warm end)",
+        label: "Scale (hot end)",
         choices: &[
-            Choice { value: "100", text: "100 % (default)" },
+            Choice { value: "75", text: "75 % (default)" },
             Choice { value: "25", text: "25 %" },
             Choice { value: "50", text: "50 %" },
-            Choice { value: "75", text: "75 %" },
+            Choice { value: "100", text: "100 %" },
             Choice { value: "150", text: "150 %" },
             Choice { value: "200", text: "200 %" },
         ],
@@ -73,7 +73,7 @@ fn vs(@builtin(vertex_index) index: u32) -> VertexOut {{
 
 @fragment
 fn fs(in: VertexOut) -> @location(0) vec4<f32> {{
-    if (params.info.w > 0.5) {{ return vec4<f32>(muted(in.uv.x), 1.0); }}
+    if (params.info.w > 0.5) {{ return vec4<f32>(overlay(0.5, in.uv.x), 1.0); }}
     let size = vec2<i32>(i32(params.info.x), i32(params.info.y));
     let at = clamp(vec2<i32>(in.uv * params.info.xy), vec2<i32>(0), size - vec2<i32>(1));
     let rgb = textureLoad(picture, at, 0).rgb;
@@ -81,7 +81,7 @@ fn fs(in: VertexOut) -> @location(0) vec4<f32> {{
     let y = dot(rgb, w);
     let cb = (rgb.b - y) / (2.0 * (1.0 - w.z));
     let cr = (rgb.r - y) / (2.0 * (1.0 - w.x));
-    return vec4<f32>(muted(length(vec2<f32>(cb, cr)) * params.weights.w), 1.0);
+    return vec4<f32>(overlay(y, length(vec2<f32>(cb, cr)) * params.weights.w), 1.0);
 }}
 "#,
         palette = muted_palette::wgsl()
@@ -100,7 +100,7 @@ struct Picture {
 struct State {
     picture: Option<Picture>,
     legend: bool,
-    /// The percentage at the warm end.
+    /// The percentage at the hot end.
     scale: f64,
     weights: [f64; 3],
     label: String,
@@ -159,7 +159,7 @@ impl SaturationHeatmap {
             layout,
             picture_params: buffer("heatmap picture"),
             legend_params: buffer("heatmap legend"),
-            state: Arc::new(Mutex::new(State { picture: None, legend: true, scale: 100.0, weights: [0.2126, 0.7152, 0.0722], label: String::new() })),
+            state: Arc::new(Mutex::new(State { picture: None, legend: true, scale: 75.0, weights: [0.2126, 0.7152, 0.0722], label: String::new() })),
         };
         display.configure(&DisplayContext::default());
         display
@@ -207,13 +207,13 @@ impl Display for SaturationHeatmap {
         let measurement = output_conversion::measurement(context.colour_setup.clone(), context.luma);
         let weights = measurement.weights();
         let space = if measurement.assumed { format!("{} assumed, unconverted", measurement.space.name()) } else { measurement.space.name().to_string() };
-        let scale = context.settings.get(SCALE_SETTING).and_then(|v| v.parse::<f64>().ok()).unwrap_or(100.0);
+        let scale = context.settings.get(SCALE_SETTING).and_then(|v| v.parse::<f64>().ok()).unwrap_or(75.0);
         let mut state = self.state.lock().unwrap();
         state.weights = weights;
         state.scale = scale;
         state.legend = context.settings.get(LEGEND_SETTING).is_none_or(|v| v == "on");
         state.label = format!(
-            "Saturation heatmap  ·  Output picture, {space}  ·  distance from neutral in Cb/Cr (Y = {:.4} R + {:.4} G + {:.4} B), 100 % = the vectorscope's 100 % ring  ·  cool 0 % to warm {scale} %",
+            "Saturation heatmap  ·  Output picture, {space}  ·  distance from neutral in Cb/Cr (Y = {:.4} R + {:.4} G + {:.4} B), 100 % = the vectorscope's 100 % ring  ·  grey 0 % to hot {scale} %",
             weights[0], weights[1], weights[2]
         );
     }
@@ -267,7 +267,7 @@ impl Display for SaturationHeatmap {
         }
     }
 
-    /// The two ends of the legend: 0 % under the cool end and the scale's top under the warm end.
+    /// The two ends of the legend: 0 % under the cool end and the scale's top under the hot end.
     fn scale_texts(&self, area: [f32; 4], scale: f32) -> Vec<ScaleText> {
         let state = self.state.lock().unwrap();
         let strip = SaturationHeatmap::legend_height(state.legend, area, scale);

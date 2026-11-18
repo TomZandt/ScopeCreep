@@ -7,7 +7,7 @@ Spec #49 asks for 100 % on the heatmap to be "the vectorscope's 100 % target". A
 - Saturation is `sqrt(Cb² + Cr²)` from the Measured Space's luma weights (the same Cb/Cr as the vectorscope), as a percentage of the vectorscope's outer ring, `RING` = 0.5, so 100 % is the ring the vectorscope draws.
 - 100 % colour bars therefore read 100 to 103 % (red, cyan, yellow, blue) and 119 % (green, magenta). At the default scale everything from the ring outwards is the warm end, so all six bars are at the "100 % point".
 - The scale setting is the percentage at the warm end (100 % by default; 25, 50, 75, 150, 200 %). Pixels past it stay at the warm end.
-- The palette (7 muted stops of one Rec.709 luma, cool blue to warm red) lives in `app/src/muted_palette.rs` so the Skin Tone Panel can share it.
+- The palette lives in `app/src/muted_palette.rs` (see the 2026-11-18 update: grey picture with a contrast palette laid over it).
 
 ## Considered and rejected
 
@@ -22,3 +22,9 @@ Spec #49 asks for 100 % on the heatmap to be "the vectorscope's 100 % target". A
 ## Update 2026-11-17
 
 The vectorscope ring moved from 0.5 to 0.6 Cb/Cr, the furthest a full-strength Rec.709 bar reaches, so that every legal bar is inside it. The heatmap follows the ring, so 100 % is now 0.6: green and magenta full-strength bars read 99 %, the other four 84 to 86 %, and nothing legal is over 100 %.
+
+## Update 2026-11-18 (#100)
+
+The heatmap now keeps the picture's shape: each pixel is its Luma in grey (the Measured Space's weights) with the saturation colour laid over it, the colour's strength rising smoothly (smoothstep) from none at 0 % to full at 30 % of the scale. Neutral areas show the grey picture; saturated areas a strong colour. The even-brightness palette rule (spec #49 story 78) is dropped: the palette is 6 stops chosen for contrast, blue, cyan, green, yellow, orange, red, cool to hot.
+
+The default scale is 75 % (was 100 %). Measured on the ColorChecker as the Output picture, the 18 colour patches sit at 19 to 90 % of a 75 % scale (the most saturated, orange, at 90 %; the median near 50 %), so a normal graded picture uses most of the scale. At 100 % the most saturated patch used only 67 %. The measure itself (share of the vectorscope's ring) is unchanged, so 100 % is still the ring. The legend is the same overlay laid over mid grey, so its colours match the picture's.

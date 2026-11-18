@@ -35,6 +35,7 @@ What we learned by testing, kept in the repo so it isn't lost when an issue thre
 | [54](54-black-and-white-picture-view.md) | Milestone 2: is every ColorChecker patch drawn black and white at the Luma the waveform traces for it, and does it follow the waveform's luma weights (headless)? |
 | [56](56-gamut-legal-warning.md) | Milestone 2: does the gamut/legal warning tint, limit, tolerate (R103) and label correctly (headless)? |
 | [64](64-saturation-heatmap.md) | Milestone 2: does the saturation heatmap show each ColorChecker patch at its Cb/Cr distance, greys cool, 100 % bars at the 100 % point, a scale that remaps and a legend that toggles (headless)? |
+| [100](100-saturation-heatmap-overlay.md) | Milestone 3: does the heatmap keep the picture as its Luma grey with saturation laid over it, and what default scale lets a graded picture use most of it (headless)? |
 | [59](59-colour-waveform.md) | Milestone 2: does the Colour Waveform tint each spot by the average colour of its pixels at the luma waveform's positions, with the same settings (headless)? |
 | [60](60-skin-tone-line.md) | Where does Resolve draw its vectorscope skin-tone line? (123.3° ± 0.5° on screen, from a screenshot) |
 | [61](61-vectorscopes.md) | Milestone 2: do the vectorscopes land bars and ColorChecker hues on target, at twice the radius, with the assumed skin-tone line (headless)? |

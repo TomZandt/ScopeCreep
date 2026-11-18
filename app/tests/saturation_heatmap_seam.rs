@@ -2,7 +2,7 @@
 //! Feed monitor hands them to the GPU as the app does, and the tests read back what the Panel drew, its label and
 //! its legend. Expected values come from the BT.709 constants and the research table
 //! through the ColorChecker frames of #52. Needs a GPU.
-use scopecreep::muted_palette::{STOPS, muted};
+use scopecreep::muted_palette::{FULL_STRENGTH_AT, STOPS, heat, overlay, strength};
 use scopecreep::saturation_heatmap::SaturationHeatmap;
 use scopecreep::display::{DisplayContext, DisplaySet};
 use scopecreep::gpu_frame::FrameUploader;
@@ -141,15 +141,15 @@ fn percent(rgb: [f64; 3]) -> f64 {
     cb.hypot(cr) / scopecreep::vectorscope::RING * 100.0
 }
 
-/// Where on the scale a drawn colour sits (0 cool to 1 warm), by finding the palette colour nearest to it.
-fn position_of(got: [u8; 3]) -> f32 {
-    let distance = |t: f32| muted(t).iter().zip(got).map(|(m, g)| (m * 255.0 - g as f32).abs()).fold(0.0, f32::max);
-    (0..=2000).map(|i| i as f32 / 2000.0).min_by(|a, b| distance(*a).partial_cmp(&distance(*b)).unwrap()).unwrap()
+/// The Luma (BT.709 weights) of an encoded colour.
+fn luma(rgb: [f64; 3]) -> f32 {
+    (0.2126 * rgb[0] + 0.7152 * rgb[1] + 0.0722 * rgb[2]) as f32
 }
 
-fn assert_on_palette(got: [u8; 3], t: f32, what: &str) {
-    let want = muted(t);
-    assert!((0..3).all(|c| (got[c] as f32 - want[c] * 255.0).abs() <= 1.5), "{what}: {got:?} is not the palette at {t:.3} ({:?})", want.map(|v| v * 255.0));
+/// The picture's pixel is its Luma in grey with the heat colour laid over it at `t` on the scale.
+fn assert_overlay(got: [u8; 3], grey: f32, t: f32, what: &str) {
+    let want = overlay(grey, t);
+    assert!((0..3).all(|c| (got[c] as f32 - want[c] * 255.0).abs() <= 2.0), "{what}: {got:?} is not the grey {grey:.3} with heat at {t:.3} ({:?})", want.map(|v| v * 255.0));
 }
 
 /// The encoded Output picture of a patch of the research table: linear Rec.709 through the BT.709 OETF, mirrored
@@ -188,19 +188,25 @@ fn chart_patches(b: &mut Bench) -> Vec<(usize, &'static str, [f64; 3], [u8; 3])>
 }
 
 #[test]
-fn the_palette_is_cool_to_warm_at_an_even_brightness() {
-    assert_eq!(muted(0.0), STOPS[0]);
-    assert_eq!(muted(1.0), STOPS[STOPS.len() - 1]);
-    assert_eq!(muted(-1.0), muted(0.0));
-    assert_eq!(muted(9.0), muted(1.0));
-    // Cool is blue and warm is red.
+fn the_palette_is_cool_to_hot_and_the_colour_strengthens_over_the_grey() {
+    assert_eq!(heat(0.0), STOPS[0]);
+    assert!(heat(1.0).iter().zip(STOPS[STOPS.len() - 1]).all(|(a, b)| (a - b).abs() < 1e-5));
+    assert_eq!(heat(-1.0), heat(0.0));
+    assert_eq!(heat(9.0), heat(1.0));
+    // Cool is blue and hot is red.
     assert!(STOPS[0][2] > STOPS[0][0] && STOPS[STOPS.len() - 1][0] > STOPS[STOPS.len() - 1][2]);
-    // No part of the scale is brighter than another.
-    let luma = |c: [f32; 3]| 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2];
-    for i in 0..=100 {
-        let l = luma(muted(i as f32 / 100.0));
-        assert!((l - 0.56).abs() < 0.02, "luma {l} at {i} %");
-    }
+    // Nothing at 0, all of it from the full-strength point, rising in between.
+    assert_eq!(strength(0.0), 0.0);
+    assert_eq!(strength(FULL_STRENGTH_AT), 1.0);
+    assert_eq!(strength(1.0), 1.0);
+    assert!(strength(FULL_STRENGTH_AT / 2.0) > 0.0 && strength(FULL_STRENGTH_AT / 2.0) < 1.0);
+    // Neutral shows the grey; saturated shows the colour.
+    assert_eq!(overlay(0.4, 0.0), [0.4; 3]);
+    assert!(overlay(0.4, 1.0).iter().zip(heat(1.0)).all(|(a, b)| (a - b).abs() < 1e-5));
+    // The ramp is chosen for contrast: its stops differ a lot in brightness, not the even-brightness rule.
+    let lumas: Vec<f32> = STOPS.iter().map(|s| luma(s.map(|v| v as f64))).collect();
+    let (lo, hi) = lumas.iter().fold((1.0f32, 0.0f32), |(lo, hi), l| (lo.min(*l), hi.max(*l)));
+    assert!(hi - lo > 0.2, "{lumas:?}");
 }
 
 #[test]
@@ -211,19 +217,20 @@ fn the_display_is_registered_in_the_standard_set() {
 }
 
 #[test]
-fn the_grey_patches_are_at_the_cool_end() {
+fn neutral_patches_show_as_their_luma_grey() {
     let mut b = Bench::new("greys");
     b.configure("off", "100");
     let patches = chart_patches(&mut b);
-    for (number, name, _, got) in patches.iter().filter(|p| p.0 >= 19) {
-        // The chart's greys are neutral to within the research table's rounding: under 3 % of the scale.
-        let at = position_of(*got);
-        assert!(at <= 0.03, "patch {number} {name} is drawn at {at:.3} of the scale");
+    for (number, name, rgb, got) in patches.iter().filter(|p| p.0 >= 19) {
+        // The chart's greys are neutral to within the research table's rounding, so the colour laid over them is
+        // faint: the pixel is its Luma grey to within 8/255.
+        let grey = luma(*rgb) * 255.0;
+        assert!((0..3).all(|c| (got[c] as f32 - grey).abs() <= 8.0), "patch {number} {name}: {got:?} is not the grey {grey:.1}");
     }
 }
 
 #[test]
-fn colour_bars_at_100_percent_sit_at_the_100_percent_point_and_75_percent_bars_below_it() {
+fn colour_bars_at_100_percent_sit_at_the_100_percent_point_and_75_percent_bars_below_it_in_strong_colour() {
     let mut b = Bench::new("bars");
     b.configure("off", "100");
     for level in [1.0f64, 0.75] {
@@ -239,26 +246,39 @@ fn colour_bars_at_100_percent_sit_at_the_100_percent_point_and_75_percent_bars_b
             // furthest bar, so green and magenta are at 99 % and red, yellow, cyan and blue at 84 to 86 %).
 
             assert!((at / level - 100.0).abs() <= 20.0, "bar {i} at {at:.1} %");
-            assert_on_palette(got, (at / 100.0).min(1.0) as f32, &format!("{level} bar {i}"));
+            assert_overlay(got, luma(*c), (at / 100.0).min(1.0) as f32, &format!("{level} bar {i}"));
         }
     }
 }
 
 #[test]
-fn each_colorchecker_patch_shows_its_cb_cr_distance_on_the_scale() {
+fn each_colorchecker_patch_shows_its_grey_with_its_saturation_laid_over_it() {
     let mut b = Bench::new("patches");
     b.configure("off", "100");
     for (number, name, rgb, got) in chart_patches(&mut b) {
         let want = (percent(rgb) / 100.0).min(1.0) as f32;
-        let at = position_of(got);
-        assert!((at - want).abs() <= 0.01, "patch {number} {name}: drawn at {at:.3} of the scale, Cb/Cr distance says {want:.3}");
+        assert_overlay(got, luma(rgb), want, &format!("patch {number} {name}"));
     }
+}
+
+#[test]
+fn the_default_scale_lets_a_graded_picture_use_most_of_it() {
+    // Measured on the ColorChecker as the Output picture: the most saturated of the 18 colour patches uses at
+    // least 70 % of the default scale and none is past it.
+    let b = Bench::new("default");
+    let default: f64 = b.set.setting_defs(0)[0].choices[0].value.parse().unwrap();
+    let chart = ColorChecker::new(TimelineSpace::Rec709Gamma24);
+    let mut shares: Vec<f64> = chart.patches().iter().filter(|p| p.number < 19).map(|p| percent(encoded(p.rec709_linear)) / default).collect();
+    shares.sort_by(|a, b| a.partial_cmp(b).unwrap());
+    eprintln!("default {default} %, shares of the scale: {shares:.3?}");
+    let most = shares[shares.len() - 1];
+    assert!(most <= 1.0 && most >= 0.7 && default == 75.0, "most saturated patch uses {most:.2} of the scale");
 }
 
 #[test]
 fn changing_the_scale_remaps_the_colours() {
     let mut b = Bench::new("scale");
-    // A muted orange, about 36 % saturated.
+    // An orange, about 36 % saturated.
     let rgb = [0.75f64, 0.5, 0.25];
     let at = percent(rgb);
     assert!(at > 20.0 && at < 50.0, "{at}");
@@ -267,17 +287,17 @@ fn changing_the_scale_remaps_the_colours() {
         b.configure("off", scale);
         let image = b.render(40, 40);
         let want = (at / scale.parse::<f64>().unwrap()).min(1.0) as f32;
-        assert_on_palette(pixel(&image, 40, 20, 20), want, &format!("scale {scale}"));
+        assert_overlay(pixel(&image, 40, 20, 20), luma(rgb), want, &format!("scale {scale}"));
     }
     // The offered scales, the first the default.
     let defs = b.set.setting_defs(0);
     assert_eq!(defs[0].key, "scale");
-    assert_eq!(defs[0].choices[0].value, "100");
+    assert_eq!(defs[0].choices[0].value, "75");
     // The label says the scale.
     b.configure("off", "50");
-    assert!(b.set.labels()[0].contains("warm 50 %"), "{}", b.set.labels()[0]);
+    assert!(b.set.labels()[0].contains("hot 50 %"), "{}", b.set.labels()[0]);
     b.configure("off", "200");
-    assert!(b.set.labels()[0].contains("warm 200 %"), "{}", b.set.labels()[0]);
+    assert!(b.set.labels()[0].contains("hot 200 %"), "{}", b.set.labels()[0]);
 }
 
 #[test]
@@ -292,21 +312,23 @@ fn the_legend_toggles_and_shows_the_palette_with_its_ends() {
     assert_eq!(defs[1].choices.iter().map(|c| c.value).collect::<Vec<_>>(), ["on", "off"]);
     let image = b.render(width, height);
     // The bar under the picture runs cool (left) to warm (right).
-    assert_on_palette(pixel(&image, width, 2, height - 26 + 4), 0.0, "legend left");
-    assert_on_palette(pixel(&image, width, width - 3, height - 26 + 4), 1.0, "legend right");
-    let middle = position_of(pixel(&image, width, width / 2, height - 26 + 4));
-    assert!((middle - 0.5).abs() < 0.02, "{middle}");
+    assert_overlay(pixel(&image, width, 2, height - 26 + 4), 0.5, 2.5 / width as f32, "legend left");
+    assert_overlay(pixel(&image, width, width - 3, height - 26 + 4), 0.5, (width as f32 - 2.5) / width as f32, "legend right");
+    // Along the bar the colour is the picture's own: a pixel at that place on the scale, over mid grey.
+    for x in [width / 10, width / 4, width / 2, width * 3 / 4] {
+        assert_overlay(pixel(&image, width, x, height - 26 + 4), 0.5, (x as f32 + 0.5) / width as f32, "legend");
+    }
     let texts = b.set.scale_texts(0, [0.0, 0.0, width as f32, height as f32], 1.0);
     assert_eq!(texts.iter().map(|t| t.text.as_str()).collect::<Vec<_>>(), ["0 %", "100 %"]);
     // The picture still shows above it (a grey: the cool end).
-    assert_on_palette(pixel(&image, width, 300, 100), 0.0, "the picture");
+    assert_overlay(pixel(&image, width, 300, 100), 0.5, 0.0, "the picture");
     b.configure("on", "50");
     assert_eq!(b.set.scale_texts(0, [0.0, 0.0, width as f32, height as f32], 1.0)[1].text, "50 %");
 
     // Off: no bar, no text, the picture takes the whole Panel.
     b.configure("off", "100");
     let image = b.render(width, height);
-    assert_on_palette(pixel(&image, width, width - 3, height - 26 + 4), 0.0, "picture runs to the bottom");
+    assert_overlay(pixel(&image, width, width - 3, height - 26 + 4), 0.5, 0.0, "picture runs to the bottom");
     assert!(b.set.scale_texts(0, [0.0, 0.0, width as f32, height as f32], 1.0).is_empty());
 }
 

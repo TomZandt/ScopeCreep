@@ -8,6 +8,7 @@ The format follows [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/
 
 ### Changed
 
+- The saturation heatmap keeps the picture's shape: the picture is drawn as its Luma in grey and saturation is laid over it in a colour that gets stronger with saturation, from blue to red, so neutral areas stay grey and saturated areas stand out. The default scale is now 75 % so a normal graded picture uses most of it (#100).
 - The Skin Tone Panel reads at a glance: the picture keeps its own colours, and pixels near the skin-tone line are painted solid flat colours (yellow within the tolerance, green or magenta on either side out to six times it); neutral pixels and hues beyond keep their own colour (#101).
 
 - The vectorscopes' outer ring sits at the furthest a full-strength Rec.709 bar reaches (the green and magenta bars, 0.596 in Cb/Cr), so every legal bar is inside it, and the plot is a little bigger to fit it whole.

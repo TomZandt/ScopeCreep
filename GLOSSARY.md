@@ -87,7 +87,7 @@ A Scope that plots each pixel's colour as Cb across and Cr up, so hue is the ang
 _Avoid_: Chroma scope, colour wheel
 
 **Saturation heatmap**:
-A Picture View that colours each pixel of the Output picture by its distance from neutral on the vectorscope's scale (100 % is the vectorscope's outer ring), from cool (neutral) to warm (very saturated), in the muted palette shared with the Skin Tone Panel.
+A Picture View that draws the Output picture as its Luma in grey with saturation laid over it in a colour that strengthens with saturation, cool to hot: neutral areas show the grey picture, saturated areas a strong colour. Saturation is the distance from neutral on the vectorscope's scale (100 % is the vectorscope's outer ring).
 _Avoid_: Chroma map, saturation false colour
 
 **Skin-tone line**:
