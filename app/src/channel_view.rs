@@ -11,7 +11,9 @@ use crate::display::{ChannelViewDrawn, Display, DisplayContext, Pointer, Pointer
 use crate::gpu_frame::GpuFrame;
 use crate::picture_stage::{PictureStage, Rule, place};
 use crate::output_conversion::Plan;
+use crate::components::{Channel as ChipColour, ChipMode};
 use crate::settings::{Choice, SettingDef};
+use crate::toolbar::{ToolbarChip, ToolbarDef};
 use std::sync::{Arc, Mutex};
 
 /// The zoom a Loupe starts at, and its limits, in percent of source pixels.
@@ -22,11 +24,11 @@ const ZOOM_STEP: u32 = 100;
 
 const STATE_KEYS: &[&str] = &["loupe_x", "loupe_y", "loupe_zoom"];
 
-static SETTINGS: [SettingDef; 2] = [
+pub static SETTINGS: [SettingDef; 2] = [
     SettingDef {
         key: "channel",
         label: "Channel",
-        choices: &[Choice { value: "blue", text: "Blue" }, Choice { value: "red", text: "Red" }, Choice { value: "green", text: "Green" }],
+        choices: &[Choice { value: "blue", text: "Blue" }, Choice { value: "red", text: "Red" }, Choice { value: "green", text: "Green" }, Choice { value: "luma", text: "Luma" }],
     },
     SettingDef {
         key: "size",
@@ -35,12 +37,26 @@ static SETTINGS: [SettingDef; 2] = [
     },
 ];
 
+/// The channel as chips on the title bar: Y R G B, one at a time (Y is Luma as grey), the model control of the
+/// Panel toolbar (#116).
+pub static TOOLBAR: [ToolbarDef; 1] = [ToolbarDef {
+    key: "channel",
+    mode: ChipMode::Single,
+    chips: &[
+        ToolbarChip { value: "luma", text: "Y", tooltip: "Luma (Y)", channel: Some(ChipColour::Y) },
+        ToolbarChip { value: "red", text: "R", tooltip: "Red", channel: Some(ChipColour::R) },
+        ToolbarChip { value: "green", text: "G", tooltip: "Green", channel: Some(ChipColour::G) },
+        ToolbarChip { value: "blue", text: "B", tooltip: "Blue", channel: Some(ChipColour::B) },
+    ],
+}];
+
 /// Which channel is drawn.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum Channel {
     Blue,
     Red,
     Green,
+    Luma,
 }
 
 impl Channel {
@@ -48,6 +64,7 @@ impl Channel {
         match value {
             Some("red") => Channel::Red,
             Some("green") => Channel::Green,
+            Some("luma") => Channel::Luma,
             _ => Channel::Blue,
         }
     }
@@ -56,6 +73,7 @@ impl Channel {
             Channel::Blue => "Blue",
             Channel::Red => "Red",
             Channel::Green => "Green",
+            Channel::Luma => "Luma",
         }
     }
     /// The index the shader picks the channel by.
@@ -64,6 +82,7 @@ impl Channel {
             Channel::Red => 0.0,
             Channel::Green => 1.0,
             Channel::Blue => 2.0,
+            Channel::Luma => 3.0,
         }
     }
 }
@@ -155,12 +174,12 @@ impl Loupe {
 
 /// The colour rule the stage draws the picture with: one channel as grey.
 const RULE: &str = r#"
-struct Values { channel: vec4<f32> };   // x: the channel (0 R, 1 G, 2 B)
+struct Values { channel: vec4<f32>, weights: vec4<f32> };   // x: the channel (0 R, 1 G, 2 B, 3 Luma); luma weights
 
 fn colour(uv: vec2<f32>) -> vec3<f32> {
     let c = sample_picture(uv);
     var v = c.b;
-    if values.channel.x < 0.5 { v = c.r; } else if values.channel.x < 1.5 { v = c.g; }
+    if values.channel.x < 0.5 { v = c.r; } else if values.channel.x < 1.5 { v = c.g; } else if values.channel.x > 2.5 { v = dot(c.rgb, values.weights.xyz); }
     return vec3<f32>(v);
 }
 "#;
@@ -171,7 +190,8 @@ struct Params {
     quad: vec4<f32>,    // left, top, right, bottom in clip space
     loupe: vec4<f32>,   // left, top, side, device pixels per source pixel
     src: vec4<f32>,     // frame width, height, source pixel at the Loupe's middle (x, y)
-    mid: vec4<f32>,     // the Loupe's middle pixel (x, y), channel (0 R, 1 G, 2 B), bottom row first
+    mid: vec4<f32>,     // the Loupe's middle pixel (x, y), channel (0 R, 1 G, 2 B, 3 Luma), bottom row first
+    weights: vec4<f32>, // luma weights for R, G, B
 };
 @group(0) @binding(0) var<uniform> p: Params;
 @group(0) @binding(1) var picture: texture_2d<f32>;
@@ -189,6 +209,7 @@ fn vs(@builtin(vertex_index) index: u32) -> VertexOut {
 fn pick(c: vec3<f32>) -> f32 {
     if p.mid.z < 0.5 { return c.r; }
     if p.mid.z < 1.5 { return c.g; }
+    if p.mid.z > 2.5 { return dot(c, p.weights.xyz); }
     return c.b;
 }
 
@@ -207,10 +228,12 @@ fn fs(in: VertexOut) -> @location(0) vec4<f32> {
 }
 "#;
 
-const PARAMS_BYTES: u64 = 64;
+const PARAMS_BYTES: u64 = 80;
 
 struct State {
     channel: Channel,
+    /// The luma weights the Luma choice uses: the waveform's, so a grey lines up with its trace.
+    weights: [f32; 3],
     loupe: Loupe,
     /// Remembered state is taken once, from the first [`Display::configure`] (the user's file at start-up);
     /// after that the display's own is the newer.
@@ -236,7 +259,7 @@ pub struct ChannelView {
 
 impl ChannelView {
     pub fn new(device: &wgpu::Device, queue: &wgpu::Queue, target: wgpu::TextureFormat, filterable: bool) -> ChannelView {
-        let stage = PictureStage::new::<[f32; 4]>(device, queue, target, filterable, Rule { label: "channel view", wgsl: RULE.into(), has_legend: false });
+        let stage = PictureStage::new::<[[f32; 4]; 2]>(device, queue, target, filterable, Rule { label: "channel view", wgsl: RULE.into(), has_legend: false });
         let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor { label: Some("channel view loupe"), source: wgpu::ShaderSource::Wgsl(LOUPE_SHADER.into()) });
         let loupe_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: Some("channel view loupe"),
@@ -276,7 +299,7 @@ impl ChannelView {
             loupe_layout,
             loupe_params,
             loupe_bound: Arc::new(Mutex::new(None)),
-            state: Arc::new(Mutex::new(State { channel: Channel::Blue, loupe: Loupe::new(), loaded: false, area: None, tail: String::new() })),
+            state: Arc::new(Mutex::new(State { channel: Channel::Blue, weights: [0.2126, 0.7152, 0.0722], loupe: Loupe::new(), loaded: false, area: None, tail: String::new() })),
         }
     }
 }
@@ -293,6 +316,8 @@ impl Display for ChannelView {
     fn configure(&self, context: &DisplayContext) {
         let mut state = self.state.lock().unwrap();
         state.channel = Channel::from_setting(context.settings.get("channel").map(String::as_str));
+        let [wr, wg, wb] = crate::output_conversion::measurement(context.colour_setup.clone(), context.luma).weights();
+        state.weights = [wr as f32, wg as f32, wb as f32];
         state.loupe.size = LoupeSize::from_setting(context.settings.get("size").map(String::as_str));
         if !state.loaded {
             state.loaded = true;
@@ -306,6 +331,10 @@ impl Display for ChannelView {
         &SETTINGS
     }
 
+    fn toolbar_defs(&self) -> &'static [ToolbarDef] {
+        &TOOLBAR
+    }
+
     fn state_keys(&self) -> &'static [&'static str] {
         STATE_KEYS
     }
@@ -314,7 +343,10 @@ impl Display for ChannelView {
         // The picture first, then the state: the order `draw` takes them in.
         let size = self.stage.size();
         let state = self.state.lock().unwrap();
-        let head = format!("{} channel as grey", state.channel.name());
+        let head = match state.channel {
+            Channel::Luma => "Luma as grey".to_string(),
+            channel => format!("{} channel as grey", channel.name()),
+        };
         match size {
             Some([w, h]) => format!("{head}  ·  {w} × {h}  ·  Loupe {} %  ·  {}", state.loupe.zoom, state.tail),
             None => head,
@@ -329,7 +361,7 @@ impl Display for ChannelView {
         let mut state = self.state.lock().unwrap();
         state.area = Some((area, scale));
         // The picture, through the stage.
-        self.stage.draw(pass, area, surface, &[state.channel.index(), 0.0, 0.0, 0.0], None);
+        self.stage.draw(pass, area, surface, &[[state.channel.index(), 0.0, 0.0, 0.0], [state.weights[0], state.weights[1], state.weights[2], 0.0]], None);
         // The Loupe on top, and the source pixel under its middle.
         let Some(p) = place(area, shown.size, 0.0) else { return };
         let rect = state.loupe.rect(area, scale);
@@ -337,7 +369,7 @@ impl Display for ChannelView {
         let (mx, my) = (middle[0].round(), middle[1].round());
         let source = [((mx - p.x) / p.w * shown.size[0] as f32).floor(), ((my - p.y) / p.h * shown.size[1] as f32).floor()];
         let clip = |px: f32, size: f32| px / size * 2.0 - 1.0;
-        let params: [f32; 16] = [
+        let params: [f32; 20] = [
             clip(rect[0], surface[0]),
             -clip(rect[1], surface[1]),
             clip(rect[0] + rect[2], surface[0]),
@@ -354,6 +386,10 @@ impl Display for ChannelView {
             my,
             state.channel.index(),
             if shown.bottom_up { 1.0 } else { 0.0 },
+            state.weights[0],
+            state.weights[1],
+            state.weights[2],
+            0.0,
         ];
         self.queue.write_buffer(&self.loupe_params, 0, bytemuck::cast_slice(&params));
         let mut bound = self.loupe_bound.lock().unwrap();

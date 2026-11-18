@@ -93,6 +93,9 @@ _Avoid_: Widget, control (for the whole set)
 **Chip**:
 A small toggle on a title bar: a letter or short word, grey when off, the accent (or its channel's colour for R, G, B, Y) when on.
 
+**Toolbar**:
+The settings a display marks to show as chips on its Panel's title bar (the Channel view's Y R G B). The popover holds the settings that are not on the toolbar.
+
 **Legend strip**:
 The colour scale of a display, always horizontal: under the picture, full width, read left to right.
 _Avoid_: Vertical legend
@@ -206,7 +209,7 @@ The Feed's frame as Resolve sends it, before Output Conversion. Stops False Colo
 A movable square on a Picture View that shows the picture under it magnified, so single pixels (and noise) can be seen. Its zoom is of source pixels, in device pixels of the screen: at 200 % each picture pixel is 2 × 2 device pixels, whatever the Panel's size. It lives on the Channel view.
 
 **Channel view**:
-The Panel showing one channel of the Output picture (blue by default, or red or green) as grey, with the Loupe on top, for inspecting noise.
+The Panel showing one channel of the Output picture (blue by default, or red, green or Luma) as grey, with the Loupe on top, for inspecting noise.
 _Avoid_: PiP, magnifier, zoom window
 
 **ColorChecker frame**:

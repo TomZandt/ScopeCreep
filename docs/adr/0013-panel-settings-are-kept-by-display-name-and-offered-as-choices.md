@@ -20,3 +20,7 @@
 
 - Renaming a display forgets its settings; display names are therefore treated as stable.
 - A new setting is one entry in a display's list and one line reading it in `configure`; the menu, saving and the label rule need no change.
+
+## Note, 2026-11-18: settings can also be chips on the title bar (#116)
+
+A display may mark a setting to be shown as a row of chips on its Panel's title bar (spec #113). It is still one of the display's ordinary settings: a short list of named choices, stored and remembered under the display's name exactly as above, and shown in the tags when it changes what is measured. A chip is one choice; the popover (opened from a small settings button on the title bar, or by right-click) holds the settings that are not chips. Only single choice is built so far (the Channel view's Y R G B, with Luma as a fourth channel choice); multiple choice and toggles follow with the displays that use them. The decision above is otherwise unchanged: no free numbers, nothing that could mislead.

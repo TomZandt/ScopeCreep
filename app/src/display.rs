@@ -13,6 +13,7 @@
 use crate::colour_setup::KnownColourSetup;
 use crate::gpu_frame::GpuFrame;
 use crate::settings::{PanelSettings, SettingDef, Settings};
+use crate::toolbar::{Toolbar, ToolbarDef};
 use crate::waveform::{LumaWeights, Waveform};
 use std::any::Any;
 use std::sync::Arc;
@@ -100,6 +101,11 @@ pub trait Display: Send + Sync {
     /// default). Only sensible values: a display never offers a setting that could make it mislead. None by
     /// default, and a Panel with no settings shows no menu.
     fn setting_defs(&self) -> &'static [SettingDef] {
+        &[]
+    }
+    /// The settings (from [`Display::setting_defs`]) the display shows as chips on its title bar. The popover
+    /// holds the rest. None by default.
+    fn toolbar_defs(&self) -> &'static [ToolbarDef] {
         &[]
     }
     /// What the display remembers between sessions besides its menu choices (a Loupe's position and zoom). They
@@ -233,6 +239,16 @@ impl DisplaySet {
     /// The settings the display in Panel `index` offers.
     pub fn setting_defs(&self, index: usize) -> &'static [SettingDef] {
         self.displays[index].setting_defs()
+    }
+
+    /// The settings the display in Panel `index` leaves for the popover: those that are not chips on its title bar.
+    pub fn popover_defs(&self, index: usize) -> Vec<SettingDef> {
+        crate::toolbar::popover_defs(self.displays[index].setting_defs(), self.displays[index].toolbar_defs())
+    }
+
+    /// The chips on the title bar of the display in Panel `index`, given everyone's choices.
+    pub fn toolbar(&self, index: usize, settings: &PanelSettings) -> Toolbar {
+        Toolbar::new(self.displays[index].toolbar_defs(), &self.settings_of(index, settings))
     }
 
     /// The settings the display in Panel `index` is using, given everyone's choices.

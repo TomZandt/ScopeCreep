@@ -102,6 +102,22 @@ fn each_channel_choice_draws_exactly_that_channels_values_as_grey_and_blue_is_th
 }
 
 #[test]
+fn the_y_chip_draws_luma_as_grey_with_the_waveforms_weights_in_the_picture_and_in_the_loupe() {
+    let mut b = Bench::new("luma");
+    b.play(64, 36, &solid(64, 36, [0.4, 0.6, 0.8]));
+    b.set.configure(&DisplayContext::default(), &with_setting(&b, "channel", "luma"));
+    // The weights the waveform measures with (Rec.709 here: no Colour Setup is known).
+    let [wr, wg, wb] = scopecreep::output_conversion::measurement(None, scopecreep::waveform::DEFAULT_LUMA_WEIGHTS).weights();
+    let luma = ((wr * 0.4 + wg * 0.6 + wb * 0.8) * 255.0).round() as i32;
+    let image = b.render();
+    let near = |p: [u8; 3]| p[0] == p[1] && p[1] == p[2] && (p[0] as i32 - luma).abs() <= 1;
+    assert!(near(px(&image, AREA[0] as u32 + 40, AREA[1] as u32 + 90)), "the picture is Luma grey: {:?} vs {luma}", px(&image, AREA[0] as u32 + 40, AREA[1] as u32 + 90));
+    let c = centre(b.drawn().loupe);
+    assert!(near(px(&image, c[0] as u32, c[1] as u32)), "the Loupe shows Luma grey too");
+    assert!(b.set.labels()[b.index].starts_with("Luma as grey"), "{}", b.set.labels()[b.index]);
+}
+
+#[test]
 fn the_label_says_which_channel_is_shown() {
     let mut b = Bench::new("label");
     b.play(64, 36, &solid(64, 36, [0.4, 0.6, 0.8]));

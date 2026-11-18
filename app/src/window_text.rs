@@ -135,11 +135,16 @@ pub fn panel_title(display_name: &str, context: &DisplayContext, full: String) -
             let channel = match setting("channel") {
                 Some("red") => "Red",
                 Some("green") => "Green",
+                Some("luma") => "Luma",
                 _ => "Blue",
             };
             let zoom = setting("loupe_zoom").and_then(|z| z.parse::<u32>().ok()).unwrap_or(crate::channel_view::DEFAULT_ZOOM);
             let mut tags = vec![channel.to_string(), format!("{zoom} %")];
             tags.extend(conversion_tags(context));
+            // Luma follows the waveform's weights, so a grey that is not the default says so.
+            if setting("channel") == Some("luma") && measurement(context.colour_setup.clone(), context.luma).luma == LumaWeights::MatchResolve {
+                tags.push("luma weights: match Resolve".into());
+            }
             ("Channel view".into(), tags)
         }
         crate::stops_false_colour::NAME => (crate::stops_false_colour::NAME.into(), crate::stops_false_colour::reading_tags(context)),
@@ -195,10 +200,16 @@ pub fn hover_text(title: &PanelTitle, name_and_tags_cut: bool, max_chars: usize)
 /// tags (most important first) as fit beside it. Returns the layout and whether everything fit; when not, the
 /// hover carries the rest ([`hover_text`]).
 pub fn lay_out_title(title: &PanelTitle, bar: [f32; 4], scale: f32) -> (crate::components::TitleLayout, String, bool) {
+    lay_out_toolbar_title(title, &[], false, bar, scale)
+}
+
+/// The same with the Panel's toolbar: its `chips` and, when it has one, its settings button stay at the right of
+/// the bar. When the Panel is small the name truncates first and the tags go to the hover; the chips never move.
+pub fn lay_out_toolbar_title(title: &PanelTitle, chips: &[crate::components::Chip], settings_button: bool, bar: [f32; 4], scale: f32) -> (crate::components::TitleLayout, String, bool) {
     use crate::components::TitleBar;
     for n in (0..=title.tags.len()).rev() {
         let tags = title.tags[..n].join(", ");
-        let layout = TitleBar { name: title.name.clone(), tags: tags.clone(), chips: Vec::new(), settings_button: false }.layout(bar, scale);
+        let layout = TitleBar { name: title.name.clone(), tags: tags.clone(), chips: chips.to_vec(), settings_button }.layout(bar, scale);
         if layout.name_cut {
             return (layout, String::new(), false);
         }

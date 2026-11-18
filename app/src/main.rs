@@ -25,7 +25,8 @@ use scopecreep::output_conversion::OutputConversion;
 use scopecreep::panel_grid::{Border, PanelGrid, PanelLayout, Press, min_panel_size};
 use scopecreep::resolve_helper::ScriptHelper;
 use scopecreep::flat_rects::FlatRects;
-use scopecreep::components::{self, Align, BarKind, Prim, Tooltip};
+use scopecreep::components::{self, Align, BarKind, Prim, State, Tooltip};
+use scopecreep::toolbar::Toolbar;
 use scopecreep::window_text::{self, PanelTitle};
 use scopecreep::settings::{Menu, PanelSettings};
 use scopecreep::style;
@@ -66,7 +67,18 @@ struct Wake;
 #[derive(Clone, Copy, Debug, PartialEq)]
 enum Hover {
     Title(usize),
+    /// Chip `.1` of Panel `.0`'s toolbar.
+    Chip(usize, usize),
+    /// Panel `.0`'s settings button.
+    SettingsButton(usize),
     Status,
+}
+
+/// What of a title bar's toolbar the pointer is on.
+#[derive(Clone, Copy, Debug, PartialEq)]
+enum ToolbarHit {
+    Chip(usize, usize),
+    Settings(usize),
 }
 
 /// Where the border positions are remembered: `$XDG_CONFIG_HOME/scopecreep/panel-grid`, else
@@ -219,6 +231,9 @@ struct AppWindow {
     /// Each Panel's title bar and the status line as last drawn (device pixels), and the text a hover shows for each.
     title_bars: Vec<[f32; 4]>,
     title_hovers: Vec<String>,
+    /// Each Panel's toolbar and where its chips and settings button were last drawn (device pixels).
+    toolbars: Vec<Toolbar>,
+    title_layouts: Vec<components::TitleLayout>,
     status_bar: [f32; 4],
     status_hover: String,
     stop: Arc<AtomicBool>,
@@ -453,6 +468,8 @@ impl AppWindow {
             hover: None,
             title_bars: Vec::new(),
             title_hovers: Vec::new(),
+            toolbars: Vec::new(),
+            title_layouts: Vec::new(),
             status_bar: [0.0; 4],
             status_hover: String::new(),
             stop,
@@ -491,12 +508,47 @@ impl AppWindow {
         } else if components::contains(self.status_bar, self.cursor) {
             Some(Hover::Status)
         } else {
-            self.title_bars.iter().position(|t| components::contains(*t, self.cursor)).map(Hover::Title)
+            match self.toolbar_hit() {
+                Some(ToolbarHit::Chip(panel, chip)) => Some(Hover::Chip(panel, chip)),
+                Some(ToolbarHit::Settings(panel)) => Some(Hover::SettingsButton(panel)),
+                None => self.title_bars.iter().position(|t| components::contains(*t, self.cursor)).map(Hover::Title),
+            }
         };
         if hover != self.hover {
             self.hover = hover;
             self.window.request_redraw();
         }
+    }
+
+    /// The chip or settings button of a title bar under the pointer.
+    fn toolbar_hit(&self) -> Option<ToolbarHit> {
+        self.title_layouts.iter().enumerate().find_map(|(panel, l)| {
+            if let Some(chip) = l.chips.iter().position(|c| components::contains(*c, self.cursor)) {
+                return Some(ToolbarHit::Chip(panel, chip));
+            }
+            l.settings.filter(|b| components::contains(*b, self.cursor)).map(|_| ToolbarHit::Settings(panel))
+        })
+    }
+
+    /// Open Panel `panel`'s popover at `at` (none when every setting of the Panel is a chip, or it has none).
+    fn open_popover(&mut self, panel: usize, at: [f32; 2]) {
+        let current = self.displays.settings_of(panel, &self.settings.lock().unwrap());
+        self.menu = Menu::new(panel, &self.displays.popover_defs(panel), &current).map(|menu| (menu, at));
+    }
+
+    /// Set a Panel's setting from the popover or a chip, remembering it if it changed.
+    fn choose(&mut self, panel: usize, key: &str, value: &str) {
+        let name = self.displays.name(panel);
+        let changed = {
+            let mut settings = self.settings.lock().unwrap();
+            let before = settings.version();
+            settings.set(name, key, value);
+            settings.version() != before
+        };
+        if changed {
+            self.save_settings();
+        }
+        self.window.request_redraw();
     }
 
     fn pointer_moved(&mut self, x: f32, y: f32) {
@@ -546,8 +598,7 @@ impl AppWindow {
         }
         let hit = self.cells.iter().position(|c| Menu::contains(*c, self.cursor));
         if let Some(panel) = hit {
-            let current = self.displays.settings_of(panel, &self.settings.lock().unwrap());
-            self.menu = Menu::new(panel, self.displays.setting_defs(panel), &current).map(|menu| (menu, self.cursor));
+            self.open_popover(panel, self.cursor);
         }
         if was_open || self.menu.is_some() {
             self.window.request_redraw();
@@ -694,16 +745,8 @@ impl AppWindow {
         let (Some((menu, _)), Some(rect)) = (self.menu.as_ref(), self.menu_rect()) else { return };
         let choice = menu.choice_at(rect, self.cursor, self.scale);
         if let Some((key, value)) = choice {
-            let name = self.displays.name(menu.panel);
-            let changed = {
-                let mut settings = self.settings.lock().unwrap();
-                let before = settings.version();
-                settings.set(name, key, value);
-                settings.version() != before
-            };
-            if changed {
-                self.save_settings();
-            }
+            let panel = menu.panel;
+            self.choose(panel, key, value);
         }
         if choice.is_none() && Menu::contains(rect, self.cursor) {
             return;
@@ -782,6 +825,23 @@ impl AppWindow {
         }
         match state {
             ElementState::Pressed => {
+                // A chip or the settings button on a title bar takes the press before the bar can be dragged.
+                match self.toolbar_hit() {
+                    Some(ToolbarHit::Chip(panel, chip)) => {
+                        if let Some((key, value)) = self.toolbars.get(panel).and_then(|t| t.click(chip)) {
+                            self.choose(panel, key, value);
+                        }
+                        return;
+                    }
+                    Some(ToolbarHit::Settings(panel)) => {
+                        if let Some(button) = self.title_layouts.get(panel).and_then(|l| l.settings) {
+                            self.open_popover(panel, [button[0], button[1] + button[3]]);
+                            self.window.request_redraw();
+                        }
+                        return;
+                    }
+                    None => {}
+                }
                 // A display that uses the pointer (a Loupe) gets it first; else a border may be grabbed.
                 let panel = self.contents.iter().position(|c| Menu::contains(*c, self.cursor)).filter(|p| self.displays.takes_pointer(*p));
                 if let Some(panel) = panel {
@@ -831,19 +891,28 @@ impl AppWindow {
         // Where each name and its tags sit in the title bar (the tags go to the hover when they do not fit).
         let mut title_parts: Vec<([f32; 4], Option<[f32; 4]>)> = Vec::new();
         self.title_hovers.clear();
+        let settings_now = self.settings.lock().unwrap().clone();
+        let mut toolbars: Vec<Toolbar> = Vec::new();
+        let mut layouts: Vec<components::TitleLayout> = Vec::new();
         let max_chars = ((width / (style::SPACE_CHAR_WIDTH * scale)) as usize).saturating_sub(8).clamp(40, 110);
         for (i, cell) in cells.iter().enumerate() {
             let title = texts.titles.get(i).cloned().unwrap_or_default();
             let panel = PanelLayout::new(*cell, scale);
-            let (l, tags, all_shown) = window_text::lay_out_title(&title, panel.title, scale);
+            let toolbar = self.displays.toolbar(i, &settings_now);
+            let has_popover = !self.displays.popover_defs(i).is_empty();
+            let (l, tags, all_shown) = window_text::lay_out_toolbar_title(&title, &toolbar.chips, has_popover, panel.title, scale);
+            toolbars.push(toolbar);
             self.panel_texts[i].label.set(&mut self.font_system, &title.name, TextStyle { wrap: false, ..TextStyle::LABEL }, scale, l.name[2].max(1.0));
             let tags_style = TextStyle { size: style::TYPE_SCALE, line: style::TYPE_SCALE_LINE, align: None, wrap: false };
             self.panel_texts[i].tags.set(&mut self.font_system, &tags, tags_style, scale, l.tags.map_or(1.0, |t| t[2].max(1.0)));
             self.title_hovers.push(window_text::hover_text(&title, l.name_cut || !all_shown, max_chars));
             title_parts.push((l.name, l.tags));
+            layouts.push(l);
             panels.push(panel);
         }
         self.title_bars = panels.iter().map(|p| p.title).collect();
+        self.toolbars = toolbars;
+        self.title_layouts = layouts;
         self.contents = panels.iter().map(|p| p.content).collect();
         let status_width = width - 2.0 * margin;
         // Playback and performance only: the longest choice that fits, whole parts only (never cut mid-word).
@@ -944,16 +1013,31 @@ impl AppWindow {
         let mut menu_areas: Vec<(usize, f32, f32, [u8; 3])> = Vec::new();
         // The menu over the Panels, or else the hover of what the pointer rests on, over everything.
         let mut over: Vec<Prim> = Vec::new();
+        // Each title bar's chips and settings button, lit under the pointer.
+        let pointer_over = if self.menu.is_some() { None } else { self.toolbar_hit() };
+        for (i, (toolbar, l)) in self.toolbars.iter().zip(&self.title_layouts).enumerate() {
+            for (c, (chip, r)) in toolbar.chips.iter().zip(&l.chips).enumerate() {
+                let state = if pointer_over == Some(ToolbarHit::Chip(i, c)) { State::Hover } else { State::Normal };
+                over.extend(chip.draw([r[0], r[1]], toolbar.on[c], state, scale));
+            }
+            if let Some(button) = l.settings {
+                let open = self.menu.as_ref().is_some_and(|(m, _)| m.panel == i);
+                let state = if open { State::Pressed } else if pointer_over == Some(ToolbarHit::Settings(i)) { State::Hover } else { State::Normal };
+                over.extend(components::settings_button(button, state, scale));
+            }
+        }
         if let (Some((menu, _)), Some(rect)) = (self.menu.as_ref(), self.menu_rect()) {
-            over = components::popover(menu, rect, self.cursor, scale);
+            over.extend(components::popover(menu, rect, self.cursor, scale));
         } else if let Some(hover) = self.hover {
             let (anchor, text) = match hover {
+                Hover::Chip(p, c) => (self.title_layouts.get(p).and_then(|l| l.chips.get(c)).copied(), self.toolbars.get(p).and_then(|t| t.tooltips.get(c)).cloned()),
+                Hover::SettingsButton(p) => (self.title_layouts.get(p).and_then(|l| l.settings), Some("Settings".to_string())),
                 Hover::Title(i) => (self.title_bars.get(i).copied(), self.title_hovers.get(i).cloned()),
                 Hover::Status => (Some(self.status_bar), Some(self.status_hover.clone())),
             };
             if let (Some(anchor), Some(text)) = (anchor, text.filter(|t| !t.is_empty())) {
                 let tip = Tooltip::new(&text);
-                over = tip.draw(tip.rect(anchor, [width, height], scale), scale);
+                over.extend(tip.draw(tip.rect(anchor, [width, height], scale), scale));
             }
         }
         let mut texts_used = 0;
