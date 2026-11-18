@@ -4,8 +4,8 @@
 //! converted picture's values, the waveform of the converted picture, and the labels. Expected values come from
 //! the f64 published maths in the accuracy crate (the transforms proven against Resolve's renders in #10), never
 //! from the shader. Needs a GPU.
-use scopecreep::gpu_frame::FrameUploader;
-use scopecreep::monitor::Monitor;
+mod common;
+use common::{Rig, TARGET};
 use scopecreep::project::{Answer, ProjectReader};
 use scopecreep::output_conversion::{self, OutputConversion};
 use scopecreep::waveform::{LumaWeights, Waveform, WaveformCounts};
@@ -14,41 +14,25 @@ use scopecreep_accuracy::compare::{TOLERANCE_FLOAT, TOLERANCE_LINEAR};
 use scopecreep_accuracy::pipeline::{Encoding, Pipeline};
 use scopecreep_accuracy::colour::REC2020;
 use scopecreep_accuracy::transfer;
-use scopecreep_feed::{FeedWriter, FrameMeta, Provenance, SentColourSetup, now_ns};
-use std::path::PathBuf;
-use std::sync::{Mutex, MutexGuard, OnceLock};
-
-const MS: u64 = 1_000_000;
-
-/// One GPU device for all the tests, used by one test at a time: the graphics memory is shared with Resolve.
-fn gpu() -> (MutexGuard<'static, ()>, wgpu::Device, wgpu::Queue) {
-    static GPU: OnceLock<(wgpu::Device, wgpu::Queue)> = OnceLock::new();
-    static TURN: Mutex<()> = Mutex::new(());
-    let turn = TURN.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
-    let (device, queue) = GPU.get_or_init(|| {
-        let instance = wgpu::Instance::new(wgpu::InstanceDescriptor::new_without_display_handle_from_env());
-        let adapter = pollster::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions {
-            power_preference: wgpu::PowerPreference::HighPerformance,
-            ..Default::default()
-        }))
-        .expect("these tests need a GPU");
-        pollster::block_on(adapter.request_device(&wgpu::DeviceDescriptor { label: Some("output conversion tests"), ..Default::default() })).unwrap()
-    });
-    (turn, device.clone(), queue.clone())
-}
 
 /// A stand-in Resolve and Sender (the synthetic writer), the app's Feed monitor, and the app's GPU side of the
 /// Feed: upload, Output Conversion, waveform, as `main.rs` wires them.
 struct Bench {
-    path: PathBuf,
-    writer: FeedWriter,
-    monitor: Monitor,
-    uploader: FrameUploader,
+    rig: Rig,
     conversion: OutputConversion,
     waveform: Waveform,
-    now: u64,
-    frame: f64,
-    _gpu_turn: MutexGuard<'static, ()>,
+}
+
+/// As the app does after every poll: upload, Output Conversion, measure in the Measured Space, and follow the
+/// Colour Setup.
+fn poll(rig: &mut Rig, conversion: &mut OutputConversion, waveform: &Waveform) {
+    rig.poll(|encoder, gpu_frame| {
+        let shown = conversion.convert(encoder, gpu_frame);
+        waveform.measure(encoder, shown);
+    });
+    let setup = rig.monitor.status().colour_setup().map(|c| c.setup);
+    waveform.set_measurement(output_conversion::measurement(rig.monitor.status().colour_setup(), LumaWeights::FromPrimaries));
+    conversion.follow(setup.as_ref(), rig.uploader.frame(), |encoder, shown| waveform.measure(encoder, shown));
 }
 
 impl Bench {
@@ -66,51 +50,16 @@ impl Bench {
     }
 
     fn make(name: &str, colour_setup: Option<&str>, project: Option<Box<dyn ProjectReader>>) -> Bench {
-        let path = PathBuf::from(format!("/dev/shm/scopecreep-conversion-test-{}-{}", std::process::id(), name));
-        let _ = std::fs::remove_file(&path);
-        let (turn, device, queue) = gpu();
-        let mut writer = FeedWriter::create(&path, 4, 1024 * 64 * 16).unwrap();
-        writer.set_colour_setup(colour_setup.map(|text| SentColourSetup::new(Provenance::Manual, text)));
-        let monitor = match project {
-            Some(reader) => Monitor::with_project_reader(&path, reader),
-            None => Monitor::new(&path),
-        };
-        let mut b = Bench {
-            monitor,
-            uploader: FrameUploader::new(&device, &queue),
-            conversion: OutputConversion::new(&device, &queue),
-            waveform: Waveform::new(&device, &queue, wgpu::TextureFormat::Rgba8Unorm),
-            path,
-            writer,
-            now: now_ns(),
-            frame: 86400.0,
-            _gpu_turn: turn,
-        };
-        b.poll();
-        b
+        let mut rig = Rig::build(name, 1024 * 64 * 16, colour_setup, project);
+        let (mut conversion, waveform) = (OutputConversion::new(&rig.device, &rig.queue), Waveform::new(&rig.device, &rig.queue, TARGET));
+        poll(&mut rig, &mut conversion, &waveform);
+        Bench { rig, conversion, waveform }
     }
 
     /// Resolve stays stopped for `ms` milliseconds.
     fn wait(&mut self, ms: u64) {
-        for _ in 0..ms {
-            self.now += MS;
-            self.poll();
-        }
-    }
-
-    fn poll(&mut self) {
-        let (uploader, conversion, waveform) = (&mut self.uploader, &mut self.conversion, &self.waveform);
-        self.monitor.poll(self.now, &mut |frame| {
-            uploader.upload(frame, |encoder, gpu_frame| {
-                let shown = conversion.convert(encoder, gpu_frame);
-                waveform.measure(encoder, shown);
-            })
-        });
-        // As the app does after every poll: measure in the Measured Space, and follow the Colour Setup.
-        let setup = self.monitor.status().colour_setup().map(|c| c.setup);
-        self.waveform.set_measurement(output_conversion::measurement(self.monitor.status().colour_setup(), LumaWeights::FromPrimaries));
-        let waveform = &self.waveform;
-        self.conversion.follow(setup.as_ref(), self.uploader.frame(), |encoder, shown| waveform.measure(encoder, shown));
+        let (conversion, waveform) = (&mut self.conversion, &self.waveform);
+        self.rig.wait(ms, |rig| poll(rig, conversion, waveform));
     }
 
     /// Resolve plays one frame of Timeline Colour Space values (`rgb(x, row from the top)`), and the app has a
@@ -124,22 +73,17 @@ impl Bench {
                 pixels.extend_from_slice(&[r, g, b, 1.0]);
             }
         }
-        let meta = FrameMeta { width, height, frame_time: self.frame, frame_rate: 24.0, render_ns: self.now, sender_instance: 1 };
-        self.writer.write_frame(&meta, &pixels).unwrap();
-        self.frame += 1.0;
-        for _ in 0..50 {
-            self.now += MS;
-            self.poll();
-        }
+        let (conversion, waveform) = (&mut self.conversion, &self.waveform);
+        self.rig.play(width, height, &pixels, |rig| poll(rig, conversion, waveform));
     }
 
     /// The picture the Picture View shows and the waveform measures, top row first, RGB.
     fn shown(&self) -> Vec<[f32; 3]> {
-        self.conversion.read_shown(self.uploader.frame().expect("a frame was shown"))
+        self.conversion.read_shown(self.rig.uploader.frame().expect("a frame was shown"))
     }
 
     fn label(&self) -> String {
-        let status = self.monitor.status();
+        let status = self.rig.monitor.status();
         scopecreep::picture_view::PictureView::label_for(status.picture.as_ref().map(|p| [p.width, p.height]), &status.display_context())
     }
 
@@ -157,12 +101,6 @@ impl ProjectReader for Helper {
         Some(self.0.clone())
     }
     fn abandon(&mut self) {}
-}
-
-impl Drop for Bench {
-    fn drop(&mut self) {
-        let _ = std::fs::remove_file(&self.path);
-    }
 }
 
 const DWG_REC709: &str = "timeline=DaVinci WG/Intermediate\noutput=Rec.709 Gamma 2.4\nlevels=video\n";
@@ -277,7 +215,6 @@ fn acescct_to_aces_2_rec2100_pq_1000_nit_matches_the_reference_ctl_port() {
     let mut b = Bench::new("aces-pq", "timeline=ACEScct\noutput=Rec.2100 ST2084 (1000 nit)\naces_version=2.0\n");
     assert_converted_like(&mut b, &Pipeline::Aces2(Box::new(AcesOutputTransform::rec2100_pq_1000())), &acescct_values());
 }
-
 
 // ------------------------------------------------------------------ approximated and unsupported
 

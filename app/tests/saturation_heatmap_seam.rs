@@ -2,56 +2,28 @@
 //! Feed monitor hands them to the GPU as the app does, and the tests read back what the Panel drew, its label and
 //! its legend. Expected values come from the BT.709 constants and the research table
 //! through the ColorChecker frames of #52. Needs a GPU.
+mod common;
+use common::{Rig, TARGET, solid};
 use scopecreep::muted_palette::{FULL_STRENGTH_AT, STOPS, heat, overlay, strength};
 use scopecreep::saturation_heatmap::SaturationHeatmap;
 use scopecreep::display::{DisplayContext, DisplaySet};
-use scopecreep::gpu_frame::FrameUploader;
-use scopecreep::monitor::Monitor;
 use scopecreep::settings::PanelSettings;
 use scopecreep_accuracy::colorchecker::{ColorChecker, TimelineSpace};
 use scopecreep_accuracy::transfer::bt709_oetf;
-use scopecreep_feed::{FeedWriter, FrameMeta, now_ns};
-use std::path::PathBuf;
-use std::sync::{Arc, Mutex, MutexGuard, OnceLock};
+use std::sync::Arc;
 
-const MS: u64 = 1_000_000;
-const TARGET: wgpu::TextureFormat = wgpu::TextureFormat::Rgba8Unorm;
-
-fn gpu() -> (MutexGuard<'static, ()>, wgpu::Device, wgpu::Queue) {
-    static GPU: OnceLock<(wgpu::Device, wgpu::Queue)> = OnceLock::new();
-    static TURN: Mutex<()> = Mutex::new(());
-    let turn = TURN.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
-    let (device, queue) = GPU.get_or_init(|| {
-        let instance = wgpu::Instance::new(wgpu::InstanceDescriptor::new_without_display_handle_from_env());
-        let adapter = pollster::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions { power_preference: wgpu::PowerPreference::HighPerformance, ..Default::default() }))
-            .expect("these tests need a GPU");
-        pollster::block_on(adapter.request_device(&wgpu::DeviceDescriptor { label: Some("saturation heatmap tests"), ..Default::default() })).unwrap()
-    });
-    (turn, device.clone(), queue.clone())
-}
 
 struct Bench {
-    path: PathBuf,
-    writer: FeedWriter,
-    monitor: Monitor,
-    uploader: FrameUploader,
+    rig: Rig,
     set: DisplaySet,
-    device: wgpu::Device,
-    queue: wgpu::Queue,
-    now: u64,
-    frame: f64,
-    _gpu_turn: MutexGuard<'static, ()>,
 }
 
 impl Bench {
     fn new(name: &str) -> Bench {
-        let path = PathBuf::from(format!("/dev/shm/scopecreep-heatmap-test-{}-{}", std::process::id(), name));
-        let _ = std::fs::remove_file(&path);
-        let (turn, device, queue) = gpu();
-        let writer = FeedWriter::create(&path, 4, 1920 * 1080 * 16).unwrap();
+        let rig = Rig::new(name);
         let mut set = DisplaySet::default();
-        set.register(Arc::new(SaturationHeatmap::new(&device, &queue, TARGET)));
-        Bench { monitor: Monitor::new(&path), uploader: FrameUploader::new(&device, &queue), set, path, writer, device, queue, now: now_ns(), frame: 86400.0, _gpu_turn: turn }
+        set.register(Arc::new(SaturationHeatmap::new(&rig.device, &rig.queue, TARGET)));
+        Bench { rig, set }
     }
 
     fn configure(&self, legend: &str, scale: &str) {
@@ -62,64 +34,13 @@ impl Bench {
     }
 
     fn play(&mut self, width: u32, height: u32, pixels: &[f32]) {
-        let meta = FrameMeta { width, height, frame_time: self.frame, frame_rate: 24.0, render_ns: self.now, sender_instance: 1 };
-        self.writer.write_frame(&meta, pixels).unwrap();
-        self.frame += 1.0;
-        for _ in 0..50 {
-            self.now += MS;
-            let (uploader, set) = (&mut self.uploader, &self.set);
-            self.monitor.poll(self.now, &mut |frame| uploader.upload(frame, |encoder, gpu_frame| set.on_frame(encoder, gpu_frame)));
-        }
+        let set = &self.set;
+        self.rig.play(width, height, pixels, |rig| rig.poll(|encoder, frame| set.on_frame(encoder, frame)));
     }
 
     /// Draw the Panel into a `width` × `height` target at scale 1 and read it back (RGBA8, rows top first).
     fn render(&self, width: u32, height: u32) -> Vec<u8> {
-        let target = self.device.create_texture(&wgpu::TextureDescriptor {
-            label: None,
-            size: wgpu::Extent3d { width, height, depth_or_array_layers: 1 },
-            mip_level_count: 1,
-            sample_count: 1,
-            dimension: wgpu::TextureDimension::D2,
-            format: TARGET,
-            usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_SRC,
-            view_formats: &[],
-        });
-        let view = target.create_view(&Default::default());
-        let mut encoder = self.device.create_command_encoder(&Default::default());
-        {
-            let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                label: None,
-                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                    view: &view,
-                    depth_slice: None,
-                    resolve_target: None,
-                    ops: wgpu::Operations { load: wgpu::LoadOp::Clear(wgpu::Color::BLACK), store: wgpu::StoreOp::Store },
-                })],
-                depth_stencil_attachment: None,
-                timestamp_writes: None,
-                occlusion_query_set: None,
-                multiview_mask: None,
-            });
-            self.set.draw(&mut pass, 0, [0.0, 0.0, width as f32, height as f32], [width as f32, height as f32], 1.0);
-        }
-        let row = (width * 4).next_multiple_of(256);
-        let readback = self.device.create_buffer(&wgpu::BufferDescriptor { label: None, size: (row * height) as u64, usage: wgpu::BufferUsages::MAP_READ | wgpu::BufferUsages::COPY_DST, mapped_at_creation: false });
-        encoder.copy_texture_to_buffer(
-            target.as_image_copy(),
-            wgpu::TexelCopyBufferInfo { buffer: &readback, layout: wgpu::TexelCopyBufferLayout { offset: 0, bytes_per_row: Some(row), rows_per_image: None } },
-            wgpu::Extent3d { width, height, depth_or_array_layers: 1 },
-        );
-        self.queue.submit([encoder.finish()]);
-        readback.map_async(wgpu::MapMode::Read, .., |_| {});
-        self.device.poll(wgpu::PollType::wait_indefinitely()).unwrap();
-        let mapped = readback.get_mapped_range(..).unwrap();
-        (0..height as usize).flat_map(|y| mapped[y * row as usize..y * row as usize + width as usize * 4].to_vec()).collect()
-    }
-}
-
-impl Drop for Bench {
-    fn drop(&mut self) {
-        let _ = std::fs::remove_file(&self.path);
+        self.rig.render(width, height, |pass| self.set.draw(pass, 0, [0.0, 0.0, width as f32, height as f32], [width as f32, height as f32], 1.0))
     }
 }
 
@@ -129,10 +50,6 @@ fn pixel(image: &[u8], width: u32, x: u32, y: u32) -> [u8; 3] {
 }
 
 /// A frame (RGBA, bottom row first) of one solid colour.
-fn solid(width: u32, height: u32, rgb: [f32; 3]) -> Vec<f32> {
-    (0..width * height).flat_map(|_| [rgb[0], rgb[1], rgb[2], 1.0]).collect()
-}
-
 /// BT.709 Cb and Cr from the standard's own constants (1.8556, 1.5748), and the distance from neutral as a share
 /// of the vectorscope's 100 % ring (Cb/Cr 0.6).
 fn percent(rgb: [f64; 3]) -> f64 {
@@ -211,8 +128,9 @@ fn the_palette_is_cool_to_hot_and_the_colour_strengthens_over_the_grey() {
 
 #[test]
 fn the_display_is_registered_in_the_standard_set() {
-    let (_turn, device, queue) = gpu();
-    let set = DisplaySet::standard(&device, &queue, TARGET, false);
+    let rig = Rig::new("registered");
+    let (device, queue) = (&rig.device, &rig.queue);
+    let set = DisplaySet::standard(device, queue, TARGET, false);
     assert!(set.names().contains(&"Saturation heatmap"), "{:?}", set.names());
 }
 

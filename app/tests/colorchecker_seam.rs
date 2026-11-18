@@ -3,109 +3,53 @@
 //! Feed monitor hands it to the GPU exactly as the app does, and the test looks at what a colourist would see: the
 //! waveform of the converted picture. Expected values come from the chart code and the f64 published maths in the
 //! accuracy crate (the transforms proven against Resolve's renders in #10), never from the shader. Needs a GPU.
-use scopecreep::gpu_frame::FrameUploader;
-use scopecreep::monitor::Monitor;
+mod common;
+use common::{Rig, TARGET};
 use scopecreep::output_conversion::{self, OutputConversion};
 use scopecreep::waveform::{LumaWeights, Waveform, WaveformCounts};
 use scopecreep_accuracy::aces2::AcesOutputTransform;
 use scopecreep_accuracy::colorchecker::{ColorChecker, TimelineSpace};
 use scopecreep_accuracy::colour::{REC709, luma_weights};
 use scopecreep_accuracy::pipeline::Pipeline;
-use scopecreep_feed::{FeedWriter, FrameMeta, Provenance, SentColourSetup, now_ns};
-use std::path::PathBuf;
-use std::sync::{Mutex, MutexGuard, OnceLock};
-
-const MS: u64 = 1_000_000;
-
-/// One GPU device for all the tests, used by one test at a time: the graphics memory is shared with Resolve.
-fn gpu() -> (MutexGuard<'static, ()>, wgpu::Device, wgpu::Queue) {
-    static GPU: OnceLock<(wgpu::Device, wgpu::Queue)> = OnceLock::new();
-    static TURN: Mutex<()> = Mutex::new(());
-    let turn = TURN.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
-    let (device, queue) = GPU.get_or_init(|| {
-        let instance = wgpu::Instance::new(wgpu::InstanceDescriptor::new_without_display_handle_from_env());
-        let adapter = pollster::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions {
-            power_preference: wgpu::PowerPreference::HighPerformance,
-            ..Default::default()
-        }))
-        .expect("these tests need a GPU");
-        pollster::block_on(adapter.request_device(&wgpu::DeviceDescriptor { label: Some("colorchecker tests"), ..Default::default() })).unwrap()
-    });
-    (turn, device.clone(), queue.clone())
-}
 
 /// A stand-in Resolve and Sender (the synthetic writer), the app's Feed monitor, and the app's GPU side of the
 /// Feed: upload, Output Conversion, waveform, as `main.rs` wires them.
 struct Bench {
-    path: PathBuf,
-    writer: FeedWriter,
-    monitor: Monitor,
-    uploader: FrameUploader,
+    rig: Rig,
     conversion: OutputConversion,
     waveform: Waveform,
-    now: u64,
-    frame: f64,
-    _gpu_turn: MutexGuard<'static, ()>,
+}
+
+/// As the app does after every poll: upload, Output Conversion, measure in the Measured Space, and follow the
+/// Colour Setup.
+fn poll(rig: &mut Rig, conversion: &mut OutputConversion, waveform: &Waveform) {
+    rig.poll(|encoder, gpu_frame| {
+        let shown = conversion.convert(encoder, gpu_frame);
+        waveform.measure(encoder, shown);
+    });
+    let setup = rig.monitor.status().colour_setup().map(|c| c.setup);
+    waveform.set_measurement(output_conversion::measurement(rig.monitor.status().colour_setup(), LumaWeights::FromPrimaries));
+    conversion.follow(setup.as_ref(), rig.uploader.frame(), |encoder, shown| waveform.measure(encoder, shown));
 }
 
 impl Bench {
     /// The Sender node says the project is `colour_setup` (protocol 1.1 `key=value` lines).
     fn new(name: &str, colour_setup: &str) -> Bench {
-        let path = PathBuf::from(format!("/dev/shm/scopecreep-colorchecker-test-{}-{}", std::process::id(), name));
-        let _ = std::fs::remove_file(&path);
-        let (turn, device, queue) = gpu();
-        let mut writer = FeedWriter::create(&path, 4, 1920 * 1080 * 16).unwrap();
-        writer.set_colour_setup(Some(SentColourSetup::new(Provenance::Manual, colour_setup)));
-        let mut b = Bench {
-            monitor: Monitor::new(&path),
-            uploader: FrameUploader::new(&device, &queue),
-            conversion: OutputConversion::new(&device, &queue),
-            waveform: Waveform::new(&device, &queue, wgpu::TextureFormat::Rgba8Unorm),
-            path,
-            writer,
-            now: now_ns(),
-            frame: 86400.0,
-            _gpu_turn: turn,
-        };
-        b.poll();
-        b
-    }
-
-    fn poll(&mut self) {
-        let (uploader, conversion, waveform) = (&mut self.uploader, &mut self.conversion, &self.waveform);
-        self.monitor.poll(self.now, &mut |frame| {
-            uploader.upload(frame, |encoder, gpu_frame| {
-                let shown = conversion.convert(encoder, gpu_frame);
-                waveform.measure(encoder, shown);
-            })
-        });
-        // As the app does after every poll: measure in the Measured Space, and follow the Colour Setup.
-        let setup = self.monitor.status().colour_setup().map(|c| c.setup);
-        self.waveform.set_measurement(output_conversion::measurement(self.monitor.status().colour_setup(), LumaWeights::FromPrimaries));
-        let waveform = &self.waveform;
-        self.conversion.follow(setup.as_ref(), self.uploader.frame(), |encoder, shown| waveform.measure(encoder, shown));
+        let mut rig = Rig::with_colour_setup(name, Some(colour_setup));
+        let (mut conversion, waveform) = (OutputConversion::new(&rig.device, &rig.queue), Waveform::new(&rig.device, &rig.queue, TARGET));
+        poll(&mut rig, &mut conversion, &waveform);
+        Bench { rig, conversion, waveform }
     }
 
     /// Resolve plays one frame (RGBA, bottom row first, as the Sender writes it) and the app has a moment to
     /// take it.
     fn play(&mut self, width: u32, height: u32, pixels: &[f32]) {
-        let meta = FrameMeta { width, height, frame_time: self.frame, frame_rate: 24.0, render_ns: self.now, sender_instance: 1 };
-        self.writer.write_frame(&meta, pixels).unwrap();
-        self.frame += 1.0;
-        for _ in 0..50 {
-            self.now += MS;
-            self.poll();
-        }
+        let (conversion, waveform) = (&mut self.conversion, &self.waveform);
+        self.rig.play(width, height, pixels, |rig| poll(rig, conversion, waveform));
     }
 
     fn counts(&self) -> WaveformCounts {
         self.waveform.counts()
-    }
-}
-
-impl Drop for Bench {
-    fn drop(&mut self) {
-        let _ = std::fs::remove_file(&self.path);
     }
 }
 

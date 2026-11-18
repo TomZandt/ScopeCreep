@@ -3,81 +3,47 @@
 //! monitor hands it to the GPU as the app does, and the tests read back what the Panel measured, what it drew and
 //! its label. Expected stops come from the chart's published values (the accuracy crate, checked against the
 //! research table), never from the shader. Needs a GPU.
+mod common;
+use common::{Rig, TARGET};
 use scopecreep::display::{Display, DisplaySet};
-use scopecreep::gpu_frame::FrameUploader;
-use scopecreep::monitor::Monitor;
 use scopecreep::output_conversion::OutputConversion;
-use scopecreep::panel_grid::{PanelGrid, PanelLayout};
 use scopecreep::settings::PanelSettings;
 use scopecreep::stops_false_colour::{StopsFalseColour, StopsMap};
 use scopecreep_accuracy::colorchecker::{ColorChecker, TimelineSpace};
 use scopecreep_accuracy::transfer;
-use scopecreep_feed::{FeedWriter, FrameMeta, Provenance, SentColourSetup, now_ns};
 use std::path::PathBuf;
-use std::sync::{Arc, Mutex, MutexGuard, OnceLock};
+use std::sync::Arc;
 
-const MS: u64 = 1_000_000;
-const TARGET: wgpu::TextureFormat = wgpu::TextureFormat::Rgba8Unorm;
-
-fn gpu() -> (MutexGuard<'static, ()>, wgpu::Device, wgpu::Queue) {
-    static GPU: OnceLock<(wgpu::Device, wgpu::Queue)> = OnceLock::new();
-    static TURN: Mutex<()> = Mutex::new(());
-    let turn = TURN.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
-    let (device, queue) = GPU.get_or_init(|| {
-        let instance = wgpu::Instance::new(wgpu::InstanceDescriptor::new_without_display_handle_from_env());
-        let adapter = pollster::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions { power_preference: wgpu::PowerPreference::HighPerformance, ..Default::default() }))
-            .expect("these tests need a GPU");
-        pollster::block_on(adapter.request_device(&wgpu::DeviceDescriptor { label: Some("stops false colour tests"), ..Default::default() })).unwrap()
-    });
-    (turn, device.clone(), queue.clone())
-}
 
 /// A stand-in Resolve and Sender, the app's Feed monitor and its GPU side, with only Stops False Colour shown.
 struct Bench {
-    path: PathBuf,
-    writer: FeedWriter,
-    monitor: Monitor,
-    uploader: FrameUploader,
+    rig: Rig,
     conversion: OutputConversion,
     set: DisplaySet,
     display: Arc<StopsFalseColour>,
     settings: PanelSettings,
-    device: wgpu::Device,
-    queue: wgpu::Queue,
-    now: u64,
-    frame: f64,
-    _gpu_turn: MutexGuard<'static, ()>,
+}
+
+/// As the app does: the picture after Output Conversion to every display, and the Timeline Colour Space frame
+/// to the displays that measure scene light.
+fn poll(rig: &mut Rig, conversion: &mut OutputConversion, set: &DisplaySet, settings: &PanelSettings) {
+    rig.poll(|encoder, gpu_frame| {
+        let shown = conversion.convert(encoder, gpu_frame);
+        set.on_frame(encoder, shown);
+        set.on_timeline_frame(encoder, gpu_frame);
+    });
+    set.configure(&rig.monitor.status().display_context(), settings);
 }
 
 impl Bench {
     fn new(name: &str, colour_setup: &str) -> Bench {
-        let path = PathBuf::from(format!("/dev/shm/scopecreep-stops-test-{}-{}", std::process::id(), name));
-        let _ = std::fs::remove_file(&path);
-        let (turn, device, queue) = gpu();
-        let mut writer = FeedWriter::create(&path, 4, 1920 * 1080 * 16).unwrap();
-        if !colour_setup.is_empty() {
-            writer.set_colour_setup(Some(SentColourSetup::new(Provenance::Manual, colour_setup)));
-        }
-        let display = Arc::new(StopsFalseColour::new(&device, &queue, TARGET));
+        let mut rig = Rig::with_colour_setup(name, (!colour_setup.is_empty()).then_some(colour_setup));
         let mut set = DisplaySet::default();
+        let display = Arc::new(StopsFalseColour::new(&rig.device, &rig.queue, TARGET));
         set.register(display.clone());
-        let mut b = Bench {
-            monitor: Monitor::new(&path),
-            uploader: FrameUploader::new(&device, &queue),
-            conversion: OutputConversion::new(&device, &queue),
-            set,
-            display,
-            settings: PanelSettings::default(),
-            path,
-            writer,
-            device,
-            queue,
-            now: now_ns(),
-            frame: 86400.0,
-            _gpu_turn: turn,
-        };
-        b.poll();
-        b
+        let (mut conversion, settings) = (OutputConversion::new(&rig.device, &rig.queue), PanelSettings::default());
+        poll(&mut rig, &mut conversion, &set, &settings);
+        Bench { rig, conversion, set, display, settings }
     }
 
     fn choose(&mut self, key: &str, value: &str) {
@@ -86,31 +52,12 @@ impl Bench {
     }
 
     fn configure(&self) {
-        self.set.configure(&self.monitor.status().display_context(), &self.settings);
-    }
-
-    /// As the app does: the picture after Output Conversion to every display, and the Timeline Colour Space frame
-    /// to the displays that measure scene light.
-    fn poll(&mut self) {
-        let (uploader, conversion, set) = (&mut self.uploader, &mut self.conversion, &self.set);
-        self.monitor.poll(self.now, &mut |frame| {
-            uploader.upload(frame, |encoder, gpu_frame| {
-                let shown = conversion.convert(encoder, gpu_frame);
-                set.on_frame(encoder, shown);
-                set.on_timeline_frame(encoder, gpu_frame);
-            })
-        });
-        self.configure();
+        self.set.configure(&self.rig.monitor.status().display_context(), &self.settings);
     }
 
     fn play(&mut self, width: u32, height: u32, pixels: &[f32]) {
-        let meta = FrameMeta { width, height, frame_time: self.frame, frame_rate: 24.0, render_ns: self.now, sender_instance: 1 };
-        self.writer.write_frame(&meta, pixels).unwrap();
-        self.frame += 1.0;
-        for _ in 0..50 {
-            self.now += MS;
-            self.poll();
-        }
+        let (conversion, set, settings) = (&mut self.conversion, &self.set, &self.settings);
+        self.rig.play(width, height, pixels, |rig| poll(rig, conversion, set, settings));
     }
 
     fn measured(&self) -> StopsMap {
@@ -119,55 +66,7 @@ impl Bench {
 
     /// Draw the display into a `width` × `height` target at scale 1 (RGBA8, rows top first).
     fn render(&self, width: u32, height: u32) -> Vec<u8> {
-        let panel = PanelLayout::new(PanelGrid::new(1).cells([0.0, 0.0, width as f32, height as f32], 0.0)[0], 1.0, 1);
-        let target = self.device.create_texture(&wgpu::TextureDescriptor {
-            label: None,
-            size: wgpu::Extent3d { width, height, depth_or_array_layers: 1 },
-            mip_level_count: 1,
-            sample_count: 1,
-            dimension: wgpu::TextureDimension::D2,
-            format: TARGET,
-            usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_SRC,
-            view_formats: &[],
-        });
-        let view = target.create_view(&Default::default());
-        let mut encoder = self.device.create_command_encoder(&Default::default());
-        {
-            let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                label: None,
-                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                    view: &view,
-                    depth_slice: None,
-                    resolve_target: None,
-                    ops: wgpu::Operations { load: wgpu::LoadOp::Clear(wgpu::Color::BLACK), store: wgpu::StoreOp::Store },
-                })],
-                depth_stencil_attachment: None,
-                timestamp_writes: None,
-                occlusion_query_set: None,
-                multiview_mask: None,
-            });
-            // The whole target is the Panel's content: what is drawn is what the test looks at.
-            let _ = panel;
-            self.set.draw(&mut pass, 0, [0.0, 0.0, width as f32, height as f32], [width as f32, height as f32], 1.0);
-        }
-        let row = (width * 4).next_multiple_of(256);
-        let readback = self.device.create_buffer(&wgpu::BufferDescriptor { label: None, size: (row * height) as u64, usage: wgpu::BufferUsages::MAP_READ | wgpu::BufferUsages::COPY_DST, mapped_at_creation: false });
-        encoder.copy_texture_to_buffer(
-            target.as_image_copy(),
-            wgpu::TexelCopyBufferInfo { buffer: &readback, layout: wgpu::TexelCopyBufferLayout { offset: 0, bytes_per_row: Some(row), rows_per_image: None } },
-            wgpu::Extent3d { width, height, depth_or_array_layers: 1 },
-        );
-        self.queue.submit([encoder.finish()]);
-        readback.map_async(wgpu::MapMode::Read, .., |_| {});
-        self.device.poll(wgpu::PollType::wait_indefinitely()).unwrap();
-        let mapped = readback.get_mapped_range(..).unwrap();
-        (0..height as usize).flat_map(|y| mapped[y * row as usize..y * row as usize + width as usize * 4].to_vec()).collect()
-    }
-}
-
-impl Drop for Bench {
-    fn drop(&mut self) {
-        let _ = std::fs::remove_file(&self.path);
+        self.rig.render(width, height, |pass| self.set.draw(pass, 0, [0.0, 0.0, width as f32, height as f32], [width as f32, height as f32], 1.0))
     }
 }
 
