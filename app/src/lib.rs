@@ -14,6 +14,7 @@ pub mod components;
 pub mod showcase;
 pub mod layout;
 pub mod panel_grid;
+pub mod layouts;
 pub mod display;
 pub mod settings;
 pub mod flat_rects;

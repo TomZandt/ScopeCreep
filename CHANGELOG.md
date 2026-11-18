@@ -6,6 +6,10 @@ The format follows [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/
 
 ## [Unreleased]
 
+### Added
+
+- Named layouts: Ctrl+Shift+1 to 9 saves the arrangement of the Panels into a slot and Ctrl+1 to 9 shows it. Right-click the status line for a small menu of the slots by name: click a saved layout to show it (or an empty slot to save into it), Shift-click saves over a layout, right-click renames it, and "Default layout" restores the default. Layouts are remembered in `~/.config/scopecreep/layouts`, and a layout still opens after Panels are added or removed. Nothing about layouts is on screen until you use it (#98, ADR 0030).
+
 ### Changed
 
 - The Window says less, and says it once. A bar across the top carries the Colour Setup (Timeline → Output, Levels, where it came from, and whether Output Conversion is exact or approximated). Each Panel's title bar shows its name and short tags only for what changes how to read it (a zoom, a mode, "approximated", "unconverted", "Rec.709 assumed", a non-default setting such as "luma weights: match Resolve"), and hovering it shows the full label. The status line at the bottom is the playback rate, dropped frames and why, and the timeline feeding the Window; the Sender, process and version details are in its hover. At 320 pixels wide the rate and the drops stay and the rest drops first (#99, ADR 0007).

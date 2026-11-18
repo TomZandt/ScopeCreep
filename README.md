@@ -100,6 +100,7 @@ DaVinci Resolve                                 scopecreep app (Rust + wgpu)
   - [0026](docs/adr/0026-style-tokens-by-role-and-the-chrome-check.md): chrome draws only through style tokens named by role; measurement colours are data, exempt from the check
   - [0025](docs/adr/0025-skin-tone-panel-paints-solid-colours-on-the-natural-picture.md): the Skin Tone Panel paints solid flat colours on the picture's own colours (replaces ADR 0021's tints)
   - [0028](docs/adr/0028-every-picture-view-draws-through-one-picture-stage.md): every Picture View draws through one Picture stage (placement, flip, binding, legend strip); a view supplies its colour rule, values and legend
+  - [0030](docs/adr/0030-named-layouts-are-nine-slots-of-the-grid-text.md): named layouts are nine slots holding the grid's own saved text, recalled through the same checks
 - [docs/findings/](docs/findings/): what testing showed, one file per ticket.
 - [docs/research/](docs/research/): what public sources say, with dates and links.
 

@@ -117,6 +117,10 @@ _Avoid_: Letterbox (that is one kind of matte), border
 The columns and rows the Panels sit in, each Panel at a cell with a span of columns and rows, every cell used. By default the clean picture spans 3 × 2 at the top left. Column and row sizes are weights, so border positions the user dragged stay valid at any window size. Each Panel has a thin border and a title bar with its label at its top.
 _Avoid_: Layout (on its own), dock
 
+**Layout** (named):
+An arrangement of the Panel grid saved in one of nine slots (Ctrl+Shift+1 to 9), shown again with Ctrl+1 to 9 or from the layout menu (right-click the status line), which also renames layouts and restores the default layout. A layout names its Panels, so one still opens after Panels are added or removed.
+_Avoid_: Preset, workspace, profile
+
 **Panel settings**:
 The choices a display offers in its Panel's right-click menu, each from a short list so a display can't be set up to mislead. Kept per Panel between sessions. A setting that changes what is measured is named in the Panel's label.
 _Avoid_: Preferences, options, properties

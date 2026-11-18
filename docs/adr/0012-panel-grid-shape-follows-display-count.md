@@ -24,3 +24,7 @@ The first decision no longer holds. The Window is now a layout: a grid of column
 ## Update 2026-11-18 (#92): a grid with a hole is ignored
 
 The default layout has one Vectorscope Panel, two cells wide, in place of the two one-cell vectorscope Panels, so the Window has 10 Panels over the same 20 cells. A saved layout that leaves any cell empty once its Panels that no longer exist are dropped no longer fits the displays and is ignored: the default is used. (Before, a display missing from the saved layout took the first free cell and could leave a hole.)
+
+## Update 2026-11-18 (#98): named layouts
+
+Layouts are saved copies of this grid's text in nine named slots (ADR 0030). Recalling one uses the same rules as above: Panels that have gone are dropped, new ones take the first free cell, a layout with a hole shows the default layout.

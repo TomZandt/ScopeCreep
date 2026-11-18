@@ -19,6 +19,7 @@ use glyphon::{Attrs, Buffer, Cache, Color, ColorMode, Family, FontSystem, Metric
 use scopecreep::display::{DisplayContext, DisplaySet, Pointer};
 use scopecreep::gpu_frame::FrameUploader;
 use scopecreep::layout::MARGIN;
+use scopecreep::layouts::{self, Action, Click, Layouts, Rename};
 use scopecreep::monitor::{FeedState, Monitor};
 use scopecreep::output_conversion::OutputConversion;
 use scopecreep::panel_grid::{Border, PanelGrid, PanelLayout, Press, min_panel_size};
@@ -35,6 +36,7 @@ use std::time::Duration;
 use winit::application::ApplicationHandler;
 use winit::dpi::LogicalSize;
 use winit::event::{ElementState, MouseButton, MouseScrollDelta, WindowEvent};
+use winit::keyboard::{Key, KeyCode, ModifiersState, NamedKey, PhysicalKey};
 use winit::event_loop::{ActiveEventLoop, EventLoop, EventLoopProxy};
 use winit::window::{CursorIcon, Window, WindowId};
 
@@ -77,6 +79,11 @@ fn grid_file() -> Option<PathBuf> {
 /// Where the Panels' settings are remembered, next to the border positions.
 fn settings_file() -> Option<PathBuf> {
     grid_file().map(|p| p.with_file_name("panel-settings"))
+}
+
+/// Where the named layouts are remembered, next to the border positions.
+fn layouts_file() -> Option<PathBuf> {
+    grid_file().map(|p| p.with_file_name("layouts"))
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -170,6 +177,13 @@ struct AppWindow {
     settings: Arc<Mutex<PanelSettings>>,
     /// The right-click menu, while open, with where it opened.
     menu: Option<(Menu, [f32; 2])>,
+    /// The saved layouts (#98), and whether the open menu is their menu (opened by a right-click on the status
+    /// line) and not a Panel's settings.
+    layouts: Layouts,
+    layout_menu: bool,
+    /// A layout's name being typed in the layout menu.
+    renaming: Option<Rename>,
+    modifiers: ModifiersState,
     flat: FlatRects,
     menu_renderer: TextRenderer,
     menu_texts: Vec<Text>,
@@ -409,6 +423,10 @@ impl AppWindow {
             grid,
             settings,
             menu: None,
+            layouts: layouts_file().and_then(|path| std::fs::read_to_string(path).ok()).map_or_else(Layouts::default, |text| Layouts::from_text(&text)),
+            layout_menu: false,
+            renaming: None,
+            modifiers: ModifiersState::empty(),
             flat,
             menu_renderer,
             menu_texts: Vec::new(),
@@ -504,7 +522,28 @@ impl AppWindow {
     /// Right button: open the menu of the Panel under the pointer (none for a Panel without settings, or off a
     /// Panel), or close the one that is open.
     fn right_click(&mut self) {
+        // In the layout menu, a right-click on a saved layout starts renaming it.
+        if self.layout_menu {
+            if let (Some((menu, _)), Some(rect)) = (self.menu.as_ref(), self.menu_rect()) {
+                if let Some((_, value)) = menu.choice_at(rect, self.cursor, self.scale) {
+                    if let Some(Action::Rename(slot)) = layouts::action(&self.layouts, value, Click::Right) {
+                        self.renaming = Rename::start(&self.layouts, slot);
+                        self.show_layout_menu();
+                        return;
+                    }
+                }
+            }
+        }
         let was_open = self.menu.take().is_some();
+        self.layout_menu = false;
+        self.renaming = None;
+        // On the status line: the layout menu.
+        if !was_open && self.cursor[1] >= self.grid_area[1] + self.grid_area[3] {
+            self.layout_menu = true;
+            self.menu = Some((layouts::menu(&self.layouts, None), self.cursor));
+            self.window.request_redraw();
+            return;
+        }
         let hit = self.cells.iter().position(|c| Menu::contains(*c, self.cursor));
         if let Some(panel) = hit {
             let current = self.displays.settings_of(panel, &self.settings.lock().unwrap());
@@ -512,6 +551,132 @@ impl AppWindow {
         }
         if was_open || self.menu.is_some() {
             self.window.request_redraw();
+        }
+    }
+
+    /// Draw the layout menu again from the saved layouts, where it opened.
+    fn show_layout_menu(&mut self) {
+        if let Some((menu, _)) = self.menu.as_mut() {
+            *menu = layouts::menu(&self.layouts, self.renaming.as_ref());
+        }
+        self.window.request_redraw();
+    }
+
+    /// Remember the named layouts.
+    fn save_layouts(&self) {
+        if let Some(path) = layouts_file() {
+            if let Err(e) = scopecreep::settings::save(&path, &self.layouts.to_text()) {
+                eprintln!("scopecreep: cannot remember the layouts: {e}");
+            }
+        }
+    }
+
+    /// Do one layout action: show a saved layout or the default, or save the arrangement on screen into a slot.
+    fn layout_action(&mut self, action: Action) {
+        let names = self.displays.names();
+        match action {
+            Action::Default => self.grid = PanelGrid::default_for(&names),
+            Action::Recall(slot) => match self.layouts.recall(slot, &names) {
+                Some(grid) => self.grid = grid,
+                None => return,
+            },
+            Action::Save(slot) => {
+                self.layouts.save(slot, &self.grid, &names);
+                self.save_layouts();
+                return;
+            }
+            Action::Rename(_) => return,
+        }
+        self.save_grid();
+        self.window.request_redraw();
+    }
+
+    /// Left button in the layout menu: a click does what the row says; any click ends a rename being typed.
+    fn layout_menu_click(&mut self) {
+        let (Some((menu, _)), Some(rect)) = (self.menu.as_ref(), self.menu_rect()) else { return };
+        let choice = menu.choice_at(rect, self.cursor, self.scale);
+        self.finish_rename(true);
+        let click = if self.modifiers.shift_key() { Click::Shift } else { Click::Plain };
+        if let Some(action) = choice.and_then(|(_, value)| layouts::action(&self.layouts, value, click)) {
+            self.layout_action(action);
+            self.close_menu();
+        } else if choice.is_none() && Menu::contains(rect, self.cursor) {
+            self.show_layout_menu();
+        } else {
+            self.close_menu();
+        }
+    }
+
+    fn close_menu(&mut self) {
+        self.menu = None;
+        self.layout_menu = false;
+        self.renaming = None;
+        self.window.request_redraw();
+    }
+
+    /// End a rename being typed: keep the name (`accept`) or drop it.
+    fn finish_rename(&mut self, accept: bool) {
+        if let Some(rename) = self.renaming.take() {
+            if accept && rename.accept(&mut self.layouts) {
+                self.save_layouts();
+            }
+        }
+    }
+
+    /// A key: Ctrl+1 to 9 recalls a layout and Ctrl+Shift+1 to 9 saves one (the Window is still, nothing shows);
+    /// while a layout name is being typed, the keys type it.
+    fn key(&mut self, event: &winit::event::KeyEvent) {
+        if event.state != ElementState::Pressed {
+            return;
+        }
+        if self.renaming.is_some() {
+            match &event.logical_key {
+                Key::Named(NamedKey::Enter) => {
+                    self.finish_rename(true);
+                    self.show_layout_menu();
+                }
+                Key::Named(NamedKey::Escape) => {
+                    self.renaming = None;
+                    self.show_layout_menu();
+                }
+                Key::Named(NamedKey::Backspace) => {
+                    if let Some(r) = self.renaming.as_mut() {
+                        r.backspace();
+                    }
+                    self.show_layout_menu();
+                }
+                _ => {
+                    if let (Some(r), Some(text)) = (self.renaming.as_mut(), event.text.as_ref()) {
+                        r.type_text(text);
+                        self.show_layout_menu();
+                    }
+                }
+            }
+            return;
+        }
+        if event.logical_key == Key::Named(NamedKey::Escape) && self.menu.is_some() {
+            self.close_menu();
+            return;
+        }
+        let digit = match event.physical_key {
+            PhysicalKey::Code(KeyCode::Digit1) => Some(1),
+            PhysicalKey::Code(KeyCode::Digit2) => Some(2),
+            PhysicalKey::Code(KeyCode::Digit3) => Some(3),
+            PhysicalKey::Code(KeyCode::Digit4) => Some(4),
+            PhysicalKey::Code(KeyCode::Digit5) => Some(5),
+            PhysicalKey::Code(KeyCode::Digit6) => Some(6),
+            PhysicalKey::Code(KeyCode::Digit7) => Some(7),
+            PhysicalKey::Code(KeyCode::Digit8) => Some(8),
+            PhysicalKey::Code(KeyCode::Digit9) => Some(9),
+            _ => None,
+        };
+        let m = self.modifiers;
+        if let Some(shortcut) = digit.and_then(|d| layouts::shortcut(d, m.control_key(), m.shift_key(), m.alt_key())) {
+            let action = match shortcut {
+                layouts::Shortcut::Recall(slot) => Action::Recall(slot),
+                layouts::Shortcut::Save(slot) => Action::Save(slot),
+            };
+            self.layout_action(action);
         }
     }
 
@@ -523,6 +688,9 @@ impl AppWindow {
     /// Left button while a menu is open: a click on a choice picks it (and remembers it); a click on a heading or
     /// the menu's padding leaves it open; any other click closes it.
     fn menu_click(&mut self) {
+        if self.layout_menu {
+            return self.layout_menu_click();
+        }
         let (Some((menu, _)), Some(rect)) = (self.menu.as_ref(), self.menu_rect()) else { return };
         let choice = menu.choice_at(rect, self.cursor, self.scale);
         if let Some((key, value)) = choice {
@@ -907,6 +1075,8 @@ impl ApplicationHandler<Wake> for App {
             WindowEvent::CursorMoved { position, .. } => w.pointer_moved(position.x as f32, position.y as f32),
             WindowEvent::MouseInput { state, button: MouseButton::Left, .. } => w.button(state),
             WindowEvent::MouseInput { state: ElementState::Pressed, button: MouseButton::Right, .. } => w.right_click(),
+            WindowEvent::ModifiersChanged(m) => w.modifiers = m.state(),
+            WindowEvent::KeyboardInput { event, is_synthetic: false, .. } => w.key(&event),
             WindowEvent::MouseWheel { delta, .. } => w.wheel(match delta {
                 MouseScrollDelta::LineDelta(_, y) => y,
                 MouseScrollDelta::PixelDelta(p) => p.y as f32 / 40.0,
