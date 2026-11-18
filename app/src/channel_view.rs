@@ -9,6 +9,7 @@
 //! medium, large) is a menu choice; its position and zoom are remembered as state (ADR 0015).
 use crate::display::{ChannelViewDrawn, Display, DisplayContext, Pointer, PointerResult};
 use crate::gpu_frame::GpuFrame;
+use crate::picture_stage::{PictureStage, Rule, place};
 use crate::output_conversion::Plan;
 use crate::settings::{Choice, SettingDef};
 use std::sync::{Arc, Mutex};
@@ -152,17 +153,28 @@ impl Loupe {
     }
 }
 
-const SHADER: &str = r#"
+/// The colour rule the stage draws the picture with: one channel as grey.
+const RULE: &str = r#"
+struct Values { channel: vec4<f32> };   // x: the channel (0 R, 1 G, 2 B)
+
+fn colour(uv: vec2<f32>) -> vec3<f32> {
+    let c = sample_picture(uv);
+    var v = c.b;
+    if values.channel.x < 0.5 { v = c.r; } else if values.channel.x < 1.5 { v = c.g; }
+    return vec3<f32>(v);
+}
+"#;
+
+/// The Loupe's own draw, on top of the picture: a square with the source pixels under it, magnified.
+const LOUPE_SHADER: &str = r#"
 struct Params {
     quad: vec4<f32>,    // left, top, right, bottom in clip space
-    pic: vec4<f32>,     // the picture on screen: left, top, width, height (device pixels)
-    loupe: vec4<f32>,   // left, top, side (0: no Loupe), device pixels per source pixel
+    loupe: vec4<f32>,   // left, top, side, device pixels per source pixel
     src: vec4<f32>,     // frame width, height, source pixel at the Loupe's middle (x, y)
     mid: vec4<f32>,     // the Loupe's middle pixel (x, y), channel (0 R, 1 G, 2 B), bottom row first
 };
 @group(0) @binding(0) var<uniform> p: Params;
 @group(0) @binding(1) var picture: texture_2d<f32>;
-@group(0) @binding(2) var picture_sampler: sampler;
 
 struct VertexOut { @builtin(position) position: vec4<f32> };
 
@@ -184,36 +196,18 @@ fn pick(c: vec3<f32>) -> f32 {
 fn fs(in: VertexOut) -> @location(0) vec4<f32> {
     let pos = in.position.xy;
     let lo = p.loupe;
-    let in_loupe = lo.z > 0.0 && pos.x >= lo.x && pos.x < lo.x + lo.z && pos.y >= lo.y && pos.y < lo.y + lo.z;
-    if in_loupe {
-        let edge = min(min(pos.x - lo.x, lo.x + lo.z - pos.x), min(pos.y - lo.y, lo.y + lo.z - pos.y));
-        if edge < 2.0 { return vec4<f32>(0.9, 0.9, 0.9, 1.0); }
-        let s = p.src.zw + floor((floor(pos) - p.mid.xy) / lo.w);
-        if s.x < 0.0 || s.y < 0.0 || s.x >= p.src.x || s.y >= p.src.y { return vec4<f32>(0.0, 0.0, 0.0, 1.0); }
-        var row = s.y;
-        if p.mid.w > 0.5 { row = p.src.y - 1.0 - s.y; }
-        let v = pick(textureLoad(picture, vec2<i32>(i32(s.x), i32(row)), 0).rgb);
-        return vec4<f32>(v, v, v, 1.0);
-    }
-    let uv = (pos - p.pic.xy) / p.pic.zw;
-    if uv.x < 0.0 || uv.x >= 1.0 || uv.y < 0.0 || uv.y >= 1.0 { discard; }
-    var y = uv.y;
-    if p.mid.w > 0.5 { y = 1.0 - uv.y; }
-    let v = pick(textureSampleLevel(picture, picture_sampler, vec2<f32>(uv.x, y), 0.0).rgb);
+    let edge = min(min(pos.x - lo.x, lo.x + lo.z - pos.x), min(pos.y - lo.y, lo.y + lo.z - pos.y));
+    if edge < 2.0 { return vec4<f32>(0.9, 0.9, 0.9, 1.0); }
+    let s = p.src.zw + floor((floor(pos) - p.mid.xy) / lo.w);
+    if s.x < 0.0 || s.y < 0.0 || s.x >= p.src.x || s.y >= p.src.y { return vec4<f32>(0.0, 0.0, 0.0, 1.0); }
+    var row = s.y;
+    if p.mid.w > 0.5 { row = p.src.y - 1.0 - s.y; }
+    let v = pick(textureLoad(picture, vec2<i32>(i32(s.x), i32(row)), 0).rgb);
     return vec4<f32>(v, v, v, 1.0);
 }
 "#;
 
-const PARAMS_BYTES: u64 = 80;
-
-/// The frame on the GPU.
-struct Picture {
-    texture_id: u64,
-    bind_group: wgpu::BindGroup,
-    width: u32,
-    height: u32,
-    bottom_up: bool,
-}
+const PARAMS_BYTES: u64 = 64;
 
 struct State {
     channel: Channel,
@@ -231,19 +225,21 @@ struct State {
 pub struct ChannelView {
     device: wgpu::Device,
     queue: wgpu::Queue,
-    pipeline: wgpu::RenderPipeline,
-    layout: wgpu::BindGroupLayout,
-    sampler: wgpu::Sampler,
-    params: wgpu::Buffer,
-    picture: Arc<Mutex<Option<Picture>>>,
+    stage: PictureStage,
+    loupe_pipeline: wgpu::RenderPipeline,
+    loupe_layout: wgpu::BindGroupLayout,
+    loupe_params: wgpu::Buffer,
+    /// The Loupe's bind group for the frame's texture.
+    loupe_bound: Arc<Mutex<Option<(u64, wgpu::BindGroup)>>>,
     state: Arc<Mutex<State>>,
 }
 
 impl ChannelView {
     pub fn new(device: &wgpu::Device, queue: &wgpu::Queue, target: wgpu::TextureFormat, filterable: bool) -> ChannelView {
-        let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor { label: Some("channel view"), source: wgpu::ShaderSource::Wgsl(SHADER.into()) });
-        let layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-            label: Some("channel view"),
+        let stage = PictureStage::new::<[f32; 4]>(device, queue, target, filterable, Rule { label: "channel view", wgsl: RULE.into(), has_legend: false });
+        let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor { label: Some("channel view loupe"), source: wgpu::ShaderSource::Wgsl(LOUPE_SHADER.into()) });
+        let loupe_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            label: Some("channel view loupe"),
             entries: &[
                 wgpu::BindGroupLayoutEntry {
                     binding: 0,
@@ -254,20 +250,14 @@ impl ChannelView {
                 wgpu::BindGroupLayoutEntry {
                     binding: 1,
                     visibility: wgpu::ShaderStages::FRAGMENT,
-                    ty: wgpu::BindingType::Texture { sample_type: wgpu::TextureSampleType::Float { filterable }, view_dimension: wgpu::TextureViewDimension::D2, multisampled: false },
-                    count: None,
-                },
-                wgpu::BindGroupLayoutEntry {
-                    binding: 2,
-                    visibility: wgpu::ShaderStages::FRAGMENT,
-                    ty: wgpu::BindingType::Sampler(if filterable { wgpu::SamplerBindingType::Filtering } else { wgpu::SamplerBindingType::NonFiltering }),
+                    ty: wgpu::BindingType::Texture { sample_type: wgpu::TextureSampleType::Float { filterable: false }, view_dimension: wgpu::TextureViewDimension::D2, multisampled: false },
                     count: None,
                 },
             ],
         });
-        let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor { label: Some("channel view"), bind_group_layouts: &[Some(&layout)], immediate_size: 0 });
-        let pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-            label: Some("channel view"),
+        let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor { label: Some("channel view loupe"), bind_group_layouts: &[Some(&loupe_layout)], immediate_size: 0 });
+        let loupe_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+            label: Some("channel view loupe"),
             layout: Some(&pipeline_layout),
             vertex: wgpu::VertexState { module: &shader, entry_point: Some("vs"), buffers: &[], compilation_options: Default::default() },
             primitive: wgpu::PrimitiveState { topology: wgpu::PrimitiveTopology::TriangleStrip, ..Default::default() },
@@ -277,17 +267,15 @@ impl ChannelView {
             multiview_mask: None,
             cache: None,
         });
-        let filter = if filterable { wgpu::FilterMode::Linear } else { wgpu::FilterMode::Nearest };
-        let sampler = device.create_sampler(&wgpu::SamplerDescriptor { label: Some("channel view"), mag_filter: filter, min_filter: filter, ..Default::default() });
-        let params = device.create_buffer(&wgpu::BufferDescriptor { label: Some("channel view params"), size: PARAMS_BYTES, usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST, mapped_at_creation: false });
+        let loupe_params = device.create_buffer(&wgpu::BufferDescriptor { label: Some("channel view loupe params"), size: PARAMS_BYTES, usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST, mapped_at_creation: false });
         ChannelView {
             device: device.clone(),
             queue: queue.clone(),
-            pipeline,
-            layout,
-            sampler,
-            params,
-            picture: Arc::new(Mutex::new(None)),
+            stage,
+            loupe_pipeline,
+            loupe_layout,
+            loupe_params,
+            loupe_bound: Arc::new(Mutex::new(None)),
             state: Arc::new(Mutex::new(State { channel: Channel::Blue, loupe: Loupe::new(), loaded: false, area: None, tail: String::new() })),
         }
     }
@@ -299,22 +287,7 @@ impl Display for ChannelView {
     }
 
     fn on_frame(&self, _encoder: &mut wgpu::CommandEncoder, frame: &GpuFrame) {
-        let mut picture = self.picture.lock().unwrap();
-        if picture.as_ref().is_none_or(|p| p.texture_id != frame.texture_id) {
-            let bind_group = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
-                label: Some("channel view"),
-                layout: &self.layout,
-                entries: &[
-                    wgpu::BindGroupEntry { binding: 0, resource: self.params.as_entire_binding() },
-                    wgpu::BindGroupEntry { binding: 1, resource: wgpu::BindingResource::TextureView(&frame.texture.create_view(&Default::default())) },
-                    wgpu::BindGroupEntry { binding: 2, resource: wgpu::BindingResource::Sampler(&self.sampler) },
-                ],
-            });
-            *picture = Some(Picture { texture_id: frame.texture_id, bind_group, width: frame.width, height: frame.height, bottom_up: frame.bottom_up });
-        }
-        if let Some(p) = picture.as_mut() {
-            p.bottom_up = frame.bottom_up;
-        }
+        self.stage.show(frame);
     }
 
     fn configure(&self, context: &DisplayContext) {
@@ -339,59 +312,64 @@ impl Display for ChannelView {
 
     fn label(&self) -> String {
         // The picture first, then the state: the order `draw` takes them in.
-        let picture = self.picture.lock().unwrap();
+        let size = self.stage.size();
         let state = self.state.lock().unwrap();
         let head = format!("{} channel as grey", state.channel.name());
-        match picture.as_ref() {
-            Some(p) => format!("{head}  ·  {} × {}  ·  Loupe {} %  ·  {}", p.width, p.height, state.loupe.zoom, state.tail),
+        match size {
+            Some([w, h]) => format!("{head}  ·  {w} × {h}  ·  Loupe {} %  ·  {}", state.loupe.zoom, state.tail),
             None => head,
         }
     }
 
     fn draw(&self, pass: &mut wgpu::RenderPass<'_>, area: [f32; 4], surface: [f32; 2], scale: f32) {
-        let guard = self.picture.lock().unwrap();
-        let Some(picture) = guard.as_ref() else { return };
-        let [left, top, width, height] = area;
-        if width < 1.0 || height < 1.0 {
+        let Some(shown) = self.stage.shown() else { return };
+        if area[2] < 1.0 || area[3] < 1.0 {
             return;
         }
         let mut state = self.state.lock().unwrap();
         state.area = Some((area, scale));
-        // The picture, scaled to fit with its shape kept (as the Picture View).
-        let fit = (width / picture.width as f32).min(height / picture.height as f32);
-        let (w, h) = ((picture.width as f32 * fit).round(), (picture.height as f32 * fit).round());
-        let (x, y) = ((left + (width - w) / 2.0).round(), (top + (height - h) / 2.0).round());
-        // The Loupe, and the source pixel under its middle.
+        // The picture, through the stage.
+        self.stage.draw(pass, area, surface, &[state.channel.index(), 0.0, 0.0, 0.0], None);
+        // The Loupe on top, and the source pixel under its middle.
+        let Some(p) = place(area, shown.size, 0.0) else { return };
         let rect = state.loupe.rect(area, scale);
         let middle = Loupe::middle(rect);
         let (mx, my) = (middle[0].round(), middle[1].round());
-        let source = [((mx - x) / w * picture.width as f32).floor(), ((my - y) / h * picture.height as f32).floor()];
+        let source = [((mx - p.x) / p.w * shown.size[0] as f32).floor(), ((my - p.y) / p.h * shown.size[1] as f32).floor()];
         let clip = |px: f32, size: f32| px / size * 2.0 - 1.0;
-        let params: [f32; 20] = [
-            clip(left, surface[0]),
-            -clip(top, surface[1]),
-            clip(left + width, surface[0]),
-            -clip(top + height, surface[1]),
-            x,
-            y,
-            w,
-            h,
+        let params: [f32; 16] = [
+            clip(rect[0], surface[0]),
+            -clip(rect[1], surface[1]),
+            clip(rect[0] + rect[2], surface[0]),
+            -clip(rect[1] + rect[3], surface[1]),
             rect[0],
             rect[1],
             rect[2],
             state.loupe.zoom as f32 / 100.0,
-            picture.width as f32,
-            picture.height as f32,
+            shown.size[0] as f32,
+            shown.size[1] as f32,
             source[0],
             source[1],
             mx,
             my,
             state.channel.index(),
-            if picture.bottom_up { 1.0 } else { 0.0 },
+            if shown.bottom_up { 1.0 } else { 0.0 },
         ];
-        self.queue.write_buffer(&self.params, 0, bytemuck::cast_slice(&params));
-        pass.set_pipeline(&self.pipeline);
-        pass.set_bind_group(0, &picture.bind_group, &[]);
+        self.queue.write_buffer(&self.loupe_params, 0, bytemuck::cast_slice(&params));
+        let mut bound = self.loupe_bound.lock().unwrap();
+        if bound.as_ref().is_none_or(|(id, _)| *id != shown.texture_id) {
+            let group = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
+                label: Some("channel view loupe"),
+                layout: &self.loupe_layout,
+                entries: &[
+                    wgpu::BindGroupEntry { binding: 0, resource: self.loupe_params.as_entire_binding() },
+                    wgpu::BindGroupEntry { binding: 1, resource: wgpu::BindingResource::TextureView(&shown.texture.create_view(&Default::default())) },
+                ],
+            });
+            *bound = Some((shown.texture_id, group));
+        }
+        pass.set_pipeline(&self.loupe_pipeline);
+        pass.set_bind_group(0, &bound.as_ref().unwrap().1, &[]);
         pass.draw(0..4, 0..1);
     }
 

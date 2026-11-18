@@ -54,4 +54,5 @@ Anything the ticket could not verify becomes a GitHub issue (or a comment on the
 | [114](114-style-tokens.md) | Style: are chrome colours and sizes tokens by role with no visible change, and does the check catch a raw literal? |
 | [115](115-style-components.md) | Style: do the components lay out and look right in every state at 1x and 2x, and is every legend horizontal? |
 | [95](95-panels-out-of-the-window.md) | Taking the gamut/legal warning, Highlight Neutrals and CIE plot out of the Window: what stays, and GPU memory when running tests beside Resolve |
+| [110](110-picture-stage.md) | Refactor: does every Picture View still draw the same through the shared Picture stage? |
 | [96](96-panel-layout.md) | Panels span cells: the default layout, minimum sizes at 1280 x 760, borders, saved layouts, title bar |

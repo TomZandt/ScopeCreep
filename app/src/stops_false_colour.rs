@@ -23,6 +23,7 @@ use crate::colour_setup::{OutputSpace, TimelineSpace};
 use crate::output_conversion::Plan;
 use crate::display::{Display, DisplayContext, ScaleText};
 use crate::gpu_frame::GpuFrame;
+use crate::picture_stage::{Legend, PictureStage, Rule};
 use crate::settings::{Choice, SettingDef};
 use scopecreep_accuracy::colorchecker::luma_weights_adapted_to_d65;
 use scopecreep_accuracy::colour::{AP1, DWG, P3_D65, REC2020, REC709};
@@ -174,12 +175,13 @@ const CHAR_WIDTH: f32 = crate::waveform::SCALE_SIZE * 0.6;
 pub const DARK_SKIN_ZONE: usize = 6;
 pub const LIGHT_SKIN_ZONE: usize = 10;
 
-/// Where the picture and the legend go in a Panel.
+/// Where the legend goes in a Panel (the picture is the Picture stage's).
 struct Geometry {
-    /// Left, top, width, height in device pixels.
-    picture: [f32; 4],
-    /// The bar of swatches.
-    legend: [f32; 4],
+    /// The strip the legend takes under the picture, and its bar of swatches in it (none: no legend).
+    legend: Option<Legend>,
+    /// Left and width of the bar.
+    bar_left: f32,
+    bar_width: f32,
     swatches: usize,
     /// The middle of the caption line and of the numbers' line.
     caption_y: f32,
@@ -189,7 +191,7 @@ struct Geometry {
 }
 
 impl Geometry {
-    fn new(area: [f32; 4], scale: f32, mode: Mode, legend_on: bool, picture_size: [u32; 2]) -> Geometry {
+    fn new(area: [f32; 4], scale: f32, mode: Mode, legend_on: bool) -> Geometry {
         let [left, top, width, height] = area;
         let swatches = if mode == Mode::Zones { ZONE_COLOURS.len() } else { 2 };
         let (swatch, line, gap) = (SWATCH_ROW * scale, TEXT_LINE * scale, GAP * scale);
@@ -203,24 +205,20 @@ impl Geometry {
         } else {
             (0.0, false)
         };
-        let room = (height - strip).max(1.0);
-        let fit = (width / picture_size[0].max(1) as f32).min(room / picture_size[1].max(1) as f32);
-        let (w, h) = ((picture_size[0] as f32 * fit).round(), (picture_size[1] as f32 * fit).round());
-        let picture = [(left + (width - w) / 2.0).round(), (top + (room - h) / 2.0).round(), w, h];
         let bottom = top + height;
         let swatch_top = if texts { bottom - strip + line + gap } else { bottom - strip };
-        let legend = if strip > 0.0 { [left, swatch_top, width, swatch] } else { [0.0; 4] };
-        Geometry { picture, legend, swatches, caption_y: bottom - strip + line / 2.0, number_y: swatch_top + swatch + gap + line / 2.0, texts }
+        let legend = (strip > 0.0).then_some(Legend { strip, bar_offset: swatch_top - (bottom - strip), bar: swatch });
+        Geometry { legend, bar_left: left, bar_width: if strip > 0.0 { width } else { 0.0 }, swatches, caption_y: bottom - strip + line / 2.0, number_y: swatch_top + swatch + gap + line / 2.0, texts }
     }
 
     /// The captions and numbers of the legend: each number centred under its own swatch, captions over the zones
     /// they name. Text is dropped, never overlapped: every second number when they are too wide for their
     /// swatches, then all of them; a caption that would touch another or leave the bar.
     fn legend_texts(&self, scale: f32, mode: Mode) -> Vec<ScaleText> {
-        if !self.texts || self.legend[2] <= 0.0 {
+        if !self.texts || self.bar_width <= 0.0 {
             return Vec::new();
         }
-        let [left, _, width, _] = self.legend;
+        let (left, width) = (self.bar_left, self.bar_width);
         let cell = width / self.swatches as f32;
         let char_width = CHAR_WIDTH * scale;
         let text_width = |text: &str| text.chars().count() as f32 * char_width;
@@ -281,16 +279,11 @@ fn common_shader() -> String {
     let colours = ZONE_COLOURS.iter().map(|c| wgsl_vec3(*c)).collect::<Vec<_>>().join(", ");
     format!(
         r#"
-struct Params {{
+struct Values {{
     weights: vec4<f32>,     // the Y weights of the Timeline Colour Space's primaries
     info: vec4<u32>,        // curve, picture width, picture height, mode (0 full zones, 1 grey and +1 stop)
-    clip: vec4<f32>,        // the Panel in clip space: left, top, right, bottom
-    picture: vec4<f32>,     // the picture on screen, in pixels: left, top, width, height
-    legend: vec4<f32>,      // the legend's bar of swatches, in pixels: left, top, width, height (width 0: none)
-    flags: vec4<f32>,       // x: the frame's first row is the bottom of the picture; y: swatches in the legend; z: 1 to fill the Panel with the neutral background
+    flags: vec4<f32>,       // x: swatches in the legend; y: 1 to fill the Panel with the neutral background
 }};
-@group(0) @binding(0) var<uniform> params: Params;
-@group(0) @binding(1) var frame: texture_2d<f32>;
 
 var<private> EDGES: array<f32, 16> = array<f32, 16>({edges});
 var<private> COLOURS: array<vec3<f32>, 17> = array<vec3<f32>, 17>({colours});
@@ -321,8 +314,8 @@ fn decode(v: f32, curve: u32) -> f32 {{
 
 // Linear Y of a Timeline Colour Space pixel.
 fn luma(texel: vec4<f32>) -> f32 {{
-    let c = params.info.x;
-    return dot(params.weights.xyz, vec3<f32>(decode(texel.r, c), decode(texel.g, c), decode(texel.b, c)));
+    let c = values.info.x;
+    return dot(values.weights.xyz, vec3<f32>(decode(texel.r, c), decode(texel.g, c), decode(texel.b, c)));
 }}
 
 fn stops_of(y: f32) -> f32 {{
@@ -339,30 +332,23 @@ fn stops_of(y: f32) -> f32 {{
 fn measure_shader() -> String {
     common_shader()
         + r#"
+@group(0) @binding(0) var<uniform> values: Values;
+@group(0) @binding(1) var frame: texture_2d<f32>;
 @group(0) @binding(2) var stops_out: texture_storage_2d<r32float, write>;
 
 @compute @workgroup_size(8, 8)
 fn measure(@builtin(global_invocation_id) id: vec3<u32>) {
-    if id.x >= params.info.y || id.y >= params.info.z { return; }
+    if id.x >= values.info.y || id.y >= values.info.z { return; }
     let texel = textureLoad(frame, vec2<i32>(id.xy), 0);
     textureStore(stops_out, vec2<i32>(id.xy), vec4<f32>(stops_of(luma(texel)), 0.0, 0.0, 1.0));
 }
 "#
 }
 
+/// The colour rule: the zones (or the grey and +1 stop highlight) of the pixel's stops; the legend is the swatches.
 fn draw_shader() -> String {
     common_shader()
         + r#"
-@vertex
-fn vs(@builtin(vertex_index) index: u32) -> @builtin(position) vec4<f32> {
-    let corner = vec2<f32>(f32(index & 1u), f32((index >> 1u) & 1u));
-    return vec4<f32>(mix(params.clip.x, params.clip.z, corner.x), mix(params.clip.y, params.clip.w, corner.y), 0.0, 1.0);
-}
-
-fn inside(p: vec2<f32>, r: vec4<f32>) -> bool {
-    return p.x >= r.x && p.x < r.x + r.z && p.y >= r.y && p.y < r.y + r.w;
-}
-
 fn zone_colour(stops: f32) -> vec3<f32> {
     var zone = 0u;
     for (var i = 0u; i < 16u; i++) {
@@ -371,39 +357,32 @@ fn zone_colour(stops: f32) -> vec3<f32> {
     return COLOURS[zone];
 }
 
-@fragment
-fn fs(@builtin(position) position: vec4<f32>) -> @location(0) vec4<f32> {
-    let p = position.xy;
-    if params.flags.z > 0.5 { return vec4<f32>(0.09, 0.09, 0.09, 1.0); }
-    let chart = params.info.w == 1u;
-    if params.legend.z > 0.0 && inside(p, params.legend) {
-        let count = u32(params.flags.y);
-        let swatch = min(u32((p.x - params.legend.x) / params.legend.z * f32(count)), count - 1u);
-        if chart {
-            return vec4<f32>(select(GREEN, PINK, swatch == 1u), 1.0);
-        }
-        return vec4<f32>(COLOURS[swatch], 1.0);
+fn legend(uv: vec2<f32>) -> vec3<f32> {
+    let count = u32(values.flags.x);
+    let swatch = min(u32(uv.x * f32(count)), count - 1u);
+    if values.info.w == 1u {
+        return select(GREEN, PINK, swatch == 1u);
     }
-    if !inside(p, params.picture) { discard; }
-    let uv = (p - params.picture.xy) / params.picture.zw;
-    let x = min(u32(uv.x * f32(params.info.y)), params.info.y - 1u);
-    let y = min(u32(uv.y * f32(params.info.z)), params.info.z - 1u);
-    let row = select(y, params.info.z - 1u - y, params.flags.x > 0.5);
-    let y_linear = luma(textureLoad(frame, vec2<i32>(vec2<u32>(x, row)), 0));
+    return COLOURS[swatch];
+}
+
+fn colour(uv: vec2<f32>) -> vec3<f32> {
+    if values.flags.y > 0.5 { return vec3<f32>(0.09); }
+    let y_linear = luma(vec4<f32>(load_picture(uv), 1.0));
     let stops = stops_of(y_linear);
-    if chart {
-        if abs(stops) < TOLERANCE { return vec4<f32>(GREEN, 1.0); }
-        if abs(stops - 1.0) < TOLERANCE { return vec4<f32>(PINK, 1.0); }
+    if values.info.w == 1u {
+        if abs(stops) < TOLERANCE { return GREEN; }
+        if abs(stops - 1.0) < TOLERANCE { return PINK; }
         let grey = pow(clamp(y_linear, 0.0, 1.0), 1.0 / 2.4);
-        return vec4<f32>(grey, grey, grey, 1.0);
+        return vec3<f32>(grey);
     }
-    return vec4<f32>(zone_colour(stops), 1.0);
+    return zone_colour(stops);
 }
 "#
 }
 
-
-const PARAMS_BYTES: u64 = 96;
+/// The words of `Values` (and of the measuring pass's parameters): 3 vec4s.
+const VALUES_WORDS: usize = 12;
 
 /// What the display measures, and with which curve.
 #[derive(Clone, Debug, PartialEq)]
@@ -477,8 +456,6 @@ struct State {
     /// The Timeline Colour Space frame, and the Output picture.
     timeline: Option<GpuFrame>,
     output: Option<GpuFrame>,
-    /// The bind group of the draw, for the frame's texture.
-    bound: Option<(u64, wgpu::BindGroup)>,
 }
 
 impl State {
@@ -497,8 +474,9 @@ impl State {
 pub struct StopsFalseColour {
     device: wgpu::Device,
     queue: wgpu::Queue,
-    draw: wgpu::RenderPipeline,
+    stage: PictureStage,
     measure: wgpu::ComputePipeline,
+    /// The parameters of the measuring pass.
     params: wgpu::Buffer,
     config: Arc<Mutex<Config>>,
     state: Arc<Mutex<State>>,
@@ -506,18 +484,7 @@ pub struct StopsFalseColour {
 
 impl StopsFalseColour {
     pub fn new(device: &wgpu::Device, queue: &wgpu::Queue, target: wgpu::TextureFormat) -> StopsFalseColour {
-        let module = device.create_shader_module(wgpu::ShaderModuleDescriptor { label: Some("stops false colour draw"), source: wgpu::ShaderSource::Wgsl(draw_shader().into()) });
-        let draw = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-            label: Some("stops false colour draw"),
-            layout: None,
-            vertex: wgpu::VertexState { module: &module, entry_point: Some("vs"), buffers: &[], compilation_options: Default::default() },
-            primitive: wgpu::PrimitiveState { topology: wgpu::PrimitiveTopology::TriangleStrip, ..Default::default() },
-            depth_stencil: None,
-            multisample: wgpu::MultisampleState::default(),
-            fragment: Some(wgpu::FragmentState { module: &module, entry_point: Some("fs"), targets: &[Some(target.into())], compilation_options: Default::default() }),
-            multiview_mask: None,
-            cache: None,
-        });
+        let stage = PictureStage::new::<[u32; VALUES_WORDS]>(device, queue, target, false, Rule { label: "stops false colour", wgsl: draw_shader(), has_legend: true });
         let module = device.create_shader_module(wgpu::ShaderModuleDescriptor { label: Some("stops false colour measure"), source: wgpu::ShaderSource::Wgsl(measure_shader().into()) });
         let measure = device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
             label: Some("stops false colour measure"),
@@ -527,36 +494,38 @@ impl StopsFalseColour {
             compilation_options: Default::default(),
             cache: None,
         });
-        let params = device.create_buffer(&wgpu::BufferDescriptor { label: Some("stops false colour params"), size: PARAMS_BYTES, usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST, mapped_at_creation: false });
+        let params = device.create_buffer(&wgpu::BufferDescriptor { label: Some("stops false colour params"), size: (VALUES_WORDS * 4) as u64, usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST, mapped_at_creation: false });
         let view = StopsFalseColour {
             device: device.clone(),
             queue: queue.clone(),
-            draw,
+            stage,
             measure,
             params,
             config: Arc::new(Mutex::new(Config { basis: Basis::for_setup(None), mode: Mode::Zones, legend: true, colour_label: String::new(), timeline: String::new() })),
-            state: Arc::new(Mutex::new(State { timeline: None, output: None, bound: None })),
+            state: Arc::new(Mutex::new(State { timeline: None, output: None })),
         };
         view.configure(&DisplayContext::default());
         view
     }
 
-    /// Write the parameters for measuring `frame`; with an `area` (area, surface size, scale) also where to draw,
-    /// and `background` fills the Panel with the neutral background instead of a picture.
-    fn write_params(&self, config: &Config, frame: &GpuFrame, curve: Curve, weights: [f64; 3], area: Option<([f32; 4], [f32; 2], f32)>, background: bool) {
-        let mut words = [0u8; PARAMS_BYTES as usize];
-        words[..16].copy_from_slice(bytemuck::cast_slice(&[weights[0] as f32, weights[1] as f32, weights[2] as f32, 0.0]));
-        words[16..32].copy_from_slice(bytemuck::cast_slice(&[curve.code(), frame.width, frame.height, (config.mode == Mode::GreyAndPlusOne) as u32]));
-        if let Some((area, surface, scale)) = area {
-            let geometry = Geometry::new(area, scale, config.mode, config.legend, [frame.width, frame.height]);
-            let clip = |px: f32, size: f32| px / size * 2.0 - 1.0;
-            let [left, top, width, height] = area;
-            words[32..48].copy_from_slice(bytemuck::cast_slice(&[clip(left, surface[0]), -clip(top, surface[1]), clip(left + width, surface[0]), -clip(top + height, surface[1])]));
-            words[48..64].copy_from_slice(bytemuck::cast_slice(&geometry.picture));
-            words[64..80].copy_from_slice(bytemuck::cast_slice(&geometry.legend));
-            words[80..96].copy_from_slice(bytemuck::cast_slice(&[frame.bottom_up as u32 as f32, geometry.swatches as f32, background as u32 as f32, 0.0]));
-        }
-        self.queue.write_buffer(&self.params, 0, &words);
+    /// The values the shaders read, for `frame` decoded with `curve` and `weights`; `swatches` in the legend, and
+    /// `background` fills the Panel with the neutral background instead of a picture.
+    fn values(config: &Config, frame: &GpuFrame, curve: Curve, weights: [f64; 3], swatches: usize, background: bool) -> [u32; VALUES_WORDS] {
+        let f = |v: f32| v.to_bits();
+        [
+            f(weights[0] as f32),
+            f(weights[1] as f32),
+            f(weights[2] as f32),
+            0,
+            curve.code(),
+            frame.width,
+            frame.height,
+            (config.mode == Mode::GreyAndPlusOne) as u32,
+            f(swatches as f32),
+            f(background as u32 as f32),
+            0,
+            0,
+        ]
     }
 
     /// What the display measures, for tests and diagnostics: the stops of every pixel of the latest frame, decoded
@@ -565,7 +534,7 @@ impl StopsFalseColour {
         let state = self.state.lock().unwrap();
         let config = self.config.lock().unwrap();
         let (frame, curve, weights) = state.source(&config)?;
-        self.write_params(&config, &frame, curve, weights, None, false);
+        self.queue.write_buffer(&self.params, 0, bytemuck::cast_slice(&Self::values(&config, &frame, curve, weights, 0, false)));
         let (width, height) = (frame.width, frame.height);
         let out = self.device.create_texture(&wgpu::TextureDescriptor {
             label: Some("stops map"),
@@ -651,7 +620,7 @@ impl Display for StopsFalseColour {
     }
 
     fn draw(&self, pass: &mut wgpu::RenderPass<'_>, area: [f32; 4], surface: [f32; 2], scale: f32) {
-        let mut state = self.state.lock().unwrap();
+        let state = self.state.lock().unwrap();
         let config = self.config.lock().unwrap();
         if area[2] < 1.0 || area[3] < 1.0 {
             return;
@@ -664,21 +633,14 @@ impl Display for StopsFalseColour {
                 _ => return,
             },
         };
-        self.write_params(&config, &frame, curve, weights, Some((area, surface, scale)), background);
-        if state.bound.as_ref().is_none_or(|(id, _)| *id != frame.texture_id) {
-            let bind_group = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
-                label: Some("stops false colour draw"),
-                layout: &self.draw.get_bind_group_layout(0),
-                entries: &[
-                    wgpu::BindGroupEntry { binding: 0, resource: self.params.as_entire_binding() },
-                    wgpu::BindGroupEntry { binding: 1, resource: wgpu::BindingResource::TextureView(&frame.texture.create_view(&Default::default())) },
-                ],
-            });
-            state.bound = Some((frame.texture_id, bind_group));
+        self.stage.show(&frame);
+        let geometry = Geometry::new(area, scale, config.mode, config.legend);
+        let values = Self::values(&config, &frame, curve, weights, geometry.swatches, background);
+        if background {
+            self.stage.fill(pass, area, surface, &values);
+        } else {
+            self.stage.draw(pass, area, surface, &values, geometry.legend);
         }
-        pass.set_pipeline(&self.draw);
-        pass.set_bind_group(0, &state.bound.as_ref().unwrap().1, &[]);
-        pass.draw(0..4, 0..1);
     }
 
     /// The legend's numbers and captions, or the message when nothing can be measured.
@@ -686,7 +648,9 @@ impl Display for StopsFalseColour {
         // Lock the state before the config, as everywhere else.
         let state = self.state.lock().unwrap();
         let config = self.config.lock().unwrap();
-        let Some(frame) = state.timeline.as_ref().or(state.output.as_ref()) else { return Vec::new() };
+        if state.timeline.is_none() && state.output.is_none() {
+            return Vec::new();
+        }
         if let Basis::Unreadable { lines, .. } = &config.basis {
             let line = TEXT_LINE * scale;
             let middle = area[1] + area[3] / 2.0;
@@ -696,7 +660,7 @@ impl Display for StopsFalseColour {
         if !config.legend {
             return Vec::new();
         }
-        Geometry::new(area, scale, config.mode, true, [frame.width, frame.height]).legend_texts(scale, config.mode)
+        Geometry::new(area, scale, config.mode, true).legend_texts(scale, config.mode)
     }
 
     fn read_back(&self) -> Option<Box<dyn std::any::Any>> {

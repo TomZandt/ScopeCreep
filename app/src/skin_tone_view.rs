@@ -10,6 +10,7 @@
 //! larger Cb/Cr angle (towards yellow) is green, the other way magenta.
 use crate::display::{Display, DisplayContext};
 use crate::gpu_frame::GpuFrame;
+use crate::picture_stage::{PictureStage, Rule};
 use crate::output_conversion::{Plan, measurement};
 use crate::settings::{Choice, SettingDef};
 use crate::skin_tone::SKIN_TONE_LINE_DEGREES;
@@ -31,46 +32,26 @@ const SETTINGS: [SettingDef; 1] = [SettingDef {
     ],
 }];
 
-const SHADER: &str = r#"
-struct Params {
-    rect: vec4<f32>,      // left, top, right, bottom in clip space
-    flip: vec4<f32>,      // x > 0.5: the texture's first row is the bottom of the picture
+/// The colour rule: solid flat colours for the hues near the skin-tone line, the picture's own colour elsewhere.
+const RULE: &str = r#"
+struct Values {
     weights: vec4<f32>,   // luma weights for R, G, B
     skin: vec4<f32>,      // x: tolerance in degrees, y: skin-tone line angle in degrees
 };
-@group(0) @binding(0) var<uniform> params: Params;
-@group(0) @binding(1) var picture: texture_2d<f32>;
-
-struct VertexOut {
-    @builtin(position) position: vec4<f32>,
-    @location(0) uv: vec2<f32>,
-};
-
-@vertex
-fn vs(@builtin(vertex_index) index: u32) -> VertexOut {
-    let corner = vec2<f32>(f32(index & 1u), f32((index >> 1u) & 1u));
-    var out: VertexOut;
-    out.position = vec4<f32>(mix(params.rect.x, params.rect.z, corner.x), mix(params.rect.y, params.rect.w, corner.y), 0.0, 1.0);
-    out.uv = vec2<f32>(corner.x, mix(corner.y, 1.0 - corner.y, step(0.5, params.flip.x)));
-    return out;
-}
 
 const PI: f32 = 3.14159265358979;
 
-@fragment
-fn fs(in: VertexOut) -> @location(0) vec4<f32> {
-    let size = vec2<f32>(textureDimensions(picture));
-    let at = vec2<i32>(min(in.uv * size, size - vec2<f32>(1.0)));
-    let rgb = textureLoad(picture, at, 0).rgb;
-    let w = params.weights.xyz;
+fn colour(uv: vec2<f32>) -> vec3<f32> {
+    let rgb = load_picture(uv);
+    let w = values.weights.xyz;
     let y = dot(rgb, w);
     let cb = (rgb.b - y) / (2.0 * (1.0 - w.z));
     let cr = (rgb.r - y) / (2.0 * (1.0 - w.x));
     // Degrees from the skin-tone line, wrapped to -180..180: positive is towards yellow (green), negative towards red (magenta).
-    let turn = atan2(cr, cb) - params.skin.y * PI / 180.0;
+    let turn = atan2(cr, cb) - values.skin.y * PI / 180.0;
     let offset = atan2(sin(turn), cos(turn)) * 180.0 / PI;
     let distance = abs(offset);
-    let t = params.skin.x;
+    let t = values.skin.x;
     // Solid flat colours, not blended: yellow within t of the line, then green or magenta out to 6 t. Beyond that, and
     // where there is almost no hue, the pixel keeps its own colour.
     let lit = distance <= 6.0 * t && length(vec2<f32>(cb, cr)) >= 0.02;
@@ -78,17 +59,9 @@ fn fs(in: VertexOut) -> @location(0) vec4<f32> {
     let green = vec3<f32>(0.1, 0.85, 0.2);
     let magenta = vec3<f32>(0.95, 0.2, 0.85);
     let flat_colour = select(select(magenta, green, offset > 0.0), yellow, distance <= t);
-    return vec4<f32>(select(rgb, flat_colour, lit), 1.0);
+    return select(rgb, flat_colour, lit);
 }
 "#;
-
-struct Picture {
-    texture_id: u64,
-    bind_group: wgpu::BindGroup,
-    width: u32,
-    height: u32,
-    bottom_up: bool,
-}
 
 /// What the last [`DisplayContext`] set, for drawing and for the label.
 #[derive(Clone)]
@@ -111,49 +84,14 @@ impl Default for Config {
 /// thread draws through another.
 #[derive(Clone)]
 pub struct SkinTone {
-    device: wgpu::Device,
-    queue: wgpu::Queue,
-    pipeline: wgpu::RenderPipeline,
-    layout: wgpu::BindGroupLayout,
-    params: wgpu::Buffer,
-    picture: Arc<Mutex<Option<Picture>>>,
+    stage: PictureStage,
     config: Arc<Mutex<Config>>,
 }
 
 impl SkinTone {
     pub fn new(device: &wgpu::Device, queue: &wgpu::Queue, target: wgpu::TextureFormat, _filterable: bool) -> SkinTone {
-        let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor { label: Some("skin tone"), source: wgpu::ShaderSource::Wgsl(SHADER.into()) });
-        let layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-            label: Some("skin tone"),
-            entries: &[
-                wgpu::BindGroupLayoutEntry {
-                    binding: 0,
-                    visibility: wgpu::ShaderStages::VERTEX_FRAGMENT,
-                    ty: wgpu::BindingType::Buffer { ty: wgpu::BufferBindingType::Uniform, has_dynamic_offset: false, min_binding_size: None },
-                    count: None,
-                },
-                wgpu::BindGroupLayoutEntry {
-                    binding: 1,
-                    visibility: wgpu::ShaderStages::FRAGMENT,
-                    ty: wgpu::BindingType::Texture { sample_type: wgpu::TextureSampleType::Float { filterable: false }, view_dimension: wgpu::TextureViewDimension::D2, multisampled: false },
-                    count: None,
-                },
-            ],
-        });
-        let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor { label: Some("skin tone"), bind_group_layouts: &[Some(&layout)], immediate_size: 0 });
-        let pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-            label: Some("skin tone"),
-            layout: Some(&pipeline_layout),
-            vertex: wgpu::VertexState { module: &shader, entry_point: Some("vs"), buffers: &[], compilation_options: Default::default() },
-            primitive: wgpu::PrimitiveState { topology: wgpu::PrimitiveTopology::TriangleStrip, ..Default::default() },
-            depth_stencil: None,
-            multisample: wgpu::MultisampleState::default(),
-            fragment: Some(wgpu::FragmentState { module: &shader, entry_point: Some("fs"), targets: &[Some(target.into())], compilation_options: Default::default() }),
-            multiview_mask: None,
-            cache: None,
-        });
-        let params = device.create_buffer(&wgpu::BufferDescriptor { label: Some("skin tone params"), size: 64, usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST, mapped_at_creation: false });
-        SkinTone { device: device.clone(), queue: queue.clone(), pipeline, layout, params, picture: Arc::new(Mutex::new(None)), config: Arc::new(Mutex::new(Config::default())) }
+        let stage = PictureStage::new::<[f32; 8]>(device, queue, target, false, Rule { label: "skin tone", wgsl: RULE.into(), has_legend: false });
+        SkinTone { stage, config: Arc::new(Mutex::new(Config::default())) }
     }
 }
 
@@ -163,21 +101,7 @@ impl Display for SkinTone {
     }
 
     fn on_frame(&self, _encoder: &mut wgpu::CommandEncoder, frame: &GpuFrame) {
-        let mut picture = self.picture.lock().unwrap();
-        if picture.as_ref().is_none_or(|p| p.texture_id != frame.texture_id) {
-            let bind_group = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
-                label: Some("skin tone"),
-                layout: &self.layout,
-                entries: &[
-                    wgpu::BindGroupEntry { binding: 0, resource: self.params.as_entire_binding() },
-                    wgpu::BindGroupEntry { binding: 1, resource: wgpu::BindingResource::TextureView(&frame.texture.create_view(&Default::default())) },
-                ],
-            });
-            *picture = Some(Picture { texture_id: frame.texture_id, bind_group, width: frame.width, height: frame.height, bottom_up: frame.bottom_up });
-        }
-        if let Some(p) = picture.as_mut() {
-            p.bottom_up = frame.bottom_up;
-        }
+        self.stage.show(frame);
     }
 
     fn configure(&self, context: &DisplayContext) {
@@ -200,7 +124,7 @@ impl Display for SkinTone {
     /// States only what is proven (ADR 0007): the bands in degrees from the line, and that the line's angle is
     /// measured in Resolve 21.2 (#60).
     fn label(&self) -> String {
-        if self.picture.lock().unwrap().is_none() {
+        if !self.stage.has_picture() {
             return "Skin tone".to_string();
         }
         let config = self.config.lock().unwrap();
@@ -215,38 +139,8 @@ impl Display for SkinTone {
 
     /// Draw the picture, scaled to fit inside `area` with its shape kept.
     fn draw(&self, pass: &mut wgpu::RenderPass<'_>, area: [f32; 4], surface: [f32; 2], _scale: f32) {
-        let guard = self.picture.lock().unwrap();
-        let Some(picture) = guard.as_ref() else { return };
-        let [left, top, width, height] = area;
-        if width < 1.0 || height < 1.0 {
-            return;
-        }
-        let fit = (width / picture.width as f32).min(height / picture.height as f32);
-        let (w, h) = (picture.width as f32 * fit, picture.height as f32 * fit);
-        let (x, y) = ((left + (width - w) / 2.0).round(), (top + (height - h) / 2.0).round());
-        let clip = |px: f32, size: f32| px / size * 2.0 - 1.0;
         let config = self.config.lock().unwrap().clone();
-        let params: [f32; 16] = [
-            clip(x, surface[0]),
-            -clip(y, surface[1]),
-            clip(x + w.round(), surface[0]),
-            -clip(y + h.round(), surface[1]),
-            if picture.bottom_up { 1.0 } else { 0.0 },
-            0.0,
-            0.0,
-            0.0,
-            config.weights[0],
-            config.weights[1],
-            config.weights[2],
-            0.0,
-            config.tolerance,
-            SKIN_TONE_LINE_DEGREES as f32,
-            0.0,
-            0.0,
-        ];
-        self.queue.write_buffer(&self.params, 0, bytemuck::cast_slice(&params));
-        pass.set_pipeline(&self.pipeline);
-        pass.set_bind_group(0, &picture.bind_group, &[]);
-        pass.draw(0..4, 0..1);
+        let [r, g, b] = config.weights;
+        self.stage.draw(pass, area, surface, &[r, g, b, 0.0, config.tolerance, SKIN_TONE_LINE_DEGREES as f32, 0.0, 0.0], None);
     }
 }
