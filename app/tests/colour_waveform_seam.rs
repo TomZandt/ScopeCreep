@@ -6,7 +6,9 @@ use common::{Rig, TARGET, layouts, solid};
 use scopecreep::display::{DisplayContext, DisplaySet};
 use scopecreep::panel_grid::PanelLayout;
 use scopecreep::settings::PanelSettings;
-use scopecreep::waveform::{Measurement, PlotLayout, WaveformCounts};
+use scopecreep::picture_view::PictureView;
+use scopecreep::waveform::{Measurement, PlotLayout, Waveform, WaveformCounts};
+use std::sync::Arc;
 
 
 struct Bench {
@@ -17,7 +19,12 @@ struct Bench {
 impl Bench {
     fn new(name: &str) -> Bench {
         let rig = Rig::new(name);
-        let set = DisplaySet::standard(&rig.device, &rig.queue, TARGET, false);
+        // The Colour Waveform is out of the Window (#145) but kept and tested: the displays it needs, built here.
+        let mut set = DisplaySet::default();
+        set.register(Arc::new(PictureView::new(&rig.device, &rig.queue, TARGET, false)));
+        let luma = Waveform::new(&rig.device, &rig.queue, TARGET);
+        set.register(Arc::new(luma.clone()));
+        set.register(Arc::new(Waveform::new_colour(&rig.device, &rig.queue, TARGET, &luma)));
         Bench { rig, set }
     }
 

@@ -7,8 +7,8 @@ use scopecreep::panel_grid::{Border, PanelGrid, PanelLayout, Press, min_panel_si
 const AREA: [f32; 4] = [12.0, 12.0, 1256.0, 716.0];
 const GAP: f32 = 12.0;
 
-/// The 9 displays the Window shows, in Panel order.
-const NAMES: [&str; 9] = [
+/// The 8 displays the Window shows, in Panel order.
+const NAMES: [&str; 8] = [
     "Clean picture",
     "Luma waveform",
     "Channel view",
@@ -17,7 +17,6 @@ const NAMES: [&str; 9] = [
     "Saturation heatmap",
     "Skin tone",
     "Stops False Colour",
-    "Colour waveform",
 ];
 
 fn overlap(a: [f32; 4], b: [f32; 4]) -> bool {
@@ -81,7 +80,7 @@ fn the_default_layout_has_the_scopes_beside_the_picture_and_the_views_below() {
         assert!(c[0] >= picture[0] + picture[2], "{name} is right of the picture: {c:?}");
         assert!(c[1] < picture[1] + picture[3], "{name} is beside the picture: {c:?}");
     }
-    for name in ["Channel view", "ARRI False Colour", "Saturation heatmap", "Skin tone", "Stops False Colour", "Colour waveform"] {
+    for name in ["Channel view", "ARRI False Colour", "Saturation heatmap", "Skin tone", "Stops False Colour"] {
         let c = cell_of(&grid, name);
         assert!(c[1] >= picture[1] + picture[3], "{name} is below the picture: {c:?}");
     }
@@ -129,7 +128,7 @@ fn displays_other_than_the_default_ones_get_an_automatic_grid_that_fills() {
 fn dragging_a_column_border_resizes_the_columns_on_each_side() {
     let mut grid = default_grid();
     let before = grid.cells(AREA, GAP);
-    // The border between columns 2 and 3, in the bottom row (Channel view, ARRI False Colour, Skin tone...).
+    // The border between columns 2 and 3, in the bottom row (Saturation heatmap, Skin tone...).
     let skin = cell_of(&grid, "Skin tone");
     let (x, y) = (skin[0] - GAP / 2.0, skin[1] + skin[3] / 2.0);
     let border = grid.border_at(AREA, GAP, [x, y], 4.0).expect("a border is there");
@@ -137,7 +136,7 @@ fn dragging_a_column_border_resizes_the_columns_on_each_side() {
     grid.drag(border, [x + 60.0, y], AREA, GAP, min_panel_size(1.0));
     let after = grid.cells(AREA, GAP);
     let i = NAMES.iter().position(|n| *n == "Skin tone").unwrap();
-    let channel = NAMES.iter().position(|n| *n == "Channel view").unwrap();
+    let channel = NAMES.iter().position(|n| *n == "Saturation heatmap").unwrap();
     assert!((after[i][2] - (before[i][2] - 60.0)).abs() < 0.5, "the right column shrinks");
     assert!((after[channel][2] - (before[channel][2] + 60.0)).abs() < 0.5, "the left column grows");
     assert!((after[0][2] - before[0][2]).abs() > 1.0, "the hero spans the left column, so it grows with it");
@@ -251,7 +250,7 @@ fn a_panel_missing_from_a_saved_layout_takes_the_first_free_cell_or_a_new_row() 
     let grid = PanelGrid::from_text(&names, &text);
     let heatmap = grid.places()[5];
     assert_eq!((heatmap.column, heatmap.row, heatmap.columns, heatmap.rows), (2, 3, 1, 1), "the free cell");
-    let new = grid.places()[9];
+    let new = grid.places()[8];
     assert_eq!((new.column, new.row, new.columns), (0, 4, 5), "a new row of its own");
     assert_eq!(grid.size(), (5, 5));
     assert_fills(&grid);
@@ -259,11 +258,11 @@ fn a_panel_missing_from_a_saved_layout_takes_the_first_free_cell_or_a_new_row() 
 
 #[test]
 fn a_layout_that_merely_lost_a_panel_still_recalls_with_the_hole_closed() {
-    // Saved with 9 Panels, recalled by a build without the Channel view: its cell is taken up by a neighbour.
+    // Saved with 8 Panels, recalled by a build without the Channel view: its cell is taken up by a neighbour.
     let text = default_grid().to_text(&NAMES);
     let names: Vec<&str> = NAMES.iter().copied().filter(|n| *n != "Channel view").collect();
     let grid = PanelGrid::from_text(&names, &text);
-    assert_eq!(grid.places().len(), 8);
+    assert_eq!(grid.places().len(), 7);
     assert_ne!(grid, PanelGrid::default_for(&names), "the saved layout is recalled, not the default");
     assert_fills(&grid);
     // The Panels that were not next to the hole stay where they were.
@@ -334,6 +333,19 @@ fn the_vectorscope_is_two_cells_wide_and_borders_do_not_run_through_it() {
 }
 
 #[test]
+fn a_layout_saved_with_the_colour_waveform_still_recalls_without_it() {
+    // Saved while the Window had 9 Panels (the Colour Waveform in the 2 x 2 at the left): the others stay where
+    // they were, and the cells the Colour Waveform leaves are closed up by a neighbour (the #98 rule).
+    let nine = "layout 1\ncolumns 0.2 0.2 0.2 0.2 0.2\nrows 0.28 0.28 0.22 0.22\npanel 0 0 3 2 Clean picture\npanel 3 0 2 1 Luma waveform\npanel 3 1 2 1 Vectorscope\npanel 0 2 2 2 Colour waveform\npanel 2 2 1 1 Channel view\npanel 3 2 2 1 ARRI False Colour\npanel 2 3 1 1 Saturation heatmap\npanel 3 3 1 1 Skin tone\npanel 4 3 1 1 Stops False Colour\n";
+    let grid = PanelGrid::from_text(&NAMES, nine);
+    assert_ne!(grid, default_grid(), "the saved layout is recalled, not the default");
+    assert_eq!(grid.places().len(), 8);
+    assert_fills(&grid);
+    let clean = grid.places()[0];
+    assert_eq!((clean.column, clean.row, clean.columns, clean.rows), (0, 0, 3, 2));
+}
+
+#[test]
 fn a_grid_saved_with_the_two_milestone_2_vectorscope_panels_is_ignored_and_the_default_used() {
     let old = "layout 1\ncolumns 0.2 0.2 0.2 0.2 0.2\nrows 0.28 0.28 0.22 0.22\npanel 0 0 3 2 Clean picture\npanel 3 0 2 1 Luma waveform\npanel 3 1 1 1 Vectorscope 100 %\npanel 4 1 1 1 Vectorscope 200 %\npanel 0 2 2 2 Colour waveform\npanel 2 2 1 1 Channel view\npanel 3 2 1 1 ARRI False Colour\npanel 4 2 1 1 Black and white\npanel 2 3 1 1 Saturation heatmap\npanel 3 3 1 1 Skin tone\npanel 4 3 1 1 Stops False Colour\n";
     assert_eq!(PanelGrid::from_text(&NAMES, old), default_grid());
@@ -367,7 +379,7 @@ fn swapping_a_panel_with_itself_changes_nothing() {
 #[test]
 fn a_swap_is_remembered_between_sessions() {
     let mut grid = default_grid();
-    grid.swap(0, 8);
+    grid.swap(0, 7);
     let back = PanelGrid::from_text(&NAMES, &grid.to_text(&NAMES));
     assert_eq!(back, grid);
     assert_ne!(back, default_grid());
@@ -390,8 +402,8 @@ fn a_press_on_a_display_starts_nothing() {
 #[test]
 fn a_press_in_a_gap_starts_a_border_drag_not_a_panel_drag() {
     let grid = default_grid();
-    let c = cell_of(&grid, "Channel view");
-    let level = c[1] + 10.0; // the height of Channel view's title bar
+    let c = cell_of(&grid, "ARRI False Colour");
+    let level = c[1] + 10.0; // the height of ARRI False Colour's title bar
     assert!(matches!(grid.press_at(AREA, GAP, [c[0] - GAP / 2.0, level], 3.0, 1.0), Some(Press::Border(Border::Column { .. }))));
     assert!(matches!(grid.press_at(AREA, GAP, [c[0] + 20.0, level], 3.0, 1.0), Some(Press::Panel(_))));
 }

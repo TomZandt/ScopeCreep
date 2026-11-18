@@ -101,7 +101,7 @@ The colour scale of a display, always horizontal: under the picture, full width,
 _Avoid_: Vertical legend
 
 **Panel**:
-One area of the Window that shows one Scope or Picture View. Every display in the Window has its own Panel, so everything can be seen at once (9 Panels; the gamut/legal warning, Highlight Neutrals, CIE plot and Black and white are out of the Window but their code and saved settings are kept); the Panels sit in an ordered grid whose borders the user can drag.
+One area of the Window that shows one Scope or Picture View. Every display in the Window has its own Panel, so everything can be seen at once (8 Panels; the gamut/legal warning, Highlight Neutrals, CIE plot, Black and white and Colour Waveform are out of the Window but their code and saved settings are kept); the Panels sit in an ordered grid whose borders the user can drag.
 _Avoid_: Pane, view, tile, window (for one display)
 
 **Display**:
@@ -176,7 +176,7 @@ The Picture View that shows the Output picture as greys equal to Luma, with the 
 _Avoid_: Greyscale, desaturated view, monochrome
 
 **Colour Waveform**:
-A waveform whose trace is tinted by the colour of the pixels plotted at each point, so a green scene gives a green trace. A Scope in its own Panel, beside the plain Luma waveform.
+A waveform whose trace is tinted by the colour of the pixels plotted at each point, so a green scene gives a green trace. Out of the Window since #145 (the luma waveform's Colorise chip does its job); its code, tests and saved settings are kept.
 Its spots are at the luma waveform's positions; each one's tint is the average colour of the pixels counted there, brought to the neutral trace's strength so grey draws as the luma trace does.
 _Avoid_: Colourised waveform, RGB waveform, parade (that shows channels side by side)
 

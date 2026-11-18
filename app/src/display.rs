@@ -144,11 +144,13 @@ pub struct InWindow {
     pub highlight_neutrals: bool,
     pub cie_plot: bool,
     pub black_and_white: bool,
+    pub colour_waveform: bool,
 }
 
 /// What the Window shows (ticket #95: the first three displays below are out of it for now; #118: the clean picture's
-/// B/W toggle does the black and white Panel's job).
-pub const IN_WINDOW: InWindow = InWindow { gamut_legal_warning: false, highlight_neutrals: false, cie_plot: false, black_and_white: false };
+/// B/W toggle does the black and white Panel's job; #145: the Colour Waveform is out, Colorise on the luma waveform
+/// does its job).
+pub const IN_WINDOW: InWindow = InWindow { gamut_legal_warning: false, highlight_neutrals: false, cie_plot: false, black_and_white: false, colour_waveform: false };
 
 /// Every display, in Panel order (the order of the grid, left to right then down).
 #[derive(Clone, Default)]
@@ -182,7 +184,9 @@ impl DisplaySet {
         if IN_WINDOW.cie_plot {
             set.register(Arc::new(crate::cie::CiePlot::new(device, queue, target)));
         }
-        set.register(Arc::new(Waveform::new_colour(device, queue, target, &luma_waveform)));
+        if IN_WINDOW.colour_waveform {
+            set.register(Arc::new(Waveform::new_colour(device, queue, target, &luma_waveform)));
+        }
         set
     }
 
