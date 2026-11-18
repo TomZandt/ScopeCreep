@@ -23,8 +23,4 @@
 
 ## Note, 2026-11-18
 
-The tint rule now also serves the luma waveform's Colorise chip (#143, ADR 0032): the Y trace takes the same average colour at each position. The Colour Waveform Panel keeps its code.
-
-## Note, 2026-11-18 (#145)
-
-The Colour Waveform Panel is out of the Window (ADR 0032): Colorise on the luma waveform gives the same picture on the one Scope. The module, its tests and its saved settings are kept, and a saved layout that names it still recalls. The tint rule above is unchanged.
+The tint rule now also serves the luma waveform's Colorise chip (#143, ADR 0032): the Y trace takes the same average colour at each position. The Colour Waveform Panel is out of the Window (#145): Colorise on the luma waveform gives the same picture on the one Scope. Its module, tests and saved settings are kept, and a saved layout that names it still recalls. The tint rule above is unchanged.

@@ -504,7 +504,14 @@ const TRACE_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba16Float;
 
 const DRAW_UNIFORM_BYTES: u64 = 160;
 
+/// The bit of `look.w` that says the traces are coloured (Colorise on, or the Colour Waveform). The shader's
+/// `COLORISE_BIT` is the same bit: change them together.
+const COLORISE_BIT: u32 = 4;
+
 const DRAW_SHADER: &str = r#"
+// The bit of look.w that says the traces are coloured; the same as COLORISE_BIT in Rust, change them together.
+const COLORISE_BIT: u32 = 4u;
+
 struct Placement {
     clip: vec4<f32>,      // the panel in clip space: left, top, right, bottom
     plot: vec4<f32>,      // rectangles in pixels: left, top, width, height
@@ -612,11 +619,11 @@ fn channel_on(channel: u32) -> bool {
 }
 
 // The trace colour of a channel: with Colorise on Y is tinted by the pixels' colour and R, G, B take their channel
-// colours (look.w bit 4); off, every trace is neutral.
+// colours (look.w bit COLORISE_BIT); off, every trace is neutral.
 fn channel_colour(channel: u32, x: f32, first_row: u32, end_row: u32) -> vec3<f32> {
     if (channel == 0u) {
         return tint(x, first_row, end_row);
-    } else if (((u32(placement.look.w) >> 4u) & 1u) == 0u) {
+    } else if (((u32(placement.look.w) >> COLORISE_BIT) & 1u) == 0u) {
         return TRACE;   // Colorise off: every trace is neutral
     } else if (channel == 1u) {
         return placement.red.xyz;
@@ -894,7 +901,8 @@ impl Waveform {
         *self.channels.lock().unwrap()
     }
 
-    /// Colorise on or off from the next frame on (ADR 0032). The Colour Waveform is always tinted and ignores it.
+    /// Colorise on or off from the next frame on (ADR 0032). Only the luma waveform reads it: the Colour Waveform is
+    /// always tinted, whatever this says.
     pub fn set_colorise(&self, on: bool) {
         *self.colorise.lock().unwrap() = on;
     }
@@ -903,9 +911,9 @@ impl Waveform {
         *self.colorise.lock().unwrap()
     }
 
-    /// Whether the Y trace is tinted, which needs the colour sums: the Colour Waveform always, the luma waveform
-    /// with Colorise on and Y showing.
-    fn tints_y(&self) -> bool {
+    /// Whether the colour sums are needed, which also tells the draw pass to tint Y: the Colour Waveform always, the
+    /// luma waveform with Colorise on and Y showing.
+    fn needs_colour_sums(&self) -> bool {
         self.colour || (self.colorise() && self.channels().y)
     }
 
@@ -958,7 +966,7 @@ impl Waveform {
         state.counts.as_mut().unwrap().picture_height = frame.height;
         // The colour sums exist only while the Y trace is tinted; a token buffer keeps the draw shader's bindings
         // whole otherwise.
-        let sums_size = if self.tints_y() { frame.width as u64 * ROWS as u64 * 12 } else { 16 };
+        let sums_size = if self.needs_colour_sums() { frame.width as u64 * ROWS as u64 * 12 } else { 16 };
         if state.sums.as_ref().is_none_or(|b| b.size() != sums_size) {
             state.sums = Some(self.device.create_buffer(&wgpu::BufferDescriptor {
                 label: Some("waveform colour sums"),
@@ -993,7 +1001,7 @@ impl Waveform {
         pass.set_bind_group(0, &state.bound.as_ref().unwrap().1, &[]);
         pass.dispatch_workgroups(frame.width.div_ceil(2), 1, 1);
         drop(pass);
-        if self.tints_y() {
+        if self.needs_colour_sums() {
             self.measure_colour(&mut state, encoder, frame);
         }
         self.measure_channels(&mut state, encoder, frame, channels);
@@ -1134,7 +1142,7 @@ impl Waveform {
         placement[20..22].copy_from_slice(&[black as f32, white as f32]);
         let channels = self.channels();
         let mask = if state.rgb.is_some() || !channels.colour_channels() { channels.mask() } else { channels.mask() & 1 };
-        placement[24..28].copy_from_slice(&[look.brightness.gain(), if look.spread { 1.0 } else { 0.0 }, if self.tints_y() { 1.0 } else { 0.0 }, (mask | if self.colour || self.colorise() { 16 } else { 0 }) as f32]);
+        placement[24..28].copy_from_slice(&[look.brightness.gain(), if look.spread { 1.0 } else { 0.0 }, if self.needs_colour_sums() { 1.0 } else { 0.0 }, (mask | if self.colour || self.colorise() { 1 << COLORISE_BIT } else { 0 }) as f32]);
         for (i, colour) in [crate::style::CHANNEL_R, crate::style::CHANNEL_G, crate::style::CHANNEL_B].into_iter().enumerate() {
             placement[28 + i * 4..31 + i * 4].copy_from_slice(&colour);
         }

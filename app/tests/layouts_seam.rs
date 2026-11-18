@@ -247,3 +247,21 @@ fn default_layout_is_the_default_grid_for_the_displays() {
     assert_ne!(layouts.recall(0, &NAMES), Some(default_grid()));
     assert_eq!(PanelGrid::default_for(&NAMES), default_grid());
 }
+
+#[test]
+fn a_layout_saved_with_the_colour_waveform_still_recalls_and_the_other_panels_keep_their_places() {
+    // The 9-Panel Window as it was before the Colour Waveform left it (#145), saved to the layouts file and read back.
+    let mut before = NAMES.to_vec();
+    before.push("Colour waveform");
+    let mut grid = PanelGrid::default_for(&before);
+    grid.swap(0, 1);
+    let mut layouts = Layouts::default();
+    layouts.save(0, &grid, &before);
+    let file = Layouts::from_text(&layouts.to_text());
+
+    let recalled = file.recall(0, &NAMES).expect("the layout recalls");
+    assert_eq!(recalled.places().len(), NAMES.len(), "the Panel that is gone is dropped");
+    // A neighbour may grow into the cell the gone Panel leaves, but each Panel stays where it was put.
+    let corner = |places: &[scopecreep::panel_grid::Place]| places.iter().map(|p| (p.column, p.row)).collect::<Vec<_>>();
+    assert_eq!(corner(recalled.places()), corner(&grid.places()[..NAMES.len()]), "the others keep their places");
+}
