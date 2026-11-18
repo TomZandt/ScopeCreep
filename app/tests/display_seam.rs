@@ -166,9 +166,24 @@ fn middle(rect: [f32; 4]) -> (f32, f32) {
 }
 
 #[test]
-fn the_window_starts_with_the_clean_picture_the_luma_waveform_and_the_gamut_warning_in_that_order() {
+fn the_window_shows_eleven_panels_without_the_gamut_warning_highlight_neutrals_and_cie_plot() {
     let b = Bench::new("order");
-    assert_eq!(b.set.names()[..3], ["Clean picture", "Luma waveform", "Gamut/legal warning"]);
+    let names = b.set.names();
+    assert_eq!(names.len(), 11, "{names:?}");
+    assert_eq!(names[..3], ["Clean picture", "Luma waveform", "Channel view"]);
+    for gone in ["Gamut/legal warning", "Highlight neutrals", "CIE chromaticity"] {
+        assert!(!names.contains(&gone), "{gone} is out of the Window: {names:?}");
+    }
+}
+
+#[test]
+fn settings_of_panels_out_of_the_window_stay_in_the_saved_text() {
+    let mut saved = PanelSettings::default();
+    saved.set("Gamut/legal warning", "limits", "ebu");
+    saved.set("CIE chromaticity", "plot", "x");
+    let text = saved.to_text();
+    let reloaded = PanelSettings::from_text(&text);
+    assert_eq!(reloaded.to_text(), text);
 }
 
 #[test]

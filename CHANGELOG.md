@@ -8,6 +8,7 @@ The format follows [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/
 
 ### Changed
 
+- The Window shows 11 Panels: the gamut/legal warning, Highlight Neutrals and the CIE plot are out of it for now. Their code and tests are kept, and their saved settings stay in `~/.config/scopecreep/panel-settings`, so they come back if the Panels return (#95).
 - The saturation heatmap keeps the picture's shape: the picture is drawn as its Luma in grey and saturation is laid over it in a colour that gets stronger with saturation, from blue to red, so neutral areas stay grey and saturated areas stand out. The default scale is now 75 % so a normal graded picture uses most of it (#100).
 - The Window's chrome (menu, labels, scale numbers, status line, borders, gaps) takes its colours and sizes from one set of style tokens named by role, and a test fails if chrome code uses a raw colour or size. Nothing looks different (#114, ADR 0026).
 - The Skin Tone Panel reads at a glance: the picture keeps its own colours, and pixels near the skin-tone line are painted solid flat colours (yellow within the tolerance, green or magenta on either side out to six times it); neutral pixels and hues beyond keep their own colour (#101).

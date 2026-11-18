@@ -124,6 +124,17 @@ pub trait Display: Send + Sync {
     }
 }
 
+/// One switch per display that can leave the Window: whether [`DisplaySet::standard`] registers it. A display
+/// that is off keeps its module, its tests and its saved settings, so turning it back on is one word here.
+pub struct InWindow {
+    pub gamut_legal_warning: bool,
+    pub highlight_neutrals: bool,
+    pub cie_plot: bool,
+}
+
+/// What the Window shows (ticket #95: the three displays below are out of it for now).
+pub const IN_WINDOW: InWindow = InWindow { gamut_legal_warning: false, highlight_neutrals: false, cie_plot: false };
+
 /// Every display, in Panel order (the order of the grid, left to right then down).
 #[derive(Clone, Default)]
 pub struct DisplaySet {
@@ -138,8 +149,12 @@ impl DisplaySet {
         set.register(Arc::new(crate::picture_view::PictureView::new(device, queue, target, filterable)));
         let luma_waveform = Waveform::new(device, queue, target);
         set.register(Arc::new(luma_waveform.clone()));
-        set.register(Arc::new(crate::gamut_warning::GamutWarning::new(device, queue, target)));
-        set.register(Arc::new(crate::highlight_neutrals::HighlightNeutrals::new(device, queue, target, filterable)));
+        if IN_WINDOW.gamut_legal_warning {
+            set.register(Arc::new(crate::gamut_warning::GamutWarning::new(device, queue, target)));
+        }
+        if IN_WINDOW.highlight_neutrals {
+            set.register(Arc::new(crate::highlight_neutrals::HighlightNeutrals::new(device, queue, target, filterable)));
+        }
         set.register(Arc::new(crate::channel_view::ChannelView::new(device, queue, target, filterable)));
         set.register(Arc::new(crate::arri_false_colour::ArriFalseColour::new(device, queue, target)));
         set.register(Arc::new(crate::black_and_white::BlackAndWhite::new(device, queue, target, filterable)));
@@ -148,7 +163,9 @@ impl DisplaySet {
         set.register(Arc::new(crate::saturation_heatmap::SaturationHeatmap::new(device, queue, target)));
         set.register(Arc::new(crate::skin_tone_view::SkinTone::new(device, queue, target, filterable)));
         set.register(Arc::new(crate::stops_false_colour::StopsFalseColour::new(device, queue, target)));
-        set.register(Arc::new(crate::cie::CiePlot::new(device, queue, target)));
+        if IN_WINDOW.cie_plot {
+            set.register(Arc::new(crate::cie::CiePlot::new(device, queue, target)));
+        }
         set.register(Arc::new(Waveform::new_colour(device, queue, target, &luma_waveform)));
         set
     }

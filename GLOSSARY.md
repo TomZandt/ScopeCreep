@@ -75,7 +75,7 @@ A colour that is data, not style: a false colour band, the heatmap palette, a sk
 _Avoid_: Theme colour
 
 **Panel**:
-One area of the Window that shows one Scope or Picture View. Every display has its own Panel, so everything can be seen at once; the Panels sit in an ordered grid whose borders the user can drag.
+One area of the Window that shows one Scope or Picture View. Every display in the Window has its own Panel, so everything can be seen at once (11 Panels; the gamut/legal warning, Highlight Neutrals and CIE plot are out of the Window but their code and saved settings are kept); the Panels sit in an ordered grid whose borders the user can drag.
 _Avoid_: Pane, view, tile, window (for one display)
 
 **Display**:
