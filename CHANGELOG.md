@@ -6,6 +6,10 @@ The format follows [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/
 
 ## [Unreleased]
 
+### Changed
+
+- Viewer gate: while the playhead is dragged in Resolve, every Panel follows the picture (the newest frame is shown at least every frame period) and lands on the stop frame at once, where before nothing was shown until the drag stopped. Cache fills stay hidden. Fast drags, which the gate used to mistake for a cache fill, are told apart by the time each render takes, not by how many frame numbers it jumps (#104, ADR 0031).
+
 ### Added
 
 - Luma waveform: Y R G B chips on its title bar draw any combination of Luma, red, green and blue, each in its channel's colour with the phosphor look, overlaid on one scale. The edge rows show out-of-range pixels per channel. At least one chip stays on, Luma is the default, the choice is remembered per Panel, and the tags name the channels when it is not just Luma. R, G and B are measured only while their chips are on (#117).
