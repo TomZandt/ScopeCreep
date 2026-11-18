@@ -59,14 +59,13 @@ impl Place {
 
 /// The default layout, in whole numbers: columns and rows (as weights), then each Panel by display name at
 /// `(column, row, columns, rows)`. 5 × 4: the clean picture 3 × 2 at the top left, the luma waveform and the
-/// two vectorscopes to its right, the Colour Waveform and the Picture Views below, every cell used.
+/// Vectorscope (two cells wide) to its right, the Colour Waveform and the Picture Views below, every cell used.
 const DEFAULT_COLUMNS: [u32; 5] = [1, 1, 1, 1, 1];
 const DEFAULT_ROWS: [u32; 4] = [14, 14, 11, 11];
-const DEFAULT_PLACES: [(&str, [usize; 4]); 11] = [
+const DEFAULT_PLACES: [(&str, [usize; 4]); 10] = [
     ("Clean picture", [0, 0, 3, 2]),
     ("Luma waveform", [3, 0, 2, 1]),
-    ("Vectorscope 100 %", [3, 1, 1, 1]),
-    ("Vectorscope 200 %", [4, 1, 1, 1]),
+    ("Vectorscope", [3, 1, 2, 1]),
     ("Colour waveform", [0, 2, 2, 2]),
     ("Channel view", [2, 2, 1, 1]),
     ("ARRI False Colour", [3, 2, 1, 1]),
@@ -302,6 +301,11 @@ impl PanelGrid {
             let columns_wide = if free.is_some() { 1 } else { columns.len() };
             used[row][column..column + columns_wide].fill(true);
             *slot = Some(Place { column, row, columns: columns_wide, rows: 1 });
+        }
+        // A saved layout that leaves a cell empty no longer fits these displays (a Panel went and left a hole, as
+        // when the two vectorscope Panels became one): the default is used.
+        if used.iter().flatten().any(|u| !u) {
+            return None;
         }
         Some(PanelGrid { columns, rows, places: placed.into_iter().flatten().collect() })
     }

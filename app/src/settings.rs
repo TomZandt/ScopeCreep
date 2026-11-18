@@ -121,6 +121,13 @@ impl PanelSettings {
         for line in text.lines() {
             let mut parts = line.split('\t');
             if let (Some(panel), Some(key), Some(value), None) = (parts.next(), parts.next(), parts.next(), parts.next()) {
+                // The milestone 2 vectorscope Panels became one (#92): the 100 % Panel's settings are the one
+                // Panel's, and the 200 % Panel's are ignored.
+                let panel = match panel {
+                    "Vectorscope 100 %" => "Vectorscope",
+                    "Vectorscope 200 %" => continue,
+                    other => other,
+                };
                 if !panel.is_empty() && !key.is_empty() && !value.is_empty() {
                     match key.strip_prefix(STATE_PREFIX) {
                         Some(key) => {

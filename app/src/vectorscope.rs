@@ -6,8 +6,9 @@
 //! Measured Space's luma weights (ADR 0004), so the vectorscope agrees with the Luma waveform: Cb = (B - Y) /
 //! (2 (1 - Wb)) and Cr = (R - Y) / (2 (1 - Wr)), each running from -0.5 to 0.5.
 //!
-//! Two Panels show it (ADR 0011): at 100 % the plot's edge is [`HALF_EXTENT`] on each axis; at 200 % it is half
-//! that, so the same data sits at twice the radius.
+//! One Panel shows it twice (ADR 0011, #92): the left half at 100 %, where the plot's edge is [`HALF_EXTENT`] on each
+//! axis, and the right half at 200 %, where it is half that, so the same data sits at twice the radius. The frame is
+//! measured once, into one set of bins per zoom, and one label, one menu and one set of settings serve both.
 use crate::display::{Display, DisplayContext};
 use crate::gpu_frame::GpuFrame;
 use crate::settings::{Choice, SettingDef};
@@ -45,12 +46,24 @@ impl Zoom {
     pub fn half_extent(self) -> f64 {
         HALF_EXTENT / self.factor()
     }
-    fn name(self) -> &'static str {
+    /// Where this zoom's bins start in the bins buffer.
+    fn first_bin(self) -> usize {
         match self {
-            Zoom::X1 => "Vectorscope 100 %",
-            Zoom::X2 => "Vectorscope 200 %",
+            Zoom::X1 => 0,
+            Zoom::X2 => (BINS * BINS) as usize,
         }
     }
+}
+
+/// What the Panel is called: its settings are kept under this name. A Panel saved as "Vectorscope 100 %" in
+/// milestone 2 is read as this one ([`crate::settings`]).
+pub const NAME: &str = "Vectorscope";
+
+/// The two plots' areas inside the Panel's display area: 100 % on the left, 200 % on the right, each half the width
+/// (left, top, width, height in pixels). The halves are fixed.
+pub fn halves([left, top, width, height]: [f32; 4]) -> [[f32; 4]; 2] {
+    let first = (width / 2.0).floor();
+    [[left, top, first, height], [left + first, top, width - first, height]]
 }
 
 /// Cb and Cr of an encoded `rgb` for luma `weights` (Wr, Wg, Wb).
@@ -126,6 +139,13 @@ impl PlotSquare {
     }
 }
 
+/// What the Panel measured: the 100 % plot's bins and the 200 % plot's.
+#[derive(Clone, Debug, PartialEq)]
+pub struct VectorscopePlots {
+    pub x1: VectorscopeCounts,
+    pub x2: VectorscopeCounts,
+}
+
 /// How many pixels of the picture landed in each bin: the vectorscope's contents. Bin (0, 0) is at the top left
 /// of the plot.
 #[derive(Clone, Debug, PartialEq)]
@@ -191,7 +211,7 @@ const MEASURE_SHADER: &str = r#"
 struct Params {
     weights: vec4<f32>,   // luma weights for R, G, B
     size: vec4<u32>,      // picture width, height
-    scale: vec4<f32>,     // 1 / half extent, Cb per (B - Y), Cr per (R - Y)
+    scale: vec4<f32>,     // 1 / half extent at 100 %, Cb per (B - Y), Cr per (R - Y), 1 / half extent at 200 %
 };
 @group(0) @binding(0) var<uniform> params: Params;
 @group(0) @binding(1) var frame: texture_2d<f32>;
@@ -207,10 +227,14 @@ fn measure(@builtin(global_invocation_id) id: vec3<u32>) {
     }
     let rgb = textureLoad(frame, vec2<u32>(id.x, id.y), 0).rgb;
     let y = dot(rgb, params.weights.xyz);
-    let u = (rgb.b - y) * params.scale.y * params.scale.x * 0.5 + 0.5;
-    let v = 0.5 - (rgb.r - y) * params.scale.z * params.scale.x * 0.5;
-    if (u >= 0.0 && u < 1.0 && v >= 0.0 && v < 1.0) {
-        atomicAdd(&bins[u32(v * BINS) * 1024u + u32(u * BINS)], 1u);
+    // One pass, two plots: the 100 % bins first, then the 200 % bins.
+    for (var k = 0u; k < 2u; k++) {
+        let zoom = select(params.scale.x, params.scale.w, k == 1u);
+        let u = (rgb.b - y) * params.scale.y * zoom * 0.5 + 0.5;
+        let v = 0.5 - (rgb.r - y) * params.scale.z * zoom * 0.5;
+        if (u >= 0.0 && u < 1.0 && v >= 0.0 && v < 1.0) {
+            atomicAdd(&bins[k * 1048576u + u32(v * BINS) * 1024u + u32(u * BINS)], 1u);
+        }
     }
     // Clipping: a colour beyond the furthest a full-strength bar reaches, whatever the zoom, is counted by its hue angle
     // after the plot's bins. (Not a number, or too far to place: not counted.)
@@ -219,7 +243,7 @@ fn measure(@builtin(global_invocation_id) id: vec3<u32>) {
     let reach = length(vec2<f32>(cb, cr));
     if (reach == reach && reach > RING && reach < 1.0e6) {
         let turn = (atan2(cr, cb) + 3.14159265) / 6.2831853;
-        atomicAdd(&bins[1048576u + min(u32(turn * 720.0), 719u)], 1u);
+        atomicAdd(&bins[2097152u + min(u32(turn * 720.0), 719u)], 1u);
     }
 }
 "#;
@@ -235,7 +259,7 @@ struct Placement {
     plot: vec4<f32>,      // the square plot in pixels: left, top, width, height
     info: vec4<f32>,      // half extent (Cb/Cr), trace gain, pixels counted, device pixels per logical pixel
     opts: vec4<f32>,      // skin line on, its cos and sin, target box half size (Cb/Cr)
-    rings: vec4<f32>,     // the outer ring as a fraction of the plot's radius
+    rings: vec4<f32>,     // the outer ring as a fraction of the plot's radius, soft spread on, where this plot's bins start
     targets: array<vec4<f32>, 6>,   // Cb, Cr of each colour target
     weights: vec4<f32>,   // luma weights for R, G, B, to turn a position back into a colour
 };
@@ -284,7 +308,7 @@ fn density(p: vec2<f32>) -> f32 {
             let x = u32(first.x) + i;
             let y = u32(first.y) + j;
             if (x < BINS && y < BINS) {
-                sum += f32(bins[y * BINS + x]);
+                sum += f32(bins[u32(placement.rings.z) + y * BINS + x]);
             }
         }
     }
@@ -349,7 +373,7 @@ fn fs(@builtin(position) position: vec4<f32>) -> @location(0) vec4<f32> {
         let at = i32(min(turn * 720.0, 719.0));
         var clipped = 0u;
         for (var j = -2; j <= 2; j++) {
-            clipped += bins[1048576u + u32((at + j + 720) % 720)];
+            clipped += bins[2097152u + u32((at + j + 720) % 720)];
         }
         if (clipped > 0u) {
             let d = q / max(r, 0.001);
@@ -391,28 +415,28 @@ struct State {
     /// Pixels in the last frame measured, for the brightness scale.
     pixels: u32,
     bound: Option<(u64, wgpu::BindGroup)>,
-    draw_bound: Option<wgpu::BindGroup>,
+    draw_bound: Option<[wgpu::BindGroup; 2]>,
     measured: bool,
 }
 
-/// One vectorscope Panel's GPU state. Cheap to clone: the Feed thread measures through one clone while the
+/// The vectorscope Panel's GPU state, for both plots. Cheap to clone: the Feed thread measures through one clone while the
 /// window thread draws through another.
 #[derive(Clone)]
 pub struct Vectorscope {
-    zoom: Zoom,
     device: wgpu::Device,
     queue: wgpu::Queue,
     measure: wgpu::ComputePipeline,
     params: wgpu::Buffer,
     draw: wgpu::RenderPipeline,
-    placement: wgpu::Buffer,
+    /// One per plot: 100 % then 200 %.
+    placement: [wgpu::Buffer; 2],
     config: Arc<Mutex<Config>>,
     state: Arc<Mutex<State>>,
 }
 
 impl Vectorscope {
     /// `target`: the format of what [`Display::draw`] draws into.
-    pub fn new(device: &wgpu::Device, queue: &wgpu::Queue, target: wgpu::TextureFormat, zoom: Zoom) -> Vectorscope {
+    pub fn new(device: &wgpu::Device, queue: &wgpu::Queue, target: wgpu::TextureFormat) -> Vectorscope {
         let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor { label: Some("vectorscope measure"), source: wgpu::ShaderSource::Wgsl(MEASURE_SHADER.into()) });
         let measure = device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
             label: Some("vectorscope measure"),
@@ -437,18 +461,17 @@ impl Vectorscope {
         });
         let bins = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("vectorscope bins"),
-            size: (BINS as u64 * BINS as u64 + CLIP_BINS as u64) * 4,
+            size: (2 * BINS as u64 * BINS as u64 + CLIP_BINS as u64) * 4,
             usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_SRC | wgpu::BufferUsages::COPY_DST,
             mapped_at_creation: false,
         });
         Vectorscope {
-            zoom,
             device: device.clone(),
             queue: queue.clone(),
             measure,
             params: uniform("vectorscope params", PARAMS_BYTES),
             draw,
-            placement: uniform("vectorscope placement", DRAW_UNIFORM_BYTES),
+            placement: [uniform("vectorscope placement 100 %", DRAW_UNIFORM_BYTES), uniform("vectorscope placement 200 %", DRAW_UNIFORM_BYTES)],
             config: Arc::new(Mutex::new(Config { measurement: Measurement::default(), bars: 0.75, skin_line: true, gain: 1.0, spread: true })),
             state: Arc::new(Mutex::new(State { bins, pixels: 0, bound: None, draw_bound: None, measured: false })),
         }
@@ -459,7 +482,7 @@ impl Vectorscope {
     }
 
     /// Read what was measured back from the GPU (waits for it): for tests and diagnostics, not per frame.
-    pub fn counts(&self) -> VectorscopeCounts {
+    pub fn counts(&self, zoom: Zoom) -> VectorscopeCounts {
         let state = self.state.lock().unwrap();
         let readback = self.device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("vectorscope readback"),
@@ -473,8 +496,9 @@ impl Vectorscope {
         readback.map_async(wgpu::MapMode::Read, .., |_| {});
         self.device.poll(wgpu::PollType::wait_indefinitely()).expect("the GPU finishes");
         let all: Vec<u32> = bytemuck::cast_slice(&readback.get_mapped_range(..).expect("mapped")).to_vec();
-        let (counts, clipped) = all.split_at((BINS * BINS) as usize);
-        VectorscopeCounts { half_extent: self.zoom.half_extent(), counts: counts.to_vec(), clipped: clipped.to_vec() }
+        let first = zoom.first_bin();
+        let clipped = &all[2 * (BINS * BINS) as usize..];
+        VectorscopeCounts { half_extent: zoom.half_extent(), counts: all[first..first + (BINS * BINS) as usize].to_vec(), clipped: clipped.to_vec() }
     }
 
     /// The quiet label (ADR 0007): the Measured Space and weights in use, the targets, and the skin-tone
@@ -486,8 +510,7 @@ impl Vectorscope {
         let name = m.space.name();
         let space = if m.assumed { format!("{name} assumed, measured as sent, unconverted") } else { name.to_string() };
         let mut label = format!(
-            "{}  ·  Cb/Cr  ·  {space}  ·  Y = {r:.4} R + {g:.4} G + {b:.4} B {}  ·  {} % targets  ·  colours beyond the 100 % bars mark the ring",
-            self.zoom.name(),
+            "Vectorscope 100 % and 200 %  ·  Cb/Cr  ·  {space}  ·  Y = {r:.4} R + {g:.4} G + {b:.4} B {}  ·  {} % targets  ·  colours beyond the 100 % bars mark the ring",
             m.weights_how(),
             (config.bars * 100.0).round()
         );
@@ -500,7 +523,7 @@ impl Vectorscope {
 
 impl Display for Vectorscope {
     fn name(&self) -> &'static str {
-        self.zoom.name()
+        NAME
     }
 
     fn on_frame(&self, encoder: &mut wgpu::CommandEncoder, frame: &GpuFrame) {
@@ -508,10 +531,11 @@ impl Display for Vectorscope {
         let mut params = [0u8; PARAMS_BYTES as usize];
         params[..16].copy_from_slice(bytemuck::cast_slice(&[w[0] as f32, w[1] as f32, w[2] as f32, 0.0]));
         params[16..24].copy_from_slice(bytemuck::cast_slice(&[frame.width, frame.height]));
-        params[32..44].copy_from_slice(bytemuck::cast_slice(&[
-            (1.0 / self.zoom.half_extent()) as f32,
+        params[32..48].copy_from_slice(bytemuck::cast_slice(&[
+            (1.0 / Zoom::X1.half_extent()) as f32,
             (1.0 / (2.0 * (1.0 - w[2]))) as f32,
             (1.0 / (2.0 * (1.0 - w[0]))) as f32,
+            (1.0 / Zoom::X2.half_extent()) as f32,
         ]));
         self.queue.write_buffer(&self.params, 0, &params);
 
@@ -563,44 +587,51 @@ impl Display for Vectorscope {
 
     fn draw(&self, pass: &mut wgpu::RenderPass<'_>, area: [f32; 4], surface: [f32; 2], scale: f32) {
         let mut state = self.state.lock().unwrap();
-        let [left, top, width, height] = area;
+        let [_, _, width, height] = area;
         if !state.measured || width < 1.0 || height < 1.0 {
             return;
         }
         if state.draw_bound.is_none() {
-            state.draw_bound = Some(self.device.create_bind_group(&wgpu::BindGroupDescriptor {
-                label: Some("vectorscope draw"),
-                layout: &self.draw.get_bind_group_layout(0),
-                entries: &[
-                    wgpu::BindGroupEntry { binding: 0, resource: self.placement.as_entire_binding() },
-                    wgpu::BindGroupEntry { binding: 1, resource: state.bins.as_entire_binding() },
-                ],
-            }));
+            let group = |placement: &wgpu::Buffer| {
+                self.device.create_bind_group(&wgpu::BindGroupDescriptor {
+                    label: Some("vectorscope draw"),
+                    layout: &self.draw.get_bind_group_layout(0),
+                    entries: &[
+                        wgpu::BindGroupEntry { binding: 0, resource: placement.as_entire_binding() },
+                        wgpu::BindGroupEntry { binding: 1, resource: state.bins.as_entire_binding() },
+                    ],
+                })
+            };
+            state.draw_bound = Some([group(&self.placement[0]), group(&self.placement[1])]);
         }
         let config = self.config();
-        let square = PlotSquare::new(area, scale);
         let clip = |px: f32, size: f32| px / size * 2.0 - 1.0;
-        let mut placement = [0f32; (DRAW_UNIFORM_BYTES / 4) as usize];
-        placement[..4].copy_from_slice(&[clip(left, surface[0]), -clip(top, surface[1]), clip(left + width, surface[0]), -clip(top + height, surface[1])]);
-        placement[4..8].copy_from_slice(&square.plot);
-        placement[8..12].copy_from_slice(&[self.zoom.half_extent() as f32, config.gain, state.pixels as f32, scale]);
-        let angle = SKIN_TONE_LINE_DEGREES.to_radians();
-        placement[12..16].copy_from_slice(&[if config.skin_line { 1.0 } else { 0.0 }, angle.cos() as f32, angle.sin() as f32, TARGET_HALF as f32]);
-        placement[16] = (RING / HALF_EXTENT) as f32;
-        placement[17] = if config.spread { 1.0 } else { 0.0 };
-        for (i, [cb, cr]) in bar_targets(config.measurement.weights(), config.bars).iter().enumerate() {
-            placement[20 + i * 4] = *cb as f32;
-            placement[21 + i * 4] = *cr as f32;
-        }
-        let w = config.measurement.weights();
-        placement[44..48].copy_from_slice(&[w[0] as f32, w[1] as f32, w[2] as f32, 0.0]);
-        self.queue.write_buffer(&self.placement, 0, bytemuck::cast_slice(&placement));
         pass.set_pipeline(&self.draw);
-        pass.set_bind_group(0, state.draw_bound.as_ref().unwrap(), &[]);
-        pass.draw(0..4, 0..1);
+        for (i, (zoom, half)) in [Zoom::X1, Zoom::X2].into_iter().zip(halves(area)).enumerate() {
+            let [left, top, width, height] = half;
+            let square = PlotSquare::new(half, scale);
+            let mut placement = [0f32; (DRAW_UNIFORM_BYTES / 4) as usize];
+            placement[..4].copy_from_slice(&[clip(left, surface[0]), -clip(top, surface[1]), clip(left + width, surface[0]), -clip(top + height, surface[1])]);
+            placement[4..8].copy_from_slice(&square.plot);
+            placement[8..12].copy_from_slice(&[zoom.half_extent() as f32, config.gain, state.pixels as f32, scale]);
+            let angle = SKIN_TONE_LINE_DEGREES.to_radians();
+            placement[12..16].copy_from_slice(&[if config.skin_line { 1.0 } else { 0.0 }, angle.cos() as f32, angle.sin() as f32, TARGET_HALF as f32]);
+            placement[16] = (RING / HALF_EXTENT) as f32;
+            placement[17] = if config.spread { 1.0 } else { 0.0 };
+            placement[18] = zoom.first_bin() as f32;
+            for (t, [cb, cr]) in bar_targets(config.measurement.weights(), config.bars).iter().enumerate() {
+                placement[20 + t * 4] = *cb as f32;
+                placement[21 + t * 4] = *cr as f32;
+            }
+            let w = config.measurement.weights();
+            placement[44..48].copy_from_slice(&[w[0] as f32, w[1] as f32, w[2] as f32, 0.0]);
+            self.queue.write_buffer(&self.placement[i], 0, bytemuck::cast_slice(&placement));
+            pass.set_bind_group(0, &state.draw_bound.as_ref().unwrap()[i], &[]);
+            pass.draw(0..4, 0..1);
+        }
     }
 
     fn read_back(&self) -> Option<Box<dyn std::any::Any>> {
-        Some(Box::new(self.counts()))
+        Some(Box::new(VectorscopePlots { x1: self.counts(Zoom::X1), x2: self.counts(Zoom::X2) }))
     }
 }

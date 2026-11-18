@@ -17,7 +17,7 @@ Pre-alpha. Nothing to install yet.
 |---|---|---|
 | 0 | Colour and performance checks against Resolve (throwaway prototypes) | Done ([report](docs/stage0-report.md)) |
 | 1 | Feed plus clean picture plus luma waveform (Linux, NVIDIA) | Released in v0.1.0 |
-| 2 | Every display in its own Panel: 14 Panels (waveforms, vectorscopes, CIE plot, false colour, skin tone and more) | Released in v0.2.0 |
+| 2 | Every display in its own Panel: 14 Panels (waveforms, vectorscope, CIE plot, false colour, skin tone and more) | Released in v0.2.0 |
 | 3 | A colourist's Window: the picture as the hero, arranged and saved layouts, title bars and one Colour Setup line, a style system with Panel toolbars and sliders, stronger Skin Tone and heatmap, following the scrub | Planned: specs [#94](https://github.com/TomZandt/scopecreep/issues/94), [#113](https://github.com/TomZandt/scopecreep/issues/113), [#83](https://github.com/TomZandt/scopecreep/issues/83), [#106](https://github.com/TomZandt/scopecreep/issues/106); backlog [#119](https://github.com/TomZandt/scopecreep/issues/119); checks at Resolve [#120](https://github.com/TomZandt/scopecreep/issues/120) |
 | Later | Parade, histogram, HDR, Setup Checklist, Capture, Windows/macOS, installers, licensing | Decided, parked |
 
@@ -27,7 +27,7 @@ Pre-alpha. Nothing to install yet.
 |---|---|---|
 | Feed protocol | `feed/PROTOCOL.md`, `feed/include/scopecreep_feed.h`, `feed/` crate | The shared-memory ring between Sender and app: spec, C header (Sender), Rust reader and synthetic writer (app, tests) |
 | Sender | `sender/` | C++ OFX plugin, Resolve's CUDA render path, async pinned copy into the Feed |
-| App | `app/` | Rust + wgpu: one window, a layout of 11 Panels (the clean picture as the hero) (the gamut/legal warning, Highlight Neutrals and the CIE plot are built and tested but out of the Window, #95) (Scopes and Picture Views) all showing the latest Feed frame (GPU, every pixel, full resolution) |
+| App | `app/` | Rust + wgpu: one window, a layout of 10 Panels (the clean picture as the hero, one Vectorscope Panel showing 100 % and 200 % together) (the gamut/legal warning, Highlight Neutrals and the CIE plot are built and tested but out of the Window, #95) (Scopes and Picture Views) all showing the latest Feed frame (GPU, every pixel, full resolution) |
 
 ```sh
 cargo test                       # Feed protocol (Rust and C against each other) and the app, driven at the Feed seam (waveform tests need a GPU)

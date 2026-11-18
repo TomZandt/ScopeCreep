@@ -7,15 +7,14 @@ use scopecreep::panel_grid::{Border, PanelGrid, PanelLayout, min_panel_size};
 const AREA: [f32; 4] = [12.0, 12.0, 1256.0, 716.0];
 const GAP: f32 = 12.0;
 
-/// The 11 displays the Window shows, in Panel order.
-const NAMES: [&str; 11] = [
+/// The 10 displays the Window shows, in Panel order.
+const NAMES: [&str; 10] = [
     "Clean picture",
     "Luma waveform",
     "Channel view",
     "ARRI False Colour",
     "Black and white",
-    "Vectorscope 100 %",
-    "Vectorscope 200 %",
+    "Vectorscope",
     "Saturation heatmap",
     "Skin tone",
     "Stops False Colour",
@@ -78,7 +77,7 @@ fn the_default_layout_puts_the_clean_picture_three_by_two_at_the_top_left() {
 fn the_default_layout_has_the_scopes_beside_the_picture_and_the_views_below() {
     let grid = default_grid();
     let picture = cell_of(&grid, "Clean picture");
-    for name in ["Luma waveform", "Vectorscope 100 %", "Vectorscope 200 %"] {
+    for name in ["Luma waveform", "Vectorscope"] {
         let c = cell_of(&grid, name);
         assert!(c[0] >= picture[0] + picture[2], "{name} is right of the picture: {c:?}");
         assert!(c[1] < picture[1] + picture[3], "{name} is beside the picture: {c:?}");
@@ -251,9 +250,9 @@ fn a_panel_missing_from_a_saved_layout_takes_the_first_free_cell_or_a_new_row() 
     names.push("New display");
     let text = default_grid().to_text(&NAMES).replace("panel 2 3 1 1 Saturation heatmap\n", "");
     let grid = PanelGrid::from_text(&names, &text);
-    let heatmap = grid.places()[7];
+    let heatmap = grid.places()[6];
     assert_eq!((heatmap.column, heatmap.row, heatmap.columns, heatmap.rows), (2, 3, 1, 1), "the free cell");
-    let new = grid.places()[11];
+    let new = grid.places()[10];
     assert_eq!((new.column, new.row, new.columns), (0, 4, 5), "a new row of its own");
     assert_eq!(grid.size(), (5, 5));
     assert_fills(&grid);
@@ -307,4 +306,22 @@ fn at_a_scale_of_2_everything_is_twice_the_size() {
 fn a_panel_smaller_than_its_title_bar_still_gives_the_display_a_pixel() {
     let p = PanelLayout::new([0.0, 0.0, 50.0, 10.0], 1.0);
     assert!(p.content[2] >= 1.0 && p.content[3] >= 1.0);
+}
+
+#[test]
+fn the_vectorscope_is_two_cells_wide_and_borders_do_not_run_through_it() {
+    let grid = default_grid();
+    let one = cell_of(&grid, "Skin tone");
+    let scope = cell_of(&grid, "Vectorscope");
+    let luma = cell_of(&grid, "Luma waveform");
+    assert!((scope[2] - (2.0 * one[2] + GAP)).abs() < 0.01, "two columns wide: {scope:?}");
+    assert_eq!(scope[2], luma[2], "as wide as the luma waveform above it");
+    assert_eq!(grid.border_at(AREA, GAP, [scope[0] + scope[2] / 2.0 - 0.0, scope[1] + 50.0], 4.0), None, "no border through its middle");
+    assert_fills(&grid);
+}
+
+#[test]
+fn a_grid_saved_with_the_two_milestone_2_vectorscope_panels_is_ignored_and_the_default_used() {
+    let old = "layout 1\ncolumns 0.2 0.2 0.2 0.2 0.2\nrows 0.28 0.28 0.22 0.22\npanel 0 0 3 2 Clean picture\npanel 3 0 2 1 Luma waveform\npanel 3 1 1 1 Vectorscope 100 %\npanel 4 1 1 1 Vectorscope 200 %\npanel 0 2 2 2 Colour waveform\npanel 2 2 1 1 Channel view\npanel 3 2 1 1 ARRI False Colour\npanel 4 2 1 1 Black and white\npanel 2 3 1 1 Saturation heatmap\npanel 3 3 1 1 Skin tone\npanel 4 3 1 1 Stops False Colour\n";
+    assert_eq!(PanelGrid::from_text(&NAMES, old), default_grid());
 }

@@ -75,10 +75,10 @@ fn middle(rect: [f32; 4]) -> (f32, f32) {
 }
 
 #[test]
-fn the_window_shows_eleven_panels_without_the_gamut_warning_highlight_neutrals_and_cie_plot() {
+fn the_window_shows_ten_panels_without_the_gamut_warning_highlight_neutrals_and_cie_plot() {
     let b = Bench::new("order");
     let names = b.set.names();
-    assert_eq!(names.len(), 11, "{names:?}");
+    assert_eq!(names.len(), 10, "{names:?}");
     assert_eq!(names[..3], ["Clean picture", "Luma waveform", "Channel view"]);
     for gone in ["Gamut/legal warning", "Highlight neutrals", "CIE chromaticity"] {
         assert!(!names.contains(&gone), "{gone} is out of the Window: {names:?}");
@@ -223,7 +223,7 @@ fn the_luma_weights_setting_changes_the_counts_and_the_label_for_a_coloured_fram
 fn every_display_that_shows_luma_follows_the_waveforms_luma_weights() {
     let b = Bench::new("luma-everywhere");
     let waveform = b.set.name(1);
-    let following = ["ARRI-style False Colour", "Saturation heatmap", "Vectorscope 100 %", "Vectorscope 200 %"];
+    let following = ["ARRI-style False Colour", "Saturation heatmap", "Vectorscope"];
     let label_of = |b: &Bench, prefix: &str| b.set.labels().into_iter().find(|l| l.starts_with(prefix)).unwrap_or_else(|| panic!("no label starts with {prefix}"));
     let mut settings = PanelSettings::default();
     b.set.configure(&p3_d65_setup(), &settings);
@@ -238,7 +238,7 @@ fn every_display_that_shows_luma_follows_the_waveforms_luma_weights() {
         assert!(label.contains("0.7152 G"), "{prefix} follows the waveform to Resolve's weights: {label}");
         assert!(!label.contains("from primaries"), "{prefix} does not claim weights it is not using: {label}");
     }
-    assert!(label_of(&b, "Vectorscope 100 %").contains("to match Resolve"));
+    assert!(label_of(&b, "Vectorscope").contains("to match Resolve"));
 }
 
 #[test]

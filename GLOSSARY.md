@@ -86,7 +86,7 @@ The colour scale of a display, always horizontal: under the picture, full width,
 _Avoid_: Vertical legend
 
 **Panel**:
-One area of the Window that shows one Scope or Picture View. Every display in the Window has its own Panel, so everything can be seen at once (11 Panels; the gamut/legal warning, Highlight Neutrals and CIE plot are out of the Window but their code and saved settings are kept); the Panels sit in an ordered grid whose borders the user can drag.
+One area of the Window that shows one Scope or Picture View. Every display in the Window has its own Panel, so everything can be seen at once (10 Panels; the gamut/legal warning, Highlight Neutrals and CIE plot are out of the Window but their code and saved settings are kept); the Panels sit in an ordered grid whose borders the user can drag.
 _Avoid_: Pane, view, tile, window (for one display)
 
 **Display**:
@@ -110,7 +110,7 @@ A display that measures the Feed's pixel values, such as a waveform, RGB parade 
 _Avoid_: Monitor, meter, graph
 
 **Vectorscope**:
-A Scope that plots each pixel's colour as Cb across and Cr up, so hue is the angle and saturation the distance from the middle. Two Panels show it: at 100 % the whole picture, at 200 % the same data at twice the radius. Cb/Cr use the Measured Space's luma weights.
+A Scope that plots each pixel's colour as Cb across and Cr up, so hue is the angle and saturation the distance from the middle. One Panel shows it twice, side by side: at 100 % (left) the whole picture, at 200 % (right) the same data at twice the radius. One label, one right-click menu and one set of settings serve both. Cb/Cr use the Measured Space's luma weights.
 _Avoid_: Chroma scope, colour wheel
 
 **Saturation heatmap**:

@@ -9,12 +9,11 @@ use scopecreep::display::{DisplayContext, DisplaySet};
 use scopecreep::panel_grid::PanelLayout;
 use scopecreep::settings::PanelSettings;
 use scopecreep::skin_tone::SKIN_TONE_LINE_DEGREES;
-use scopecreep::vectorscope::{PlotSquare, VectorscopeCounts, Zoom};
+use scopecreep::vectorscope::{PlotSquare, VectorscopeCounts, VectorscopePlots, Zoom, halves};
 use scopecreep_accuracy::colorchecker::{ColorChecker, TimelineSpace};
 use scopecreep_accuracy::transfer::bt709_oetf;
 
-const V100: &str = "Vectorscope 100 %";
-const V200: &str = "Vectorscope 200 %";
+const V: &str = "Vectorscope";
 
 struct Bench {
     rig: Rig,
@@ -53,8 +52,21 @@ impl Bench {
         self.set.labels()[self.index(name)].clone()
     }
 
-    fn counts(&self, name: &str) -> VectorscopeCounts {
-        *self.set.read_back(self.index(name)).and_then(|r| r.downcast::<VectorscopeCounts>().ok()).expect("a vectorscope reads back")
+    fn plots(&self) -> VectorscopePlots {
+        *self.set.read_back(self.index(V)).and_then(|r| r.downcast::<VectorscopePlots>().ok()).expect("the vectorscope reads back")
+    }
+
+    fn x1(&self) -> VectorscopeCounts {
+        self.plots().x1
+    }
+
+    fn x2(&self) -> VectorscopeCounts {
+        self.plots().x2
+    }
+
+    /// The square of the 100 % plot (`which` 0) or the 200 % plot (1) in a rendered Panel.
+    fn square(&self, panels: &[PanelLayout], which: usize) -> PlotSquare {
+        PlotSquare::new(halves(panels[self.index(V)].content)[which], 1.0)
     }
 
     fn play(&mut self, width: u32, height: u32, pixels: &[f32]) {
@@ -112,9 +124,10 @@ fn angle_gap(a: f64, b: f64) -> f64 {
 }
 
 #[test]
-fn there_are_two_vectorscope_panels_the_100_percent_one_first() {
+fn there_is_one_vectorscope_panel() {
     let b = Bench::new("order");
-    assert_eq!(b.index(V200), b.index(V100) + 1);
+    assert_eq!(b.set.names().iter().filter(|n| n.starts_with("Vectorscope")).count(), 1);
+    assert_eq!(b.set.names()[b.index(V)], V);
 }
 
 #[test]
@@ -123,7 +136,7 @@ fn rec709_bars_at_75_and_100_percent_land_on_their_targets() {
     for level in [0.75f32, 1.0] {
         let (w, h, pixels, colours) = bars(level);
         b.play(w, h, &pixels);
-        let counts = b.counts(V100);
+        let counts = b.x1();
         for colour in &colours {
             let [cb, cr] = cb_cr(*colour);
             assert_eq!(counts.near(cb, cr), 360, "{}% bars: the stripe {colour:?} lands at Cb {cb:.4}, Cr {cr:.4}", level * 100.0);
@@ -137,12 +150,12 @@ fn the_100_percent_vectorscope_shows_the_whole_picture_and_the_200_percent_only_
     let mut b = Bench::new("range");
     let (w, h, pixels, _) = bars(1.0);
     b.play(w, h, &pixels);
-    assert_eq!(b.counts(V100).total(), 6 * 360, "at 100 % every full-strength bar is on the plot");
-    assert_eq!(b.counts(V100).clipped_total(), 0, "full-strength bars are not clipping");
+    assert_eq!(b.x1().total(), 6 * 360, "at 100 % every full-strength bar is on the plot");
+    assert_eq!(b.x1().clipped_total(), 0, "full-strength bars are not clipping");
     // At 200 % a full-strength bar is further out than the plot reaches: those pixels are off the plot, not wrapped,
     // and not clipping either: clipping does not depend on the zoom.
-    assert!(b.counts(V200).total() < 6 * 360);
-    assert_eq!(b.counts(V200).clipped_total(), 0, "and the 200 % Panel does not call them clipping");
+    assert!(b.x2().total() < 6 * 360);
+    assert_eq!(b.x2().clipped_total(), 0, "and the 200 % Panel does not call them clipping");
 }
 
 #[test]
@@ -153,7 +166,7 @@ fn each_colorchecker_patch_lands_at_the_research_tables_hue_angle_within_one_deg
     for patch in &chart.patches()[..18] {
         let rgb = patch.rec709_linear.map(|l| (l.signum() * bt709_oetf(l.abs())) as f32);
         b.play(64, 36, &solid(64, 36, rgb));
-        let counts = b.counts(V100);
+        let counts = b.x1();
         assert_eq!(counts.total(), 64 * 36, "{} is on the plot", patch.name);
         let (x, y) = counts.peak_bin();
         assert_eq!(counts.at(x, y), 64 * 36, "{} is one colour", patch.name);
@@ -172,7 +185,7 @@ fn the_200_percent_panel_shows_the_same_data_at_twice_the_radius() {
         assert_eq!(counts.at(x, y), 64 * 36);
         [x as f64 + 0.5 - 512.0, y as f64 + 0.5 - 512.0]
     };
-    let (one, two) = (from_middle(&b.counts(V100)), from_middle(&b.counts(V200)));
+    let (one, two) = (from_middle(&b.x1()), from_middle(&b.x2()));
     for axis in 0..2 {
         assert!((two[axis] - 2.0 * one[axis]).abs() <= 1.0, "axis {axis}: {} bins from the middle at 100 %, {} at 200 %", one[axis], two[axis]);
     }
@@ -182,8 +195,8 @@ fn the_200_percent_panel_shows_the_same_data_at_twice_the_radius() {
 fn black_frame_and_render(b: &mut Bench) -> (Vec<u8>, PlotSquare, PanelLayout) {
     b.play(64, 36, &solid(64, 36, [0.0; 3]));
     let (image, panels) = b.render(2000, 900, 1.0);
-    let panel = panels[b.index(V100)];
-    (image, PlotSquare::new(panel.content, 1.0), panel)
+    let panel = panels[b.index(V)];
+    (image, b.square(&panels, 0), panel)
 }
 
 #[test]
@@ -202,7 +215,7 @@ fn the_skin_tone_line_is_drawn_at_the_recorded_angle_and_can_be_turned_off() {
     assert!(lit(&on, SKIN_TONE_LINE_DEGREES) > 60, "the skin-tone line is drawn: {}", lit(&on, SKIN_TONE_LINE_DEGREES));
     assert!(lit(&on, SKIN_TONE_LINE_DEGREES + 25.0) <= 40, "and only at its angle: {}", lit(&on, SKIN_TONE_LINE_DEGREES + 25.0));
 
-    let panel = b.set.name(b.index(V100));
+    let panel = V;
     b.choose(panel, "skin-line", "off");
     let (off, _, _) = black_frame_and_render(&mut b);
     assert!(lit(&off, SKIN_TONE_LINE_DEGREES) <= 40, "turned off, nothing is drawn there: {}", lit(&off, SKIN_TONE_LINE_DEGREES));
@@ -223,7 +236,7 @@ fn the_colour_targets_are_drawn_where_the_chosen_bars_land() {
     assert!(on_box(&image, 0.75) > 60, "a target box at the 75 % red position: {}", on_box(&image, 0.75));
     assert!(on_box(&image, 1.0) <= 40, "not at the 100 % red position: {}", on_box(&image, 1.0));
 
-    let panel = b.set.name(b.index(V100));
+    let panel = V;
     b.choose(panel, "targets", "100");
     let (image, _, _) = black_frame_and_render(&mut b);
     assert!(on_box(&image, 1.0) > 60, "100 % targets: a box at the 100 % red position: {}", on_box(&image, 1.0));
@@ -238,7 +251,7 @@ fn the_trace_is_tinted_by_the_colour_that_put_it_there_and_the_middle_is_white()
     for (rgb, which) in cases {
         b.play(64, 36, &solid(64, 36, rgb));
         let (image, panels) = b.render(width, 900, 1.0);
-        let square = PlotSquare::new(panels[b.index(V100)].content, 1.0);
+        let square = b.square(&panels, 0);
         let [cb, cr] = cb_cr([rgb[0] as f64, rgb[1] as f64, rgb[2] as f64]);
         let [x, y] = square.position(cb, cr, Zoom::X1);
         let p = pixel(&image, width, [x, y]);
@@ -254,7 +267,7 @@ fn the_trace_is_tinted_by_the_colour_that_put_it_there_and_the_middle_is_white()
     // Grey pixels land in the middle: white, not tinted.
     b.play(64, 36, &solid(64, 36, [0.5, 0.5, 0.5]));
     let (image, panels) = b.render(width, 900, 1.0);
-    let square = PlotSquare::new(panels[b.index(V100)].content, 1.0);
+    let square = b.square(&panels, 0);
     let [x, y] = square.position(0.0, 0.0, Zoom::X1);
     let mut lit = [0u8; 3];
     for dy in -1..=1 {
@@ -309,20 +322,21 @@ fn colours_beyond_the_100_percent_bars_mark_the_ring_at_their_hue_at_either_zoom
     };
     // Red at twice full strength is beyond the 100 % bars (Cb -0.23, Cr 1.0: 102.9 degrees).
     b.play(64, 36, &solid(64, 36, [2.0, 0.0, 0.0]));
-    for (panel, name) in [(V100, "100 %"), (V200, "200 %")] {
-        assert!(b.counts(panel).clipped_total() > 0, "{name}: clipping is counted");
-        let degrees = b.counts(panel).clipped_peak_degrees().expect("a peak");
+    for (which, name) in [(0, "100 %"), (1, "200 %")] {
+        let counts = if which == 0 { b.x1() } else { b.x2() };
+        assert!(counts.clipped_total() > 0, "{name}: clipping is counted");
+        let degrees = counts.clipped_peak_degrees().expect("a peak");
         assert!((degrees - 102.9).abs() < 1.0, "{name}: at red's hue: {degrees}");
         let (image, panels) = b.render(width, 900, 1.0);
-        let square = PlotSquare::new(panels[b.index(panel)].content, 1.0);
+        let square = b.square(&panels, which);
         assert!(ring_pixel(&image, &square, 102.9) >= 5, "{name}: the ring is thick and lit at red's hue: {}", ring_pixel(&image, &square, 102.9));
         assert!(ring_pixel(&image, &square, 282.9) <= 3, "{name}: and plain on the opposite side: {}", ring_pixel(&image, &square, 282.9));
     }
     // Full-strength colours (even the green and magenta bars that reach furthest) are not clipping at either zoom.
     let (w, h, pixels, _) = bars(1.0);
     b.play(w, h, &pixels);
-    assert_eq!(b.counts(V100).clipped_total(), 0);
-    assert_eq!(b.counts(V200).clipped_total(), 0);
+    assert_eq!(b.x1().clipped_total(), 0);
+    assert_eq!(b.x2().clipped_total(), 0);
 }
 
 #[test]
@@ -369,7 +383,7 @@ fn the_trace_glows_where_it_is_dense_and_a_stray_pixel_is_faint_and_the_soft_spr
     let render = |b: &mut Bench| {
         b.play(w, h, &pixels);
         let (image, panels) = b.render(width, 900, 1.0);
-        (image, PlotSquare::new(panels[b.index(V100)].content, 1.0))
+        (image, b.square(&panels, 0))
     };
     let (image, square) = render(&mut b);
     let level = |image: &[u8], at: [f32; 2]| pixel(image, width, at).iter().copied().max().unwrap();
@@ -383,7 +397,7 @@ fn the_trace_glows_where_it_is_dense_and_a_stray_pixel_is_faint_and_the_soft_spr
     // The soft spread: a pixel next to the stray one is lit with it on and dark with it off.
     let next = [stray_at[0] + 1.0, stray_at[1]];
     let with = level(&image, next);
-    let panel = b.set.name(b.index(V100));
+    let panel = V;
     b.choose(panel, "spread", "off");
     let (image, square) = render(&mut b);
     let _ = square;
@@ -412,11 +426,11 @@ fn the_trace_brightness_setting_makes_a_sparse_colour_brighter_or_dimmer() {
     let [cb, cr] = cb_cr([0.75, 0.0, 0.0]);
     let mut seen = Vec::new();
     for choice in ["dim", "normal", "bright"] {
-        let panel = b.set.name(b.index(V100));
+        let panel = V;
         b.choose(panel, "brightness", choice);
         b.play(64, 36, &pixels);
         let (image, panels) = b.render(width, 900, 1.0);
-        let square = PlotSquare::new(panels[b.index(V100)].content, 1.0);
+        let square = b.square(&panels, 0);
         seen.push(brightest_near(&image, width, square.position(cb, cr, Zoom::X1)));
     }
     assert!(seen[0] < seen[1] && seen[1] <= seen[2], "dimmer, normal, brighter: {seen:?}");
@@ -425,20 +439,19 @@ fn the_trace_brightness_setting_makes_a_sparse_colour_brighter_or_dimmer() {
 #[test]
 fn the_label_names_the_measured_space_the_weights_the_targets_and_the_angle() {
     let mut b = Bench::new("label");
-    let assumed = b.label(V100);
-    assert!(assumed.starts_with("Vectorscope 100 %  ·  Cb/Cr"), "{assumed}");
+    let assumed = b.label(V);
+    assert!(assumed.starts_with("Vectorscope 100 % and 200 %  ·  Cb/Cr"), "one label names both zooms: {assumed}");
     assert!(assumed.contains("Rec.709 assumed, measured as sent, unconverted"), "{assumed}");
     assert!(assumed.contains("Y = 0.2126 R + 0.7152 G + 0.0722 B"), "{assumed}");
     assert!(assumed.contains("75 % targets"), "{assumed}");
     assert!(assumed.contains("123° (as Resolve 21.2 draws it)"), "{assumed}");
-    assert!(b.label(V200).starts_with("Vectorscope 200 %"));
 
     let setup = ColourSetup::new(Some(Science::Yrgb), "P3-D65".into(), "P3-D65".into(), None, None, None, Some(Levels::Video));
     b.context = DisplayContext { colour_setup: Some(KnownColourSetup { setup, provenance: Provenance::Project }), colour_label: "P3-D65".into(), ..DisplayContext::default() };
-    let panel = b.set.name(b.index(V100));
+    let panel = V;
     b.choose(panel, "targets", "100");
     b.choose(panel, "skin-line", "off");
-    let p3 = b.label(V100);
+    let p3 = b.label(V);
     assert!(p3.contains("P3-D65") && !p3.contains("assumed"), "{p3}");
     assert!(p3.contains("Y = 0.2290 R + 0.6917 G + 0.0793 B"), "the same weights as the Luma waveform for this space: {p3}");
     assert!(p3.contains("100 % targets"), "{p3}");
@@ -448,7 +461,85 @@ fn the_label_names_the_measured_space_the_weights_the_targets_and_the_angle() {
 #[test]
 fn the_menu_offers_trace_brightness_targets_and_the_skin_tone_line_with_sensible_defaults() {
     let b = Bench::new("menu");
-    let defs = b.set.setting_defs(b.index(V100));
+    let defs = b.set.setting_defs(b.index(V));
     let keys: Vec<_> = defs.iter().map(|d| (d.key, d.choices.iter().map(|c| c.value).collect::<Vec<_>>())).collect();
     assert_eq!(keys, [("brightness", vec!["normal", "bright", "dim"]), ("spread", vec!["on", "off"]), ("targets", vec!["75", "100"]), ("skin-line", vec!["on", "off"])]);
+}
+
+#[test]
+fn the_two_plots_sit_side_by_side_each_square_and_centred_in_its_half() {
+    for (width, height) in [(900.0f32, 300.0f32), (400.0, 400.0), (200.0, 500.0), (1001.0, 333.0)] {
+        let area = [20.0, 30.0, width, height];
+        let [left, right] = halves(area);
+        assert_eq!(left[0], area[0], "100 % on the left");
+        assert_eq!(left[0] + left[2], right[0], "200 % right beside it");
+        assert_eq!(right[0] + right[2], area[0] + width, "and together they fill the Panel");
+        for half in [left, right] {
+            let plot = PlotSquare::new(half, 1.0);
+            assert_eq!(plot.plot[2], plot.plot[3], "square");
+            let [cx, cy] = plot.centre();
+            assert!((cx - (half[0] + half[2] / 2.0)).abs() <= 1.0 && (cy - (half[1] + half[3] / 2.0)).abs() <= 1.0, "centred in its half: {half:?} {plot:?}");
+            assert!(plot.plot[0] >= half[0] && plot.plot[0] + plot.plot[2] <= half[0] + half[2], "inside its half");
+        }
+    }
+}
+
+#[test]
+fn one_setting_changes_both_plots_and_the_targets_move_on_the_100_percent_plot() {
+    let mut b = Bench::new("both");
+    let width = 2000;
+    // One red pixel in an otherwise black frame, near enough the middle to be on both plots.
+    let mut pixels = solid(64, 36, [0.0; 3]);
+    pixels[..3].copy_from_slice(&[0.25, 0.0, 0.0]);
+    let [cb, cr] = cb_cr([0.25, 0.0, 0.0]);
+    let mut seen = Vec::new();
+    for choice in ["dim", "bright"] {
+        b.choose(V, "brightness", choice);
+        b.play(64, 36, &pixels);
+        let (image, panels) = b.render(width, 900, 1.0);
+        seen.push([(0, Zoom::X1), (1, Zoom::X2)].map(|(which, zoom)| brightest_near(&image, width, b.square(&panels, which).position(cb, cr, zoom))));
+    }
+    assert!(seen[0][0] < seen[1][0] && seen[0][1] < seen[1][1], "brighter on both plots: {seen:?}");
+    // The colour targets (75 % red at Cb -0.086, Cr 0.375) are on the 100 % plot; one choice moves them.
+    b.play(64, 36, &solid(64, 36, [0.0; 3]));
+    let box_top = |b: &Bench, level: f64| {
+        let (image, panels) = b.render(width, 900, 1.0);
+        let [cb, cr] = cb_cr([level, 0.0, 0.0]);
+        let [x, y] = b.square(&panels, 0).position(cb, cr + 0.02, Zoom::X1);
+        brightest_near(&image, width, [x, y])
+    };
+    assert!(box_top(&b, 0.75) > 60);
+    b.choose(V, "targets", "100");
+    assert!(box_top(&b, 0.75) <= 40 && box_top(&b, 1.0) > 60);
+}
+
+#[test]
+fn the_rings_and_the_skin_tone_line_are_in_the_same_place_on_both_plots_and_the_setting_turns_both_off() {
+    let mut b = Bench::new("graticule");
+    let width = 2000;
+    let along = |b: &Bench, which: usize, image: &[u8], panels: &[PanelLayout]| {
+        let square = b.square(panels, which);
+        let [mx, my] = square.centre();
+        let r = square.ring_radius() * 0.7;
+        let (s, c) = SKIN_TONE_LINE_DEGREES.to_radians().sin_cos();
+        brightest_near(image, width, [mx + r * c as f32, my - r * s as f32])
+    };
+    b.play(64, 36, &solid(64, 36, [0.0; 3]));
+    let (image, panels) = b.render(width, 900, 1.0);
+    assert!(along(&b, 0, &image, &panels) > 60 && along(&b, 1, &image, &panels) > 60, "the skin-tone line is on both plots");
+    b.choose(V, "skin-line", "off");
+    let (image, panels) = b.render(width, 900, 1.0);
+    assert!(along(&b, 0, &image, &panels) <= 40 && along(&b, 1, &image, &panels) <= 40, "and off on both");
+}
+
+#[test]
+fn old_vectorscope_settings_carry_over_to_the_one_panel_and_the_200_percent_ones_are_ignored() {
+    let saved = PanelSettings::from_text("Vectorscope 100 %\ttargets\t100\nVectorscope 100 %\tskin-line\toff\nVectorscope 200 %\ttargets\t75\nVectorscope 200 %\tbrightness\tbright\n");
+    let mut b = Bench::new("legacy");
+    b.settings = saved;
+    b.reconfigure();
+    let label = b.label(V);
+    assert!(label.contains("100 % targets") && !label.contains("skin-tone"), "the 100 % Panel's choices apply: {label}");
+    let resolved = b.set.settings_of(b.index(V), &b.settings);
+    assert_eq!(resolved["brightness"], "normal", "the 200 % Panel's are not used");
 }

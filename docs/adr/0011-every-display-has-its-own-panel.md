@@ -18,3 +18,7 @@ Most scope apps give a few slots and a picker for what each slot shows. scopecre
 
 - Every display measures every Feed frame, so the performance check (ADR 0003) must pass with all Panels shown, and each Panel's cost must be measured.
 - Each Panel gets less room as displays are added, so labels and scales must stay legible at small Panel sizes.
+
+## Update 2026-11-18 (#92): the vectorscope is one Panel
+
+The vectorscope at 100 % and at 200 % is one Panel, not two. They are one scope at two zooms, and as two Panels each had its own label, menu and measurement, so the colourist set up and read two things that must always agree. The Panel shows both plots side by side (100 % left, 200 % right), is two grid cells wide so each plot keeps its size, and has one label, one right-click menu and one measurement per frame. The example in the third decision no longer holds; the luma waveform and the colour-tinted waveform still get separate Panels. Settings saved under "Vectorscope 100 %" carry over to the "Vectorscope" Panel; those saved under "Vectorscope 200 %" are ignored.
