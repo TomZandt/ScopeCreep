@@ -31,7 +31,7 @@ fn play(rig: &mut Rig, stage: &PictureStage, width: u32, height: u32, pixels: &[
     rig.write(width, height, pixels);
     for _ in 0..50 {
         rig.now += common::MS;
-        rig.poll(|_, frame| stage.show(frame));
+        rig.poll(|encoder, frame| stage.show(encoder, frame));
     }
 }
 
@@ -162,7 +162,7 @@ fn a_top_down_frame_is_drawn_as_it_is() {
     // The first row is the top: red on top, blue under it.
     let mut pixels = solid(2, 1, [1.0, 0.0, 0.0]);
     pixels.extend(solid(2, 1, [0.0, 0.0, 1.0]));
-    stage.show(&top_down(&rig, 2, 2, &pixels));
+    stage.show_now(&top_down(&rig, 2, 2, &pixels));
     let image = rig.render(W, H, |pass| stage.draw(pass, [0.0, 0.0, 100.0, 100.0], [W as f32, H as f32], &ID, None));
     assert!(filled(&image, [0, 0, 100, 50], RED));
     assert!(filled(&image, [0, 50, 100, 50], BLUE));

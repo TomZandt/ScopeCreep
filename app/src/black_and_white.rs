@@ -39,8 +39,8 @@ impl Display for BlackAndWhite {
         "Black and white"
     }
 
-    fn on_frame(&self, _encoder: &mut wgpu::CommandEncoder, frame: &GpuFrame) {
-        self.stage.show(frame);
+    fn on_frame(&self, encoder: &mut wgpu::CommandEncoder, frame: &GpuFrame) {
+        self.stage.show(encoder, frame);
     }
 
     /// The weights are the waveform's: the same Colour Setup and the same luma weights choice.

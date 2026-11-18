@@ -633,7 +633,7 @@ impl Display for StopsFalseColour {
                 _ => return,
             },
         };
-        self.stage.show(&frame);
+        self.stage.show_now(&frame);
         let geometry = Geometry::new(area, scale, config.mode, config.legend);
         let values = Self::values(&config, &frame, curve, weights, geometry.swatches, background);
         if background {

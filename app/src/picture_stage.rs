@@ -12,6 +12,10 @@
 //! - optionally a **legend** ([`Legend`]): a strip under the picture, whose bar is drawn by `legend(uv)` with `uv.x`
 //!   running across it.
 //!
+//! The stage also finds the **mattes** (black bars: whole rows at the top and bottom or whole columns at the
+//! sides in which every pixel is exactly black) once per frame, on the GPU and without reading anything back, and
+//! draws them black whatever the colour rule would make of them (#102, ADR 0029).
+//!
 //! The Channel view's Loupe is its own extra draw on top of the picture; it asks the stage where the picture went
 //! ([`place`]) and for the frame's texture ([`PictureStage::shown`]).
 use crate::gpu_frame::GpuFrame;
@@ -69,12 +73,14 @@ impl Legend {
 const PRELUDE: &str = r#"
 struct Stage {
     rect: vec4<f32>,   // left, top, right, bottom in clip space
-    info: vec4<f32>,   // picture width, height, bottom row first (> 0.5), drawing the legend (> 0.5)
+    info: vec4<f32>,   // picture width, height, bottom row first (> 0.5), what is drawn: 0 picture, 1 legend, 2 fill
 };
 @group(0) @binding(0) var<uniform> stage: Stage;
 @group(0) @binding(1) var picture: texture_2d<f32>;
 @group(0) @binding(2) var picture_sampler: sampler;
 @group(0) @binding(3) var<uniform> values: Values;
+// The picture's matte: first and last picture row and column that are not black bars (texel coordinates).
+@group(0) @binding(4) var<storage, read> matte: array<u32>;
 
 struct VertexOut {
     @builtin(position) position: vec4<f32>,
@@ -104,8 +110,49 @@ fn load_picture(uv: vec2<f32>) -> vec3<f32> {
 
 @fragment
 fn fs(in: VertexOut) -> @location(0) vec4<f32> {
-    if (stage.info.w > 0.5) { return vec4<f32>(legend(in.uv), 1.0); }
+    if (stage.info.w > 0.5 && stage.info.w < 1.5) { return vec4<f32>(legend(in.uv), 1.0); }
+    if (stage.info.w < 0.5) {
+        let at = vec2<u32>(clamp(in.uv * stage.info.xy, vec2<f32>(0.0), stage.info.xy - vec2<f32>(1.0)));
+        if (at.y < matte[0] || at.y > matte[1] || at.x < matte[2] || at.x > matte[3]) { return vec4<f32>(0.0, 0.0, 0.0, 1.0); }
+    }
     return vec4<f32>(colour(in.uv), 1.0);
+}
+"#;
+
+/// Finds the black bars of a frame in two compute steps: `mark` flags each row and column that holds a pixel that is
+/// not exactly black, `find` walks in from each edge to the first flagged one and writes the picture's first and
+/// last row and column (the whole frame when it is all black).
+const MATTE: &str = r#"
+@group(0) @binding(0) var frame: texture_2d<f32>;
+@group(0) @binding(1) var<storage, read_write> flags: array<atomic<u32>>;
+@group(0) @binding(2) var<storage, read_write> bounds: array<u32>;
+
+@compute @workgroup_size(8, 8)
+fn mark(@builtin(global_invocation_id) id: vec3<u32>) {
+    let size = textureDimensions(frame);
+    if (id.x >= size.x || id.y >= size.y) { return; }
+    if (any(textureLoad(frame, vec2<i32>(id.xy), 0).rgb != vec3<f32>(0.0))) {
+        atomicStore(&flags[id.y], 1u);
+        atomicStore(&flags[size.y + id.x], 1u);
+    }
+}
+
+@compute @workgroup_size(1)
+fn find() {
+    let size = textureDimensions(frame);
+    var top = 0u;
+    while (top < size.y && atomicLoad(&flags[top]) == 0u) { top++; }
+    if (top == size.y) {
+        bounds[0] = 0u; bounds[1] = size.y - 1u; bounds[2] = 0u; bounds[3] = size.x - 1u;
+        return;
+    }
+    var bottom = size.y - 1u;
+    while (atomicLoad(&flags[bottom]) == 0u) { bottom--; }
+    var left = 0u;
+    while (atomicLoad(&flags[size.y + left]) == 0u) { left++; }
+    var right = size.x - 1u;
+    while (atomicLoad(&flags[size.y + right]) == 0u) { right--; }
+    bounds[0] = top; bounds[1] = bottom; bounds[2] = left; bounds[3] = right;
 }
 "#;
 
@@ -126,6 +173,9 @@ struct Bound {
     texture: wgpu::Texture,
     picture_group: wgpu::BindGroup,
     legend_group: wgpu::BindGroup,
+    /// Per frame: which rows and columns hold picture, and the compute's bindings.
+    flags: wgpu::Buffer,
+    matte_group: wgpu::BindGroup,
     width: u32,
     height: u32,
     bottom_up: bool,
@@ -148,6 +198,9 @@ pub struct PictureStage {
     pipeline: wgpu::RenderPipeline,
     layout: wgpu::BindGroupLayout,
     sampler: wgpu::Sampler,
+    matte_layout: wgpu::BindGroupLayout,
+    matte_mark: wgpu::ComputePipeline,
+    matte_find: wgpu::ComputePipeline,
     /// One for the picture and one for the legend: both are drawn in the same pass, so they cannot share.
     picture_stage: wgpu::Buffer,
     legend_stage: wgpu::Buffer,
@@ -187,8 +240,46 @@ impl PictureStage {
                     count: None,
                 },
                 uniform(3),
+                wgpu::BindGroupLayoutEntry {
+                    binding: 4,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Buffer { ty: wgpu::BufferBindingType::Storage { read_only: true }, has_dynamic_offset: false, min_binding_size: None },
+                    count: None,
+                },
             ],
         });
+        let storage = |binding| wgpu::BindGroupLayoutEntry {
+            binding,
+            visibility: wgpu::ShaderStages::COMPUTE,
+            ty: wgpu::BindingType::Buffer { ty: wgpu::BufferBindingType::Storage { read_only: false }, has_dynamic_offset: false, min_binding_size: None },
+            count: None,
+        };
+        let matte_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            label: Some("matte"),
+            entries: &[
+                wgpu::BindGroupLayoutEntry {
+                    binding: 0,
+                    visibility: wgpu::ShaderStages::COMPUTE,
+                    ty: wgpu::BindingType::Texture { sample_type: wgpu::TextureSampleType::Float { filterable: false }, view_dimension: wgpu::TextureViewDimension::D2, multisampled: false },
+                    count: None,
+                },
+                storage(1),
+                storage(2),
+            ],
+        });
+        let matte_module = device.create_shader_module(wgpu::ShaderModuleDescriptor { label: Some("matte"), source: wgpu::ShaderSource::Wgsl(MATTE.into()) });
+        let matte_pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor { label: Some("matte"), bind_group_layouts: &[Some(&matte_layout)], immediate_size: 0 });
+        let matte_step = |entry: &'static str| {
+            device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
+                label: Some(entry),
+                layout: Some(&matte_pipeline_layout),
+                module: &matte_module,
+                entry_point: Some(entry),
+                compilation_options: Default::default(),
+                cache: None,
+            })
+        };
+        let (matte_mark, matte_find) = (matte_step("mark"), matte_step("find"));
         let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor { label: Some(rule.label), bind_group_layouts: &[Some(&layout)], immediate_size: 0 });
         let pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
             label: Some(rule.label),
@@ -210,6 +301,9 @@ impl PictureStage {
             pipeline,
             layout,
             sampler,
+            matte_layout,
+            matte_mark,
+            matte_find,
             picture_stage: buffer(32),
             legend_stage: buffer(32),
             values: buffer(values_size),
@@ -218,7 +312,7 @@ impl PictureStage {
         }
     }
 
-    fn bind_group(&self, stage: &wgpu::Buffer, frame: &GpuFrame) -> wgpu::BindGroup {
+    fn bind_group(&self, stage: &wgpu::Buffer, frame: &GpuFrame, bounds: &wgpu::Buffer) -> wgpu::BindGroup {
         self.device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: None,
             layout: &self.layout,
@@ -227,19 +321,47 @@ impl PictureStage {
                 wgpu::BindGroupEntry { binding: 1, resource: wgpu::BindingResource::TextureView(&frame.texture.create_view(&Default::default())) },
                 wgpu::BindGroupEntry { binding: 2, resource: wgpu::BindingResource::Sampler(&self.sampler) },
                 wgpu::BindGroupEntry { binding: 3, resource: self.values.as_entire_binding() },
+                wgpu::BindGroupEntry { binding: 4, resource: bounds.as_entire_binding() },
             ],
         })
     }
 
-    /// Show the Feed frame the uploader put on the GPU: bound once per texture, its flip kept up to date.
-    pub fn show(&self, frame: &GpuFrame) {
+    /// Show the Feed frame the uploader put on the GPU: bound once per texture, its flip kept up to date, its
+    /// mattes found by a small GPU job recorded into `encoder` after the frame's own upload (nothing is read back,
+    /// so nothing waits).
+    pub fn show(&self, encoder: &mut wgpu::CommandEncoder, frame: &GpuFrame) {
+        self.bind(frame, Some(encoder));
+    }
+
+    /// As [`show`](Self::show) for a frame that is already on the GPU: the mattes are found in a job of their own.
+    pub fn show_now(&self, frame: &GpuFrame) {
+        self.bind(frame, None);
+    }
+
+    fn bind(&self, frame: &GpuFrame, encoder: Option<&mut wgpu::CommandEncoder>) {
         let mut bound = self.bound.lock().unwrap();
         if bound.as_ref().is_none_or(|b| b.texture_id != frame.texture_id) {
+            let storage = |size: u64| self.device.create_buffer(&wgpu::BufferDescriptor { label: Some("matte"), size, usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST, mapped_at_creation: false });
+            let flags = storage((frame.width as u64 + frame.height as u64) * 4);
+            let bounds = storage(16);
+            // Until the first frame is measured there is no matte.
+            self.queue.write_buffer(&bounds, 0, bytemuck::cast_slice(&[0u32, frame.height.saturating_sub(1), 0, frame.width.saturating_sub(1)]));
+            let matte_group = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
+                label: Some("matte"),
+                layout: &self.matte_layout,
+                entries: &[
+                    wgpu::BindGroupEntry { binding: 0, resource: wgpu::BindingResource::TextureView(&frame.texture.create_view(&Default::default())) },
+                    wgpu::BindGroupEntry { binding: 1, resource: flags.as_entire_binding() },
+                    wgpu::BindGroupEntry { binding: 2, resource: bounds.as_entire_binding() },
+                ],
+            });
             *bound = Some(Bound {
                 texture_id: frame.texture_id,
                 texture: frame.texture.clone(),
-                picture_group: self.bind_group(&self.picture_stage, frame),
-                legend_group: self.bind_group(&self.legend_stage, frame),
+                picture_group: self.bind_group(&self.picture_stage, frame, &bounds),
+                legend_group: self.bind_group(&self.legend_stage, frame, &bounds),
+                flags,
+                matte_group,
                 width: frame.width,
                 height: frame.height,
                 bottom_up: frame.bottom_up,
@@ -247,6 +369,27 @@ impl PictureStage {
         }
         if let Some(b) = bound.as_mut() {
             b.bottom_up = frame.bottom_up;
+            match encoder {
+                Some(encoder) => self.find_mattes(encoder, b),
+                None => {
+                    let mut encoder = self.device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: Some("matte") });
+                    self.find_mattes(&mut encoder, b);
+                    self.queue.submit([encoder.finish()]);
+                }
+            }
+        }
+    }
+
+    /// Mark every row and column that holds picture, then walk in from the edges to the bars' inner sides.
+    fn find_mattes(&self, encoder: &mut wgpu::CommandEncoder, bound: &Bound) {
+        encoder.clear_buffer(&bound.flags, 0, None);
+        {
+            let mut pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor { label: Some("matte"), timestamp_writes: None });
+            pass.set_bind_group(0, &bound.matte_group, &[]);
+            pass.set_pipeline(&self.matte_mark);
+            pass.dispatch_workgroups(bound.width.div_ceil(8), bound.height.div_ceil(8), 1);
+            pass.set_pipeline(&self.matte_find);
+            pass.dispatch_workgroups(1, 1, 1);
         }
     }
 
@@ -273,13 +416,13 @@ impl PictureStage {
         let strip = legend.map_or(0.0, |l| l.strip);
         let Some(p) = place(area, [bound.width, bound.height], strip) else { return };
         self.write_values(values);
-        self.write_stage(&self.picture_stage, bound, [p.x, p.y, p.w, p.h], surface, false);
+        self.write_stage(&self.picture_stage, bound, [p.x, p.y, p.w, p.h], surface, 0.0);
         pass.set_pipeline(&self.pipeline);
         pass.set_bind_group(0, &bound.picture_group, &[]);
         pass.draw(0..4, 0..1);
         if let Some(l) = legend.filter(|l| l.strip > 0.0) {
             let bar = [area[0], area[1] + area[3] - l.strip + l.bar_offset, area[2], l.bar];
-            self.write_stage(&self.legend_stage, bound, bar, surface, true);
+            self.write_stage(&self.legend_stage, bound, bar, surface, 1.0);
             pass.set_bind_group(0, &bound.legend_group, &[]);
             pass.draw(0..4, 0..1);
         }
@@ -294,7 +437,7 @@ impl PictureStage {
             return;
         }
         self.write_values(values);
-        self.write_stage(&self.picture_stage, bound, area, surface, false);
+        self.write_stage(&self.picture_stage, bound, area, surface, 2.0);
         pass.set_pipeline(&self.pipeline);
         pass.set_bind_group(0, &bound.picture_group, &[]);
         pass.draw(0..4, 0..1);
@@ -306,7 +449,7 @@ impl PictureStage {
     }
 
     /// `rect` is left, top, width, height in device pixels.
-    fn write_stage(&self, buffer: &wgpu::Buffer, bound: &Bound, rect: [f32; 4], surface: [f32; 2], legend: bool) {
+    fn write_stage(&self, buffer: &wgpu::Buffer, bound: &Bound, rect: [f32; 4], surface: [f32; 2], what: f32) {
         let clip = |px: f32, size: f32| px / size * 2.0 - 1.0;
         let words: [f32; 8] = [
             clip(rect[0], surface[0]),
@@ -316,7 +459,7 @@ impl PictureStage {
             bound.width as f32,
             bound.height as f32,
             if bound.bottom_up { 1.0 } else { 0.0 },
-            if legend { 1.0 } else { 0.0 },
+            what,
         ];
         self.queue.write_buffer(buffer, 0, bytemuck::cast_slice(&words));
     }

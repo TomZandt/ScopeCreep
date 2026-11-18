@@ -174,8 +174,8 @@ impl Display for GamutWarning {
         "Gamut/legal warning"
     }
 
-    fn on_frame(&self, _encoder: &mut wgpu::CommandEncoder, frame: &GpuFrame) {
-        self.stage.show(frame);
+    fn on_frame(&self, encoder: &mut wgpu::CommandEncoder, frame: &GpuFrame) {
+        self.stage.show(encoder, frame);
     }
 
     fn configure(&self, context: &DisplayContext) {

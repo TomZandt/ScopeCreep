@@ -36,8 +36,8 @@ impl PictureView {
 
     /// Show the Feed frame [`FrameUploader`](scopecreep::gpu_frame::FrameUploader) put on the GPU. Called on
     /// the Feed thread.
-    pub fn show(&self, frame: &GpuFrame) {
-        self.stage.show(frame);
+    pub fn show(&self, encoder: &mut wgpu::CommandEncoder, frame: &GpuFrame) {
+        self.stage.show(encoder, frame);
     }
 
     /// What was done to the picture, and how far it can be trusted (ticket #17): never more than is proven.
@@ -71,8 +71,8 @@ impl Display for PictureView {
         "Clean picture"
     }
 
-    fn on_frame(&self, _encoder: &mut wgpu::CommandEncoder, frame: &GpuFrame) {
-        self.show(frame);
+    fn on_frame(&self, encoder: &mut wgpu::CommandEncoder, frame: &GpuFrame) {
+        self.show(encoder, frame);
     }
 
     fn configure(&self, context: &DisplayContext) {

@@ -97,6 +97,10 @@ _Avoid_: Widget, plugin, module (for a display)
 The one part of the code every Picture View draws through. It places the frame in its Panel (fit, centre, whole device pixels), flips it, keeps the GPU binding and the legend strip; a Picture View supplies only its colour rule, its values and optionally a legend. The Channel view's Loupe is its own draw on top of it.
 _Avoid_: Renderer, canvas
 
+**Matte**:
+A black bar around the picture: whole rows at the top and bottom, or whole columns at the sides, in which every pixel is exactly black. The Picture stage finds them once per frame and draws them black on every Picture View. A black pixel inside the picture is not a matte.
+_Avoid_: Letterbox (that is one kind of matte), border
+
 **Panel grid** (the layout):
 The columns and rows the Panels sit in, each Panel at a cell with a span of columns and rows, every cell used. By default the clean picture spans 3 × 2 at the top left. Column and row sizes are weights, so border positions the user dragged stay valid at any window size. Each Panel has a thin border and a title bar with its label at its top.
 _Avoid_: Layout (on its own), dock
