@@ -152,8 +152,8 @@ impl Drop for Rig {
 
 /// The Panels of `count` displays in a `width` × `height` window at `scale`, as the window lays them out.
 pub fn layouts(count: usize, width: u32, height: u32, scale: f32) -> Vec<PanelLayout> {
-    let cells = PanelGrid::new(count).cells([0.0, 0.0, width as f32, height as f32], 8.0 * scale);
-    cells.iter().map(|c| PanelLayout::new(*c, scale, 1)).collect()
+    let cells = PanelGrid::automatic(count).cells([0.0, 0.0, width as f32, height as f32], 8.0 * scale);
+    cells.iter().map(|c| PanelLayout::new(*c, scale)).collect()
 }
 
 /// A frame of one colour (RGBA, as the Feed carries it).

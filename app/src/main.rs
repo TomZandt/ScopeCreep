@@ -138,18 +138,12 @@ impl Text {
         self.buffer.shape_until_scroll(font_system, false);
         self.key = Some((text.to_string(), width, scale.to_bits(), style));
     }
-
-    fn lines(&self) -> usize {
-        self.buffer.layout_runs().count().max(1)
-    }
 }
 
-/// What a Panel's text is made of: its label, and the numbers on its display's scale.
+/// What a Panel's text is made of: its label (one line, in the title bar), and the numbers on its display's scale.
 struct PanelText {
     label: Text,
     scale: Vec<Text>,
-    /// The lines the label wrapped onto when last shaped: the Panel makes room for them.
-    lines: usize,
 }
 
 struct AppWindow {
@@ -230,7 +224,8 @@ impl AppWindow {
         let displays = DisplaySet::standard(&device, &queue, format, filterable);
         let settings = Arc::new(Mutex::new(settings_file().and_then(|path| std::fs::read_to_string(path).ok()).map_or_else(PanelSettings::default, |text| PanelSettings::from_text(&text))));
         displays.configure(&DisplayContext::default(), &settings.lock().unwrap());
-        let grid = grid_file().and_then(|path| std::fs::read_to_string(path).ok()).map_or_else(|| PanelGrid::new(displays.len()), |text| PanelGrid::from_text(displays.len(), &text));
+        let names = displays.names();
+        let grid = grid_file().and_then(|path| std::fs::read_to_string(path).ok()).map_or_else(|| PanelGrid::default_for(&names), |text| PanelGrid::from_text(&names, &text));
         let mut font_system = FontSystem::new();
         let cache = Cache::new(&device);
         let viewport = Viewport::new(&device, &cache);
@@ -240,7 +235,7 @@ impl AppWindow {
         let flat = FlatRects::new(&device, &queue, format);
         let status = Text::new(&mut font_system);
         let notice = Text::new(&mut font_system);
-        let panel_texts = (0..displays.len()).map(|_| PanelText { label: Text::new(&mut font_system), scale: Vec::new(), lines: 1 }).collect();
+        let panel_texts = (0..displays.len()).map(|_| PanelText { label: Text::new(&mut font_system), scale: Vec::new() }).collect();
 
         let texts = Arc::new(Mutex::new(Texts::default()));
         let stop = Arc::new(AtomicBool::new(false));
@@ -537,7 +532,7 @@ impl AppWindow {
             }
             if self.drag.take().is_some() {
                 if let Some(path) = grid_file() {
-                    if let Err(e) = scopecreep::settings::save(&path, &self.grid.to_text()) {
+                    if let Err(e) = scopecreep::settings::save(&path, &self.grid.to_text(&self.displays.names())) {
                         eprintln!("scopecreep: cannot remember the Panel borders: {e}");
                     }
                 }
@@ -583,19 +578,15 @@ impl AppWindow {
         self.grid_gap = margin;
 
         let line = style::TYPE_LABEL * scale * style::TYPE_LABEL_LINE;
-        // Each Panel: its label wrapped to the Panel's width (the Panel makes room for the lines), the display
-        // above it, and the numbers on the display's scale.
+        // Each Panel: a thin border, its label on one line in the title bar (clipped to it), the display under
+        // the bar, and the numbers on the display's scale.
         let mut panels = Vec::new();
         for (i, cell) in cells.iter().enumerate() {
             let label = texts.labels.get(i).map(String::as_str).unwrap_or("");
-            let panel_text = &mut self.panel_texts[i];
-            panel_text.label.set(&mut self.font_system, label, TextStyle::LABEL, scale, cell[2]);
-            let lines = panel_text.label.lines();
-            if lines != panel_text.lines {
-                panel_text.lines = lines;
-                self.window.request_redraw();
-            }
-            panels.push(PanelLayout::new(*cell, scale, lines));
+            let panel = PanelLayout::new(*cell, scale);
+            let pad = style::SPACE_TITLE_PAD * scale;
+            self.panel_texts[i].label.set(&mut self.font_system, label, TextStyle { wrap: false, ..TextStyle::LABEL }, scale, (panel.title[2] - 2.0 * pad).max(1.0));
+            panels.push(panel);
         }
         self.contents = panels.iter().map(|p| p.content).collect();
         let status_width = width - 2.0 * margin;
@@ -647,10 +638,10 @@ impl AppWindow {
             TextArea { buffer: &self.notice.buffer, left: notice_left, top: notice_top, scale: 1.0, bounds: whole, default_color: text_colour(style::TEXT_PRIMARY), custom_glyphs: &[] },
         ];
         for (panel, text) in panels.iter().zip(&self.panel_texts) {
-            let [left, top, w, h] = panel.label;
-            // A label never spills out of its Panel.
+            let [left, top, w, h] = panel.title;
+            // A label never spills out of its title bar.
             let bounds = TextBounds { left: left as i32, top: top as i32, right: (left + w).ceil() as i32, bottom: (top + h).ceil() as i32 };
-            areas.push(TextArea { buffer: &text.label.buffer, left, top: top + (scopecreep::panel_grid::LABEL_STRIP * scale - line) / 2.0, scale: 1.0, bounds, default_color: text_colour(style::TEXT_SECONDARY), custom_glyphs: &[] });
+            areas.push(TextArea { buffer: &text.label.buffer, left: left + style::SPACE_TITLE_PAD * scale, top: top + (h - line) / 2.0, scale: 1.0, bounds, default_color: text_colour(style::TEXT_SECONDARY), custom_glyphs: &[] });
         }
         for (i, n, left, top) in mark_areas {
             let c = panels[i].content;
@@ -666,6 +657,12 @@ impl AppWindow {
         // The right-click menu, drawn as the popover component, over everything: its rectangles, then its own text
         // (so it sits above the Panels' text).
         let mut rects: Vec<([f32; 4], [f32; 4])> = Vec::new();
+        // Each Panel's thin border and the line under its title bar.
+        for panel in &panels {
+            for edge in panel.lines((style::LINE_WEIGHT * scale).max(1.0)) {
+                rects.push((edge, style::rgba(style::LINE_BORDER)));
+            }
+        }
         let mut menu_areas: Vec<(usize, f32, f32, [u8; 3])> = Vec::new();
         if let (Some((menu, _)), Some(rect)) = (self.menu.as_ref(), self.menu_rect()) {
             let mut texts_used = 0;

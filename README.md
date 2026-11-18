@@ -27,7 +27,7 @@ Pre-alpha. Nothing to install yet.
 |---|---|---|
 | Feed protocol | `feed/PROTOCOL.md`, `feed/include/scopecreep_feed.h`, `feed/` crate | The shared-memory ring between Sender and app: spec, C header (Sender), Rust reader and synthetic writer (app, tests) |
 | Sender | `sender/` | C++ OFX plugin, Resolve's CUDA render path, async pinned copy into the Feed |
-| App | `app/` | Rust + wgpu: one window, a grid of 11 Panels (the gamut/legal warning, Highlight Neutrals and the CIE plot are built and tested but out of the Window, #95) (Scopes and Picture Views) all showing the latest Feed frame (GPU, every pixel, full resolution) |
+| App | `app/` | Rust + wgpu: one window, a layout of 11 Panels (the clean picture as the hero) (the gamut/legal warning, Highlight Neutrals and the CIE plot are built and tested but out of the Window, #95) (Scopes and Picture Views) all showing the latest Feed frame (GPU, every pixel, full resolution) |
 
 ```sh
 cargo test                       # Feed protocol (Rust and C against each other) and the app, driven at the Feed seam (waveform tests need a GPU)
@@ -83,7 +83,7 @@ DaVinci Resolve                                 scopecreep app (Rust + wgpu)
   - [0009](docs/adr/0009-exposure-in-scene-light-clipping-on-output.md): exposure in stops is measured in scene light; clipping and legal checks on the Output picture
   - [0010](docs/adr/0010-false-colour-schemes-are-not-licensed-or-named.md): third-party false colour schemes are modelled, not licensed, and never claimed
   - [0011](docs/adr/0011-every-display-has-its-own-panel.md): every display has its own Panel, always visible, in a fixed grid
-  - [0012](docs/adr/0012-panel-grid-shape-follows-display-count.md): the Panel grid's shape follows the number of displays, not the window, and Panels fill their cells
+  - [0012](docs/adr/0012-panel-grid-shape-follows-display-count.md): the Panel grid's shape follows the number of displays, not the window, and Panels fill their cells (updated #96: a layout of cells and spans)
   - [0013](docs/adr/0013-panel-settings-are-kept-by-display-name-and-offered-as-choices.md): Panel settings are lists of choices, kept by display name in a text file, in a menu the app draws itself
   - [0014](docs/adr/0014-gamut-warning-judges-every-channel-in-fractions-of-the-levels-range.md): the gamut/legal warning judges every channel, in fractions of the Levels' range
   - [0015](docs/adr/0015-display-state-is-remembered-beside-the-settings.md): what a display moves by hand (the Loupe) is remembered beside the settings, not as a setting

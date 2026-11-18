@@ -141,11 +141,11 @@ fn each_display_draws_only_inside_its_own_panel() {
     let content = panels[1].content;
     let trace = (0..content[3] as u32).map(|dy| pixel(&image, 1280, content[0] + content[2] * 0.75, content[1] + dy as f32)[0]).max().unwrap();
     assert!(trace > 150, "the waveform trace is in panel 1: {trace}");
-    // Nothing is drawn in the gap between the Panels, nor in the label strip under them.
+    // Nothing is drawn in the gap between the Panels, nor in the title bar above each display.
     let gap_x = panels[0].content[0] + panels[0].content[2] + 4.0;
     assert_eq!(pixel(&image, 1280, gap_x, 100.0), [0, 0, 0], "the border between Panels is empty");
-    let strip = panels[0].label;
-    assert_eq!(pixel(&image, 1280, strip[0] + 10.0, strip[1] + 10.0), [0, 0, 0], "the label strip is left for the label text");
+    let bar = panels[0].title;
+    assert_eq!(pixel(&image, 1280, bar[0] + 10.0, bar[1] + 5.0), [0, 0, 0], "the title bar is left for the label text");
 }
 
 #[test]

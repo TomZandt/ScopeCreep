@@ -93,8 +93,8 @@ _Avoid_: Pane, view, tile, window (for one display)
 The shape every Scope and Picture View shares in the code: created for the target format, measures or takes the Viewer Frame already on the GPU, draws into its Panel, takes its settings and the Colour Setup, reports its label, and (Scopes) can be read back for tests. A new Scope or Picture View is one module with this shape, registered once.
 _Avoid_: Widget, plugin, module (for a display)
 
-**Panel grid**:
-The ordered grid the Panels sit in. Its shape depends only on how many displays there are (rows as equal as possible, every row filling the width), so border positions the user dragged stay valid at any window size.
+**Panel grid** (the layout):
+The columns and rows the Panels sit in, each Panel at a cell with a span of columns and rows, every cell used. By default the clean picture spans 3 × 2 at the top left. Column and row sizes are weights, so border positions the user dragged stay valid at any window size. Each Panel has a thin border and a title bar with its label at its top.
 _Avoid_: Layout (on its own), dock
 
 **Panel settings**:

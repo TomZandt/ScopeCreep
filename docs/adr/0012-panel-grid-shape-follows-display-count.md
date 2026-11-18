@@ -16,3 +16,7 @@
 
 - At 14 Panels in a 1280 × 760 window the smallest Panel is about 240 × 225 pixels; a Panel cannot be dragged below 120 × 100 logical pixels.
 - A later change can bring back column alignment for the two displays that need it only by giving up free resizing for them.
+
+## Update 2026-11-18 (#96): the shape no longer follows the count
+
+The first decision no longer holds. The Window is now a layout: a grid of columns and rows (the default is 5 × 4) with each Panel at a column and row and a span of columns and rows, and every cell used. The clean picture is 3 × 2 at the top left, by default. Column widths and row heights are still weights that add up to 1 and are remembered, so they hold at any window size; border drags move the weight between the two tracks beside the border, and no track goes under the minimum Panel size, so no Panel does. A border is draggable only between Panels, never through one that spans it. Panels are placed by display name, so a saved layout that names a Panel that has gone drops it, and a Panel missing from it takes the first free cell (or a row of its own). A grid saved by v0.2.0 (it starts "panels") is ignored and the default used. Displays other than the default set fall back to an automatic grid (rows as equal as possible, every row filling the width). The third decision changes too: each Panel has a thin border and a title bar with its label at its top and no label strip under it. The rest stands.

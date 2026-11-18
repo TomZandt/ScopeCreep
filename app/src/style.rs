@@ -50,17 +50,21 @@ pub const TYPE_SCALE_LINE: f32 = 1.3;
 pub const SPACE_MARGIN: f32 = 12.0;
 /// The gutter for a scale's numbers.
 pub const SPACE_GUTTER: f32 = 44.0;
-/// A Panel's label strip, for one line.
-pub const SPACE_LABEL_STRIP: f32 = 30.0;
+/// A Panel's title bar, for one line of label.
+pub const SPACE_TITLE_BAR: f32 = 22.0;
+/// The title bar's text: room left of it.
+pub const SPACE_TITLE_PAD: f32 = 8.0;
 /// One row of the status line.
 pub const SPACE_STATUS_ROW: f32 = 20.0;
 /// How far from a Panel border's gap a click still grabs it.
 pub const SPACE_GRAB: f32 = 3.0;
-/// The least height a display keeps above its label, and the least width of a Panel.
+/// The least height a display keeps under the title bar, the least width of a Panel, and the least height of a
+/// Panel (the display, the title bar and the border's three lines).
 pub const SPACE_MIN_DISPLAY: f32 = 80.0;
 pub const SPACE_MIN_PANEL_WIDTH: f32 = 120.0;
+pub const SPACE_MIN_PANEL_HEIGHT: f32 = 105.0;
 /// The window the saved border positions are checked against: the default window's Panel area and gap.
-pub const SPACE_REFERENCE_AREA: [f32; 2] = [1256.0, 700.0];
+pub const SPACE_REFERENCE_AREA: [f32; 2] = [1256.0, 716.0];
 pub const SPACE_REFERENCE_GAP: f32 = 12.0;
 /// The menu: width, row height, padding.
 pub const SPACE_MENU_WIDTH: f32 = 230.0;
@@ -130,8 +134,7 @@ pub const SPACE_SLIDER_NUMBER: f32 = 44.0;
 /// A tooltip's padding and its gap from what it names.
 pub const SPACE_TOOLTIP_PAD: f32 = 6.0;
 pub const SPACE_TOOLTIP_GAP: f32 = 6.0;
-/// A Panel's title bar, the top bar, and the bars' side padding.
-pub const SPACE_TITLE_BAR: f32 = 28.0;
+/// The top bar and the bars' side padding (the title bar is SPACE_TITLE_BAR above).
 pub const SPACE_TOP_BAR: f32 = 32.0;
 pub const SPACE_BAR_PAD: f32 = 10.0;
 /// The settings button on a title bar (square), and the gap between a name and its tags.

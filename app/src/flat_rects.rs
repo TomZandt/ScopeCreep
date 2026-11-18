@@ -2,7 +2,7 @@
 //! tick. Rectangles are in device pixels of the target. Colours are neutral (the same on every channel), so
 //! nothing on screen tints the eye.
 
-const MAX_RECTS: usize = 64;
+const MAX_RECTS: usize = 256;
 const VERTEX_BYTES: u64 = 6 * 24;
 
 const SHADER: &str = r#"
