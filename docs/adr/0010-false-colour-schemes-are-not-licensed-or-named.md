@@ -22,3 +22,7 @@ Colourists know two exposure schemes by name: ARRI's false colour and Ed Lachman
 - The EL Zone name is a clear trademark. A near-identical colour scheme could still draw a complaint from Cinecam. The product owner accepted that risk. This is not legal advice.
 - If the bands are ever measured against an ARRI camera's own Rec.709 output, the label can say more.
 - The research behind this decision is in [`docs/research/false-colour-and-skin-tools.md`](../research/false-colour-and-skin-tools.md).
+
+## Update 2026-11-18 (#93)
+
+The stops scale now has 17 zones centred on the stop marks (-6 to +6, with -1/2, 18 % and +1/2 beside middle grey, black and white beyond 6 1/2 stops) and a horizontal legend, following a reference scale the product owner supplied as a model for the colours and layout only. The colours are scopecreep's own values, chosen by eye (black, purple, lilac, blue, sky blue, green, mid green, light green, grey, yellow, pale yellow, orange, light orange, red, pink, light pink, white). The product owner accepted the risk that a scheme this close to a third party's can draw a complaint; the third party's name still appears nowhere in the app or its docs.

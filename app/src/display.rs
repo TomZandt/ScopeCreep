@@ -46,6 +46,8 @@ pub struct ScaleText {
     pub top: f32,
     pub width: f32,
     pub right_aligned: bool,
+    /// Centred in its width (wins over `right_aligned`).
+    pub centred: bool,
 }
 
 /// What the pointer does over a Panel, in device pixels of the window.

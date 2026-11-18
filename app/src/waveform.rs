@@ -1068,7 +1068,7 @@ impl crate::display::Display for Waveform {
             .into_iter()
             .zip(shown)
             .filter(|(_, shown)| *shown)
-            .map(|((text, top, _), _)| crate::display::ScaleText { text, left: area[0], top, width, right_aligned: true })
+            .map(|((text, top, _), _)| crate::display::ScaleText { text, left: area[0], top, width, right_aligned: true, centred: false })
             .collect()
     }
 

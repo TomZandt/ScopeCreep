@@ -326,7 +326,7 @@ impl Display for ArriFalseColour {
         BANDS
             .iter()
             .enumerate()
-            .map(|(i, b)| ScaleText { text: format!("{}–{}", b.from, b.to), left: area[0] + i as f32 * cell, top, width: cell, right_aligned: false })
+            .map(|(i, b)| ScaleText { text: format!("{}–{}", b.from, b.to), left: area[0] + i as f32 * cell, top, width: cell, right_aligned: false, centred: false })
             .collect()
     }
 }

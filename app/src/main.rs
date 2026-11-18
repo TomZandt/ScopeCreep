@@ -636,7 +636,7 @@ impl AppWindow {
         for (i, mark) in &marks {
             let n = used[*i];
             used[*i] += 1;
-            let style = TextStyle { size: style::TYPE_SCALE, line: style::TYPE_SCALE_LINE, align: mark.right_aligned.then_some(glyphon::cosmic_text::Align::Right), wrap: false };
+            let style = TextStyle { size: style::TYPE_SCALE, line: style::TYPE_SCALE_LINE, align: if mark.centred { Some(glyphon::cosmic_text::Align::Center) } else { mark.right_aligned.then_some(glyphon::cosmic_text::Align::Right) }, wrap: false };
             self.panel_texts[*i].scale[n].set(&mut self.font_system, &mark.text, style, scale, mark.width);
             mark_areas.push((*i, n, mark.left, mark.top - scale_mark_line / 2.0));
         }

@@ -155,11 +155,11 @@ One colour of ARRI False Colour: a range of Output Luma in percent of the full-r
 _Avoid_: Zone (ARRI's and EL Zone's word for their own schemes)
 
 **Stops False Colour**:
-False Colour by stops above and below middle grey, in scene light decoded from the Timeline Colour Space.
+False Colour by stops above and below middle grey, in scene light decoded from the Timeline Colour Space. When that space is not known or cannot be decoded it measures the Output picture through its display curve instead, labelled approximated (and assumed). Its legend is a horizontal bar of swatches under the picture, with the stop numbers under them and captions over them.
 _Avoid_: EL Zone (a trademark scopecreep does not use), zone system
 
 **Full zones**:
-Stops False Colour's default mode: 15 zones, whole stops out to six either side of middle grey, with half-stop zones beside the grey zone, each in its own colour.
+Stops False Colour's default mode: 17 zones, each in its own colour: black beyond 6 1/2 stops under middle grey, then 15 zones centred on the marks -6 to +6 (whole stops, with -1/2, 18 % and +1/2 beside middle grey), and white beyond 6 1/2 stops over. A zone covers the stops up to the midpoint with its neighbour.
 
 **Grey and +1 stop**:
 Stops False Colour's chart mode: a black and white picture where pixels within a sixth of a stop of middle grey are green and within a sixth of a stop of one stop over are pink. The ColorChecker routine (neutral 5 green, neutral 6.5 pink).

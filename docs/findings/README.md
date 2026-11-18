@@ -40,6 +40,7 @@ What we learned by testing, kept in the repo so it isn't lost when an issue thre
 | [60](60-skin-tone-line.md) | Where does Resolve draw its vectorscope skin-tone line? (123.3° ± 0.5° on screen, from a screenshot) |
 | [61](61-vectorscopes.md) | Milestone 2: do the vectorscopes land bars and ColorChecker hues on target, at twice the radius, with the assumed skin-tone line (headless)? |
 | [63](63-skin-tone-panel.md) | Milestone 2: does the Skin Tone Panel colour ColorChecker skin by hue against the assumed line, keep neutrals and far hues grey, go green and magenta with distance, and follow its tolerance (headless)? |
+| [93](93-stops-false-colour-scale.md) | Does Stops False Colour put the ColorChecker in the right one of 17 zones, lay its scale out horizontally with numbers under their swatches, thin its text instead of overlapping it, and draw zones or a message instead of black (headless)? |
 | [58](58-stops-false-colour.md) | Milestone 2: does Stops False Colour measure the ColorChecker's published stops in every supported Timeline Colour Space, and do both modes paint the right zones (headless)? |
 | [62](62-cie-plot.md) | Milestone 2: does the CIE plot put every ColorChecker Patch at its reference chromaticity, draw the right triangles and label both spaces (headless)? |
 

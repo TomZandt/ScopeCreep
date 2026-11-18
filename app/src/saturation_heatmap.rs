@@ -277,8 +277,8 @@ impl Display for SaturationHeatmap {
         let top = area[1] + area[3] - strip + (BAR + (LEGEND - BAR) / 2.0) * scale;
         let width = area[2] / 2.0;
         vec![
-            ScaleText { text: "0 %".into(), left: area[0], top, width, right_aligned: false },
-            ScaleText { text: format!("{} %", state.scale), left: area[0] + width, top, width, right_aligned: true },
+            ScaleText { text: "0 %".into(), left: area[0], top, width, right_aligned: false, centred: false },
+            ScaleText { text: format!("{} %", state.scale), left: area[0] + width, top, width, right_aligned: true, centred: false },
         ]
     }
 }
