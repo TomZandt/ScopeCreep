@@ -465,7 +465,7 @@ fn the_legend_can_be_turned_off() {
 fn the_settings_are_a_mode_and_the_legend_and_the_mode_defaults_to_full_zones() {
     let b = Bench::new("settings", SETUPS[2].1);
     let defs = b.set.setting_defs(0);
-    assert_eq!(defs.iter().map(|d| d.key).collect::<Vec<_>>(), ["mode", "legend"]);
+    assert_eq!(defs.iter().map(|d| d.key).collect::<Vec<_>>(), ["mode", "legend", "bw"]);
     assert_eq!(defs[0].choices[0].value, "zones", "full zones is the default");
     assert_eq!(defs[1].choices.iter().map(|c| c.value).collect::<Vec<_>>(), ["on", "off"]);
     assert!(b.display.label().contains("full zones"), "{}", b.display.label());

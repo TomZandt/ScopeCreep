@@ -132,6 +132,76 @@ fn the_channel_shows_in_the_tags_and_luma_says_so() {
     assert_eq!(tags(None)[0], "Blue");
 }
 
+// ------------------------------------------------------------------------------------------------ B/W (#118)
+
+use scopecreep::{arri_false_colour, picture_view, skin_tone_view, stops_false_colour};
+
+/// Whether a Panel's own settings say its unpainted picture is grey, and whether its toolbar has a B/W chip on.
+fn bw_state(name: &str, defs: &[scopecreep::settings::SettingDef], toolbar: &[scopecreep::toolbar::ToolbarDef], set: &[(&str, &str)]) -> (Vec<String>, Vec<bool>) {
+    let mut s = PanelSettings::default();
+    for (k, v) in set {
+        s.set(name, k, v);
+    }
+    let t = Toolbar::new(toolbar, &s.resolve(name, defs));
+    (t.chips.iter().map(|c| c.text.clone()).collect(), t.on)
+}
+
+#[test]
+fn the_clean_picture_and_skin_tone_start_in_colour_and_arri_and_stops_start_grey() {
+    let (chips, on) = bw_state("Clean picture", &picture_view::SETTINGS, &picture_view::TOOLBAR, &[]);
+    assert_eq!((chips, on), (vec!["B/W".to_string()], vec![false]));
+    assert_eq!(bw_state("Skin tone", &skin_tone_view::SETTINGS, &skin_tone_view::TOOLBAR, &[]).1, [false]);
+    assert_eq!(bw_state("ARRI False Colour", &arri_false_colour::SETTINGS, &arri_false_colour::TOOLBAR, &[]).1, [true]);
+    assert_eq!(bw_state("Stops False Colour", &stops_false_colour::SETTINGS, &stops_false_colour::TOOLBAR, &[]).1, [true]);
+}
+
+#[test]
+fn a_click_flips_the_toggle_each_way_and_it_is_remembered_per_panel() {
+    let mut s = PanelSettings::default();
+    let name = "Clean picture";
+    let click = |s: &mut PanelSettings| {
+        let t = Toolbar::new(&picture_view::TOOLBAR, &s.resolve(name, &picture_view::SETTINGS));
+        let (k, v) = t.click(0).unwrap();
+        s.set(name, k, v);
+    };
+    click(&mut s);
+    let back = PanelSettings::from_text(&s.to_text());
+    assert_eq!(Toolbar::new(&picture_view::TOOLBAR, &back.resolve(name, &picture_view::SETTINGS)).on, [true]);
+    assert_eq!(Toolbar::new(&skin_tone_view::TOOLBAR, &back.resolve("Skin tone", &skin_tone_view::SETTINGS)).on, [false], "another Panel is unaffected");
+    click(&mut s);
+    assert_eq!(Toolbar::new(&picture_view::TOOLBAR, &s.resolve(name, &picture_view::SETTINGS)).on, [false], "a second click turns it off");
+}
+
+#[test]
+fn stops_shows_bw_only_in_grey_and_plus_one_and_the_heatmap_has_none() {
+    let zones: Settings = [("mode".to_string(), "zones".to_string())].into();
+    let grey: Settings = [("mode".to_string(), "grey-plus-one".to_string())].into();
+    assert!(Toolbar::new(stops_false_colour::toolbar_for(&zones), &zones).chips.is_empty());
+    assert_eq!(Toolbar::new(stops_false_colour::toolbar_for(&grey), &grey).chips.len(), 1);
+    assert!(Toolbar::new(stops_false_colour::toolbar_for(&Settings::default()), &Settings::default()).chips.is_empty(), "the default mode is full zones");
+}
+
+#[test]
+fn bw_is_a_chip_not_a_popover_row() {
+    let left = popover_defs(&picture_view::SETTINGS, &picture_view::TOOLBAR);
+    assert!(left.is_empty(), "the clean picture has no popover");
+    assert_eq!(popover_defs(&stops_false_colour::SETTINGS, &stops_false_colour::TOOLBAR).iter().map(|d| d.key).collect::<Vec<_>>(), ["mode", "legend"]);
+}
+
+#[test]
+fn the_tags_say_b_w_or_colour_when_the_toggle_is_not_at_its_default() {
+    let tags = |name: &str, v: &str| {
+        let settings: Settings = [("bw".to_string(), v.to_string()), ("mode".to_string(), "grey-plus-one".to_string())].into();
+        panel_title(name, &DisplayContext { settings, ..DisplayContext::default() }, String::new()).tags
+    };
+    assert!(tags("Clean picture", "on").contains(&"B/W".to_string()));
+    assert!(!tags("Clean picture", "off").contains(&"B/W".to_string()));
+    assert!(tags("Skin tone", "on").contains(&"B/W".to_string()));
+    assert!(tags("ARRI False Colour", "off").contains(&"colour".to_string()));
+    assert!(!tags("ARRI False Colour", "on").iter().any(|t| t == "B/W" || t == "colour"));
+    assert!(tags("Stops False Colour", "off").contains(&"colour".to_string()));
+}
+
 // ------------------------------------------------------------------ the luma waveform's chips (#117)
 
 mod waveform_chips {

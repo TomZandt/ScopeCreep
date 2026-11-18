@@ -15,6 +15,8 @@ struct Bench {
     rig: Rig,
     conversion: OutputConversion,
     display: SkinTone,
+    /// The B/W toggle, as the user left it.
+    bw: std::cell::Cell<bool>,
 }
 
 /// What the app does after every poll of the Feed: upload, Output Conversion, the display, and the conversion
@@ -34,7 +36,7 @@ impl Bench {
         let mut rig = Rig::with_colour_setup(name, colour_setup);
         let (mut conversion, display) = (OutputConversion::new(&rig.device, &rig.queue), SkinTone::new(&rig.device, &rig.queue, TARGET, false));
         poll(&mut rig, &mut conversion, &display);
-        let b = Bench { rig, conversion, display };
+        let b = Bench { rig, conversion, display, bw: std::cell::Cell::new(false) };
         b.configure(None);
         b
     }
@@ -45,6 +47,7 @@ impl Bench {
         if let Some(tolerance) = tolerance {
             settings.set(self.display.name(), "tolerance", tolerance);
         }
+        settings.set(self.display.name(), "bw", if self.bw.get() { "on" } else { "off" });
         let known = self.rig.monitor.status().colour_setup();
         let colour_label = known.as_ref().map_or("Colour Setup unknown".to_string(), |c| c.setup.timeline.clone());
         let context = DisplayContext { colour_setup: known, colour_label, settings: settings.resolve(self.display.name(), self.display.setting_defs()), ..DisplayContext::default() };
@@ -201,8 +204,7 @@ fn the_tolerance_widens_and_narrows_the_on_line_band() {
 fn the_tolerance_is_a_list_of_choices_with_five_degrees_first_and_the_label_names_the_bands_and_the_angle() {
     let mut b = Bench::new("label", Some(DWG_REC709));
     let defs = b.display.setting_defs();
-    assert_eq!(defs.len(), 1);
-    assert_eq!(defs[0].key, "tolerance");
+    assert_eq!(defs.iter().map(|d| d.key).collect::<Vec<_>>(), ["tolerance", "bw"]);
     assert_eq!(defs[0].choices[0].value, "5");
     b.play(16, 9, &(0..16 * 9).flat_map(|_| [0.5, 0.5, 0.5, 1.0]).collect::<Vec<f32>>());
     let label = b.display.label();
@@ -220,4 +222,20 @@ fn nothing_is_drawn_before_a_frame_arrives() {
     let b = Bench::new("empty", None);
     assert_eq!(pixel(&b.render(64, 36), 64, 32, 18), [0, 0, 0]);
     assert_eq!(b.display.label(), "Skin tone");
+}
+
+#[test]
+fn bw_turns_the_unpainted_picture_grey_and_leaves_the_painted_pixels_alone() {
+    let mut b = Bench::new("bw", None);
+    // Far from the line: unpainted. In colour by default.
+    let colour = shown_at(&mut b, 120.0);
+    assert!((colour[0] as i32 - colour[2] as i32).abs() > 12, "unpainted keeps its colour: {colour:?}");
+    b.bw.set(true);
+    b.configure(None);
+    let grey = centre(&b);
+    assert!(grey[0].abs_diff(grey[1]) <= 1 && grey[1].abs_diff(grey[2]) <= 1, "unpainted is Luma grey: {grey:?}");
+    // On the line, and either side of it: painted pixels are the same solid colours.
+    assert!(is_yellow(shown_at(&mut b, 0.0)));
+    assert!(is_solid(shown_at(&mut b, 8.0), GREEN));
+    assert!(is_solid(shown_at(&mut b, -8.0), MAGENTA));
 }

@@ -13,6 +13,7 @@ use crate::gpu_frame::GpuFrame;
 use crate::picture_stage::{PictureStage, Rule};
 use crate::output_conversion::{Plan, measurement};
 use crate::settings::{Choice, SettingDef};
+use crate::toolbar::{BW_DEFAULT_COLOUR, BW_SETTING, BW_TOOLBAR, ToolbarDef};
 use crate::skin_tone::SKIN_TONE_LINE_DEGREES;
 use std::sync::{Arc, Mutex};
 
@@ -20,7 +21,7 @@ pub const TOLERANCE_SETTING: &str = "tolerance";
 
 pub const DEFAULT_TOLERANCE: &str = "5";
 
-const SETTINGS: [SettingDef; 1] = [SettingDef {
+pub static SETTINGS: [SettingDef; 2] = [SettingDef {
     key: TOLERANCE_SETTING,
     label: "On-line tolerance",
     choices: &[
@@ -30,13 +31,14 @@ const SETTINGS: [SettingDef; 1] = [SettingDef {
         Choice { value: "8", text: "±8°" },
         Choice { value: "10", text: "±10°" },
     ],
-}];
+}, BW_DEFAULT_COLOUR];
+pub static TOOLBAR: [ToolbarDef; 1] = BW_TOOLBAR;
 
 /// The colour rule: solid flat colours for the hues near the skin-tone line, the picture's own colour elsewhere.
 const RULE: &str = r#"
 struct Values {
     weights: vec4<f32>,   // luma weights for R, G, B
-    skin: vec4<f32>,      // x: tolerance in degrees, y: skin-tone line angle in degrees
+    skin: vec4<f32>,      // x: tolerance in degrees, y: skin-tone line angle in degrees, z: 1 for the unpainted picture in grey
 };
 
 const PI: f32 = 3.14159265358979;
@@ -59,7 +61,8 @@ fn colour(uv: vec2<f32>) -> vec3<f32> {
     let green = vec3<f32>(0.1, 0.85, 0.2);
     let magenta = vec3<f32>(0.95, 0.2, 0.85);
     let flat_colour = select(select(magenta, green, offset > 0.0), yellow, distance <= t);
-    return select(rgb, flat_colour, lit);
+    let unpainted = select(rgb, vec3<f32>(y), values.skin.z > 0.5);
+    return select(unpainted, flat_colour, lit);
 }
 "#;
 
@@ -70,13 +73,15 @@ struct Config {
     /// The tolerance as the setting says it (degrees).
     degrees: String,
     tolerance: f32,
+    /// B/W: the unpainted picture in Luma grey.
+    bw: bool,
     /// How the picture was made, for the label (ADR 0007).
     source: String,
 }
 
 impl Default for Config {
     fn default() -> Config {
-        Config { weights: [0.2126, 0.7152, 0.0722], degrees: DEFAULT_TOLERANCE.into(), tolerance: 5.0, source: String::new() }
+        Config { weights: [0.2126, 0.7152, 0.0722], degrees: DEFAULT_TOLERANCE.into(), tolerance: 5.0, bw: false, source: String::new() }
     }
 }
 
@@ -114,11 +119,15 @@ impl Display for SkinTone {
         // The picture is the Output picture only once it has been converted (ADR 0007).
         let what = if plan.method().is_some() || plan.measured_space(setup).is_some() { "Output picture" } else { "Picture as sent" };
         let source = format!("{what}  ·  {}  ·  {}", context.colour_label, plan.label());
-        *self.config.lock().unwrap() = Config { weights: [r as f32, g as f32, b as f32], degrees, tolerance, source };
+        *self.config.lock().unwrap() = Config { weights: [r as f32, g as f32, b as f32], degrees, tolerance, bw: context.settings.get(BW_SETTING).map(String::as_str) == Some("on"), source };
     }
 
     fn setting_defs(&self) -> &'static [SettingDef] {
         &SETTINGS
+    }
+
+    fn toolbar_defs(&self) -> &'static [ToolbarDef] {
+        &TOOLBAR
     }
 
     /// States only what is proven (ADR 0007): the bands in degrees from the line, and that the line's angle is
@@ -141,6 +150,6 @@ impl Display for SkinTone {
     fn draw(&self, pass: &mut wgpu::RenderPass<'_>, area: [f32; 4], surface: [f32; 2], _scale: f32) {
         let config = self.config.lock().unwrap().clone();
         let [r, g, b] = config.weights;
-        self.stage.draw(pass, area, surface, &[r, g, b, 0.0, config.tolerance, SKIN_TONE_LINE_DEGREES as f32, 0.0, 0.0], None);
+        self.stage.draw(pass, area, surface, &[r, g, b, 0.0, config.tolerance, SKIN_TONE_LINE_DEGREES as f32, config.bw as u32 as f32, 0.0], None);
     }
 }

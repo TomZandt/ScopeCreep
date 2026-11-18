@@ -29,12 +29,11 @@ fn title(name: &str, setup: Option<&str>, settings: &[(&str, &str)]) -> PanelTit
     panel_title(name, &context(setup, settings), "the full label".into())
 }
 
-const NAMES: [&str; 10] = [
+const NAMES: [&str; 9] = [
     "Clean picture",
     "Luma waveform",
     "Channel view",
     "ARRI False Colour",
-    "Black and white",
     "Vectorscope",
     "Saturation heatmap",
     "Skin tone",

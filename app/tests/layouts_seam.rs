@@ -4,12 +4,11 @@ use scopecreep::layouts::{Action, Click, Layouts, Rename, SLOTS, Shortcut, actio
 use scopecreep::panel_grid::{Border, PanelGrid};
 use scopecreep::settings::MenuRow;
 
-const NAMES: [&str; 10] = [
+const NAMES: [&str; 9] = [
     "Clean picture",
     "Luma waveform",
     "Channel view",
     "ARRI False Colour",
-    "Black and white",
     "Vectorscope",
     "Saturation heatmap",
     "Skin tone",
@@ -156,7 +155,7 @@ fn a_panel_missing_from_a_layout_is_placed_in_the_first_free_cell() {
     let mut more = NAMES.to_vec();
     more.push("New display");
     let grid = layouts.recall(0, &more).unwrap();
-    let new = grid.places()[10];
+    let new = grid.places()[9];
     assert_eq!((new.column, new.row, new.columns, new.rows), (0, 4, 5, 1));
     assert_eq!(grid.size(), (5, 5));
 }

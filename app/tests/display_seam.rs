@@ -75,12 +75,12 @@ fn middle(rect: [f32; 4]) -> (f32, f32) {
 }
 
 #[test]
-fn the_window_shows_ten_panels_without_the_gamut_warning_highlight_neutrals_and_cie_plot() {
+fn the_window_shows_nine_panels_without_the_gamut_warning_highlight_neutrals_cie_plot_and_black_and_white() {
     let b = Bench::new("order");
     let names = b.set.names();
-    assert_eq!(names.len(), 10, "{names:?}");
+    assert_eq!(names.len(), 9, "{names:?}");
     assert_eq!(names[..3], ["Clean picture", "Luma waveform", "Channel view"]);
-    for gone in ["Gamut/legal warning", "Highlight neutrals", "CIE chromaticity"] {
+    for gone in ["Gamut/legal warning", "Highlight neutrals", "CIE chromaticity", "Black and white"] {
         assert!(!names.contains(&gone), "{gone} is out of the Window: {names:?}");
     }
 }
@@ -196,7 +196,8 @@ fn the_waveform_offers_luma_weights_and_the_first_is_from_primaries() {
     assert_eq!(defs[1].choices[0].value, "normal", "trace brightness starts normal");
     assert_eq!(defs[2].choices[0].value, "on", "the soft spread starts on");
     assert_eq!(defs[0].choices.iter().map(|c| c.value).collect::<Vec<_>>(), ["primaries", "match-resolve"]);
-    assert!(b.set.setting_defs(0).is_empty(), "the clean picture has no settings, so no menu");
+    assert_eq!(b.set.setting_defs(0).iter().map(|d| d.key).collect::<Vec<_>>(), ["bw"]);
+    assert!(b.set.popover_defs(0).is_empty(), "the clean picture has only the B/W chip, so no menu");
 }
 
 #[test]

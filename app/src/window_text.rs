@@ -72,6 +72,17 @@ pub fn conversion_tags(context: &DisplayContext) -> Vec<String> {
     }
 }
 
+/// The B/W tag (#118): "B/W" when the unpainted picture is grey on a Panel that defaults to colour, "colour" when it
+/// is in colour on one that defaults to grey. Defaults are not repeated.
+pub(crate) fn bw_tag(context: &DisplayContext, default_grey: bool) -> Option<String> {
+    let grey = context.settings.get(crate::toolbar::BW_SETTING).map_or(default_grey, |v| v == "on");
+    match (grey, default_grey) {
+        (true, false) => Some("B/W".into()),
+        (false, true) => Some("colour".into()),
+        _ => None,
+    }
+}
+
 /// The tags a Panel that measures Luma and colour needs: the conversion's, the Measured Space when assumed, and
 /// the luma weights when they are not the default.
 pub fn measurement_tags(context: &DisplayContext) -> Vec<String> {
@@ -103,7 +114,7 @@ fn waveform_tags(context: &DisplayContext) -> Vec<String> {
 pub fn panel_title(display_name: &str, context: &DisplayContext, full: String) -> PanelTitle {
     let setting = |key: &str| context.settings.get(key).map(String::as_str);
     let (name, tags): (String, Vec<String>) = match display_name {
-        "Clean picture" => ("Clean picture".into(), conversion_tags(context)),
+        "Clean picture" => ("Clean picture".into(), bw_tag(context, false).into_iter().chain(conversion_tags(context)).collect()),
         crate::waveform::NAME => {
             // The channels drawn, when not just Luma.
             let channels = crate::waveform::Channels::from_setting(setting(crate::waveform::CHANNELS_SETTING));
@@ -113,7 +124,7 @@ pub fn panel_title(display_name: &str, context: &DisplayContext, full: String) -
         }
         crate::waveform::COLOUR_NAME => ("Colour waveform".into(), waveform_tags(context)),
         "Black and white" => ("Black and white".into(), measurement_tags(context)),
-        "ARRI False Colour" => ("ARRI False Colour".into(), measurement_tags(context)),
+        "ARRI False Colour" => ("ARRI False Colour".into(), bw_tag(context, true).into_iter().chain(measurement_tags(context)).collect()),
         crate::vectorscope::NAME => {
             // Both zooms are drawn side by side, so there is no zoom to say.
             let mut tags = measurement_tags(context);
@@ -131,7 +142,7 @@ pub fn panel_title(display_name: &str, context: &DisplayContext, full: String) -
             ("Saturation heatmap".into(), tags)
         }
         "Skin tone" => {
-            let mut tags = conversion_tags(context);
+            let mut tags: Vec<String> = bw_tag(context, false).into_iter().chain(conversion_tags(context)).collect();
             if let Some(degrees) = setting(crate::skin_tone_view::TOLERANCE_SETTING).filter(|d| *d != crate::skin_tone_view::DEFAULT_TOLERANCE) {
                 tags.push(format!("±{degrees}°"));
             }

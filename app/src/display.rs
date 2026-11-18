@@ -108,6 +108,11 @@ pub trait Display: Send + Sync {
     fn toolbar_defs(&self) -> &'static [ToolbarDef] {
         &[]
     }
+    /// The chips shown under `settings`, for a display whose chips depend on them (a subset of
+    /// [`Display::toolbar_defs`]). The same by default.
+    fn toolbar_defs_for(&self, _settings: &Settings) -> &'static [ToolbarDef] {
+        self.toolbar_defs()
+    }
     /// What the display remembers between sessions besides its menu choices (a Loupe's position and zoom). They
     /// reach [`Display::configure`] in the context's settings, and leave through [`PointerResult::remember`].
     fn state_keys(&self) -> &'static [&'static str] {
@@ -138,10 +143,12 @@ pub struct InWindow {
     pub gamut_legal_warning: bool,
     pub highlight_neutrals: bool,
     pub cie_plot: bool,
+    pub black_and_white: bool,
 }
 
-/// What the Window shows (ticket #95: the three displays below are out of it for now).
-pub const IN_WINDOW: InWindow = InWindow { gamut_legal_warning: false, highlight_neutrals: false, cie_plot: false };
+/// What the Window shows (ticket #95: the first three displays below are out of it for now; #118: the clean picture's
+/// B/W toggle does the black and white Panel's job).
+pub const IN_WINDOW: InWindow = InWindow { gamut_legal_warning: false, highlight_neutrals: false, cie_plot: false, black_and_white: false };
 
 /// Every display, in Panel order (the order of the grid, left to right then down).
 #[derive(Clone, Default)]
@@ -165,7 +172,9 @@ impl DisplaySet {
         }
         set.register(Arc::new(crate::channel_view::ChannelView::new(device, queue, target, filterable)));
         set.register(Arc::new(crate::arri_false_colour::ArriFalseColour::new(device, queue, target)));
-        set.register(Arc::new(crate::black_and_white::BlackAndWhite::new(device, queue, target, filterable)));
+        if IN_WINDOW.black_and_white {
+            set.register(Arc::new(crate::black_and_white::BlackAndWhite::new(device, queue, target, filterable)));
+        }
         set.register(Arc::new(crate::vectorscope::Vectorscope::new(device, queue, target)));
         set.register(Arc::new(crate::saturation_heatmap::SaturationHeatmap::new(device, queue, target)));
         set.register(Arc::new(crate::skin_tone_view::SkinTone::new(device, queue, target, filterable)));
@@ -248,7 +257,8 @@ impl DisplaySet {
 
     /// The chips on the title bar of the display in Panel `index`, given everyone's choices.
     pub fn toolbar(&self, index: usize, settings: &PanelSettings) -> Toolbar {
-        Toolbar::new(self.displays[index].toolbar_defs(), &self.settings_of(index, settings))
+        let own = self.settings_of(index, settings);
+        Toolbar::new(self.displays[index].toolbar_defs_for(&own), &own)
     }
 
     /// The settings the display in Panel `index` is using, given everyone's choices.

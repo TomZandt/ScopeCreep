@@ -27,7 +27,7 @@ Pre-alpha. Nothing to install yet.
 |---|---|---|
 | Feed protocol | `feed/PROTOCOL.md`, `feed/include/scopecreep_feed.h`, `feed/` crate | The shared-memory ring between Sender and app: spec, C header (Sender), Rust reader and synthetic writer (app, tests) |
 | Sender | `sender/` | C++ OFX plugin, Resolve's CUDA render path, async pinned copy into the Feed |
-| App | `app/` | Rust + wgpu: one window, a layout of 10 Panels (the clean picture as the hero, one Vectorscope Panel showing 100 % and 200 % together) (the gamut/legal warning, Highlight Neutrals and the CIE plot are built and tested but out of the Window, #95) (Scopes and Picture Views) all showing the latest Feed frame (GPU, every pixel, full resolution) |
+| App | `app/` | Rust + wgpu: one window, a layout of 9 Panels (the clean picture as the hero, one Vectorscope Panel showing 100 % and 200 % together) (the gamut/legal warning, Highlight Neutrals, the CIE plot and the Black and white Panel are built and tested but out of the Window, #95, #118; the clean picture, ARRI False Colour, Stops False Colour and Skin Tone have a B/W toggle instead) (Scopes and Picture Views) all showing the latest Feed frame (GPU, every pixel, full resolution) |
 
 ```sh
 cargo test                       # Feed protocol (Rust and C against each other) and the app, driven at the Feed seam (waveform tests need a GPU)

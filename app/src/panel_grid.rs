@@ -70,14 +70,13 @@ impl Place {
 /// Vectorscope (two cells wide) to its right, the Colour Waveform and the Picture Views below, every cell used.
 const DEFAULT_COLUMNS: [u32; 5] = [1, 1, 1, 1, 1];
 const DEFAULT_ROWS: [u32; 4] = [14, 14, 11, 11];
-const DEFAULT_PLACES: [(&str, [usize; 4]); 10] = [
+const DEFAULT_PLACES: [(&str, [usize; 4]); 9] = [
     ("Clean picture", [0, 0, 3, 2]),
     ("Luma waveform", [3, 0, 2, 1]),
     ("Vectorscope", [3, 1, 2, 1]),
     ("Colour waveform", [0, 2, 2, 2]),
     ("Channel view", [2, 2, 1, 1]),
-    ("ARRI False Colour", [3, 2, 1, 1]),
-    ("Black and white", [4, 2, 1, 1]),
+    ("ARRI False Colour", [3, 2, 2, 1]),
     ("Saturation heatmap", [2, 3, 1, 1]),
     ("Skin tone", [3, 3, 1, 1]),
     ("Stops False Colour", [4, 3, 1, 1]),

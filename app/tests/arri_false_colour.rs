@@ -191,7 +191,7 @@ fn the_legend_toggles_and_the_label_says_the_bands_are_third_party_and_not_affil
     // On by default: six swatches under the picture, each band's colour, with the band edges as text.
     b.configure("on");
     let defs = b.set.setting_defs(0);
-    assert_eq!(defs.len(), 1);
+    assert_eq!(defs.len(), 2, "the legend and B/W");
     assert_eq!((defs[0].key, defs[0].choices.iter().map(|c| c.value).collect::<Vec<_>>()), ("legend", vec!["on", "off"]));
     let image = b.render(width, height);
     for (i, band) in BANDS.iter().enumerate() {

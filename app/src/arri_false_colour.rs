@@ -10,6 +10,7 @@ use crate::gpu_frame::GpuFrame;
 use crate::picture_stage::{BAR, BAR_STRIP, Legend, PictureStage, Rule};
 use crate::output_conversion;
 use crate::settings::{Choice, SettingDef};
+use crate::toolbar::{BW_DEFAULT_GREY, BW_SETTING, BW_TOOLBAR, ToolbarDef};
 use std::sync::{Arc, Mutex};
 
 /// One band of the table: a name, its edges in percent of full-range Luma, and the colour it is shown in.
@@ -41,12 +42,12 @@ pub fn band_at(percent: f64) -> Option<&'static Band> {
     BANDS.iter().enumerate().find(|(i, b)| (percent >= b.from || *i == 0) && (percent < b.to || *i == last)).map(|(_, b)| b)
 }
 
-/// The settings: only the legend, on by default.
-const SETTINGS: [SettingDef; 1] = [SettingDef {
-    key: "legend",
-    label: "Legend",
-    choices: &[Choice { value: "on", text: "On" }, Choice { value: "off", text: "Off" }],
-}];
+/// The settings: the legend (on by default) and B/W, a chip on the title bar (grey by default, as ARRI draws it).
+pub static SETTINGS: [SettingDef; 2] = [
+    SettingDef { key: "legend", label: "Legend", choices: &[Choice { value: "on", text: "On" }, Choice { value: "off", text: "Off" }] },
+    BW_DEFAULT_GREY,
+];
+pub static TOOLBAR: [ToolbarDef; 1] = BW_TOOLBAR;
 
 /// The WGSL for the band lookup, from [`BANDS`] so there is one table.
 fn band_function() -> String {
@@ -71,7 +72,7 @@ fn band_function() -> String {
 fn rule() -> String {
     format!(
         r#"
-struct Values {{ weights: vec4<f32> }};   // luma weights for R, G, B
+struct Values {{ weights: vec4<f32> }};   // luma weights for R, G, B; w: 1 for the unpainted picture in grey, 0 in its own colour
 
 {band}
 
@@ -85,7 +86,8 @@ fn colour(uv: vec2<f32>) -> vec3<f32> {{
     let luma = dot(load_picture(uv), values.weights.xyz);
     let coloured = band(luma * 100.0);
     if (coloured.a > 0.5) {{ return coloured.rgb; }}
-    return vec3<f32>(clamp(luma, 0.0, 1.0));
+    if (values.weights.w > 0.5) {{ return vec3<f32>(clamp(luma, 0.0, 1.0)); }}
+    return clamp(load_picture(uv), vec3<f32>(0.0), vec3<f32>(1.0));
 }}
 "#,
         band = band_function() + &swatch_function(),
@@ -104,6 +106,7 @@ fn swatch_function() -> String {
 
 struct State {
     legend: bool,
+    grey: bool,
     weights: [f64; 3],
     label: String,
 }
@@ -119,7 +122,7 @@ pub struct ArriFalseColour {
 impl ArriFalseColour {
     pub fn new(device: &wgpu::Device, queue: &wgpu::Queue, target: wgpu::TextureFormat) -> ArriFalseColour {
         let stage = PictureStage::new::<[f32; 4]>(device, queue, target, false, Rule { label: "arri false colour", wgsl: rule(), has_legend: true });
-        let display = ArriFalseColour { stage, state: Arc::new(Mutex::new(State { legend: true, weights: [0.2126, 0.7152, 0.0722], label: String::new() })) };
+        let display = ArriFalseColour { stage, state: Arc::new(Mutex::new(State { legend: true, grey: true, weights: [0.2126, 0.7152, 0.0722], label: String::new() })) };
         display.configure(&DisplayContext::default());
         display
     }
@@ -143,6 +146,7 @@ impl Display for ArriFalseColour {
         let mut state = self.state.lock().unwrap();
         state.weights = weights;
         state.legend = context.settings.get("legend").is_none_or(|v| v == "on");
+        state.grey = context.settings.get(BW_SETTING).is_none_or(|v| v == "on");
         state.label = format!(
             "ARRI-style False Colour  ·  Output Luma, {space}  ·  Y = {:.4} R + {:.4} G + {:.4} B  ·  Rec.709 percentage bands published by third parties; not ARRI's specification, not affiliated with ARRI",
             weights[0], weights[1], weights[2]
@@ -153,6 +157,10 @@ impl Display for ArriFalseColour {
         &SETTINGS
     }
 
+    fn toolbar_defs(&self) -> &'static [ToolbarDef] {
+        &TOOLBAR
+    }
+
     fn label(&self) -> String {
         self.state.lock().unwrap().label.clone()
     }
@@ -160,7 +168,7 @@ impl Display for ArriFalseColour {
     fn draw(&self, pass: &mut wgpu::RenderPass<'_>, area: [f32; 4], surface: [f32; 2], scale: f32) {
         let state = self.state.lock().unwrap();
         let w = state.weights;
-        self.stage.draw(pass, area, surface, &[w[0] as f32, w[1] as f32, w[2] as f32, 0.0], Legend::bar(state.legend, area, scale));
+        self.stage.draw(pass, area, surface, &[w[0] as f32, w[1] as f32, w[2] as f32, state.grey as u32 as f32], Legend::bar(state.legend, area, scale));
     }
 
     /// The band edges under their swatches, where they fit.

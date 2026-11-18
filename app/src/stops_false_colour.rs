@@ -24,7 +24,8 @@ use crate::output_conversion::Plan;
 use crate::display::{Display, DisplayContext, ScaleText};
 use crate::gpu_frame::GpuFrame;
 use crate::picture_stage::{Legend, PictureStage, Rule};
-use crate::settings::{Choice, SettingDef};
+use crate::settings::{Choice, SettingDef, Settings};
+use crate::toolbar::{BW_DEFAULT_GREY, BW_SETTING, BW_TOOLBAR, ToolbarDef};
 use scopecreep_accuracy::colorchecker::luma_weights_adapted_to_d65;
 use scopecreep_accuracy::colour::{AP1, DWG, P3_D65, REC2020, REC709};
 use std::sync::{Arc, Mutex};
@@ -137,14 +138,26 @@ pub enum Mode {
     GreyAndPlusOne,
 }
 
-const SETTINGS: [SettingDef; 2] = [
+pub static SETTINGS: [SettingDef; 3] = [
     SettingDef {
         key: MODE_SETTING,
         label: "Mode",
         choices: &[Choice { value: "zones", text: "Full zones" }, Choice { value: "grey-plus-one", text: "Grey and +1 stop" }],
     },
     SettingDef { key: LEGEND_SETTING, label: "Legend", choices: &[Choice { value: "on", text: "Legend on" }, Choice { value: "off", text: "Legend off" }] },
+    BW_DEFAULT_GREY,
 ];
+
+/// B/W is a chip on the title bar, only in the grey and +1 stop mode: full zones paint every pixel.
+pub static TOOLBAR: [ToolbarDef; 1] = BW_TOOLBAR;
+
+/// The chips under `settings`: B/W only in grey and +1 stop mode.
+pub fn toolbar_for(settings: &Settings) -> &'static [ToolbarDef] {
+    match settings.get(MODE_SETTING).map(String::as_str) {
+        Some("grey-plus-one") => &TOOLBAR,
+        _ => &[],
+    }
+}
 
 /// What a Stops False Colour read back from the GPU: the stops of every pixel (log2 of Y over middle grey).
 pub struct StopsMap {
@@ -282,7 +295,7 @@ fn common_shader() -> String {
 struct Values {{
     weights: vec4<f32>,     // the Y weights of the Timeline Colour Space's primaries
     info: vec4<u32>,        // curve, picture width, picture height, mode (0 full zones, 1 grey and +1 stop)
-    flags: vec4<f32>,       // x: swatches in the legend; y: 1 to fill the Panel with the neutral background
+    flags: vec4<f32>,       // x: swatches in the legend; y: 1 to fill the Panel with the neutral background; z: 1 for the unpainted picture in grey, 0 in colour
 }};
 
 var<private> EDGES: array<f32, 16> = array<f32, 16>({edges});
@@ -368,13 +381,17 @@ fn legend(uv: vec2<f32>) -> vec3<f32> {
 
 fn colour(uv: vec2<f32>) -> vec3<f32> {
     if values.flags.y > 0.5 { return vec3<f32>(0.09); }
-    let y_linear = luma(vec4<f32>(load_picture(uv), 1.0));
+    let rgb = load_picture(uv);
+    let y_linear = luma(vec4<f32>(rgb, 1.0));
     let stops = stops_of(y_linear);
     if values.info.w == 1u {
         if abs(stops) < TOLERANCE { return GREEN; }
         if abs(stops - 1.0) < TOLERANCE { return PINK; }
-        let grey = pow(clamp(y_linear, 0.0, 1.0), 1.0 / 2.4);
-        return vec3<f32>(grey);
+        if values.flags.z > 0.5 { return vec3<f32>(pow(clamp(y_linear, 0.0, 1.0), 1.0 / 2.4)); }
+        // Its own colour: each channel decoded to light and shown as the grey is, so the two differ only in colour.
+        let c = values.info.x;
+        let light = clamp(vec3<f32>(decode(rgb.r, c), decode(rgb.g, c), decode(rgb.b, c)), vec3<f32>(0.0), vec3<f32>(1.0));
+        return pow(light, vec3<f32>(1.0 / 2.4));
     }
     return zone_colour(stops);
 }
@@ -449,6 +466,7 @@ pub fn reading_tags(context: &DisplayContext) -> Vec<String> {
     let mut tags = Vec::new();
     if context.settings.get(MODE_SETTING).map(String::as_str) == Some("grey-plus-one") {
         tags.push("grey and +1 stop".to_string());
+        tags.extend(crate::window_text::bw_tag(context, true));
     }
     match Basis::for_setup(context.colour_setup.as_ref()) {
         Basis::Timeline(curve) if curve.approximated() => tags.push("approximated".into()),
@@ -470,6 +488,8 @@ struct Config {
     basis: Basis,
     mode: Mode,
     legend: bool,
+    /// B/W in the grey and +1 stop mode: the unpainted picture in grey, else in colour.
+    grey: bool,
     /// The Colour Setup's part of the label.
     colour_label: String,
     timeline: String,
@@ -524,7 +544,7 @@ impl StopsFalseColour {
             stage,
             measure,
             params,
-            config: Arc::new(Mutex::new(Config { basis: Basis::for_setup(None), mode: Mode::Zones, legend: true, colour_label: String::new(), timeline: String::new() })),
+            config: Arc::new(Mutex::new(Config { basis: Basis::for_setup(None), mode: Mode::Zones, legend: true, grey: true, colour_label: String::new(), timeline: String::new() })),
             state: Arc::new(Mutex::new(State { timeline: None, output: None })),
         };
         view.configure(&DisplayContext::default());
@@ -546,7 +566,7 @@ impl StopsFalseColour {
             (config.mode == Mode::GreyAndPlusOne) as u32,
             f(swatches as f32),
             f(background as u32 as f32),
-            0,
+            f(config.grey as u32 as f32),
             0,
         ]
     }
@@ -621,11 +641,20 @@ impl Display for StopsFalseColour {
         config.timeline = context.colour_setup.as_ref().map(|c| c.setup.timeline.clone()).unwrap_or_default();
         config.colour_label = context.colour_label.clone();
         config.mode = if context.settings.get(MODE_SETTING).map(String::as_str) == Some("grey-plus-one") { Mode::GreyAndPlusOne } else { Mode::Zones };
+        config.grey = context.settings.get(BW_SETTING).is_none_or(|v| v == "on");
         config.legend = context.settings.get(LEGEND_SETTING).map(String::as_str) != Some("off");
     }
 
     fn setting_defs(&self) -> &'static [SettingDef] {
         &SETTINGS
+    }
+
+    fn toolbar_defs(&self) -> &'static [ToolbarDef] {
+        &TOOLBAR
+    }
+
+    fn toolbar_defs_for(&self, settings: &Settings) -> &'static [ToolbarDef] {
+        toolbar_for(settings)
     }
 
     /// What is shown and how far it can be trusted: scene light decoded from the Timeline Colour Space, the Output

@@ -4,7 +4,11 @@
 //! A grey you see must line up with its trace: within one 8-bit step. Needs a GPU.
 mod common;
 use common::{Rig, TARGET, layouts};
+use scopecreep::black_and_white::BlackAndWhite;
 use scopecreep::display::DisplaySet;
+use scopecreep::picture_view::PictureView;
+use scopecreep::waveform::Waveform;
+use std::sync::Arc;
 use scopecreep::output_conversion::OutputConversion;
 use scopecreep::panel_grid::PanelLayout;
 use scopecreep::settings::PanelSettings;
@@ -35,10 +39,20 @@ fn poll(rig: &mut Rig, conversion: &mut OutputConversion, set: &DisplaySet, sett
     conversion.follow(setup.as_ref(), rig.uploader.frame(), |encoder, shown| set.on_frame(encoder, shown));
 }
 
+/// The Window's displays plus the black and white Panel, which is out of the Window (#118) but kept and tested.
+fn standard_with_black_and_white(rig: &Rig) -> DisplaySet {
+    let mut set = DisplaySet::default();
+    set.register(Arc::new(PictureView::new(&rig.device, &rig.queue, TARGET, false)));
+    let luma = Waveform::new(&rig.device, &rig.queue, TARGET);
+    set.register(Arc::new(luma));
+    set.register(Arc::new(BlackAndWhite::new(&rig.device, &rig.queue, TARGET, false)));
+    set
+}
+
 impl Bench {
     fn new(name: &str, colour_setup: &str) -> Bench {
         let mut rig = Rig::with_colour_setup(name, Some(colour_setup));
-        let (mut conversion, set, settings) = (OutputConversion::new(&rig.device, &rig.queue), DisplaySet::standard(&rig.device, &rig.queue, TARGET, false), PanelSettings::default());
+        let (mut conversion, set, settings) = (OutputConversion::new(&rig.device, &rig.queue), standard_with_black_and_white(&rig), PanelSettings::default());
         poll(&mut rig, &mut conversion, &set, &settings);
         Bench { rig, conversion, set, settings }
     }

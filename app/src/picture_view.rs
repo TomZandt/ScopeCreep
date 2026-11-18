@@ -8,13 +8,30 @@ use crate::display::{Display, DisplayContext};
 use crate::gpu_frame::GpuFrame;
 use crate::output_conversion::Plan;
 use crate::picture_stage::{PictureStage, Rule};
+use crate::settings::SettingDef;
+use crate::toolbar::{BW_DEFAULT_COLOUR, BW_SETTING, BW_TOOLBAR, ToolbarDef};
 use std::sync::{Arc, Mutex};
 
 /// The colour rule: the frame as it is.
+/// With the B/W toggle on (`values.weights.w` > 0.5) its Luma, by the weights the waveform uses (ADR 0004).
 const RULE: &str = r#"
-struct Values { unused: vec4<f32> };
-fn colour(uv: vec2<f32>) -> vec3<f32> { return sample_picture(uv); }
+struct Values { weights: vec4<f32> };   // luma weights for R, G, B; w: 1 for black and white
+fn colour(uv: vec2<f32>) -> vec3<f32> {
+    let rgb = sample_picture(uv);
+    return select(rgb, vec3<f32>(dot(rgb, values.weights.xyz)), values.weights.w > 0.5);
+}
 "#;
+
+/// B/W is a chip on the title bar, off by default.
+pub static SETTINGS: [SettingDef; 1] = [BW_DEFAULT_COLOUR];
+pub static TOOLBAR: [ToolbarDef; 1] = BW_TOOLBAR;
+
+/// What the last [`DisplayContext`] set for drawing.
+#[derive(Clone, Copy)]
+struct Look {
+    weights: [f32; 3],
+    bw: bool,
+}
 
 /// The Picture View's GPU state. Cheap to clone: the Feed thread uploads frames through one clone while the
 /// window thread draws through another.
@@ -23,13 +40,14 @@ pub struct PictureView {
     stage: PictureStage,
     /// The Colour Setup and conversion part of the label, from the last [`DisplayContext`].
     label_tail: Arc<Mutex<String>>,
+    look: Arc<Mutex<Look>>,
 }
 
 impl PictureView {
     /// `filterable`: the device can smooth 32-bit float textures (else the picture is drawn nearest-neighbour).
     pub fn new(device: &wgpu::Device, queue: &wgpu::Queue, target: wgpu::TextureFormat, filterable: bool) -> PictureView {
         let stage = PictureStage::new::<[f32; 4]>(device, queue, target, filterable, Rule { label: "picture view", wgsl: RULE.into(), has_legend: false });
-        let view = PictureView { stage, label_tail: Arc::new(Mutex::new(String::new())) };
+        let view = PictureView { stage, label_tail: Arc::new(Mutex::new(String::new())), look: Arc::new(Mutex::new(Look { weights: [0.2126, 0.7152, 0.0722], bw: false })) };
         view.configure(&DisplayContext::default());
         view
     }
@@ -77,6 +95,16 @@ impl Display for PictureView {
 
     fn configure(&self, context: &DisplayContext) {
         *self.label_tail.lock().unwrap() = Self::label_tail(context);
+        let [r, g, b] = crate::output_conversion::measurement(context.colour_setup.clone(), context.luma).weights();
+        *self.look.lock().unwrap() = Look { weights: [r as f32, g as f32, b as f32], bw: context.settings.get(BW_SETTING).map(String::as_str) == Some("on") };
+    }
+
+    fn setting_defs(&self) -> &'static [SettingDef] {
+        &SETTINGS
+    }
+
+    fn toolbar_defs(&self) -> &'static [ToolbarDef] {
+        &TOOLBAR
     }
 
     fn label(&self) -> String {
@@ -85,6 +113,7 @@ impl Display for PictureView {
 
     /// Draw the picture, scaled to fit inside `area` with its shape kept.
     fn draw(&self, pass: &mut wgpu::RenderPass<'_>, area: [f32; 4], surface: [f32; 2], _scale: f32) {
-        self.stage.draw(pass, area, surface, &[0.0f32; 4], None);
+        let look = *self.look.lock().unwrap();
+        self.stage.draw(pass, area, surface, &[look.weights[0], look.weights[1], look.weights[2], look.bw as u32 as f32], None);
     }
 }

@@ -101,7 +101,7 @@ The colour scale of a display, always horizontal: under the picture, full width,
 _Avoid_: Vertical legend
 
 **Panel**:
-One area of the Window that shows one Scope or Picture View. Every display in the Window has its own Panel, so everything can be seen at once (10 Panels; the gamut/legal warning, Highlight Neutrals and CIE plot are out of the Window but their code and saved settings are kept); the Panels sit in an ordered grid whose borders the user can drag.
+One area of the Window that shows one Scope or Picture View. Every display in the Window has its own Panel, so everything can be seen at once (9 Panels; the gamut/legal warning, Highlight Neutrals, CIE plot and Black and white are out of the Window but their code and saved settings are kept); the Panels sit in an ordered grid whose borders the user can drag.
 _Avoid_: Pane, view, tile, window (for one display)
 
 **Display**:
@@ -172,7 +172,7 @@ _Avoid_: Scope (for false colour), filter, LUT view
 A Picture View that shows the Output picture in Luma grey and pixels whose red, green and blue are nearly equal (within a tolerance, a share of the full signal range, 3 % by default) in green, for checking that whites and greys are balanced.
 _Avoid_: White balance check, neutral finder
 **Black and white**:
-The Picture View that shows the Output picture as greys equal to Luma, with the same weights as the waveform (including its luma weights setting), so a grey on screen lines up with its trace.
+The Picture View that shows the Output picture as greys equal to Luma, with the same weights as the waveform (including its luma weights setting), so a grey on screen lines up with its trace. Out of the Window since #118: the clean picture's B/W toggle does its job (code and tests kept).
 _Avoid_: Greyscale, desaturated view, monochrome
 
 **Colour Waveform**:

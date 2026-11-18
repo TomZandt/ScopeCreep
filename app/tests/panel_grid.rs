@@ -7,13 +7,12 @@ use scopecreep::panel_grid::{Border, PanelGrid, PanelLayout, Press, min_panel_si
 const AREA: [f32; 4] = [12.0, 12.0, 1256.0, 716.0];
 const GAP: f32 = 12.0;
 
-/// The 10 displays the Window shows, in Panel order.
-const NAMES: [&str; 10] = [
+/// The 9 displays the Window shows, in Panel order.
+const NAMES: [&str; 9] = [
     "Clean picture",
     "Luma waveform",
     "Channel view",
     "ARRI False Colour",
-    "Black and white",
     "Vectorscope",
     "Saturation heatmap",
     "Skin tone",
@@ -82,7 +81,7 @@ fn the_default_layout_has_the_scopes_beside_the_picture_and_the_views_below() {
         assert!(c[0] >= picture[0] + picture[2], "{name} is right of the picture: {c:?}");
         assert!(c[1] < picture[1] + picture[3], "{name} is beside the picture: {c:?}");
     }
-    for name in ["Channel view", "ARRI False Colour", "Black and white", "Saturation heatmap", "Skin tone", "Stops False Colour", "Colour waveform"] {
+    for name in ["Channel view", "ARRI False Colour", "Saturation heatmap", "Skin tone", "Stops False Colour", "Colour waveform"] {
         let c = cell_of(&grid, name);
         assert!(c[1] >= picture[1] + picture[3], "{name} is below the picture: {c:?}");
     }
@@ -156,7 +155,7 @@ fn dragging_a_row_border_resizes_the_rows_above_and_below() {
     grid.drag(border, [x, y - 50.0], AREA, GAP, min_panel_size(1.0));
     let after = grid.cells(AREA, GAP);
     assert!((after[0][3] - (before[0][3] - 50.0)).abs() < 0.5);
-    assert!((after[4][3] - (before[4][3] + 50.0)).abs() < 0.5, "the Colour waveform below grows");
+    assert!((after[2][3] - (before[2][3] + 50.0)).abs() < 0.5, "the Channel view below grows");
     assert_fills(&grid);
 }
 
@@ -250,9 +249,9 @@ fn a_panel_missing_from_a_saved_layout_takes_the_first_free_cell_or_a_new_row() 
     names.push("New display");
     let text = default_grid().to_text(&NAMES).replace("panel 2 3 1 1 Saturation heatmap\n", "");
     let grid = PanelGrid::from_text(&names, &text);
-    let heatmap = grid.places()[6];
+    let heatmap = grid.places()[5];
     assert_eq!((heatmap.column, heatmap.row, heatmap.columns, heatmap.rows), (2, 3, 1, 1), "the free cell");
-    let new = grid.places()[10];
+    let new = grid.places()[9];
     assert_eq!((new.column, new.row, new.columns), (0, 4, 5), "a new row of its own");
     assert_eq!(grid.size(), (5, 5));
     assert_fills(&grid);

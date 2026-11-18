@@ -5,7 +5,21 @@
 //! choices are stored and remembered as ever), shown as a row of chips, one per choice, one at a time. The
 //! popover holds every other setting ([`popover_defs`]).
 use crate::components::{Channel, Chip, ChipMode};
-use crate::settings::{SettingDef, Settings};
+use crate::settings::{Choice, SettingDef, Settings};
+
+/// The value a toggle setting has when off; its chip's `value` is what it has when on.
+pub const TOGGLE_OFF: &str = "off";
+
+/// The B/W toggle (#118): the setting and its chip, for the Panels that draw their unpainted picture in Luma grey
+/// or in colour. The setting's first choice is its default, so each Panel picks the one that suits it.
+pub const BW_SETTING: &str = "bw";
+pub const BW_DEFAULT_COLOUR: SettingDef = SettingDef { key: BW_SETTING, label: "Black and white", choices: &[Choice { value: TOGGLE_OFF, text: "Colour" }, Choice { value: "on", text: "Black and white" }] };
+pub const BW_DEFAULT_GREY: SettingDef = SettingDef { key: BW_SETTING, label: "Black and white", choices: &[Choice { value: "on", text: "Black and white" }, Choice { value: TOGGLE_OFF, text: "Colour" }] };
+pub static BW_TOOLBAR: [ToolbarDef; 1] = [ToolbarDef {
+    key: BW_SETTING,
+    mode: ChipMode::Toggle,
+    chips: &[ToolbarChip { value: "on", text: "B/W", tooltip: "Unpainted picture in black and white (Luma grey)", channel: None }],
+}];
 
 /// One chip: the setting's choice it selects, the letter on it, what hovering it says, and the colour it takes
 /// when on (neutral accent when `None`).
@@ -18,7 +32,8 @@ pub struct ToolbarChip {
 }
 
 /// A setting shown as chips on the title bar. Single choice (the Channel view) stores the chip's `value`; any
-/// combination (the luma waveform) stores the `value`s of the chips that are on, in chip order ("yrb"). The other
+/// combination (the luma waveform) stores the `value`s of the chips that are on, in chip order ("yrb"); a toggle (B/W)
+/// stores its chip's `value` when on and [`TOGGLE_OFF`] when off. The other
 /// modes of [`ChipMode`] arrive with the displays that use them.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct ToolbarDef {
@@ -56,6 +71,14 @@ impl Toolbar {
                 });
                 toolbar.tooltips.push(chip.tooltip.to_string());
                 toolbar.picks.push((def.key, chip.value.to_string()));
+            }
+            if def.mode == ChipMode::Toggle {
+                // A click on a toggle that is on turns it off.
+                for i in first..toolbar.on.len() {
+                    if toolbar.on[i] {
+                        toolbar.picks[i].1 = TOGGLE_OFF.to_string();
+                    }
+                }
             }
             if def.mode == ChipMode::Multiple {
                 // A click on chip `i` sets the letters of the chips that would then be on.
