@@ -74,6 +74,17 @@ _Avoid_: Theme colour, constant
 A colour that is data, not style: a false colour band, the heatmap palette, a skin tint, a trace colour. It lives with its display and is exempt from the style check.
 _Avoid_: Theme colour
 
+**Component**:
+A part of the chrome every surface shares: chip, segmented control, slider with a number, popover, tooltip, Panel frame and title bar, top bar, status bar, legend strip. Each is a pure size and hit-area description with a drawing in every state (Normal, Hover, Pressed, Disabled).
+_Avoid_: Widget, control (for the whole set)
+
+**Chip**:
+A small toggle on a title bar: a letter or short word, grey when off, the accent (or its channel's colour for R, G, B, Y) when on.
+
+**Legend strip**:
+The colour scale of a display, always horizontal: under the picture, full width, read left to right.
+_Avoid_: Vertical legend
+
 **Panel**:
 One area of the Window that shows one Scope or Picture View. Every display in the Window has its own Panel, so everything can be seen at once (11 Panels; the gamut/legal warning, Highlight Neutrals and CIE plot are out of the Window but their code and saved settings are kept); the Panels sit in an ordered grid whose borders the user can drag.
 _Avoid_: Pane, view, tile, window (for one display)

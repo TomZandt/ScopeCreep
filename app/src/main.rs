@@ -24,7 +24,8 @@ use scopecreep::output_conversion::OutputConversion;
 use scopecreep::panel_grid::{Border, PanelGrid, PanelLayout, min_panel_size};
 use scopecreep::resolve_helper::ScriptHelper;
 use scopecreep::flat_rects::FlatRects;
-use scopecreep::settings::{Menu, MenuRow, PanelSettings, MENU_ROW};
+use scopecreep::components::{self, Prim};
+use scopecreep::settings::{Menu, PanelSettings};
 use scopecreep::style;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -662,41 +663,30 @@ impl AppWindow {
             eprintln!("scopecreep: text could not be prepared: {e}");
         }
 
-        // The right-click menu, over everything: its rectangles, then its own text (so it sits above the Panels' text).
+        // The right-click menu, drawn as the popover component, over everything: its rectangles, then its own text
+        // (so it sits above the Panels' text).
         let mut rects: Vec<([f32; 4], [f32; 4])> = Vec::new();
-        let mut menu_areas: Vec<(usize, f32, f32, bool)> = Vec::new();
+        let mut menu_areas: Vec<(usize, f32, f32, [u8; 3])> = Vec::new();
         if let (Some((menu, _)), Some(rect)) = (self.menu.as_ref(), self.menu_rect()) {
-            while self.menu_texts.len() < menu.rows.len() {
-                self.menu_texts.push(Text::new(&mut self.font_system));
-            }
-            let w = style::LINE_WEIGHT * scale;
-            rects.push(([rect[0] - w, rect[1] - w, rect[2] + 2.0 * w, rect[3] + 2.0 * w], style::rgba(style::LINE_BORDER)));
-            rects.push((rect, style::rgba(style::SURFACE_MENU)));
-            let text_left = rect[0] + style::SPACE_MENU_TEXT_LEFT * scale;
-            for (i, row) in menu.rows.iter().enumerate() {
-                let top = Menu::row_top(rect, i, scale);
-                let (text, heading) = match row {
-                    MenuRow::Heading(text) => (text.as_str(), true),
-                    MenuRow::Choice { text, on, .. } => {
-                        let row_rect = [rect[0], top, rect[2], MENU_ROW * scale];
-                        if Menu::contains(row_rect, self.cursor) {
-                            rects.push((row_rect, style::rgba(style::STATE_HOVER)));
+            let mut texts_used = 0;
+            for prim in components::popover(menu, rect, self.cursor, scale) {
+                match prim {
+                    Prim::Rect { rect, colour } => rects.push((rect, colour)),
+                    Prim::Text { text, rect: at, colour, .. } => {
+                        if self.menu_texts.len() <= texts_used {
+                            self.menu_texts.push(Text::new(&mut self.font_system));
                         }
-                        if *on {
-                            let side = style::SPACE_MENU_MARK * scale;
-                            rects.push(([rect[0] + style::SPACE_MENU_MARK_LEFT * scale, top + (MENU_ROW * scale - side) / 2.0, side, side], style::rgba(style::STATE_ON)));
-                        }
-                        (text.as_str(), false)
+                        self.menu_texts[texts_used].set(&mut self.font_system, &text, TextStyle { wrap: false, ..TextStyle::LABEL }, scale, at[2]);
+                        menu_areas.push((texts_used, at[0], at[1] + (at[3] - line) / 2.0, colour));
+                        texts_used += 1;
                     }
-                };
-                self.menu_texts[i].set(&mut self.font_system, text, TextStyle { wrap: false, ..TextStyle::LABEL }, scale, rect[2] - style::SPACE_MENU_TEXT_RIGHT * scale);
-                menu_areas.push((i, if heading { rect[0] + style::SPACE_MENU_HEADING_LEFT * scale } else { text_left }, top + (MENU_ROW * scale - line) / 2.0, heading));
+                }
             }
         }
         self.flat.set([width, height], &rects);
         let menu_text_areas: Vec<TextArea> = menu_areas
             .iter()
-            .map(|(i, left, top, heading)| TextArea { buffer: &self.menu_texts[*i].buffer, left: *left, top: *top, scale: 1.0, bounds: whole, default_color: if *heading { text_colour(style::TEXT_SECONDARY) } else { text_colour(style::TEXT_PRIMARY) }, custom_glyphs: &[] })
+            .map(|(i, left, top, colour)| TextArea { buffer: &self.menu_texts[*i].buffer, left: *left, top: *top, scale: 1.0, bounds: whole, default_color: text_colour(*colour), custom_glyphs: &[] })
             .collect();
         if let Err(e) = self.menu_renderer.prepare(&self.device, &self.queue, &mut self.font_system, &mut self.atlas, &self.viewport, menu_text_areas, &mut self.swash_cache) {
             eprintln!("scopecreep: menu text could not be prepared: {e}");

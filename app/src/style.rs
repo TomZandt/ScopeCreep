@@ -80,6 +80,67 @@ pub const LINE_WEIGHT: f32 = 1.0;
 /// Corner radius: square, as every rectangle the app draws is flat.
 pub const RADIUS: f32 = 0.0;
 
+// Components (#115). Surfaces, states, accents and status.
+/// A Panel's frame fill, between the Window and a menu.
+pub const SURFACE_PANEL: Rgb = [0.09, 0.09, 0.09];
+/// A control that is off: a chip, a segment, a slider's track.
+pub const SURFACE_CONTROL: Rgb = [0.15, 0.15, 0.15];
+/// A control under a press.
+pub const STATE_PRESSED: Rgb = [0.27, 0.27, 0.27];
+/// The one quiet accent: a control that is on, and a slider's filled part.
+pub const ACCENT: Rgb = [0.78, 0.78, 0.78];
+/// The ring round the control that holds the keyboard focus.
+pub const STATE_FOCUS: Rgb = [0.55, 0.55, 0.55];
+/// How much brighter an "on" control is under the pointer.
+pub const STATE_ON_HOVER_LIFT: f32 = 0.08;
+/// Text on an accent fill.
+pub const TEXT_ON_ACCENT: [u8; 3] = [24, 24, 24];
+/// Text of a control that cannot be used.
+pub const TEXT_DISABLED: [u8; 3] = [78, 78, 78];
+
+// The channel colours of the R G B Y chips when on: the one place chrome is not neutral, so a chip tells which
+// channel it shows. Muted, so they stay quieter than the picture.
+pub const CHANNEL_R: Rgb = [0.86, 0.34, 0.34];
+pub const CHANNEL_G: Rgb = [0.34, 0.74, 0.40];
+pub const CHANNEL_B: Rgb = [0.40, 0.54, 0.92];
+/// Luma shows as grey.
+pub const CHANNEL_Y: Rgb = [0.78, 0.78, 0.78];
+
+// Status.
+pub const STATUS_WARNING: Rgb = [0.86, 0.66, 0.26];
+pub const STATUS_ERROR: Rgb = [0.86, 0.36, 0.30];
+
+// Component sizes, logical pixels.
+/// A chip: height, least width, side padding, the gap between chips, and the width one character of its text is
+/// laid out at (the pure layout cannot shape text).
+pub const SPACE_CHIP_HEIGHT: f32 = 20.0;
+pub const SPACE_CHIP_MIN_WIDTH: f32 = 26.0;
+pub const SPACE_CHIP_PAD: f32 = 8.0;
+pub const SPACE_CHIP_GAP: f32 = 4.0;
+pub const SPACE_CHAR_WIDTH: f32 = 7.6;
+/// A segmented control: height and side padding of a segment.
+pub const SPACE_SEGMENT_HEIGHT: f32 = 22.0;
+pub const SPACE_SEGMENT_PAD: f32 = 12.0;
+/// A slider: its row, the track's length and thickness, the thumb, and the room for its number.
+pub const SPACE_SLIDER_HEIGHT: f32 = 24.0;
+pub const SPACE_SLIDER_TRACK: f32 = 120.0;
+pub const SPACE_SLIDER_TRACK_THICKNESS: f32 = 4.0;
+pub const SPACE_SLIDER_THUMB: f32 = 12.0;
+pub const SPACE_SLIDER_NUMBER: f32 = 44.0;
+/// A tooltip's padding and its gap from what it names.
+pub const SPACE_TOOLTIP_PAD: f32 = 6.0;
+pub const SPACE_TOOLTIP_GAP: f32 = 6.0;
+/// A Panel's title bar, the top bar, and the bars' side padding.
+pub const SPACE_TITLE_BAR: f32 = 28.0;
+pub const SPACE_TOP_BAR: f32 = 32.0;
+pub const SPACE_BAR_PAD: f32 = 10.0;
+/// The settings button on a title bar (square), and the gap between a name and its tags.
+pub const SPACE_SETTINGS_BUTTON: f32 = 20.0;
+pub const SPACE_TAG_GAP: f32 = 10.0;
+/// A legend strip: the colour bar's height and the whole strip's (bar, then labels beneath).
+pub const SPACE_LEGEND_BAR: f32 = 8.0;
+pub const SPACE_LEGEND_HEIGHT: f32 = 26.0;
+
 /// A colour as rgba for the flat rectangles.
 pub fn rgba(c: Rgb) -> [f32; 4] {
     [c[0], c[1], c[2], 1.0]

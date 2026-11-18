@@ -46,7 +46,7 @@ fn raw_literals(source: &str) -> Vec<String> {
 }
 
 /// The chrome: everything that draws or lays out the Window's frame rather than a measurement.
-const CHROME: [&str; 5] = ["src/main.rs", "src/settings.rs", "src/panel_grid.rs", "src/layout.rs", "src/flat_rects.rs"];
+const CHROME: [&str; 6] = ["src/components.rs", "src/main.rs", "src/settings.rs", "src/panel_grid.rs", "src/layout.rs", "src/flat_rects.rs"];
 
 #[test]
 fn chrome_code_holds_no_raw_colour_or_size() {
