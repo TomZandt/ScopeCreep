@@ -429,6 +429,7 @@ fn the_channels_are_drawn_in_their_own_colour_and_edge_rows_show_each_ones_out_o
     let mut b = Bench::new("channeldraw");
     // Red and blue on, green off: red is flat at 700 and runs over white in one column, blue is flat at 300.
     b.waveform.set_channels(channels(false, true, false, true));
+    b.waveform.set_colorise(true);
     b.play(1920, 1080, &picture(1920, 1080, |x, _| [if x == 1000 { 1.3 } else { 700.0 / 1023.0 }, 0.0, 300.0 / 1023.0]));
     let (width, height) = (800, 500);
     let image = draw(&b, width, height);
@@ -602,4 +603,141 @@ fn colorise_does_not_change_the_label() {
     let off = Display::label(&b.waveform);
     b.waveform.set_colorise(true);
     assert_eq!(Display::label(&b.waveform), off);
+}
+
+// ------------------------------------------------------------------ Colorise on R, G and B, any combination (#144)
+
+const CHIP_COMBINATIONS: [[bool; 4]; 15] = [
+    [true, false, false, false], [false, true, false, false], [false, false, true, false], [false, false, false, true],
+    [true, true, false, false], [true, false, true, false], [true, false, false, true], [false, true, true, false],
+    [false, true, false, true], [false, false, true, true], [true, true, true, false], [true, true, false, true],
+    [true, false, true, true], [false, true, true, true], [true, true, true, true],
+];
+
+/// Red, green and blue flat at three well separated codes, so each trace has its own row.
+const SEPARATE: [u32; 3] = [200, 500, 800];
+
+fn separate_traces(name: &str, chips: [bool; 4], colorise: bool) -> (Vec<u8>, PlotLayout, u32, u32) {
+    let mut b = Bench::new(name);
+    b.waveform.set_channels(channels(chips[0], chips[1], chips[2], chips[3]));
+    b.waveform.set_colorise(colorise);
+    b.play(1920, 1080, &flat_codes(1920, 1080, SEPARATE));
+    let (width, height) = (800, 500);
+    (draw(&b, width, height), PlotLayout::new([0.0, 0.0, width as f32, height as f32], 1.0), width, height)
+}
+
+#[test]
+fn with_colorise_off_every_chip_combination_draws_neutral_traces_each_at_its_own_code() {
+    for (i, chips) in CHIP_COMBINATIONS.into_iter().enumerate() {
+        let (image, layout, width, _) = separate_traces(&format!("neutral{i}"), chips, false);
+        for (chip, code) in [(1, SEPARATE[0]), (2, SEPARATE[1]), (3, SEPARATE[2])] {
+            let drawn = colour_at(&image, width, &layout, 960, 1920, code);
+            if chips[chip] {
+                assert!(drawn[0] > 100 && spread_of(drawn) <= 3, "{chips:?}: channel {chip} neutral at its code: {drawn:?}");
+            } else {
+                assert!(drawn.iter().all(|&c| c < 40), "{chips:?}: channel {chip} off draws nothing: {drawn:?}");
+            }
+        }
+    }
+}
+
+#[test]
+fn with_colorise_on_every_chip_combination_draws_each_channel_in_its_colour_at_its_own_code() {
+    for (i, chips) in CHIP_COMBINATIONS.into_iter().enumerate() {
+        let (image, layout, width, _) = separate_traces(&format!("coloured{i}"), chips, true);
+        for (chip, code) in [(1, SEPARATE[0]), (2, SEPARATE[1]), (3, SEPARATE[2])] {
+            let drawn = colour_at(&image, width, &layout, 960, 1920, code);
+            if chips[chip] {
+                let others = (1..=3).filter(|&o| o != chip).map(|o| drawn[o - 1]).max().unwrap();
+                assert!(drawn[chip - 1] > 100 && drawn[chip - 1] > others + 40, "{chips:?}: channel {chip} in its colour: {drawn:?}");
+            } else {
+                assert!(drawn.iter().all(|&c| c < 40), "{chips:?}: channel {chip} off draws nothing: {drawn:?}");
+            }
+        }
+    }
+}
+
+#[test]
+fn colorise_on_tints_y_and_the_channels_together_and_off_makes_them_all_neutral() {
+    // A flat colour (0.2, 0.8, 0.3): Y lands at its Luma code, R, G and B at their own, all apart.
+    let frame = picture(1920, 1080, |_, _| [0.2, 0.8, 0.3]);
+    let (width, height) = (800, 500);
+    let layout = PlotLayout::new([0.0, 0.0, width as f32, height as f32], 1.0);
+    let mut b = Bench::new("colorisetogether");
+    b.waveform.set_channels(channels(true, true, true, true));
+    let counts = b.play(1920, 1080, &frame);
+    let y_code = (0..1024).find(|&c| counts.at(0, c) == 1080).expect("one code");
+    let codes = [y_code, (0.2f32 * 1023.0).round() as u32, (0.8f32 * 1023.0).round() as u32, (0.3f32 * 1023.0).round() as u32];
+    let rows: Vec<[i32; 3]> = codes.iter().map(|&c| colour_at(&draw(&b, width, height), width, &layout, 960, 1920, c)).collect();
+    assert!(rows.iter().all(|r| r[0] > 100 && spread_of(*r) <= 3), "off: all four neutral {rows:?}");
+    b.waveform.set_colorise(true);
+    b.play(1920, 1080, &frame);
+    let image = draw(&b, width, height);
+    let r = colour_at(&image, width, &layout, 960, 1920, codes[1]);
+    let g = colour_at(&image, width, &layout, 960, 1920, codes[2]);
+    let y = colour_at(&image, width, &layout, 960, 1920, codes[0]);
+    assert!(r[0] > r[2] + 40 && g[1] > g[0] + 40, "on: R red, G green: {r:?} {g:?}");
+    let [yr, yg, yb] = proportions(y.map(|v| v as f32));
+    assert!(yg > yr + 0.5 && yg > yb + 0.3, "on: Y takes the image's colour: {y:?}");
+}
+
+#[test]
+fn edge_rows_show_each_channels_out_of_range_in_its_colour_with_colorise_on_and_neutral_off() {
+    let (width, height) = (800, 500);
+    let layout = PlotLayout::new([0.0, 0.0, width as f32, height as f32], 1.0);
+    for colorise in [false, true] {
+        let mut b = Bench::new(if colorise { "edgecoloured" } else { "edgeneutral" });
+        b.waveform.set_channels(channels(false, true, true, true));
+        b.waveform.set_colorise(colorise);
+        // Green over white and blue under black in the middle column.
+        b.play(1920, 1080, &picture(1920, 1080, |x, _| if x == 1000 { [0.5, 1.3, -0.2] } else { [0.5, 0.5, 0.5] }));
+        let image = draw(&b, width, height);
+        let (above, below) = (layout.above(), layout.below());
+        let x = layout.x_of_column(1000, 1920) as usize;
+        let pixel = |r: [f32; 4]| {
+            let at = ((r[1] + r[3] / 2.0) as usize * width as usize + x) * 4;
+            [image[at] as i32, image[at + 1] as i32, image[at + 2] as i32]
+        };
+        let (top, bottom) = (pixel(above), pixel(below));
+        if colorise {
+            assert!(top[1] > top[0] + 40 && top[1] > top[2] + 40, "green over white lights the top row green: {top:?}");
+            assert!(bottom[2] > bottom[0] + 40 && bottom[2] > bottom[1] + 40, "blue under black lights the bottom row blue: {bottom:?}");
+        } else {
+            assert!(top[1] > 100 && spread_of(top) <= 3, "off: top row lit neutral: {top:?}");
+            assert!(bottom[2] > 100 && spread_of(bottom) <= 3, "off: bottom row lit neutral: {bottom:?}");
+        }
+    }
+}
+
+#[test]
+fn three_neutral_traces_on_a_colorchecker_frame_stay_readable_by_position() {
+    use scopecreep_accuracy::colorchecker::{ColorChecker, TimelineSpace};
+    let mut b = Bench::new("neutraloverlap");
+    b.waveform.set_channels(channels(true, true, true, true));
+    let chart = ColorChecker::new(TimelineSpace::Rec709Gamma24);
+    let frame = chart.frame(600, 400);
+    let (width, height) = (1200, 700);
+    let layout = PlotLayout::new([0.0, 0.0, width as f32, height as f32], 1.0);
+    b.play(600, 400, &frame.pixels);
+    let image = draw(&b, width, height);
+    // Patches 13 to 16 (blue, green, red, yellow): every trace is a lit neutral line at its code, and where channels
+    // are more than 30 codes apart there is dark plot between them, so they read as separate lines by position.
+    for number in 13..=16 {
+        let p = &chart.patches()[number - 1];
+        let r = frame.patch_rect(number);
+        let column = (r.x0 + r.x1) / 2;
+        let mut codes = p.encoded.map(|v| (v * 1023.0).round() as i32);
+        codes.sort();
+        for pair in codes.windows(2) {
+            if pair[1] - pair[0] <= 30 {
+                continue;   // channels this close share one band: what neutral traces cannot tell apart (finding)
+            }
+            let between = colour_at(&image, width, &layout, column, 600, ((pair[0] + pair[1]) / 2) as u32);
+            assert!(between.iter().all(|&c| c < 40), "patch {number}: dark between the traces: {between:?}");
+        }
+        for code in codes {
+            let lit = colour_at(&image, width, &layout, column, 600, code as u32);
+            assert!(lit[0] > 100 && spread_of(lit) <= 3, "patch {number}: a neutral line at code {code}: {lit:?}");
+        }
+    }
 }

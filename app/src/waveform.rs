@@ -611,10 +611,13 @@ fn channel_on(channel: u32) -> bool {
     return ((u32(placement.look.w) >> channel) & 1u) == 1u;
 }
 
-// The trace colour of a channel: Y is tinted by the pixels' colour when asked, R, G, B take their channel colours.
+// The trace colour of a channel: with Colorise on Y is tinted by the pixels' colour and R, G, B take their channel
+// colours (look.w bit 4); off, every trace is neutral.
 fn channel_colour(channel: u32, x: f32, first_row: u32, end_row: u32) -> vec3<f32> {
     if (channel == 0u) {
         return tint(x, first_row, end_row);
+    } else if (((u32(placement.look.w) >> 4u) & 1u) == 0u) {
+        return TRACE;   // Colorise off: every trace is neutral
     } else if (channel == 1u) {
         return placement.red.xyz;
     } else if (channel == 2u) {
@@ -770,8 +773,8 @@ pub struct Waveform {
     measurement: Arc<Mutex<Measurement>>,
     look: Arc<Mutex<Look>>,
     channels: Arc<Mutex<Channels>>,
-    /// Colorise (ADR 0032): the Y trace takes the colour of the pixels; off, it is neutral. A drawing choice: the
-    /// counts are the same either way. (R, G and B follow it in #144.)
+    /// Colorise (ADR 0032): the Y trace takes the colour of the pixels and R, G and B their channel colours; off,
+    /// every trace is neutral. A drawing choice: the counts are the same either way.
     colorise: Arc<Mutex<bool>>,
     state: Arc<Mutex<State>>,
 }
@@ -1131,7 +1134,7 @@ impl Waveform {
         placement[20..22].copy_from_slice(&[black as f32, white as f32]);
         let channels = self.channels();
         let mask = if state.rgb.is_some() || !channels.colour_channels() { channels.mask() } else { channels.mask() & 1 };
-        placement[24..28].copy_from_slice(&[look.brightness.gain(), if look.spread { 1.0 } else { 0.0 }, if self.tints_y() { 1.0 } else { 0.0 }, mask as f32]);
+        placement[24..28].copy_from_slice(&[look.brightness.gain(), if look.spread { 1.0 } else { 0.0 }, if self.tints_y() { 1.0 } else { 0.0 }, (mask | if self.colour || self.colorise() { 16 } else { 0 }) as f32]);
         for (i, colour) in [crate::style::CHANNEL_R, crate::style::CHANNEL_G, crate::style::CHANNEL_B].into_iter().enumerate() {
             placement[28 + i * 4..31 + i * 4].copy_from_slice(&colour);
         }
@@ -1298,7 +1301,7 @@ pub static TOOLBAR: [crate::toolbar::ToolbarDef; 2] = [crate::toolbar::ToolbarDe
     chips: &[crate::toolbar::ToolbarChip {
         value: "on",
         text: "Col",
-        tooltip: "Colorise: the Y trace takes the colour of the picture (off: white)",
+        tooltip: "Colorise: traces drawn in colour, Y in the picture's colour (off: white)",
         channel: None,
     }],
 }];

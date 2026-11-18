@@ -181,7 +181,7 @@ Its spots are at the luma waveform's positions; each one's tint is the average c
 _Avoid_: Colourised waveform, RGB waveform, parade (that shows channels side by side)
 
 **Colorise**:
-A chip on the luma waveform's title bar (default off, remembered per Panel, never a tag) that draws the Y trace in the average colour of the pixels counted at each spot (the Colour Waveform's rule); off, the trace is neutral. A drawing choice: counts and edge rows are the same either way. Resolve's own switch is spelt Colorize.
+A chip on the luma waveform's title bar (default off, remembered per Panel, never a tag) that works on whichever of Y, R, G and B are showing: Y takes the average colour of the pixels counted at each spot (the Colour Waveform's rule), R, G and B their channel colours; off, every trace is neutral. A drawing choice: counts and edge rows are the same either way. Resolve's own switch is spelt Colorize.
 _Avoid_: Colourise (as a tag or setting that changes the measurement)
 
 **False Colour**:
