@@ -21,7 +21,7 @@ use scopecreep::gpu_frame::FrameUploader;
 use scopecreep::layout::MARGIN;
 use scopecreep::monitor::{FeedState, Monitor};
 use scopecreep::output_conversion::OutputConversion;
-use scopecreep::panel_grid::{Border, PanelGrid, PanelLayout, min_panel_size};
+use scopecreep::panel_grid::{Border, PanelGrid, PanelLayout, Press, min_panel_size};
 use scopecreep::resolve_helper::ScriptHelper;
 use scopecreep::flat_rects::FlatRects;
 use scopecreep::components::{self, Prim};
@@ -168,6 +168,8 @@ struct AppWindow {
     pointer_panel: Option<usize>,
     /// The border being dragged, if any.
     drag: Option<Border>,
+    /// The Panel being dragged by its title bar, to swap with the one it is let go on.
+    panel_drag: Option<usize>,
     /// Remembered display state (a Loupe's position) changed and is not written yet.
     state_unsaved: bool,
     cursor: [f32; 2],
@@ -389,6 +391,7 @@ impl AppWindow {
             contents: Vec::new(),
             pointer_panel: None,
             drag: None,
+            panel_drag: None,
             state_unsaved: false,
             cursor: [0.0, 0.0],
             grid_area: [0.0; 4],
@@ -416,9 +419,18 @@ impl AppWindow {
         self.window.request_redraw();
     }
 
-    /// The border under the pointer, if any.
-    fn border_under_pointer(&self) -> Option<Border> {
-        self.grid.border_at(self.grid_area, self.grid_gap, self.cursor, style::SPACE_GRAB * self.scale)
+    /// What a press at the pointer would start: a border drag or a Panel drag.
+    fn press_under_pointer(&self) -> Option<Press> {
+        self.grid.press_at(self.grid_area, self.grid_gap, self.cursor, style::SPACE_GRAB * self.scale, self.scale)
+    }
+
+    /// Remember the layout.
+    fn save_grid(&self) {
+        if let Some(path) = grid_file() {
+            if let Err(e) = scopecreep::settings::save(&path, &self.grid.to_text(&self.displays.names())) {
+                eprintln!("scopecreep: cannot remember the Panel layout: {e}");
+            }
+        }
     }
 
     fn pointer_moved(&mut self, x: f32, y: f32) {
@@ -428,10 +440,13 @@ impl AppWindow {
         } else if let Some(border) = self.drag {
             self.grid.drag(border, self.cursor, self.grid_area, self.grid_gap, min_panel_size(self.scale));
             self.window.request_redraw();
+        } else if self.panel_drag.is_some() {
+            self.window.request_redraw();
         } else {
-            self.window.set_cursor(match self.border_under_pointer() {
-                Some(Border::Column { .. }) => CursorIcon::ColResize,
-                Some(Border::Row { .. }) => CursorIcon::RowResize,
+            self.window.set_cursor(match self.press_under_pointer() {
+                Some(Press::Border(Border::Column { .. })) => CursorIcon::ColResize,
+                Some(Press::Border(Border::Row { .. })) => CursorIcon::RowResize,
+                Some(Press::Panel(_)) => CursorIcon::Grab,
                 None => CursorIcon::Default,
             });
         }
@@ -531,11 +546,16 @@ impl AppWindow {
                 self.display_pointer(panel, Pointer::Up);
             }
             if self.drag.take().is_some() {
-                if let Some(path) = grid_file() {
-                    if let Err(e) = scopecreep::settings::save(&path, &self.grid.to_text(&self.displays.names())) {
-                        eprintln!("scopecreep: cannot remember the Panel borders: {e}");
-                    }
+                self.save_grid();
+            }
+            if let Some(from) = self.panel_drag.take() {
+                // Let go on another Panel to swap; anywhere else cancels.
+                if let Some(to) = self.grid.panel_at(self.grid_area, self.grid_gap, self.cursor).filter(|to| *to != from) {
+                    self.grid.swap(from, to);
+                    self.save_grid();
                 }
+                self.window.set_cursor(CursorIcon::Default);
+                self.window.request_redraw();
             }
             return;
         }
@@ -553,7 +573,14 @@ impl AppWindow {
                         return;
                     }
                 }
-                self.drag = self.border_under_pointer();
+                match self.press_under_pointer() {
+                    Some(Press::Border(border)) => self.drag = Some(border),
+                    Some(Press::Panel(panel)) => {
+                        self.panel_drag = Some(panel);
+                        self.window.set_cursor(CursorIcon::Grabbing);
+                    }
+                    None => {}
+                }
             }
             ElementState::Released => {}
         }
@@ -661,6 +688,13 @@ impl AppWindow {
         for panel in &panels {
             for edge in panel.lines((style::LINE_WEIGHT * scale).max(1.0)) {
                 rects.push((edge, style::rgba(style::LINE_BORDER)));
+            }
+        }
+        // While a Panel is dragged, the Panel it would swap with is outlined, quietly.
+        if let Some(target) = self.panel_drag.and_then(|from| self.grid.panel_at(area, margin, self.cursor).filter(|to| *to != from)) {
+            let weight = (style::LINE_WEIGHT * scale).max(1.0);
+            for edge in PanelLayout::new(cells[target], scale).lines(weight).iter().take(4) {
+                rects.push((*edge, style::rgba(style::STATE_FOCUS)));
             }
         }
         let mut menu_areas: Vec<(usize, f32, f32, [u8; 3])> = Vec::new();

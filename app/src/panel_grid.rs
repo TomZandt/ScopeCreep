@@ -42,6 +42,14 @@ pub enum Border {
     Row { after: usize },
 }
 
+/// What a press at a point starts: a border drag or a Panel drag (#97). Never both.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Press {
+    Border(Border),
+    /// Dragging the Panel (display index) by its title bar, to swap it with another.
+    Panel(usize),
+}
+
 /// Where one Panel sits: its first column and row, and how many columns and rows it spans.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Place {
@@ -197,6 +205,30 @@ impl PanelGrid {
             }
         }
         None
+    }
+
+    /// What a press at `point` starts: a border drag when it is on a border (that wins), a Panel drag when it is on
+    /// a Panel's title bar (at `scale` device pixels per logical pixel), else nothing.
+    pub fn press_at(&self, area: [f32; 4], gap: f32, point: [f32; 2], slop: f32, scale: f32) -> Option<Press> {
+        if let Some(border) = self.border_at(area, gap, point, slop) {
+            return Some(Press::Border(border));
+        }
+        let panel = self.panel_at(area, gap, point)?;
+        let t = PanelLayout::new(self.cells(area, gap)[panel], scale).title;
+        let in_bar = point[0] >= t[0] && point[0] < t[0] + t[2] && point[1] >= t[1] && point[1] < t[1] + t[3];
+        in_bar.then_some(Press::Panel(panel))
+    }
+
+    /// The Panel whose cell holds `point`, if any (a gap holds none).
+    pub fn panel_at(&self, area: [f32; 4], gap: f32, point: [f32; 2]) -> Option<usize> {
+        self.cells(area, gap).iter().position(|c| point[0] >= c[0] && point[0] < c[0] + c[2] && point[1] >= c[1] && point[1] < c[1] + c[3])
+    }
+
+    /// Swap two Panels: each takes the other's cell and span.
+    pub fn swap(&mut self, a: usize, b: usize) {
+        if a < self.places.len() && b < self.places.len() {
+            self.places.swap(a, b);
+        }
     }
 
     /// Move `border` to `to`: the columns or rows on each side take up the difference, and neither goes under

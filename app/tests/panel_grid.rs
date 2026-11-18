@@ -1,7 +1,7 @@
 //! The Panel layout at the pure seam (#96): where each Panel goes (cells and spans), the default layout, dragging
 //! the borders between columns and rows, remembering the layout, and what sits inside a Panel (border, title bar,
 //! display) at small sizes and on a HiDPI screen. Rectangles are left, top, width, height in device pixels.
-use scopecreep::panel_grid::{Border, PanelGrid, PanelLayout, min_panel_size};
+use scopecreep::panel_grid::{Border, PanelGrid, PanelLayout, Press, min_panel_size};
 
 /// The Window's Panel area at 1280 x 760: a 12 px margin all round, 20 px of status line under it.
 const AREA: [f32; 4] = [12.0, 12.0, 1256.0, 716.0];
@@ -324,4 +324,71 @@ fn the_vectorscope_is_two_cells_wide_and_borders_do_not_run_through_it() {
 fn a_grid_saved_with_the_two_milestone_2_vectorscope_panels_is_ignored_and_the_default_used() {
     let old = "layout 1\ncolumns 0.2 0.2 0.2 0.2 0.2\nrows 0.28 0.28 0.22 0.22\npanel 0 0 3 2 Clean picture\npanel 3 0 2 1 Luma waveform\npanel 3 1 1 1 Vectorscope 100 %\npanel 4 1 1 1 Vectorscope 200 %\npanel 0 2 2 2 Colour waveform\npanel 2 2 1 1 Channel view\npanel 3 2 1 1 ARRI False Colour\npanel 4 2 1 1 Black and white\npanel 2 3 1 1 Saturation heatmap\npanel 3 3 1 1 Skin tone\npanel 4 3 1 1 Stops False Colour\n";
     assert_eq!(PanelGrid::from_text(&NAMES, old), default_grid());
+}
+
+// ------------------------------------------------------------------ swapping Panels (#97)
+
+fn title_point(grid: &PanelGrid, name: &str) -> [f32; 2] {
+    let t = PanelLayout::new(cell_of(grid, name), 1.0).title;
+    [t[0] + t[2] / 2.0, t[1] + t[3] / 2.0]
+}
+
+#[test]
+fn swapping_two_panels_gives_each_the_others_cell_and_span() {
+    let mut grid = default_grid();
+    let (hero, skin) = (cell_of(&grid, "Clean picture"), cell_of(&grid, "Skin tone"));
+    let (a, b) = (0, NAMES.iter().position(|n| *n == "Skin tone").unwrap());
+    grid.swap(a, b);
+    assert_eq!(cell_of(&grid, "Clean picture"), skin);
+    assert_eq!(cell_of(&grid, "Skin tone"), hero);
+    assert_fills(&grid);
+}
+
+#[test]
+fn swapping_a_panel_with_itself_changes_nothing() {
+    let mut grid = default_grid();
+    grid.swap(3, 3);
+    assert_eq!(grid, default_grid());
+}
+
+#[test]
+fn a_swap_is_remembered_between_sessions() {
+    let mut grid = default_grid();
+    grid.swap(0, 8);
+    let back = PanelGrid::from_text(&NAMES, &grid.to_text(&NAMES));
+    assert_eq!(back, grid);
+    assert_ne!(back, default_grid());
+}
+
+#[test]
+fn a_press_on_a_title_bar_starts_a_panel_drag() {
+    let grid = default_grid();
+    let skin = NAMES.iter().position(|n| *n == "Skin tone").unwrap();
+    assert_eq!(grid.press_at(AREA, GAP, title_point(&grid, "Skin tone"), 3.0, 1.0), Some(Press::Panel(skin)));
+}
+
+#[test]
+fn a_press_on_a_display_starts_nothing() {
+    let grid = default_grid();
+    let c = cell_of(&grid, "Skin tone");
+    assert_eq!(grid.press_at(AREA, GAP, [c[0] + c[2] / 2.0, c[1] + c[3] - 10.0], 3.0, 1.0), None);
+}
+
+#[test]
+fn a_press_in_a_gap_starts_a_border_drag_not_a_panel_drag() {
+    let grid = default_grid();
+    let c = cell_of(&grid, "Channel view");
+    let level = c[1] + 10.0; // the height of Channel view's title bar
+    assert!(matches!(grid.press_at(AREA, GAP, [c[0] - GAP / 2.0, level], 3.0, 1.0), Some(Press::Border(Border::Column { .. }))));
+    assert!(matches!(grid.press_at(AREA, GAP, [c[0] + 20.0, level], 3.0, 1.0), Some(Press::Panel(_))));
+}
+
+#[test]
+fn the_panel_under_a_point_is_found_for_a_drop() {
+    let grid = default_grid();
+    let c = cell_of(&grid, "Stops False Colour");
+    let stops = NAMES.iter().position(|n| *n == "Stops False Colour").unwrap();
+    assert_eq!(grid.panel_at(AREA, GAP, [c[0] + c[2] / 2.0, c[1] + c[3] / 2.0]), Some(stops));
+    assert_eq!(grid.panel_at(AREA, GAP, [c[0] - GAP / 2.0, c[1] + 5.0]), None, "a gap is no Panel");
+    assert_eq!(grid.panel_at(AREA, GAP, [0.0, 0.0]), None, "outside the area");
 }
