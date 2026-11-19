@@ -12,7 +12,7 @@
 use crate::display::{Display, DisplayContext};
 use crate::gpu_frame::GpuFrame;
 use crate::components::ChipMode;
-use crate::settings::{Choice, SettingDef};
+use crate::settings::{Amount, Choice, SettingDef};
 use crate::toolbar::{TOGGLE_OFF, ToolbarChip, ToolbarDef};
 use crate::skin_tone::SKIN_TONE_LINE_DEGREES;
 use crate::measurement::Measurement;
@@ -163,6 +163,14 @@ pub const TARGETS_SETTING: &str = "targets";
 pub const SKIN_LINE_SETTING: &str = "skin-line";
 pub const BRIGHTNESS_SETTING: &str = "brightness";
 pub const SPREAD_SETTING: &str = "spread";
+
+/// The trace brightness slider, in percent of the normal look (#86). The range reaches the old Brighter (4 times the
+/// gain) and Dimmer (a quarter), so a file saved with either still draws as it did.
+pub const BRIGHTNESS_AMOUNT: Amount =
+    Amount { min: 20.0, max: 400.0, step: 5.0, default: 100.0, unit: " %", decimals: 0, legacy: &[("normal", 100.0), ("bright", 400.0), ("dim", 25.0)] };
+
+/// The soft spread slider: how far the trace is spread, in device pixels (#86). 0 is the old Off, 1 the old On.
+pub const SPREAD_AMOUNT: Amount = Amount { min: 0.0, max: 3.0, step: 0.1, default: 1.0, unit: " px", decimals: 1, legacy: &[("on", 1.0), ("off", 0.0)] };
 /// Which plots show: both (the default), only 100 % or only 200 % (#123).
 pub const PLOTS_SETTING: &str = "plots";
 /// The trace in neutral grey instead of the colour it stands for (#123); off by default.
@@ -172,13 +180,8 @@ pub const MONO_SETTING: &str = "mono";
 pub const TONAL_SETTING: &str = "tonal";
 
 pub const SETTINGS: [SettingDef; 7] = [
-    SettingDef {
-        key: BRIGHTNESS_SETTING,
-        label: "Trace brightness",
-        amount: None,
-        choices: &[Choice { value: "normal", text: "Normal" }, Choice { value: "bright", text: "Brighter" }, Choice { value: "dim", text: "Dimmer" }],
-    },
-    SettingDef { key: SPREAD_SETTING, label: "Soft spread", amount: None, choices: &[Choice { value: "on", text: "On" }, Choice { value: "off", text: "Off" }] },
+    SettingDef { key: BRIGHTNESS_SETTING, label: "Trace brightness", amount: Some(BRIGHTNESS_AMOUNT), choices: &[] },
+    SettingDef { key: SPREAD_SETTING, label: "Soft spread", amount: Some(SPREAD_AMOUNT), choices: &[] },
     SettingDef { key: TARGETS_SETTING, label: "Colour targets", amount: None, choices: &[Choice { value: "75", text: "75 % bars" }, Choice { value: "100", text: "100 % bars" }] },
     SettingDef { key: SKIN_LINE_SETTING, label: "Skin-tone line", amount: None, choices: &[Choice { value: "on", text: "On" }, Choice { value: "off", text: "Off" }] },
     SettingDef {
@@ -232,7 +235,8 @@ struct Config {
     bars: f64,
     skin_line: bool,
     gain: f32,
-    spread: bool,
+    /// The soft spread in device pixels; 0 skips the spread.
+    spread: f32,
     plots: Plots,
     mono: bool,
     tonal: Tonal,
@@ -397,7 +401,7 @@ struct Placement {
     plot: vec4<f32>,      // the square plot in pixels: left, top, width, height
     info: vec4<f32>,      // half extent (Cb/Cr), trace gain, pixels counted, device pixels per logical pixel
     opts: vec4<f32>,      // skin line on, its cos and sin, target box half size (Cb/Cr)
-    rings: vec4<f32>,     // the outer ring as a fraction of the plot's radius, soft spread on, where this plot's bins start, mono trace on
+    rings: vec4<f32>,     // the outer ring as a fraction of the plot's radius, soft spread in device pixels (0 off), where this plot's bins start, mono trace on
     targets: array<vec4<f32>, 6>,   // Cb, Cr of each colour target
     weights: vec4<f32>,   // luma weights for R, G, B, to turn a position back into a colour
 };
@@ -462,14 +466,14 @@ fn brightness(v: f32) -> f32 {
 // The density under a plot pixel, spread a little over its neighbours (about 1 device pixel) when the soft spread
 // is on, so the trace reads as smooth tone instead of speckle.
 fn soft_density(p: vec2<f32>) -> f32 {
-    if (placement.rings.y < 0.5) {
+    if (placement.rings.y <= 0.0) {
         return density(p);
     }
     var sum = 0.0;
     for (var j = -1; j <= 1; j++) {
         for (var i = -1; i <= 1; i++) {
             let w = (2.0 - abs(f32(i))) * (2.0 - abs(f32(j))) / 16.0;
-            let q = p + vec2<f32>(f32(i), f32(j)) * spread_step(placement.info.w);
+            let q = p + vec2<f32>(f32(i), f32(j)) * spread_step(placement.info.w) * placement.rings.y;
             if (q.x >= 0.0 && q.y >= 0.0 && q.x < placement.plot.z && q.y < placement.plot.w) {
                 sum += w * density(q);
             }
@@ -612,7 +616,7 @@ impl Vectorscope {
             params: uniform("vectorscope params", PARAMS_BYTES),
             draw,
             placement: [uniform("vectorscope placement 100 %", DRAW_UNIFORM_BYTES), uniform("vectorscope placement 200 %", DRAW_UNIFORM_BYTES)],
-            config: Arc::new(Mutex::new(Config { measurement: Measurement::default(), bars: 0.75, skin_line: true, gain: 1.0, spread: true, plots: Plots::Both, mono: false, tonal: Tonal::All })),
+            config: Arc::new(Mutex::new(Config { measurement: Measurement::default(), bars: 0.75, skin_line: true, gain: 1.0, spread: SPREAD_AMOUNT.default, plots: Plots::Both, mono: false, tonal: Tonal::All })),
             state: Arc::new(Mutex::new(State { bins, pixels: 0, bound: None, draw_bound: None, measured: false })),
         }
     }
@@ -717,15 +721,11 @@ impl Display for Vectorscope {
             measurement: crate::output_conversion::measurement(context.colour_setup.clone(), context.luma),
             bars: if get(TARGETS_SETTING) == Some("100") { 1.0 } else { 0.75 },
             skin_line: get(SKIN_LINE_SETTING) != Some("off"),
-            spread: get(SPREAD_SETTING) != Some("off"),
+            spread: SPREAD_AMOUNT.read(get(SPREAD_SETTING)),
             plots: Plots::from_setting(get(PLOTS_SETTING)),
             mono: get(MONO_SETTING) == Some("on"),
             tonal: Tonal::from_setting(get(TONAL_SETTING)),
-            gain: match get(BRIGHTNESS_SETTING) {
-                Some("bright") => 4.0,
-                Some("dim") => 0.25,
-                _ => 1.0,
-            },
+            gain: BRIGHTNESS_AMOUNT.read(get(BRIGHTNESS_SETTING)) / 100.0,
         };
     }
 
@@ -774,7 +774,7 @@ impl Display for Vectorscope {
             let angle = SKIN_TONE_LINE_DEGREES.to_radians();
             placement[12..16].copy_from_slice(&[if config.skin_line { 1.0 } else { 0.0 }, angle.cos() as f32, angle.sin() as f32, TARGET_HALF as f32]);
             placement[16] = (RING / HALF_EXTENT) as f32;
-            placement[17] = if config.spread { 1.0 } else { 0.0 };
+            placement[17] = config.spread;
             placement[18] = zoom.first_bin() as f32;
             placement[19] = if config.mono { 1.0 } else { 0.0 };
             for (t, [cb, cr]) in bar_targets(config.measurement.weights(), config.bars).iter().enumerate() {

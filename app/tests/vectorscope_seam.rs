@@ -466,7 +466,9 @@ fn the_menu_offers_trace_brightness_targets_and_the_skin_tone_line_with_sensible
     let b = Bench::new("menu");
     let defs = b.set.setting_defs(b.index(V));
     let keys: Vec<_> = defs.iter().map(|d| (d.key, d.choices.iter().map(|c| c.value).collect::<Vec<_>>())).collect();
-    assert_eq!(keys, [("brightness", vec!["normal", "bright", "dim"]), ("spread", vec!["on", "off"]), ("targets", vec!["75", "100"]), ("skin-line", vec!["on", "off"]), ("plots", vec!["both", "100", "200"]), ("tonal", vec!["all", "shadows", "mids", "highlights"]), ("mono", vec!["off", "on"])]);
+    assert!(defs[0].amount.is_some() && defs[1].amount.is_some(), "brightness and spread are sliders");
+    assert!(defs[0].amount.is_some() && defs[1].amount.is_some(), "brightness and spread are sliders");
+    assert_eq!(keys, [("brightness", vec![]), ("spread", vec![]), ("targets", vec!["75", "100"]), ("skin-line", vec!["on", "off"]), ("plots", vec!["both", "100", "200"]), ("tonal", vec!["all", "shadows", "mids", "highlights"]), ("mono", vec!["off", "on"])]);
 }
 
 #[test]
@@ -544,7 +546,7 @@ fn old_vectorscope_settings_carry_over_to_the_one_panel_and_the_200_percent_ones
     let label = b.label(V);
     assert!(label.contains("100 % targets") && !label.contains("skin-tone"), "the 100 % Panel's choices apply: {label}");
     let resolved = b.set.settings_of(b.index(V), &b.settings);
-    assert_eq!(resolved["brightness"], "normal", "the 200 % Panel's are not used");
+    assert_eq!(resolved["brightness"], "100", "the 200 % Panel's are not used");
 }
 
 // ------------------------------------------------------------------ the title bar's chips (#123)
@@ -696,4 +698,40 @@ fn each_tonal_chip_plots_only_its_ranges_colours_and_clipping_counts_only_those_
     b.play(w, h, &pixels);
     assert_eq!(b.x1(), all, "back to All is the same measurement");
     assert!(!b.label(V).contains("only:"), "{}", b.label(V));
+}
+
+#[test]
+fn brightness_and_spread_are_sliders_whose_old_list_values_and_defaults_draw_as_before() {
+    use scopecreep::vectorscope::{BRIGHTNESS_AMOUNT, SPREAD_AMOUNT};
+    // Defaults are today's look: Normal and On.
+    assert_eq!((BRIGHTNESS_AMOUNT.default, SPREAD_AMOUNT.default), (100.0, 1.0));
+    // Old list values map to the numbers that drew the same; junk is the default; out of range is clamped.
+    assert_eq!((BRIGHTNESS_AMOUNT.read(Some("normal")), BRIGHTNESS_AMOUNT.read(Some("bright")), BRIGHTNESS_AMOUNT.read(Some("dim"))), (100.0, 400.0, 25.0));
+    assert_eq!((SPREAD_AMOUNT.read(Some("on")), SPREAD_AMOUNT.read(Some("off")), SPREAD_AMOUNT.read(Some("x")), SPREAD_AMOUNT.read(Some("9"))), (1.0, 0.0, 1.0, 3.0));
+    assert_eq!(SPREAD_AMOUNT.text(1.0), "1.0 px");
+
+    // At the Feed seam: the old values and their numbers draw the same pixels; the label does not change.
+    let (w, h) = (1920u32, 1080u32);
+    let mut pixels = solid(w, h, [0.4, 0.45, 0.6]);
+    for px in pixels[..3 * 2000].chunks_mut(3) {
+        px.copy_from_slice(&[0.5, 0.1, 0.3]);
+    }
+    let draw = |setting: &str, value: &str| {
+        let mut b = Bench::new("slider");
+        if !setting.is_empty() {
+            b.choose(V, setting, value);
+        }
+        b.play(w, h, &pixels);
+        (b.render(1600, 800, 1.0).0, b.label(V))
+    };
+    let (normal, label) = draw("", "");
+    for (setting, old, new) in [("brightness", "normal", "100"), ("brightness", "bright", "400"), ("brightness", "dim", "25"), ("spread", "on", "1"), ("spread", "off", "0")] {
+        assert!(draw(setting, old).0 == draw(setting, new).0, "{setting} {old} draws as {new}");
+    }
+    assert!(draw("brightness", "bright").0 != normal, "brighter draws differently");
+    assert!(draw("brightness", "dim").0 != normal, "dimmer draws differently");
+    assert!(draw("spread", "off").0 != normal, "spread 0 draws differently");
+    assert_eq!(draw("brightness", "250").1, label);
+    assert_eq!(draw("spread", "2.5").1, label);
+    assert!(draw("spread", "3").0 != draw("spread", "1").0);
 }
