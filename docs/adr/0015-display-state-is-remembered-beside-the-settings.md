@@ -22,4 +22,4 @@
 
 ## Note, 2026-11-19 (#162)
 
-The Loupe's state (on, position, zoom, size) is now also the clean picture's, kept under its own display name (ADR 0034). The Channel view that first used it is out of the Window; its saved state stays in the file.
+The Loupe's state (on, position, zoom, size) is now also the clean picture's, kept under its own display name (ADR 0034). The Channel view that first used it is out of the Window; its saved state stays in the file. The keys are constants in `loupe.rs` (`STATE_KEYS`), and a remembered zoom that is not a sensible one reads as the default.

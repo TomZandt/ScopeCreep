@@ -30,15 +30,44 @@ pub const CHANNEL_DEF: SettingDef = SettingDef {
     amount: None,
     choices: &[Choice { value: TOGGLE_OFF, text: "Colour" }, Choice { value: "luma", text: "Luma (Y)" }, Choice { value: "red", text: "Red" }, Choice { value: "green", text: "Green" }, Choice { value: "blue", text: "Blue" }],
 };
+
+/// One channel the clean picture can show as grey: the single table the chips, the shader and the title tag read.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct ChannelChoice {
+    /// The stored setting value.
+    pub value: &'static str,
+    /// The letter on its chip and its chip colour.
+    pub letter: &'static str,
+    pub colour: Channel,
+    pub tooltip: &'static str,
+    /// The name in the Panel's title tag.
+    pub tag: &'static str,
+    /// What the colour rule's `channel` reads (0 is colour, so these start at 1).
+    pub shader: f32,
+}
+
+/// The channels in chip order.
+pub const CHANNELS: [ChannelChoice; 4] = [
+    ChannelChoice { value: "luma", letter: "Y", colour: Channel::Y, tooltip: "Luma (Y)", tag: "Luma", shader: 1.0 },
+    ChannelChoice { value: "red", letter: "R", colour: Channel::R, tooltip: "Red", tag: "Red", shader: 2.0 },
+    ChannelChoice { value: "green", letter: "G", colour: Channel::G, tooltip: "Green", tag: "Green", shader: 3.0 },
+    ChannelChoice { value: "blue", letter: "B", colour: Channel::B, tooltip: "Blue", tag: "Blue", shader: 4.0 },
+];
+
+/// The channel `value` (a stored setting) names; `None` for colour or anything else.
+pub fn channel_of(value: Option<&str>) -> Option<&'static ChannelChoice> {
+    CHANNELS.iter().find(|c| Some(c.value) == value)
+}
+
+const fn channel_chip(i: usize) -> ToolbarChip {
+    let c = &CHANNELS[i];
+    ToolbarChip { value: c.value, text: c.letter, tooltip: c.tooltip, channel: Some(c.colour) }
+}
+
 pub static CHANNEL_TOOLBAR: [ToolbarDef; 1] = [ToolbarDef {
     key: CHANNEL_SETTING,
     mode: ChipMode::OneOrNone,
-    chips: &[
-        ToolbarChip { value: "luma", text: "Y", tooltip: "Luma (Y)", channel: Some(Channel::Y) },
-        ToolbarChip { value: "red", text: "R", tooltip: "Red", channel: Some(Channel::R) },
-        ToolbarChip { value: "green", text: "G", tooltip: "Green", channel: Some(Channel::G) },
-        ToolbarChip { value: "blue", text: "B", tooltip: "Blue", channel: Some(Channel::B) },
-    ],
+    chips: &[channel_chip(0), channel_chip(1), channel_chip(2), channel_chip(3)],
 }];
 
 /// The clean picture's Loupe toggle (#161): off by default; its size is the popover's `size` choice.

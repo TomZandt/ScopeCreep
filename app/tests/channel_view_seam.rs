@@ -4,7 +4,7 @@
 mod common;
 use common::{Rig, TARGET, solid};
 use scopecreep::channel_view::ChannelView;
-use scopecreep::display::{ChannelViewDrawn, DisplayContext, DisplaySet, Pointer};
+use scopecreep::display::{LoupeDrawn, DisplayContext, DisplaySet, Pointer};
 use scopecreep::picture_view::PictureView;
 use scopecreep::settings::PanelSettings;
 use std::sync::Arc;
@@ -42,7 +42,7 @@ impl Bench {
         self.set.pointer(self.index, AREA, 1.0, event)
     }
 
-    fn drawn(&self) -> ChannelViewDrawn {
+    fn drawn(&self) -> LoupeDrawn {
         self.channel_view.drawn().expect("the Channel view reports what it drew")
     }
 

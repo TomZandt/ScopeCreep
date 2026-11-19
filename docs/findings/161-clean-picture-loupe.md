@@ -6,4 +6,5 @@ What ticket #161 showed on 2026-11-19, at the Feed seam (`app/tests/clean_loupe_
 - With it off nothing is drawn and no pointer, drag or wheel event is used.
 - The Loupe chip is off by default, toggles, is remembered per Panel and tags "Loupe N %" only while on; the size is the popover's only row. Rubbish saved values fall back to off and medium.
 - Not checked: the look beside Resolve 21 (a person does that, #75 moves to the clean picture).
-- The Loupe chip is a compact "L" (tooltip "Loupe") so the five chips and the settings button fit a Panel about 190 px wide. At the 120 px minimum Panel width they do not all fit (the same is already true of four chips plus the button); the Panel grid's default layout gives the clean picture far more.
+- Loupe position and zoom round-trip through the saved settings text beside the clean picture's choices (`app/tests/settings.rs`); the title tag shows only a sensible remembered zoom (100 to 800, whole steps), else 200 %.
+- The Loupe chip is a compact "L" with the tooltip "Loupe: drag it, scroll over it to zoom". The five chips and the settings button need about 190 px, but the minimum Panel width is 120 px, so chips can overflow between 120 and 190 px (the toolbar test uses 190 px, not 120). Spec #158 story 26 is only partly met: issue #171.

@@ -243,3 +243,19 @@ fn the_clean_picture_loupe_state_round_trips_and_rubbish_falls_back_to_the_defau
     let rubbish = PanelSettings::from_text("Clean picture\tloupe\tmaybe\nClean picture\tsize\thuge\n").resolve("Clean picture", &picture_view::SETTINGS);
     assert_eq!((rubbish["loupe"].as_str(), rubbish["size"].as_str()), ("off", "medium"));
 }
+
+#[test]
+fn the_clean_picture_loupe_position_and_zoom_round_trip_beside_its_settings() {
+    use scopecreep::{loupe, picture_view};
+    let mut s = PanelSettings::default();
+    s.set("Clean picture", "loupe", "on");
+    assert!(s.set_state("Clean picture", loupe::X_KEY, "0.25000"));
+    assert!(s.set_state("Clean picture", loupe::Y_KEY, "0.75000"));
+    assert!(s.set_state("Clean picture", loupe::ZOOM_KEY, "500"));
+    let back = PanelSettings::from_text(&s.to_text());
+    let state = back.state_of("Clean picture", loupe::STATE_KEYS);
+    assert_eq!((state[loupe::X_KEY].as_str(), state[loupe::Y_KEY].as_str(), state[loupe::ZOOM_KEY].as_str()), ("0.25000", "0.75000", "500"));
+    assert_eq!(back.resolve("Clean picture", &picture_view::SETTINGS)["loupe"], "on", "the menu choice survives beside it");
+    assert!(back.state_of("Clean picture", &["loupe", "size"]).is_empty(), "choices are not state");
+    assert!(back.state_of("Vectorscope", loupe::STATE_KEYS).is_empty(), "state is per Panel");
+}

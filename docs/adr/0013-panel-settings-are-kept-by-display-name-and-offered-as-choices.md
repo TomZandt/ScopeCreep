@@ -41,4 +41,4 @@ Amounts now are: trace brightness (waveforms 20 to 300 %, Vectorscope and CIE pl
 
 ## Note, 2026-11-19: the one-or-none chip mode (#160)
 
-A fourth chip mode, one or none: at most one chip on, clicking the lit chip turns it off, clicking another switches to it. The clean picture's Y R G B use it: its stored value is the chip's value, or "off" for none, which is colour and the default. It replaces the clean picture's B/W setting; a saved clean picture B/W "on" reads as the Luma channel and "off" as colour (the older value maps to what it produced). ARRI, Stops and Skin Tone keep their B/W toggle.
+A fourth chip mode, one or none: at most one chip on, clicking the lit chip turns it off, clicking another switches to it. The clean picture's Y R G B use it: its stored value is the chip's value, or "off" for none, which is colour and the default. It replaces the clean picture's B/W setting; a saved clean picture B/W "on" reads as the Luma channel and "off" as colour (the older value maps to what it produced). ARRI, Stops and Skin Tone keep their B/W toggle. The chips, the colour rule and the title tag read one table of channels (`toolbar::CHANNELS`).

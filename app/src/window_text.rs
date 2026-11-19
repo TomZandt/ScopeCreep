@@ -74,22 +74,7 @@ pub fn conversion_tags(context: &DisplayContext) -> Vec<String> {
 
 /// The clean picture's channel as a tag (#160): its name when it is not colour, nothing in colour.
 fn channel_tag(context: &DisplayContext) -> Option<String> {
-    match context.settings.get(crate::toolbar::CHANNEL_SETTING).map(String::as_str) {
-        Some("luma") => Some("Luma".into()),
-        Some("red") => Some("Red".into()),
-        Some("green") => Some("Green".into()),
-        Some("blue") => Some("Blue".into()),
-        _ => None,
-    }
-}
-
-/// The Loupe's zoom as a tag while the Loupe is on (#161), nothing while it is off.
-fn loupe_tag(context: &DisplayContext) -> Option<String> {
-    if context.settings.get(crate::toolbar::LOUPE_SETTING).map(String::as_str) != Some("on") {
-        return None;
-    }
-    let zoom = context.settings.get("loupe_zoom").and_then(|z| z.parse::<u32>().ok()).unwrap_or(crate::loupe::DEFAULT_ZOOM);
-    Some(format!("Loupe {zoom} %"))
+    crate::toolbar::channel_of(context.settings.get(crate::toolbar::CHANNEL_SETTING).map(String::as_str)).map(|c| c.tag.to_string())
 }
 
 /// The B/W tag (#118): "B/W" when the unpainted picture is grey on a Panel that defaults to colour, "colour" when it
@@ -137,7 +122,7 @@ fn waveform_tags(context: &DisplayContext) -> Vec<String> {
 pub fn panel_title(display_name: &str, context: &DisplayContext, full: String) -> PanelTitle {
     let setting = |key: &str| context.settings.get(key).map(String::as_str);
     let (name, tags): (String, Vec<String>) = match display_name {
-        "Clean picture" => ("Clean picture".into(), channel_tag(context).into_iter().chain(loupe_tag(context)).chain(conversion_tags(context)).collect()),
+        "Clean picture" => ("Clean picture".into(), channel_tag(context).into_iter().chain(crate::loupe::tag(&context.settings)).chain(conversion_tags(context)).collect()),
         crate::waveform::NAME => {
             // The channels drawn, when not just Luma.
             let channels = crate::waveform::Channels::from_setting(setting(crate::waveform::CHANNELS_SETTING));
@@ -189,8 +174,7 @@ pub fn panel_title(display_name: &str, context: &DisplayContext, full: String) -
                 Some("luma") => "Luma",
                 _ => "Blue",
             };
-            let zoom = setting("loupe_zoom").and_then(|z| z.parse::<u32>().ok()).unwrap_or(crate::loupe::DEFAULT_ZOOM);
-            let mut tags = vec![channel.to_string(), format!("{zoom} %")];
+            let mut tags = vec![channel.to_string(), format!("{} %", crate::loupe::zoom(&context.settings))];
             tags.extend(conversion_tags(context));
             // Luma follows the waveform's weights, so a grey that is not the default says so.
             if setting("channel") == Some("luma") && measurement(context.colour_setup.clone(), context.luma).luma == LumaWeights::MatchResolve {

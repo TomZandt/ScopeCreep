@@ -11,9 +11,9 @@
 //! to the Picture stage): for every pixel it calls the rule's `colour(uv)` with `uv` at the middle of the source
 //! texel, and `sample_picture` / `load_picture` give that exact texel. The Panel hands the Loupe the same
 //! `Values` it hands the stage.
-use crate::display::{ChannelViewDrawn, Pointer, PointerResult};
+use crate::display::{LoupeDrawn, Pointer, PointerResult};
 use crate::picture_stage::{Shown, place};
-use crate::settings::{Choice, SettingDef};
+use crate::settings::{Choice, SettingDef, Settings};
 use bytemuck::Pod;
 use std::sync::{Arc, Mutex};
 
@@ -24,7 +24,26 @@ pub const MAX_ZOOM: u32 = 800;
 const ZOOM_STEP: u32 = 100;
 
 /// The remembered state a Loupe keeps beside the settings (ADR 0015).
-pub const STATE_KEYS: &[&str] = &["loupe_x", "loupe_y", "loupe_zoom"];
+pub const X_KEY: &str = "loupe_x";
+pub const Y_KEY: &str = "loupe_y";
+pub const ZOOM_KEY: &str = "loupe_zoom";
+pub const STATE_KEYS: &[&str] = &[X_KEY, Y_KEY, ZOOM_KEY];
+
+/// The remembered zoom in `settings`, in whole 100 % steps within the limits: the default when absent or not sensible.
+pub fn zoom(settings: &Settings) -> u32 {
+    let remembered = settings.get(ZOOM_KEY).and_then(|v| v.parse::<u32>().ok()).filter(|z| (MIN_ZOOM..=MAX_ZOOM).contains(z));
+    remembered.map_or(DEFAULT_ZOOM, |z| (z + ZOOM_STEP / 2) / ZOOM_STEP * ZOOM_STEP)
+}
+
+/// Whether the Loupe is switched on in `settings` (the clean picture's chip).
+pub fn is_on(settings: &Settings) -> bool {
+    settings.get(crate::toolbar::LOUPE_SETTING).is_some_and(|v| v == "on")
+}
+
+/// The Panel title tag while the Loupe is on ("Loupe 200 %"), nothing while it is off.
+pub fn tag(settings: &Settings) -> Option<String> {
+    is_on(settings).then(|| format!("Loupe {} %", zoom(settings)))
+}
 
 /// The Loupe's size choice, for a Picture View's settings menu.
 pub const SIZE_SETTING: SettingDef = SettingDef {
@@ -104,18 +123,16 @@ impl LoupeState {
     }
 
     fn position_state(&self) -> Vec<(&'static str, String)> {
-        vec![("loupe_x", format!("{:.5}", self.x)), ("loupe_y", format!("{:.5}", self.y))]
+        vec![(X_KEY, format!("{:.5}", self.x)), (Y_KEY, format!("{:.5}", self.y))]
     }
 
     /// Take remembered state, leaving anything that is not sensible at its default.
-    fn load(&mut self, state: &crate::settings::Settings) {
+    fn load(&mut self, state: &Settings) {
         let fraction = |key: &str| state.get(key).and_then(|v| v.parse::<f32>().ok()).filter(|v| (0.0..=1.0).contains(v));
-        if let (Some(x), Some(y)) = (fraction("loupe_x"), fraction("loupe_y")) {
+        if let (Some(x), Some(y)) = (fraction(X_KEY), fraction(Y_KEY)) {
             (self.x, self.y) = (x, y);
         }
-        if let Some(zoom) = state.get("loupe_zoom").and_then(|v| v.parse::<u32>().ok()).filter(|z| (MIN_ZOOM..=MAX_ZOOM).contains(z)) {
-            self.zoom = (zoom + ZOOM_STEP / 2) / ZOOM_STEP * ZOOM_STEP;
-        }
+        self.zoom = zoom(state);
     }
 }
 
@@ -170,7 +187,7 @@ struct Inner {
     /// Remembered state is taken once, from the first [`Loupe::configure`] (the user's file at start-up);
     /// after that the display's own is the newer.
     loaded: bool,
-    /// The Panel's area and scale when last drawn or touched, for [`ChannelViewDrawn`].
+    /// The Panel's area and scale when last drawn or touched, for [`LoupeDrawn`].
     area: Option<([f32; 4], f32)>,
 }
 
@@ -241,7 +258,7 @@ impl Loupe {
     }
 
     /// Take the size choice from `settings`, and, the first time only, the remembered position and zoom.
-    pub fn configure(&self, settings: &crate::settings::Settings) {
+    pub fn configure(&self, settings: &Settings) {
         let mut inner = self.inner.lock().unwrap();
         inner.state.size = LoupeSize::from_setting(settings.get("size").map(String::as_str));
         if !inner.loaded {
@@ -256,10 +273,10 @@ impl Loupe {
     }
 
     /// For tests: what the Loupe reports it drew, `None` before the first draw.
-    pub fn drawn(&self) -> Option<ChannelViewDrawn> {
+    pub fn drawn(&self) -> Option<LoupeDrawn> {
         let inner = self.inner.lock().unwrap();
         let (area, scale) = inner.area?;
-        Some(ChannelViewDrawn { loupe: inner.state.rect(area, scale), zoom: inner.state.zoom })
+        Some(LoupeDrawn { loupe: inner.state.rect(area, scale), zoom: inner.state.zoom })
     }
 
     /// Draw the Loupe on top of the picture the stage just drew in `area` (left, top, width, height, device pixels)
@@ -343,9 +360,28 @@ impl Loupe {
                 // Nothing to remember when the zoom did not change (a part of a notch, or already at its limit).
                 let changed = zoom != state.zoom;
                 state.zoom = zoom;
-                PointerResult { used: true, remember: if changed { vec![("loupe_zoom", zoom.to_string())] } else { Vec::new() } }
+                PointerResult { used: true, remember: if changed { vec![(ZOOM_KEY, zoom.to_string())] } else { Vec::new() } }
             }
             _ => PointerResult::default(),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn with(pairs: &[(&str, &str)]) -> Settings {
+        pairs.iter().map(|(k, v)| (k.to_string(), v.to_string())).collect()
+    }
+
+    #[test]
+    fn the_tag_is_there_only_while_the_loupe_is_on_and_shows_a_sensible_zoom() {
+        assert_eq!(tag(&with(&[])), None);
+        assert_eq!(tag(&with(&[("loupe", "off"), (ZOOM_KEY, "400")])), None);
+        assert_eq!(tag(&with(&[("loupe", "on")])).as_deref(), Some("Loupe 200 %"));
+        assert_eq!(tag(&with(&[("loupe", "on"), (ZOOM_KEY, "500")])).as_deref(), Some("Loupe 500 %"));
+        assert_eq!(tag(&with(&[("loupe", "on"), (ZOOM_KEY, "rubbish")])).as_deref(), Some("Loupe 200 %"));
+        assert_eq!(tag(&with(&[("loupe", "on"), (ZOOM_KEY, "5000")])).as_deref(), Some("Loupe 200 %"));
     }
 }

@@ -2,7 +2,7 @@
 //! draws into a target, and the tests read back the pixels and what the Loupe reports it drew. Needs a GPU.
 mod common;
 use common::{Rig, TARGET, solid};
-use scopecreep::display::{ChannelViewDrawn, DisplayContext, DisplaySet, Pointer, PointerResult};
+use scopecreep::display::{LoupeDrawn, DisplayContext, DisplaySet, Pointer, PointerResult};
 use scopecreep::picture_view::PictureView;
 use scopecreep::settings::PanelSettings;
 use std::sync::Arc;
@@ -42,7 +42,7 @@ impl Bench {
         self.set.pointer(0, AREA, 1.0, event)
     }
 
-    fn drawn(&self) -> Option<ChannelViewDrawn> {
+    fn drawn(&self) -> Option<LoupeDrawn> {
         self.view.drawn()
     }
 

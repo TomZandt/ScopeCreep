@@ -3,7 +3,7 @@
 //!
 //! Blue is the default (the noisiest channel of most digital cameras); red and green are in the right-click
 //! menu. The Loupe on top of it is the shared one in `loupe.rs`, built from this view's colour rule.
-use crate::display::{ChannelViewDrawn, Display, DisplayContext, Pointer, PointerResult};
+use crate::display::{LoupeDrawn, Display, DisplayContext, Pointer, PointerResult};
 use crate::loupe::{self, Loupe};
 use crate::gpu_frame::GpuFrame;
 use crate::picture_stage::{PictureStage, Rule};
@@ -109,7 +109,7 @@ pub struct ChannelView {
 
 impl ChannelView {
     /// For tests: what the Loupe reports it drew, `None` before the first draw.
-    pub fn drawn(&self) -> Option<ChannelViewDrawn> {
+    pub fn drawn(&self) -> Option<LoupeDrawn> {
         self.loupe.drawn()
     }
 

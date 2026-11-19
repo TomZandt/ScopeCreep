@@ -74,9 +74,9 @@ pub struct PointerResult {
     pub remember: Vec<(&'static str, String)>,
 }
 
-/// For tests: what the Channel view drew.
+/// For tests: what a Loupe drew (the shared one in `loupe.rs`).
 #[derive(Clone, Copy, Debug, PartialEq)]
-pub struct ChannelViewDrawn {
+pub struct LoupeDrawn {
     /// The Loupe's square (left, top, width, height in device pixels).
     pub loupe: [f32; 4],
     /// Its zoom in percent of source pixels.

@@ -4,14 +4,13 @@
 //! `output_conversion` makes from it, drawn scaled to fit. Nothing else is done to it: the Output Colour Space
 //! values go to the screen as they are (clamped to 0..1 by the display surface, which is not sRGB-encoded for
 //! that reason).
-use crate::display::{Display, DisplayContext};
+use crate::display::{Display, DisplayContext, LoupeDrawn, Pointer, PointerResult};
 use crate::gpu_frame::GpuFrame;
+use crate::loupe::{self, Loupe};
 use crate::output_conversion::Plan;
 use crate::picture_stage::{PictureStage, Rule};
 use crate::settings::SettingDef;
-use crate::display::{ChannelViewDrawn, Pointer, PointerResult};
-use crate::loupe::{self, Loupe};
-use crate::toolbar::{CHANNEL_DEF, CHANNEL_SETTING, CHANNEL_TOOLBAR, LOUPE_DEF, LOUPE_SETTING, LOUPE_TOOLBAR, ToolbarDef};
+use crate::toolbar::{CHANNEL_DEF, CHANNEL_SETTING, CHANNEL_TOOLBAR, LOUPE_DEF, LOUPE_TOOLBAR, ToolbarDef, channel_of};
 use std::sync::{Arc, Mutex};
 
 /// The colour rule: the frame as it is.
@@ -92,13 +91,13 @@ impl PictureView {
         Self::label_with(size, &Self::label_tail(context))
     }
 
-    /// The size of the frame on screen (width, height), once one has arrived: the window lays the panels out in
-    /// its shape, so they follow a change of timeline resolution.
     /// For tests: what the Loupe reports it drew, `None` while it is off or before the first draw.
-    pub fn drawn(&self) -> Option<ChannelViewDrawn> {
+    pub fn drawn(&self) -> Option<LoupeDrawn> {
         if self.look.lock().unwrap().loupe { self.loupe.drawn() } else { None }
     }
 
+    /// The size of the frame on screen (width, height), once one has arrived: the window lays the panels out in
+    /// its shape, so they follow a change of timeline resolution.
     pub fn frame_size(&self) -> Option<[u32; 2]> {
         self.stage.size()
     }
@@ -116,15 +115,8 @@ impl Display for PictureView {
     fn configure(&self, context: &DisplayContext) {
         *self.label_tail.lock().unwrap() = Self::label_tail(context);
         let [r, g, b] = crate::output_conversion::measurement(context.colour_setup.clone(), context.luma).weights();
-        *self.look.lock().unwrap() = Look { weights: [r as f32, g as f32, b as f32], channel: match context.settings.get(CHANNEL_SETTING).map(String::as_str) {
-            Some("luma") => 1.0,
-            Some("red") => 2.0,
-            Some("green") => 3.0,
-            Some("blue") => 4.0,
-            _ => 0.0,
-        },
-        loupe: context.settings.get(LOUPE_SETTING).is_some_and(|v| v == "on"),
-        };
+        let channel = channel_of(context.settings.get(CHANNEL_SETTING).map(String::as_str)).map_or(0.0, |c| c.shader);
+        *self.look.lock().unwrap() = Look { weights: [r as f32, g as f32, b as f32], channel, loupe: loupe::is_on(&context.settings) };
         self.loupe.configure(&context.settings);
     }
 
