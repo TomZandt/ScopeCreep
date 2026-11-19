@@ -24,6 +24,7 @@ A colourist checking noise, grain, focus or a key edge needs to see single pictu
 
 - ADR 0028's stage asks the zoom model for the view (`PictureStage::draw_zoomed`); `draw` is Fit. Pan (#166, done: a middle-drag moves the centre point by the pointer's movement over the zoom, held by the same clamp the wheel uses) , the other picture Panels (#167, done: ARRI False Colour, Stops False Colour, Skin Tone and the saturation heatmap hold a `PanelZoom` each and draw through `draw_zoomed`, the legend's strip kept free), Link (#168) and Z (#169) grow the same model.
 - The Stage uniform grew by two vec4s (the window of the picture drawn, and the exact-texel flag).
+- `docs/research/panel-controls.md` said "Drop for now" for a picture zoom control (the Loupe did that job). This ADR reverses that for the picture's zoom (chip, slider and wheel; the research table is updated), while the Loupe's own zoom stays on the Loupe.
 - ADR 0015's display state now includes the zoom, kept beside the settings but not in them (and never saved).
 - `Display::zoom` and `set_zoom` take the device scale, because a legend's strip is in device pixels and Fit depends on it.
 - The clean picture's chips are seven (with the link chip) at the left of the settings button; the narrowest Panels still run over (#171).

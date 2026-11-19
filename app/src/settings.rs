@@ -260,7 +260,6 @@ impl Menu {
         Menu {
             panel,
             rows: vec![
-                MenuRow::Heading("Zoom".to_string()),
                 MenuRow::Slider { key: crate::zoom::ZOOM_KEY, amount, value: readout.percent },
                 MenuRow::Reset { key: crate::zoom::ZOOM_KEY, value: amount.default, text: format!("Fit ({} %)", readout.fit.round() as u32) },
             ],

@@ -464,7 +464,7 @@ impl AppWindow {
     /// remember it; zoom and pan are not remembered.
     fn set_link(&mut self, panel: usize, on: bool) {
         self.displays.set_link(on, panel);
-        let changed = self.settings.lock().unwrap().set_state(scopecreep::zoom::LINK_STATE_PANEL, scopecreep::zoom::LINK_KEY, if on { "on" } else { "off" });
+        let changed = self.settings.lock().unwrap().set_state(scopecreep::zoom::LINK_STATE_PANEL, scopecreep::zoom::LINK_KEY, if on { "on" } else { scopecreep::toolbar::TOGGLE_OFF });
         if changed {
             self.save_settings();
         }

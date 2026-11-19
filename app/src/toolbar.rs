@@ -112,11 +112,11 @@ pub struct Toolbar {
 }
 
 /// The tip on a picture Panel's zoom chip.
-pub const ZOOM_TOOLTIP: &str = "Zoom: scroll over the picture, or click for a slider from Fit to 400 %";
+pub const ZOOM_TOOLTIP: &str = "Zoom: scroll, or click for a slider";
 
 /// The link chip's text and tip.
 pub const LINK_CHIP: &str = "Link";
-pub const LINK_TOOLTIP: &str = "Link: picture Panels zoom and pan together";
+pub const LINK_TOOLTIP: &str = "Link zoom across Panels";
 
 impl Toolbar {
     /// The toolbar with the zoom chip first when the Panel zooms (`readout` is `Some`): lit while zoomed in, and a

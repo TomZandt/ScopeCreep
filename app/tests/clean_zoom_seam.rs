@@ -162,7 +162,7 @@ fn the_popover_slider_runs_fit_to_400_and_sets_the_zoom_snapping_above_100() {
     let b = Bench::new("clean-zoom-slider");
     let readout = b.set.zoom(0, AREA, 1.0).unwrap();
     let menu = Menu::zoom(0, &readout);
-    let MenuRow::Slider { amount, value, .. } = &menu.rows[1] else { panic!("{:?}", menu.rows) };
+    let MenuRow::Slider { amount, value, .. } = &menu.rows[0] else { panic!("{:?}", menu.rows) };
     assert_eq!((amount.min, amount.max, *value), (75.0, 400.0, readout.percent));
     for (set, shows) in [(60.0, "60 %"), (100.0, "100 %"), (240.0, "200 %"), (260.0, "300 %"), (400.0, "400 %")] {
         let set = if set < 75.0 { 75.0 } else { set };
@@ -178,7 +178,7 @@ fn the_popover_slider_runs_fit_to_400_and_sets_the_zoom_snapping_above_100() {
     assert_eq!(b.chip(), "Fit 75 %");
     let mut shown = Menu::zoom(0, &b.set.zoom(0, AREA, 1.0).unwrap());
     shown.show_value(scopecreep::zoom::ZOOM_KEY, 200.0);
-    assert!(matches!(shown.rows[1], MenuRow::Slider { value: 200.0, .. }));
+    assert!(matches!(shown.rows[0], MenuRow::Slider { value: 200.0, .. }));
 }
 
 #[test]

@@ -98,3 +98,19 @@ fn turning_link_off_keeps_each_view_and_then_they_move_apart() {
     assert_eq!(text(&a, BIG), "Fit 50 %");
     assert_ne!(text(&b, SMALL), "Fit 20 %");
 }
+
+#[test]
+fn a_panel_whose_fit_is_above_the_shared_zoom_still_pans_and_steps_the_shared_view() {
+    let (a, b, link) = pair();
+    // The small Panel zooms to 31.25 %, below the big Panel's Fit (50 %).
+    wheel(&b, SMALL, [160.0, 90.0], 2.0);
+    link.set(true, Some(b.model()));
+    assert_eq!(text(&a, BIG), "Fit 50 %");
+    assert_eq!(text(&b, SMALL), "31 %");
+    let before = middle(&b, SMALL);
+    drag(&a, BIG, [400.0, 225.0], [420.0, 225.0]);
+    assert!(middle(&b, SMALL)[0] < before[0] - 1.0, "the drag on the big Panel pans the shared view");
+    // A notch out steps from the shared 31.25 %, not from the big Panel's Fit.
+    wheel(&a, BIG, [400.0, 225.0], -1.0);
+    assert_eq!(text(&b, SMALL), "25 %");
+}

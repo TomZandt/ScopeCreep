@@ -101,6 +101,15 @@ impl ZoomModel {
         })
     }
 
+    /// The zoom this model holds, which may be below this Panel's Fit: a shared view (Link) can sit under the Fit of
+    /// a Panel that is drawn at its own Fit. Equal to [`percent`](Self::percent) otherwise.
+    fn held_percent(&self, fit: f32) -> f32 {
+        match self.zoom {
+            Zoom::Percent(p) => p.min(Self::top(fit)),
+            Zoom::Fit => fit,
+        }
+    }
+
     /// Whether the picture is at Fit (a zoom at or below Fit is Fit).
     fn at_fit(&self, fit: f32) -> bool {
         !matches!(self.zoom, Zoom::Percent(p) if p > fit)
@@ -157,8 +166,7 @@ impl ZoomModel {
 
     /// What Fit is: the whole percent of a source pixel's size the frame is drawn at when fitted (23 for "Fit 23 %").
     pub fn fit_percent(&self, area: [f32; 4], picture: [u32; 2], strip: f32) -> Option<u32> {
-        let placed = place(area, picture, strip)?;
-        Some((placed.w / picture[0] as f32 * 100.0).round() as u32)
+        Some(Self::fit(area, picture, strip)?.round() as u32)
     }
 
     /// The next zoom in from `s` percent: free below 100 %, landing on it, then whole steps; never past `top`.
@@ -173,23 +181,27 @@ impl ZoomModel {
     }
 
     /// Zoom to `percent` keeping the picture pixel under the device point `at` there.
-    fn zoom_about(&mut self, percent: f32, fit: f32, area: [f32; 4], picture: [u32; 2], strip: f32, at: [f32; 2]) {
+    fn zoom_about(&mut self, percent: f32, keep: bool, fit: f32, area: [f32; 4], picture: [u32; 2], strip: f32, at: [f32; 2]) {
         let Some(before) = self.placement(area, picture, strip) else { return };
         let (k0, [left, top, width, height]) = (before.w / picture[0] as f32, Self::room(area, strip));
         let under = [(at[0] - before.x) / k0, (at[1] - before.y) / k0];
-        self.zoom = if percent <= fit + 1e-3 { Zoom::Fit } else { Zoom::Percent(percent) };
-        let k = percent.max(fit) / 100.0;
+        // A shared zoom already at or below this Panel's Fit (Link) stays what it is (`keep`); else at or below Fit is Fit.
+        self.zoom = if percent <= fit + 1e-3 && !keep { Zoom::Fit } else { Zoom::Percent(percent) };
+        let k = if self.zoom == Zoom::Fit { percent.max(fit) } else { percent } / 100.0;
         self.centre = Some([under[0] - (at[0] - (left + width / 2.0)) / k, under[1] - (at[1] - (top + height / 2.0)) / k]);
         self.hold(area, picture, strip);
     }
 
     /// Keep the centre inside the picture, so a pan can never leave the Panel empty.
     fn hold(&mut self, area: [f32; 4], picture: [u32; 2], strip: f32) {
-        let (Some(percent), Some(c)) = (self.percent(area, picture, strip), self.centre) else { return };
-        let k = percent / 100.0;
+        let (Some(fit), Some(c)) = (Self::fit(area, picture, strip), self.centre) else { return };
+        let k = self.held_percent(fit) / 100.0;
         let [_, _, width, height] = Self::room(area, strip);
+        // Under this Panel's own Fit (a shared view, Link) it has no edge to stop at: the other Panels' placement does
+        // that, so only keep the centre in the picture.
+        let under_fit = self.held_percent(fit) < fit;
         let hold = |c: f32, room: f32, size: u32| {
-            let half = (room / 2.0 / k).min(size as f32 / 2.0);
+            let half = if under_fit { 0.0 } else { (room / 2.0 / k).min(size as f32 / 2.0) };
             c.clamp(half, size as f32 - half)
         };
         self.centre = Some([hold(c[0], width, picture[0]), hold(c[1], height, picture[1])]);
@@ -200,11 +212,10 @@ impl ZoomModel {
     /// there is nothing to pan. Returns whether the picture moved.
     pub fn pan(&mut self, area: [f32; 4], picture: [u32; 2], strip: f32, delta: [f32; 2]) -> bool {
         let Some(fit) = Self::fit(area, picture, strip) else { return false };
-        if self.at_fit(fit) {
+        if self.zoom == Zoom::Fit {
             return false;
         }
-        let Some(percent) = self.percent(area, picture, strip) else { return false };
-        let k = percent / 100.0;
+        let k = self.held_percent(fit) / 100.0;
         let before = self.centre;
         let c = before.unwrap_or([picture[0] as f32 / 2.0, picture[1] as f32 / 2.0]);
         self.centre = Some([c[0] - delta[0] / k, c[1] - delta[1] / k]);
@@ -222,10 +233,13 @@ impl ZoomModel {
         self.pending -= notches;
         let before = self.zoom;
         for _ in 0..notches.abs() as u32 {
-            let now = self.percent(area, picture, strip).unwrap_or(fit);
-            let next = if notches > 0.0 { Self::step_in(now, Self::top(fit)) } else { Self::step_out(now).max(fit) };
+            if notches < 0.0 && self.zoom == Zoom::Fit {
+                break;
+            }
+            let now = self.held_percent(fit);
+            let next = if notches > 0.0 { Self::step_in(now, Self::top(fit)) } else { Self::step_out(now) };
             if (next - now).abs() > 1e-3 {
-                self.zoom_about(next, fit, area, picture, strip, at);
+                self.zoom_about(next, now <= fit + 1e-3, fit, area, picture, strip, at);
             }
         }
         self.zoom != before
@@ -240,14 +254,14 @@ impl ZoomModel {
         } else if percent < 100.0 { percent } else { ((percent / 100.0).round() * 100.0).min(Self::top(fit)) };
         let [left, top, width, height] = Self::room(area, strip);
         // About the middle of the Panel's picture area (the slider has no pointer).
-        self.zoom_about(snapped.max(0.0), fit, area, picture, strip, [left + width / 2.0, top + height / 2.0]);
+        self.zoom_about(snapped.max(0.0), false, fit, area, picture, strip, [left + width / 2.0, top + height / 2.0]);
     }
 
     /// What the zoom chip and its slider say. `None` when nothing is left to draw in.
     pub fn readout(&self, area: [f32; 4], picture: [u32; 2], strip: f32) -> Option<Readout> {
         let fit = Self::fit(area, picture, strip)?;
         let percent = self.percent(area, picture, strip)?;
-        let text = if self.at_fit(fit) { format!("Fit {} %", fit.round() as u32) } else { format!("{} %", percent.round() as u32) };
+        let text = if self.at_fit(fit) { format!("Fit {} %", self.fit_percent(area, picture, strip)?) } else { format!("{} %", percent.round() as u32) };
         Some(Readout { text, percent, fit, max: Self::top(fit) })
     }
 }

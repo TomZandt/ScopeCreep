@@ -48,7 +48,7 @@ I couldn't get these: Omniscope's own docs (timeinpixels.com returned 404), a fu
 |---|---|---|---|---|
 | B/W (show the picture as Luma grey) | **Toolbar** toggle | Off (colour) | Judging contrast without colour is a per-shot check. Leader puts MONO/COLOR on the picture display's own menu, beside brightness and contrast. Once this toggle exists, the separate Black and white Panel adds nothing (the open question in #113). | LV §13.2.1; REPO #113 |
 | Single channel (R, G, B) | Drop here | – | It belongs on the Channel view, which has the Loupe for it. Resolve does offer it on its main Viewer ("Show Viewer Channels: RGB, R, G, B"), so if the Channel view is ever merged into the clean picture, this becomes a toolbar chip. | R20 p. 2986 |
-| Picture zoom (FIT / 1:1 / 2×) | Drop for now | Fit | Leader offers FIT/REAL/X2 on the picture display. scopecreep's Loupe on the Channel view does this job, and Resolve's Viewer already zooms. | LV §13.8.1 |
+| Picture zoom (Fit up to 400 %) | **Toolbar** zoom chip (first), a slider in its popover, and the scroll wheel over the picture; a **Link** chip beside it zooms every picture Panel together | Fit | Leader offers FIT/REAL/X2 on the picture display and Resolve's Viewer zooms with the wheel, so a colourist expects it on every picture Panel. Reversed from "Drop for now" by spec #163: zoom is of source pixels, and it is display state, never saved (ADR 0035). | LV §13.8.1; REPO #163, ADR 0035 |
 | Safe-area / aspect markers | Drop | – | Every hardware scope offers them (Leader §13.4, TEK p. 83), but they are framing tools, not grading tools, and Resolve's Viewer draws them. A colourist won't miss them on a second monitor. | LV; TEK |
 | Brightness / contrast of the picture | Drop | – | Leader has them (§13.2.3–4), but on a grading monitor they would mislead. ADR 0013 says a display can't be set up to mislead. | LV; REPO ADR 0013 |
 
@@ -114,7 +114,7 @@ What real scopes offer:
 | Control | Place | Default | Why | Source |
 |---|---|---|---|---|
 | **Y R G B channel chips**, one at a time | **Toolbar** | B (today's default; blue is the noisiest channel) | Resolve: "Show Viewer Channels … RGB, R, G, or B … useful when evaluating a single channel for noise or other artifacts". Monitors put R/G/B/Mono and Blue Only on a function key, so it is a one-press, mid-session action. | R20 p. 2986; MON; REPO #113 |
-| Loupe zoom (100 / 200 / 400 %) | **On the Loupe itself** (scroll wheel or a small badge), not the title bar | 200 % | Zoom is direct manipulation of the Loupe. FSI's Pixel Zoom is a positionable, resizable rectangle on a function key, and Leader's picture X2 is its own soft key. It is remembered as display state (ADR 0015). | MON (FSI); LV §13.8.1 |
+| Loupe zoom (100 / 200 / 400 %) | **On the Loupe itself** (scroll wheel or a small badge); the picture's own zoom is the zoom chip (ADR 0035), a separate control | 200 % | Zoom is direct manipulation of the Loupe. FSI's Pixel Zoom is a positionable, resizable rectangle on a function key, and Leader's picture X2 is its own soft key. It is remembered as display state (ADR 0015). | MON (FSI); LV §13.8.1 |
 | Loupe size (small / medium / large) | **Popover** | Medium | Set once for the Panel size. | REPO channel_view.rs |
 | Loupe on/off | **Toolbar** toggle, optional | On | Lets the colourist see the whole channel unobstructed. Cheap to add. | inference |
 
