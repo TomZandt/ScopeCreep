@@ -368,12 +368,9 @@ struct Placement {
 @group(0) @binding(4) var<storage, read> rgb_counts: array<u32>;   // the R, G and B counts, one block each
 
 const ROWS: u32 = 1026u;
-// Neutral greys only: nothing on screen may tint the eye.
-const PLOT: vec3<f32> = vec3<f32>(0.035, 0.035, 0.035);
+// The plot, grid and trace greys and the phosphor response are the scope shader library's.
 const EDGE: vec3<f32> = vec3<f32>(0.085, 0.085, 0.085);
-const GRID: vec3<f32> = vec3<f32>(0.14, 0.14, 0.14);
 const LEGAL: vec3<f32> = vec3<f32>(0.30, 0.30, 0.30);
-const TRACE: vec3<f32> = vec3<f32>(0.86, 0.86, 0.86);
 
 @vertex
 fn vs(@builtin(vertex_index) index: u32) -> @builtin(position) vec4<f32> {
@@ -414,15 +411,6 @@ fn density(channel: u32, x: f32, first_row: u32, end_row: u32) -> f32 {
         sampled += 1.0;
     }
     return sum / sampled;
-}
-
-// Phosphor response: 1 - exp(-gain * density), where density is relative to what the Panel and frame size lead
-// us to expect (see `expected`), and never invisible while even one pixel is there.
-fn phosphor(v: f32, expected: f32, floor_level: f32) -> f32 {
-    if (v <= 0.0) {
-        return 0.0;
-    }
-    return clamp(max(floor_level, 1.0 - exp(-placement.look.x * v / expected)), 0.0, 1.0);
 }
 
 // The colour of the trace over rows [first_row, end_row) at screen column x: the neutral trace for the luma
@@ -479,7 +467,7 @@ fn overlay(x: f32, first_row: u32, end_row: u32, expected: f32, floor_level: f32
         if (!channel_on(channel)) {
             continue;
         }
-        let brightness = phosphor(density(channel, x, first_row, end_row), expected, floor_level);
+        let brightness = phosphor(placement.look.x, density(channel, x, first_row, end_row), expected, floor_level);
         if (brightness > 0.0) {
             rgb += brightness * channel_colour(channel, x, first_row, end_row);
             strongest = max(strongest, brightness);
@@ -681,7 +669,7 @@ impl Waveform {
             usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
             mapped_at_creation: false,
         });
-        let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor { label: Some("waveform draw"), source: wgpu::ShaderSource::Wgsl(DRAW_SHADER.into()) });
+        let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor { label: Some("waveform draw"), source: wgpu::ShaderSource::Wgsl(crate::scope_shader::with_library(DRAW_SHADER).into()) });
         let draw = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
             label: Some("waveform draw"),
             layout: None,

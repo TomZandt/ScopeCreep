@@ -267,11 +267,9 @@ struct Placement {
 @group(0) @binding(1) var<storage, read> bins: array<u32>;
 
 const BINS: u32 = 1024u;
-// The plot, grid and skin-tone line are neutral greys; only the trace and the colour targets carry colour.
-const PLOT: vec3<f32> = vec3<f32>(0.035, 0.035, 0.035);
-const GRID: vec3<f32> = vec3<f32>(0.14, 0.14, 0.14);
+// The plot, grid and trace greys and the phosphor response are the scope shader library's; the skin-tone line is
+// a neutral grey too, and only the trace and the colour targets carry colour.
 const MARK: vec3<f32> = vec3<f32>(0.30, 0.30, 0.30);
-const TRACE: vec3<f32> = vec3<f32>(0.86, 0.86, 0.86);
 // Targets and trace are tinted by the colour they stand for: the six bars, red, yellow, green, cyan, magenta, blue.
 const BARS: array<vec3<f32>, 6> = array<vec3<f32>, 6>(
     vec3<f32>(1.0, 0.0, 0.0), vec3<f32>(1.0, 1.0, 0.0), vec3<f32>(0.0, 1.0, 0.0),
@@ -319,11 +317,8 @@ fn density(p: vec2<f32>) -> f32 {
 // relative to the picture spread evenly over a twentieth of the plot, so the look does not change with the Panel's
 // size or the picture's. Stray pixels stay visible but faint (never below 8 %).
 fn brightness(v: f32) -> f32 {
-    if (v <= 0.0) {
-        return 0.0;
-    }
     let even = max(placement.info.z / (placement.plot.z * placement.plot.w * 0.05), 1.0e-3);
-    return clamp(max(0.08, 1.0 - exp(-4.0 * placement.info.y * v / even)), 0.0, 1.0);
+    return phosphor(4.0 * placement.info.y, v, even, 0.08);
 }
 
 // The density under a plot pixel, spread a little over its neighbours (about 1 device pixel) when the soft spread
@@ -336,7 +331,7 @@ fn soft_density(p: vec2<f32>) -> f32 {
     for (var j = -1; j <= 1; j++) {
         for (var i = -1; i <= 1; i++) {
             let w = (2.0 - abs(f32(i))) * (2.0 - abs(f32(j))) / 16.0;
-            let q = p + vec2<f32>(f32(i), f32(j)) * max(1.0, placement.info.w);
+            let q = p + vec2<f32>(f32(i), f32(j)) * spread_step(placement.info.w);
             if (q.x >= 0.0 && q.y >= 0.0 && q.x < placement.plot.z && q.y < placement.plot.w) {
                 sum += w * density(q);
             }
@@ -447,7 +442,7 @@ impl Vectorscope {
             cache: None,
         });
         let uniform = |label, size| device.create_buffer(&wgpu::BufferDescriptor { label: Some(label), size, usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST, mapped_at_creation: false });
-        let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor { label: Some("vectorscope draw"), source: wgpu::ShaderSource::Wgsl(DRAW_SHADER.into()) });
+        let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor { label: Some("vectorscope draw"), source: wgpu::ShaderSource::Wgsl(crate::scope_shader::with_library(DRAW_SHADER).into()) });
         let draw = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
             label: Some("vectorscope draw"),
             layout: None,

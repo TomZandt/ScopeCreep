@@ -33,6 +33,7 @@ pub mod black_and_white;
 pub mod gamut_warning;
 pub mod skin_tone;
 pub mod skin_tone_view;
+pub mod scope_shader;
 pub mod vectorscope;
 pub mod muted_palette;
 pub mod saturation_heatmap;

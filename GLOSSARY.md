@@ -167,6 +167,10 @@ _Avoid_: Luminance (that is linear light, not this), brightness, Y (on its own)
 How many pixels land in one spot of a waveform, measured against what that Panel and frame size lead us to expect (an even spread over all codes). The trace's brightness follows it like a phosphor scope, so the same frame looks the same brightness in a large and a small Panel.
 _Avoid_: Intensity, heat
 
+**Scope shader library**:
+The one piece of shader code the waveforms and the vectorscope share: the phosphor response, the soft spread step and the plot, grid and trace greys. The trace brightness and soft spread settings change every scope through it.
+_Avoid_: Common shader, shader utils
+
 **Soft spread**:
 A blur of the waveform trace of about 1 device pixel, on by default and switchable off in the Panel's settings. Drawing only: it never changes what is measured.
 _Avoid_: Glow, blur, smoothing
