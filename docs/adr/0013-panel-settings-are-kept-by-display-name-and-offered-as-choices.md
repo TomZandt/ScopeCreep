@@ -1,5 +1,7 @@
 # Panel settings are lists of choices, kept by display name in a plain-text file, in a menu the app draws itself
 
+_Since 2026-11-19 a setting may also be an amount set with a slider; see the last note. "Never free numbers" below holds for lists; an amount is bounded by its range._
+
 ## Decision
 
 - A display offers its settings as a short list of named choices (the first is the default), never as free numbers or switches that could mislead. The right-click menu is built only from that list; a Panel with no settings shows no menu.
@@ -32,3 +34,7 @@ Multiple choice and Toggle chips now exist alongside single choice (the luma wav
 ## Note, 2026-11-19: amounts are sliders (#83, #84)
 
 A setting is either a list of choices or an **amount**: a number with a range, a step, a default, a unit, how many digits to show, and a map from the list values an earlier version saved. Choices stay lists; amounts are sliders in the popover with the number and its unit beside them, and a "Reset to default" row under each. The menu stays open while a slider is dragged, and the Panel is drawn again after each change. The range is limited to sensible values (the same rule as the lists: nothing that could mislead), a dragged value is a multiple of the step, and every default reproduces the look of the old default exactly. The file still keeps one value per Panel setting, now a plain number for an amount; a stored number is clamped into the range, one that cannot be read falls back to the default, and an old list value maps to the number it produced (trace brightness Dimmer, Normal, Brighter are 48, 100 and 240 %, both spellings "dim" and "dimmer"). The decision above is otherwise unchanged. Trace brightness (luma and Colour Waveform) was the first amount.
+
+## Note, 2026-11-19: which settings are amounts
+
+Amounts now are: trace brightness (waveforms 20 to 300 %, Vectorscope and CIE plot 20 to 400 %, because their gain scale is wider and the old Brighter was four times), soft spread (0 to 3 pixels, waveforms and Vectorscope), graticule brightness (20 to 300 %, every trace display), the Skin Tone and Highlight Neutrals tolerances, the gamut/legal warning's blue (0 to 50 %) and red (50 to 100 %) thresholds, and the saturation heatmap's scale (25 to 200 %). All use the one amount model above, so every default draws as the old default did and every old list value maps to the number it produced. Draw-only amounts (brightness, spread, graticule) never appear in a tag or label; amounts that change what is shown (tolerance, thresholds, scale) are named in the label or tag.

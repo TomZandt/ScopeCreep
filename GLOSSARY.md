@@ -136,11 +136,11 @@ What a display offers in its Panel's right-click menu (and chips on its title ba
 _Avoid_: Preferences, options, properties
 
 **Amount**:
-A Panel setting that is a number rather than a list: a range, a step, a default, a unit and how many digits to show (trace brightness, soft spread, a tolerance). It is set with a Slider, kept as a plain number, always read back inside its range, and an older list value maps to the number it produced.
+A Panel setting that is a number rather than a list: a range, a step, a default, a unit and how many digits to show (trace brightness, soft spread, graticule brightness, a tolerance, a threshold, the heatmap scale). Trace brightness runs 20 to 300 % on the waveforms and 20 to 400 % on the Vectorscope and CIE plot, whose gain scale is wider. It is set with a Slider, kept as a plain number, always read back inside its range, and an older list value maps to the number it produced.
 _Avoid_: Free number, value
 
 **Slider**:
-The row in a Panel's menu for a setting that is an amount (trace brightness): a track with a handle, the current value as a number with its unit beside it, dragged with the mouse while the menu stays open, with a row to put it back to its default. Its range is limited to sensible values and the value is kept per Panel.
+The row in a Panel's menu for a setting that is an amount (trace brightness, soft spread, graticule brightness, a tolerance, a threshold, the heatmap scale): a track with a handle, the current value as a number with its unit beside it, dragged with the mouse while the menu stays open, with a row to put it back to its default. Its range is limited to sensible values and the value is kept per Panel.
 _Avoid_: Dial, knob, spinner
 
 **Scope**:
@@ -187,7 +187,7 @@ _Avoid_: Common shader, shader utils
 The slider on every trace display (the waveforms, the vectorscope, the CIE plot) for how bright the grid, rings, targets and scale lines are, 20 % to 300 %, default 100 %. Drawing only, never in a tag, and the trace, clipping marks and measured shapes are never touched.
 
 **Soft spread**:
-A blur of the waveform trace, a Slider in the Panel's settings from 0 to 3 device pixels (default 1; 0 is off). Drawing only: it never changes what is measured.
+A blur of the trace on the waveforms and the Vectorscope, a Slider in the Panel's settings from 0 to 3 device pixels (default 1; 0 is off). Drawing only: it never changes what is measured.
 _Avoid_: Glow, blur, smoothing
 
 **Picture View**:

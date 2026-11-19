@@ -18,7 +18,7 @@ Pre-alpha. Nothing to install yet.
 | 0 | Colour and performance checks against Resolve (throwaway prototypes) | Done ([report](docs/stage0-report.md)) |
 | 1 | Feed plus clean picture plus luma waveform (Linux, NVIDIA) | Released in v0.1.0 |
 | 2 | Every display in its own Panel: 14 Panels (waveforms, vectorscope, CIE plot, false colour, skin tone and more) | Released in v0.2.0 |
-| 3 | A colourist's Window: the picture as the hero, arranged and saved layouts, title bars and one Colour Setup line, a style system with Panel toolbars and sliders, stronger Skin Tone and heatmap, following the scrub | Planned: specs [#94](https://github.com/TomZandt/scopecreep/issues/94), [#113](https://github.com/TomZandt/scopecreep/issues/113), [#83](https://github.com/TomZandt/scopecreep/issues/83), [#106](https://github.com/TomZandt/scopecreep/issues/106); backlog [#119](https://github.com/TomZandt/scopecreep/issues/119); checks at Resolve [#120](https://github.com/TomZandt/scopecreep/issues/120) |
+| 3 | A colourist's Window: the picture as the hero, arranged and saved layouts, title bars and one Colour Setup line, a style system with Panel toolbars and sliders, stronger Skin Tone and heatmap, following the scrub | In progress (on `main`: Panel toolbars and chips, sliders for every amount setting, horizontal legends, waveform Scale units, Vectorscope Tonal range). Specs [#94](https://github.com/TomZandt/scopecreep/issues/94), [#113](https://github.com/TomZandt/scopecreep/issues/113), [#83](https://github.com/TomZandt/scopecreep/issues/83), [#106](https://github.com/TomZandt/scopecreep/issues/106); backlog [#119](https://github.com/TomZandt/scopecreep/issues/119); checks at Resolve [#120](https://github.com/TomZandt/scopecreep/issues/120) |
 | Later | Parade, histogram, HDR, Setup Checklist, Capture, Windows/macOS, installers, licensing | Decided, parked |
 
 ## Development (Linux, NVIDIA)
@@ -31,7 +31,7 @@ Pre-alpha. Nothing to install yet.
 
 ```sh
 cargo test                       # Feed protocol (Rust and C against each other) and the app, driven at the Feed seam (waveform tests need a GPU)
-cargo run -p scopecreep          # the app (reads /dev/shm/scopecreep-feed, or $SCOPECREEP_FEED); right-click a Panel for its settings (the luma waveform's luma weights, for one); --no-scripting to never read the project by Resolve scripting
+cargo run -p scopecreep          # the app (reads /dev/shm/scopecreep-feed, or $SCOPECREEP_FEED); right-click a Panel for its settings: lists of choices (the luma waveform's luma weights, for one) and sliders (trace brightness, soft spread, graticule brightness, tolerances, thresholds, the heatmap scale); --no-scripting to never read the project by Resolve scripting
 cargo run -p scopecreep-feed --bin feed-synth   # a moving test card into the Feed, no Resolve needed
 
 make -C sender                   # build the Sender (needs /opt/cuda and Resolve's OpenFX headers)
@@ -84,7 +84,7 @@ DaVinci Resolve                                 scopecreep app (Rust + wgpu)
   - [0010](docs/adr/0010-false-colour-schemes-are-not-licensed-or-named.md): third-party false colour schemes are modelled, not licensed, and never claimed
   - [0011](docs/adr/0011-every-display-has-its-own-panel.md): every display has its own Panel, always visible, in a fixed grid
   - [0012](docs/adr/0012-panel-grid-shape-follows-display-count.md): the Panel grid's shape follows the number of displays, not the window, and Panels fill their cells (updated #96: a layout of cells and spans)
-  - [0013](docs/adr/0013-panel-settings-are-kept-by-display-name-and-offered-as-choices.md): Panel settings are lists of choices, kept by display name in a text file, in a menu the app draws itself
+  - [0013](docs/adr/0013-panel-settings-are-kept-by-display-name-and-offered-as-choices.md): Panel settings are lists of choices or amounts (sliders), kept by display name in a text file, in a menu the app draws itself
   - [0014](docs/adr/0014-gamut-warning-judges-every-channel-in-fractions-of-the-levels-range.md): the gamut/legal warning judges every channel, in fractions of the Levels' range
   - [0015](docs/adr/0015-display-state-is-remembered-beside-the-settings.md): what a display moves by hand (the Loupe) is remembered beside the settings, not as a setting
   - [0016](docs/adr/0016-arri-style-band-edges-and-out-of-gamut-luma.md): ARRI-style bands take Luma as the picture has it, include lower edges, and have open ends
@@ -92,7 +92,7 @@ DaVinci Resolve                                 scopecreep app (Rust + wgpu)
   - [0018](docs/adr/0018-vectorscope-skin-tone-angle-is-assumed-and-shared.md): the vectorscope skin-tone line's angle sits in one shared constant (first assumed at 134.5°, now measured from Resolve at 123°)
   - [0019](docs/adr/0019-stops-false-colour-decodes-the-timeline-frame-as-it-draws.md): Stops False Colour takes the Timeline Colour Space frame and decodes it as it draws
   - [0020](docs/adr/0020-cie-plot-reads-the-output-encoding-as-light.md): the CIE plot reads the Output encoding as light, decoded by the Output Colour Space's name
-  - [0021](docs/adr/0021-skin-tone-tolerance-is-choices-scaled-from-one-width.md): the Skin Tone Panel's tolerance is a list of choices that scale one width, and its tints fade through each other
+  - [0021](docs/adr/0021-skin-tone-tolerance-is-choices-scaled-from-one-width.md): the Skin Tone Panel's tolerance is one width that scales the bands (now a slider), and its tints fade through each other
   - [0022](docs/adr/0022-colour-waveform-tint-is-the-average-colour-at-the-luma-waveforms-positions.md): the Colour Waveform is the luma waveform's counts tinted by the average colour of the pixels counted at each spot
   - [0023](docs/adr/0023-heatmap-saturation-is-a-share-of-the-vectorscope-ring.md): the saturation heatmap's 100 % is the vectorscope's ring (Cb/Cr 0.6 since the ring moved), not each colour's own bar
   - [0024](docs/adr/0024-the-last-sender-in-the-frame-drives-the-feed.md): the last Sender in the frame drives the Feed, and more than one active Sender is a warning

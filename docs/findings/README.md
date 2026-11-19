@@ -43,12 +43,6 @@ What we learned by testing, kept in the repo so it isn't lost when an issue thre
 | [93](93-stops-false-colour-scale.md) | Does Stops False Colour put the ColorChecker in the right one of 17 zones, lay its scale out horizontally with numbers under their swatches, thin its text instead of overlapping it, and draw zones or a message instead of black (headless)? |
 | [58](58-stops-false-colour.md) | Milestone 2: does Stops False Colour measure the ColorChecker's published stops in every supported Timeline Colour Space, and do both modes paint the right zones (headless)? |
 | [62](62-cie-plot.md) | Milestone 2: does the CIE plot put every ColorChecker Patch at its reference chromaticity, draw the right triangles and label both spaces (headless)? |
-
-## Adding findings
-
-When a ticket answers a question by testing, its closing comment holds the evidence. Copy that comment into a new file here, numbered by the issue, and add a row to the table. Do it in the same change that closes the ticket.
-
-Anything the ticket could not verify becomes a GitHub issue (or a comment on the planned ticket that will cover it), and the findings file links to it. When a later ticket settles a check, update the findings file it came from.
 | [67](67-milestone-2-performance.md) | Milestone 2: does Resolve still play UHD 50 at 50 fps with the Sender, and with the app showing all 14 Panels? |
 | [review-milestone-2](review-milestone-2.md) | Milestone 2 code review: what the review found in the integration branch, what was fixed and what was left, with the tests that pin it |
 | [114](114-style-tokens.md) | Style: are chrome colours and sizes tokens by role with no visible change, and does the check catch a raw literal? |
@@ -82,3 +76,11 @@ Anything the ticket could not verify becomes a GitHub issue (or a comment on the
 | [90](90-heatmap-scale-slider.md) | Does a scale slider on the saturation heatmap keep the default look, take any step, read old list values, clamp, and move the picture, label and tag (display seam)? |
 | [127](127-graticule-brightness.md) | Does a graticule brightness slider on every trace display keep the default look, scale only the marks (never the trace, clipping, locus or label), and never fade a mark below the plot (Feed seam)? |
 | [151](151-waveform-aspect.md) | Does the luma waveform's plot take the Feed frame's aspect (16:9, 2.39:1, 4:3, 9:16), centred with its gutter and edge rows, and follow a resolution change (pure seam and drawing seam)? |
+| [85](85-soft-spread-slider.md) | Does a soft spread slider on the luma and Colour Waveforms keep the old On and Off looks, take any step from 0 to 3 pixels and leave counts and label alone? |
+| [102](102-mattes-stay-black.md) | Do black mattes (letterbox and pillarbox) stay black on ARRI False Colour, Stops False Colour, Skin Tone and the saturation heatmap (Feed seam)? |
+
+## Adding findings
+
+When a ticket answers a question by testing, its closing comment holds the evidence. Copy that comment into a new file here, numbered by the issue, and add a row to the table. Do it in the same change that closes the ticket.
+
+Anything the ticket could not verify becomes a GitHub issue (or a comment on the planned ticket that will cover it), and the findings file links to it. When a later ticket settles a check, update the findings file it came from.

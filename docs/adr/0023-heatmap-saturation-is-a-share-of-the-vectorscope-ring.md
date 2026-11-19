@@ -28,3 +28,7 @@ The vectorscope ring moved from 0.5 to 0.6 Cb/Cr, the furthest a full-strength R
 The heatmap now keeps the picture's shape: each pixel is its Luma in grey (the Measured Space's weights) with the saturation colour laid over it, the colour's strength rising smoothly (smoothstep) from none at 0 % to full at 30 % of the scale. Neutral areas show the grey picture; saturated areas a strong colour. The even-brightness palette rule (spec #49 story 78) is dropped: the palette is 6 stops chosen for contrast, blue, cyan, green, yellow, orange, red, cool to hot.
 
 The default scale is 75 % (was 100 %). Measured on the ColorChecker as the Output picture, the 18 colour patches sit at 19 to 90 % of a 75 % scale (the most saturated, orange, at 90 %; the median near 50 %), so a normal graded picture uses most of the scale. At 100 % the most saturated patch used only 67 %. The measure itself (share of the vectorscope's ring) is unchanged, so 100 % is still the ring. The legend is the same overlay laid over mid grey, so its colours match the picture's.
+
+## Update 2026-11-19 (#90)
+
+The scale is a slider, 25 to 200 % in steps of 5, instead of a list of six; the default stays 75 %. The six old list values are plain numbers and read as they are.

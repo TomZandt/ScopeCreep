@@ -18,3 +18,7 @@
 
 - The gain numbers were chosen to give the intended ratios between a stray pixel, an even spread and a dense trace; how they look next to Resolve's waveform is judged by eye (see the findings).
 - Other Scopes with the same look (Colour Waveform, vectorscopes, CIE plot) can reuse the response and the trace-texture pass.
+
+## Note, 2026-11-19 (#84, #85, #86): the settings are sliders
+
+"Trace brightness" is now a slider, 20 to 300 % on the waveforms, with the gain equal to 0.25 times the number over 100: 100 % is the old Normal, and the old Dimmer and Brighter are 48 % and 240 %. The soft spread is a slider from 0 to 3 device pixels (default 1; the spread step is the old step times the amount), so 1 is the old On and 0 the old Off. The response, floor and separate pass above are unchanged. The phosphor response and the spread step now live once in the scope shader library, shared with the Vectorscope; the Vectorscope's brightness runs 20 to 400 % (ADR 0013, last note).
