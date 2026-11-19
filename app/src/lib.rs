@@ -27,6 +27,7 @@ pub mod highlight_neutrals;
 pub mod measurement;
 pub mod waveform;
 pub mod waveform_scale;
+pub mod loupe;
 pub mod channel_view;
 pub mod arri_false_colour;
 pub mod black_and_white;

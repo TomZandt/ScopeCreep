@@ -18,3 +18,7 @@ Nine Picture Views each carried their own copy of the same drawing code: fit and
 
 - A new Picture View is its rule, its values and its settings; a fix to placement, flip or sampling is made once and tested once (`tests/picture_stage_seam.rs`).
 - The stage always declares a sampler and a texture binding, even for rules that only use `load_picture`.
+
+## Note, 2026-11-19 (#159)
+
+The Loupe is no longer part of the Channel view: it is its own piece (`loupe.rs`) that any Picture View can draw on top of the stage. It is built from the Panel's own colour rule (the same WGSL the stage gets, with the same `Values`), so it magnifies exactly what the Panel shows. It still uses `place` and the stage's texture, as this ADR said. The Channel view is its first user.

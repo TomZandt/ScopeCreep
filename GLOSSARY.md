@@ -116,7 +116,7 @@ The shape every Scope and Picture View shares in the code: created for the targe
 _Avoid_: Widget, plugin, module (for a display)
 
 **Picture stage**:
-The one part of the code every Picture View draws through. It places the frame in its Panel (fit, centre, whole device pixels), flips it, keeps the GPU binding and the legend strip; a Picture View supplies only its colour rule, its values and optionally a legend. The Channel view's Loupe is its own draw on top of it.
+The one part of the code every Picture View draws through. It places the frame in its Panel (fit, centre, whole device pixels), flips it, keeps the GPU binding and the legend strip; a Picture View supplies only its colour rule, its values and optionally a legend. The Loupe is a shared piece on top of it, built from the Panel's own colour rule (`loupe.rs`).
 _Avoid_: Renderer, canvas
 
 **Matte**:
@@ -240,7 +240,7 @@ Stops False Colour's chart mode: a black and white picture where pixels within a
 The Feed's frame as Resolve sends it, before Output Conversion. Stops False Colour measures this one; every other display sees the Output picture.
 
 **Loupe**:
-A movable square on a Picture View that shows the picture under it magnified, so single pixels (and noise) can be seen. Its zoom is of source pixels, in device pixels of the screen: at 200 % each picture pixel is 2 × 2 device pixels, whatever the Panel's size. It lives on the Channel view.
+A movable square on a Picture View that shows the picture under it magnified, so single pixels (and noise) can be seen. Its zoom is of source pixels, in device pixels of the screen: at 200 % each picture pixel is 2 × 2 device pixels, whatever the Panel's size. It is one shared piece any Picture View can use; it is built from the Panel's colour rule, so it shows what the Panel shows. Today it is on the Channel view.
 
 **Channel view**:
 The Panel showing one channel of the Output picture (blue by default, or red, green or Luma) as grey, with the Loupe on top, for inspecting noise.

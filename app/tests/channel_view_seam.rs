@@ -119,6 +119,20 @@ fn the_y_chip_draws_luma_as_grey_with_the_waveforms_weights_in_the_picture_and_i
 }
 
 #[test]
+fn the_loupe_shows_what_the_panel_shows_for_every_channel_choice() {
+    let mut b = Bench::new("loupe-matches-panel");
+    b.play(64, 36, &solid(64, 36, [0.4, 0.6, 0.8]));
+    for channel in ["red", "green", "blue", "luma"] {
+        b.set.configure(&DisplayContext::default(), &with_setting(&b, "channel", channel));
+        let image = b.render();
+        let c = centre(b.drawn().loupe);
+        let in_loupe = px(&image, c[0] as u32, c[1] as u32);
+        let in_panel = px(&image, AREA[0] as u32 + 40, AREA[1] as u32 + 90);
+        assert!(in_loupe.iter().zip(in_panel).all(|(a, b)| (*a as i32 - b as i32).abs() <= 1), "{channel}: Loupe {in_loupe:?} vs Panel {in_panel:?}");
+    }
+}
+
+#[test]
 fn the_label_says_which_channel_is_shown() {
     let mut b = Bench::new("label");
     b.play(64, 36, &solid(64, 36, [0.4, 0.6, 0.8]));

@@ -180,7 +180,7 @@ pub fn panel_title(display_name: &str, context: &DisplayContext, full: String) -
                 Some("luma") => "Luma",
                 _ => "Blue",
             };
-            let zoom = setting("loupe_zoom").and_then(|z| z.parse::<u32>().ok()).unwrap_or(crate::channel_view::DEFAULT_ZOOM);
+            let zoom = setting("loupe_zoom").and_then(|z| z.parse::<u32>().ok()).unwrap_or(crate::loupe::DEFAULT_ZOOM);
             let mut tags = vec![channel.to_string(), format!("{zoom} %")];
             tags.extend(conversion_tags(context));
             // Luma follows the waveform's weights, so a grey that is not the default says so.
