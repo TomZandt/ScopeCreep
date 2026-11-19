@@ -16,6 +16,8 @@ The format follows [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/
 
 ### Added
 
+- Luma and Colour Waveforms: a Scale units setting in the popover, 10-bit codes (default), percent of the Levels' range, or nits (offered only when the Output Colour Space is PQ or HLG; HLG assumes a 1000 nit display). The scale numbers, reference lines and edge rows follow; what is measured does not change. The tag names the unit when it is not 10-bit, and the choice is remembered (#125, ADR 0033).
+
 - Stops False Colour: the mode is two chips on its title bar, Zones and Grey +1, one click each (hover says what each does), instead of a menu row. The choice is remembered per Panel and the tag still says "grey and +1 stop" when it is not full zones; B/W appears beside them in Grey +1 only. The popover keeps just the legend (#126).
 
 - Luma waveform: a Col chip on its title bar (hover: Colorise) draws the Y trace in the average colour of the pixels at each position, so you can tell the wall's spike from the jacket's; off by default, where the trace stays white. It is a drawing choice: the counts and edge rows are the same either way, it is remembered per Panel and is not in the tags. R, G and B traces keep their channel colours for now (#143, ADR 0032).

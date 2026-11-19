@@ -606,6 +606,57 @@ fn colorise_does_not_change_the_label() {
     assert_eq!(Display::label(&b.waveform), off);
 }
 
+// ------------------------------------------------------------------ Scale units (#125)
+
+#[test]
+fn the_scale_unit_never_changes_what_is_measured() {
+    use scopecreep::waveform_scale::Unit;
+    let mut b = Bench::new("scaleunits");
+    b.waveform.set_measurement(measuring(MeasuredSpace::Rec2100Pq, LumaWeights::FromPrimaries));
+    let counts = b.play(256, 16, &picture(256, 16, |x, _| grey(x * 4)));
+    assert_eq!(b.waveform.unit(), Unit::Codes);
+    for unit in [Unit::Percent, Unit::Nits] {
+        b.waveform.set_unit(unit);
+        assert_eq!(b.waveform.unit(), unit);
+        assert_eq!(b.waveform.counts(), counts, "{unit:?}: the counts, edge rows included, are the same");
+    }
+}
+
+#[test]
+fn the_scale_numbers_follow_the_unit() {
+    use scopecreep::display::Display;
+    use scopecreep::waveform_scale::Unit;
+    let mut b = Bench::new("scaletexts");
+    b.waveform.set_measurement(Measurement { levels: Levels::Video, ..measuring(MeasuredSpace::Rec2100Pq, LumaWeights::FromPrimaries) });
+    b.play(64, 16, &picture(64, 16, |_, _| grey(500)));
+    let numbers = |b: &Bench| b.waveform.scale_texts([0.0, 0.0, 400.0, 800.0], 1.0).into_iter().map(|t| t.text).collect::<Vec<_>>();
+    assert_eq!(numbers(&b), ["> 1023", "940", "512", "64", "< 0"]);
+    b.waveform.set_unit(Unit::Percent);
+    assert_eq!(numbers(&b), ["> 109.5", "100", "50", "0", "< -7.3"]);
+    b.waveform.set_unit(Unit::Nits);
+    assert_eq!(numbers(&b), ["> 10000", "10000", "1000", "100", "10", "0", "< 0"]);
+    assert!(Display::label(&b.waveform).ends_with("scale in nits (PQ)"), "{}", Display::label(&b.waveform));
+    // An output without light: nits are not offered, and what was chosen falls back to codes.
+    b.waveform.set_measurement(Measurement { levels: Levels::Video, ..measuring(MeasuredSpace::Rec709, LumaWeights::FromPrimaries) });
+    assert_eq!(numbers(&b), ["> 1023", "940", "512", "64", "< 0"]);
+}
+
+#[test]
+fn the_popover_offers_nits_only_for_pq_and_hlg() {
+    use scopecreep::display::Display;
+    let b = Bench::new("scaleoffer");
+    let choices = |b: &Bench| {
+        let defs = b.waveform.offered_defs();
+        defs.iter().find(|d| d.key == "scale_units").unwrap().choices.iter().map(|c| c.value).collect::<Vec<_>>()
+    };
+    assert_eq!(choices(&b), ["codes", "percent"]);
+    for space in [MeasuredSpace::Rec2100Pq, MeasuredSpace::Rec2100Hlg] {
+        b.waveform.set_measurement(measuring(space, LumaWeights::FromPrimaries));
+        assert_eq!(choices(&b), ["codes", "percent", "nits"], "{space:?}");
+    }
+    assert_eq!(b.waveform.setting_defs().iter().find(|d| d.key == "scale_units").unwrap().choices[0].value, "codes", "10-bit codes are the default");
+}
+
 // ------------------------------------------------------------------ Colorise on R, G and B, any combination (#144)
 
 const CHIP_COMBINATIONS: [[bool; 4]; 15] = [

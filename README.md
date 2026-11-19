@@ -104,6 +104,7 @@ DaVinci Resolve                                 scopecreep app (Rust + wgpu)
   - [0030](docs/adr/0030-named-layouts-are-nine-slots-of-the-grid-text.md): named layouts are nine slots holding the grid's own saved text, recalled through the same checks
   - [0031](docs/adr/0031-the-gate-follows-a-drag-and-judges-fills-per-render.md): the gate follows a drag, and judges a cache fill by the time per render
   - [0032](docs/adr/0032-colorise-is-one-chip-on-the-luma-waveform.md): Colorise is one chip on the luma waveform, and the Colour Waveform leaves the Window
+  - [0033](docs/adr/0033-waveform-scale-units-rename-positions-only.md): Waveform scale units rename positions; nits are for PQ and HLG and say what they assume
 - [docs/findings/](docs/findings/): what testing showed, one file per ticket.
 - [docs/research/](docs/research/): what public sources say, with dates and links.
 

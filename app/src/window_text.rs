@@ -106,6 +106,9 @@ fn waveform_tags(context: &DisplayContext) -> Vec<String> {
         (Levels::Full, Some(_)) => tags.push("full levels".into()),
         (Levels::Video, Some(_)) => {}
     }
+    // The scale's unit when it is not 10-bit codes (nits only where the Output Colour Space has light).
+    let unit = crate::waveform_scale::Unit::from_setting(context.settings.get(crate::waveform_scale::UNIT_SETTING).map(String::as_str));
+    tags.extend(unit.effective(m.space, m.assumed).tag(m.space));
     tags
 }
 

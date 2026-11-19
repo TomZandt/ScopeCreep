@@ -187,6 +187,10 @@ _Avoid_: Colourised waveform, RGB waveform, parade (that shows channels side by 
 A chip on the luma waveform's title bar (default off, remembered per Panel, never a tag) that works on whichever of Y, R, G and B are showing: Y takes the average colour of the pixels counted at each spot (the Colour Waveform's rule), R, G and B their channel colours; off, every trace is neutral. A drawing choice: counts and edge rows are the same either way. Resolve's own switch is spelt Colorize.
 _Avoid_: Colourise (as a tag or setting that changes the measurement)
 
+**Scale units**:
+What the luma and Colour Waveforms' scale is written in: 10-bit codes (default), percent of the Levels' range (black 0 %, white 100 %), or nits (only for a PQ or HLG Output Colour Space; HLG means a 1000 nit display). A tag names the unit when it is not 10-bit codes. It renames positions only: the counts, the edge rows and where a trace lands never change.
+_Avoid_: Scale mode, IRE (a unit of analogue video)
+
 **False Colour**:
 A Picture View that paints each pixel by the band its value falls in, leaving the rest of the picture in grey.
 _Avoid_: Heatmap (for exposure), exposure overlay

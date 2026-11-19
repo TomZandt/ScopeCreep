@@ -9,8 +9,9 @@
 //! The Colour Setup's Levels decide where values land on the scale (#18): video levels put black (0.0) at code 64
 //! and white (1.0) at 940, full (data) levels at 0 and 1023. Resolve hands the Sender the same values either way.
 use crate::colour_setup::Levels;
-use crate::measurement::{luma_weights_of, Measurement, LUMA_SETTING};
+use crate::measurement::{luma_weights_of, MeasuredSpace, Measurement, LUMA_SETTING};
 use crate::gpu_frame::GpuFrame;
+use crate::waveform_scale::{Unit, UNIT_SETTING};
 use crate::settings::{Choice, SettingDef};
 use std::sync::{Arc, Mutex};
 
@@ -336,7 +337,7 @@ pub fn marks_that_fit(marks: &[(f32, u32)], line: f32) -> Vec<bool> {
 
 const TRACE_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba16Float;
 
-const DRAW_UNIFORM_BYTES: u64 = 160;
+const DRAW_UNIFORM_BYTES: u64 = 192;
 
 /// The bit of `look.w` that says the traces are coloured (Colorise on, or the Colour Waveform). The shader's
 /// `COLORISE_BIT` is the same bit: change them together.
@@ -357,6 +358,8 @@ struct Placement {
     red: vec4<f32>,       // the channels' trace colours
     green: vec4<f32>,
     blue: vec4<f32>,
+    grid_a: vec4<f32>,    // the codes of the scale's reference lines (the unit in use names them); -1000 for none
+    grid_b: vec4<f32>,
 };
 @group(0) @binding(0) var<uniform> placement: Placement;
 @group(0) @binding(1) var<storage, read> counts: array<u32>;
@@ -493,6 +496,15 @@ fn on_line(y: f32, code: f32) -> bool {
     return floor(y_of_code(code)) == y;
 }
 
+fn on_grid(y: f32) -> bool {
+    for (var i = 0; i < 4; i++) {
+        if (on_line(y, placement.grid_a[i]) || on_line(y, placement.grid_b[i])) {
+            return true;
+        }
+    }
+    return false;
+}
+
 // The plot's trace: the expected density for a screen row is the pixels a column would hold in that many codes
 // if its tones were spread evenly over all 1024 (picture height / 1024 per code).
 fn trace_at(p: vec2<f32>) -> vec4<f32> {
@@ -537,7 +549,7 @@ fn fs(@builtin(position) position: vec4<f32>) -> @location(0) vec4<f32> {
     let p = floor(position.xy);
     if (inside(p, placement.plot)) {
         var base = PLOT;
-        if (on_line(p.y, 0.0) || on_line(p.y, 256.0) || on_line(p.y, 512.0) || on_line(p.y, 768.0) || on_line(p.y, 1023.0)) {
+        if (on_grid(p.y)) {
             base = GRID;
         }
         if (on_line(p.y, placement.legal.x) || on_line(p.y, placement.legal.y)) {
@@ -617,6 +629,8 @@ pub struct Waveform {
     /// Colorise (ADR 0032): the Y trace takes the colour of the pixels and R, G and B their channel colours; off,
     /// every trace is neutral. A drawing choice: the counts are the same either way.
     colorise: Arc<Mutex<bool>>,
+    /// What the scale is written in, as chosen (#125); [`Waveform::unit`] is the one in use.
+    unit: Arc<Mutex<Unit>>,
     state: Arc<Mutex<State>>,
 }
 
@@ -712,6 +726,7 @@ impl Waveform {
             look: Arc::new(Mutex::new(Look::default())),
             channels: Arc::new(Mutex::new(Channels::default())),
             colorise: Arc::new(Mutex::new(false)),
+            unit: Arc::new(Mutex::new(Unit::Codes)),
             state: Arc::new(Mutex::new(State { counts: None, sums: None, bound_colour: None, bound: None, draw_bound: None, trace: None, trace_bound: None, rgb: None, rgb_bound: None })),
         }
     }
@@ -739,6 +754,17 @@ impl Waveform {
     /// always tinted, whatever this says.
     pub fn set_colorise(&self, on: bool) {
         *self.colorise.lock().unwrap() = on;
+    }
+
+    /// The unit the scale is written in, as chosen (#125). Drawing only: nothing measured changes.
+    pub fn set_unit(&self, unit: Unit) {
+        *self.unit.lock().unwrap() = unit;
+    }
+
+    /// The unit in use: the chosen one, with nits falling back to 10-bit codes where the Output Colour Space has no light.
+    pub fn unit(&self) -> Unit {
+        let m = self.measurement();
+        (*self.unit.lock().unwrap()).effective(m.space, m.assumed)
     }
 
     pub fn colorise(&self) -> bool {
@@ -980,6 +1006,14 @@ impl Waveform {
         for (i, colour) in [crate::style::CHANNEL_R, crate::style::CHANNEL_G, crate::style::CHANNEL_B].into_iter().enumerate() {
             placement[28 + i * 4..31 + i * 4].copy_from_slice(&colour);
         }
+        // The reference lines of the scale's unit (at most 8): the plot is the same, only where the lines sit differs.
+        let measurement = self.measurement();
+        let unit = self.unit();
+        let mut lines = [-1000f32; 8];
+        for (slot, code) in lines.iter_mut().zip(unit.lines(measurement.levels, measurement.space)) {
+            *slot = code as f32;
+        }
+        placement[40..48].copy_from_slice(&lines);
         self.queue.write_buffer(&self.placement, 0, bytemuck::cast_slice(&placement));
 
         // Pass 1, on its own: the trace's brightness into the texture. It is submitted ahead of the caller's
@@ -1056,7 +1090,7 @@ impl Waveform {
 pub const NAME: &str = "Luma waveform";
 
 /// The luma waveform's right-click menu: how Luma is weighted (ADR 0004). The label names the weights in use.
-pub const SETTINGS: [SettingDef; 5] = [
+pub const SETTINGS: [SettingDef; 6] = [
     SettingDef {
         key: LUMA_SETTING,
         label: "Luma weights",
@@ -1107,7 +1141,18 @@ pub const SETTINGS: [SettingDef; 5] = [
         label: "Colorise",
         choices: &[Choice { value: crate::toolbar::TOGGLE_OFF, text: "Off" }, Choice { value: "on", text: "On" }],
     },
+    SCALE_DEF,
 ];
+
+/// The scale's units (#125): 10-bit codes by default, percent of the Levels' range, or nits (only offered for PQ and HLG).
+const SCALE_DEF: SettingDef = SettingDef {
+    key: UNIT_SETTING,
+    label: "Scale units",
+    choices: &[Choice { value: "codes", text: "10-bit codes" }, Choice { value: "percent", text: "Percent" }, Choice { value: "nits", text: "Nits" }],
+};
+
+/// The same without nits, for an Output Colour Space that has no light to name.
+const SCALE_DEF_NO_NITS: SettingDef = SettingDef { key: UNIT_SETTING, label: "Scale units", choices: SCALE_DEF.choices.split_at(2).0 };
 
 /// The key of the Colorise setting: whether the traces are drawn in colour.
 pub const COLORISE_SETTING: &str = "colorise";
@@ -1141,7 +1186,7 @@ pub const COLOUR_NAME: &str = "Colour waveform";
 
 /// The Colour Waveform's right-click menu: the luma waveform's drawing settings. It has no luma weights of its
 /// own: it follows the luma waveform's, so the two always place a trace at the same code.
-pub const COLOUR_SETTINGS: [SettingDef; 2] = [SETTINGS[1], SETTINGS[2]];
+pub const COLOUR_SETTINGS: [SettingDef; 3] = [SETTINGS[1], SETTINGS[2], SCALE_DEF];
 
 /// The key of the trace brightness setting.
 pub const BRIGHTNESS_SETTING: &str = "brightness";
@@ -1161,6 +1206,17 @@ pub fn look_from(settings: &crate::settings::Settings) -> Look {
 /// Logical pixels: the size of the numbers on the scale.
 pub const SCALE_SIZE: f32 = crate::style::TYPE_SCALE;
 
+impl Waveform {
+    /// `label` with the unit of the scale when it is not 10-bit codes.
+    fn with_unit(&self, label: String) -> String {
+        match self.unit() {
+            Unit::Codes => label,
+            Unit::Percent => format!("{label}  ·  scale in % of the Levels' range"),
+            Unit::Nits => format!("{label}  ·  scale in nits ({})", if self.measurement().space == MeasuredSpace::Rec2100Hlg { "HLG on a 1000 nit display" } else { "PQ" }),
+        }
+    }
+}
+
 impl crate::display::Display for Waveform {
     fn name(&self) -> &'static str {
         if self.colour { COLOUR_NAME } else { NAME }
@@ -1178,6 +1234,7 @@ impl crate::display::Display for Waveform {
         self.set_look(look_from(&context.settings));
         self.set_channels(Channels::from_setting(context.settings.get(CHANNELS_SETTING).map(String::as_str)));
         self.set_colorise(context.settings.get(COLORISE_SETTING).map(String::as_str) == Some("on"));
+        self.set_unit(Unit::from_setting(context.settings.get(UNIT_SETTING).map(String::as_str)));
         self.set_measurement(crate::output_conversion::measurement(context.colour_setup.clone(), luma));
     }
 
@@ -1189,14 +1246,21 @@ impl crate::display::Display for Waveform {
         if self.colour { &[] } else { &TOOLBAR }
     }
 
+    /// Nits are offered only when the Output Colour Space is PQ or HLG.
+    fn offered_defs(&self) -> Vec<SettingDef> {
+        let m = self.measurement();
+        let offer_nits = crate::waveform_scale::nits_offered(m.space, m.assumed);
+        self.setting_defs().iter().map(|d| if d.key == UNIT_SETTING && !offer_nits { SCALE_DEF_NO_NITS } else { *d }).collect()
+    }
+
     fn label(&self) -> String {
         if self.colour {
-            return self.measurement().label_titled("Colour waveform");
+            return self.with_unit(self.measurement().label_titled("Colour waveform"));
         }
         // The channels named when not just Luma; the luma weights only while Luma is drawn.
         let channels = self.channels();
         let title = if channels.is_default() { "Luma".to_string() } else { channels.names() };
-        self.measurement().label_for(&title, channels.y)
+        self.with_unit(self.measurement().label_for(&title, channels.y))
     }
 
     fn draw(&self, pass: &mut wgpu::RenderPass<'_>, area: [f32; 4], surface: [f32; 2], scale: f32) {
@@ -1210,16 +1274,12 @@ impl crate::display::Display for Waveform {
             return Vec::new();
         }
         let plot = PlotLayout::new(area, scale);
-        let codes = self.measurement().levels.scale_marks();
+        let (levels, space, unit) = (self.measurement().levels, self.measurement().space, self.unit());
         let middle = |r: [f32; 4]| r[1] + r[3] / 2.0;
         // (text, height on screen, rank: lower matters more)
-        let marks = [
-            ("> 1023".to_string(), middle(plot.above()), 1),
-            (codes[0].to_string(), plot.y_of_code(codes[0]), 0),
-            (codes[1].to_string(), plot.y_of_code(codes[1]), 2),
-            (codes[2].to_string(), plot.y_of_code(codes[2]), 0),
-            ("< 0".to_string(), middle(plot.below()), 1),
-        ];
+        let mut marks = vec![(unit.above_text(levels, space), middle(plot.above()), 1)];
+        marks.extend(unit.marks(levels, space).into_iter().map(|m| (m.text, plot.y_of_code(m.code), m.rank)));
+        marks.push((unit.below_text(levels), middle(plot.below()), 1));
         let placed: Vec<(f32, u32)> = marks.iter().map(|(_, y, rank)| (*y, *rank)).collect();
         let shown = marks_that_fit(&placed, SCALE_SIZE * scale * 1.3);
         let width = ((crate::layout::GUTTER - 6.0) * scale).max(1.0);

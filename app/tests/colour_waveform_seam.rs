@@ -131,7 +131,7 @@ fn trace_brightness_and_soft_spread_change_the_drawing_but_not_the_label() {
     let mut b = Bench::new("settings");
     let i = index_of(&b, COLOUR);
     let keys: Vec<&str> = b.set.setting_defs(i).iter().map(|d| d.key).collect();
-    assert_eq!(keys, ["brightness", "spread"]);
+    assert_eq!(keys, ["brightness", "spread", "scale_units"]);
     let ramp: Vec<f32> = (0..1080u32).flat_map(|row| (0..1920).flat_map(move |_| [row as f32 / 1079.0, 0.3, 1.0 - row as f32 / 1079.0, 1.0])).collect();
     b.play(1920, 1080, &ramp);
     let lit = |b: &Bench, settings: &PanelSettings| {

@@ -104,6 +104,11 @@ pub trait Display: Send + Sync {
     fn setting_defs(&self) -> &'static [SettingDef] {
         &[]
     }
+    /// The settings the popover offers right now: [`Display::setting_defs`], less any choice that makes no sense
+    /// for what is measured (nits on an Output Colour Space without light). The same by default.
+    fn offered_defs(&self) -> Vec<SettingDef> {
+        self.setting_defs().to_vec()
+    }
     /// The settings (from [`Display::setting_defs`]) the display shows as chips on its title bar. The popover
     /// holds the rest. None by default.
     fn toolbar_defs(&self) -> &'static [ToolbarDef] {
@@ -257,7 +262,7 @@ impl DisplaySet {
 
     /// The settings the display in Panel `index` leaves for the popover: those that are not chips on its title bar.
     pub fn popover_defs(&self, index: usize) -> Vec<SettingDef> {
-        crate::toolbar::popover_defs(self.displays[index].setting_defs(), self.displays[index].toolbar_defs())
+        crate::toolbar::popover_defs(&self.displays[index].offered_defs(), self.displays[index].toolbar_defs())
     }
 
     /// The chips on the title bar of the display in Panel `index`, given everyone's choices.
