@@ -72,23 +72,14 @@ impl Brightness {
 
 /// The trace brightness slider, the same on every scope that draws a trace: 100 % is the normal look. The lists
 /// earlier versions saved (Dimmer, Normal, Brighter) map to the percentages that gave the same gains.
-pub const BRIGHTNESS_AMOUNT: Amount = Amount {
-    min: 20.0,
-    max: 300.0,
-    step: 5.0,
-    default: 100.0,
-    unit: " %",
-    decimals: 0,
-    legacy: &[("normal", 100.0), ("dim", 48.0), ("dimmer", 48.0), ("brighter", 240.0)],
-};
+pub const BRIGHTNESS_AMOUNT: Amount =
+    crate::scope_shader::trace_brightness_amount(300.0, &[("normal", 100.0), ("dim", 48.0), ("dimmer", 48.0), ("brighter", 240.0)]);
 
 /// How far the trace is spread over its neighbours, in device pixels (the soft spread slider, #85).
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Spread(pub f32);
 
-/// The soft spread slider, the same on both waveforms: 0 is no spread, 1 pixel (the default) is the look before the
-/// slider. The on and off earlier versions saved map to 1 and 0.
-pub const SPREAD_AMOUNT: Amount = Amount { min: 0.0, max: 3.0, step: 0.25, default: 1.0, unit: " px", decimals: 2, legacy: &[("on", 1.0), ("off", 0.0)] };
+pub use crate::scope_shader::SPREAD_AMOUNT;
 
 /// How the waveform is drawn. Drawing only: it never changes what is measured or what the label says.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -294,6 +285,7 @@ pub struct PlotLayout {
     plot: [f32; 4],
     above: [f32; 4],
     below: [f32; 4],
+    gutter_left: f32,
 }
 
 /// Logical pixels.
@@ -310,7 +302,27 @@ impl PlotLayout {
         let (l, w) = (left + gutter, (width - gutter).max(1.0));
         let plot_top = top + row + gap;
         let plot_height = (height - 2.0 * (row + gap)).max(1.0);
-        PlotLayout { plot: [l, plot_top, w, plot_height], above: [l, top, w, row], below: [l, plot_top + plot_height + gap, w, row] }
+        PlotLayout { plot: [l, plot_top, w, plot_height], above: [l, top, w, row], below: [l, plot_top + plot_height + gap, w, row], gutter_left: left }
+    }
+    /// The layout for a frame of `picture` (width, height) pixels: the plot has the frame's aspect, scaled to fit
+    /// what [`PlotLayout::new`] would give it and centred in `area`, with the gutter on its left and an edge row
+    /// above and below it. The rest of the area is left empty. A frame with no size fills the area.
+    pub fn fitted(area: [f32; 4], scale: f32, picture: [u32; 2]) -> PlotLayout {
+        let full = PlotLayout::new(area, scale);
+        if picture[0] == 0 || picture[1] == 0 {
+            return full;
+        }
+        let left = area[0];
+        let [fl, ft, fw, fh] = full.plot;
+        let fit = (fw / picture[0] as f32).min(fh / picture[1] as f32);
+        let (w, h) = ((picture[0] as f32 * fit).round().clamp(1.0, fw), (picture[1] as f32 * fit).round().clamp(1.0, fh));
+        let (l, t) = ((fl + (fw - w) / 2.0).round(), (ft + (fh - h) / 2.0).round());
+        let (row, gap) = (full.above[3], full.below[1] - (ft + fh));
+        PlotLayout { plot: [l, t, w, h], above: [l, t - gap - row, w, row], below: [l, t + h + gap, w, row], gutter_left: l - (fl - left) }
+    }
+    /// Where the gutter for the scale's numbers starts.
+    pub fn gutter_left(&self) -> f32 {
+        self.gutter_left
     }
     /// The plot of codes 0 (bottom) to 1023 (top).
     pub fn plot(&self) -> [f32; 4] {
@@ -961,7 +973,7 @@ impl Waveform {
             return;
         }
         let (columns, picture_height) = (counts.columns, counts.picture_height);
-        let layout = PlotLayout::new(area, scale);
+        let layout = PlotLayout::fitted(area, scale, [columns, picture_height]);
         // The trace texture covers the plot, one texel per device pixel.
         let trace_size = [layout.plot[2].ceil().max(1.0) as u32, layout.plot[3].ceil().max(1.0) as u32];
         if state.trace.as_ref().is_none_or(|t| t.size != trace_size) {
@@ -1292,10 +1304,11 @@ impl crate::display::Display for Waveform {
     /// The codes the Levels name, and the edge rows, left out where they would overlap: black and white stay
     /// longest, then the edge rows, then the middle.
     fn scale_texts(&self, area: [f32; 4], scale: f32) -> Vec<crate::display::ScaleText> {
-        if self.state.lock().unwrap().counts.is_none() {
-            return Vec::new();
-        }
-        let plot = PlotLayout::new(area, scale);
+        let picture = match &self.state.lock().unwrap().counts {
+            Some(counts) => [counts.columns, counts.picture_height],
+            None => return Vec::new(),
+        };
+        let plot = PlotLayout::fitted(area, scale, picture);
         let (levels, space, unit) = (self.measurement().levels, self.measurement().space, self.unit());
         let middle = |r: [f32; 4]| r[1] + r[3] / 2.0;
         // (text, height on screen, rank: lower matters more)
@@ -1309,7 +1322,7 @@ impl crate::display::Display for Waveform {
             .into_iter()
             .zip(shown)
             .filter(|(_, shown)| *shown)
-            .map(|((text, top, _), _)| crate::display::ScaleText { text, left: area[0], top, width, right_aligned: true, centred: false })
+            .map(|((text, top, _), _)| crate::display::ScaleText { text, left: plot.gutter_left(), top, width, right_aligned: true, centred: false })
             .collect()
     }
 }

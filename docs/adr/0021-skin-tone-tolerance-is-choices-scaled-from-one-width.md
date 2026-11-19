@@ -15,7 +15,7 @@ _Update 2026-11-19 (#88): the tolerance is now a slider from 1 to 12 degrees (de
 
 ## Considered and rejected
 
-- **A slider:** ADR 0013 rules out free numbers, and the menu has no slider.
+- **A slider:** ADR 0013 ruled out free numbers and the menu had no slider. Since 2026-11-19 (#88) ADR 0013 allows amounts and the tolerance is a slider (see the update above); this option was rejected under the earlier rule.
 - **Three independent settings (on, fade, cut-off):** three menus for one idea; a user who wants a wider band wants the whole shape wider.
 - **Ratios to the line only from the spec's numbers at ±5° (fixed 20° and 30°):** widening the on-line band to ±10° would leave only 10° of fade.
 

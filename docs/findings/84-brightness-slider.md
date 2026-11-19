@@ -8,4 +8,4 @@ What ticket #84 showed on 2026-11-19, at the pure settings seam (`app/tests/sett
 - A value between two old choices draws between them (170 % sits between 100 and 240 % on a grey ramp), and the label and counts do not change (brightness is drawing only).
 - The menu seam: the slider row maps a press to a step of the range at scale 1 and 2, a drag past either end of the track (or out of the menu) gives the end, a press on a heading or the row's left padding is not a slider press, the Reset row gives the default, and everything drawn stays inside the menu's width.
 - The menu stays open while dragging (the window keeps the slider being dragged until the button is let go) and the value is saved on every change; that part is window code and was not run headless.
-- Not verified: how the slider feels in the real Window beside Resolve, and its drawing on a HiDPI display: part of the last ticket of spec #83 (#127).
+- Not verified: how the slider feels in the real Window beside Resolve, and its drawing on a HiDPI display (#91).

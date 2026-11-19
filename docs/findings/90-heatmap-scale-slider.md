@@ -6,4 +6,4 @@ What ticket #90 showed on 2026-11-19, at the Feed seam (`saturation_heatmap_seam
 - The lists earlier versions saved (25, 50, 75, 100, 150, 200) are plain numbers, so they are read as they are, with no mapping needed; unreadable is 75 %, out of the range is clamped (1000 reads as 200 %).
 - A value between the old list's values (35, 85, 120 %) puts the orange at its share of that scale; a smaller scale is warmer, a larger one cooler.
 - The label and the title tag say "hot N %" in the slider's own number; the tag is absent at the default. The legend stays on or off and its top number follows the slider (same state).
-- Not verified: how dragging feels in the real Window (part of #127).
+- Not verified: how dragging feels in the real Window (#91).

@@ -132,8 +132,12 @@ An arrangement of the Panel grid saved in one of nine slots (Ctrl+Shift+1 to 9),
 _Avoid_: Preset, workspace, profile
 
 **Panel settings**:
-The choices a display offers in its Panel's right-click menu, each from a short list so a display can't be set up to mislead. Kept per Panel between sessions. A setting that changes what is measured is named in the Panel's label. A setting is a list of choices or a Slider.
+What a display offers in its Panel's right-click menu (and chips on its title bar). Each is either a short list of choices or an Amount set with a Slider, so a display can't be set up to mislead. Kept per Panel between sessions. A setting that changes what is measured is named in the Panel's label.
 _Avoid_: Preferences, options, properties
+
+**Amount**:
+A Panel setting that is a number rather than a list: a range, a step, a default, a unit and how many digits to show (trace brightness, soft spread, a tolerance). It is set with a Slider, kept as a plain number, always read back inside its range, and an older list value maps to the number it produced.
+_Avoid_: Free number, value
 
 **Slider**:
 The row in a Panel's menu for a setting that is an amount (trace brightness): a track with a handle, the current value as a number with its unit beside it, dragged with the mouse while the menu stays open, with a row to put it back to its default. Its range is limited to sensible values and the value is kept per Panel.

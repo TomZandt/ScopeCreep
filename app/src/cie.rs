@@ -125,8 +125,7 @@ pub const TIMELINE_SETTING: &str = "timeline";
 
 /// The trace brightness slider, in percent of the normal look (#87). The range reaches the old Bright (4 times the
 /// gain) and Dim (a quarter), so a file saved with either still draws as it did.
-pub const BRIGHTNESS_AMOUNT: Amount =
-    Amount { min: 20.0, max: 400.0, step: 5.0, default: 100.0, unit: " %", decimals: 0, legacy: &[("normal", 100.0), ("bright", 400.0), ("dim", 25.0)] };
+pub const BRIGHTNESS_AMOUNT: Amount = crate::scope_shader::trace_brightness_amount(400.0, &[("normal", 100.0), ("bright", 400.0), ("dim", 25.0)]);
 
 const SETTINGS: [SettingDef; 3] = [
     SettingDef { key: BRIGHTNESS_SETTING, label: "Trace brightness", amount: Some(BRIGHTNESS_AMOUNT), choices: &[] },
@@ -333,6 +332,8 @@ fn measure(@builtin(global_invocation_id) id: vec3<u32>) {{
 }
 
 const DRAW_UNIFORM_FLOATS: usize = 4 * 8 + 4 * 17;
+/// Where the graticule gain (the `graticule` field of the shader's `Placement`) starts in the uniform, after the eight vec4s before it.
+const GRATICULE_AT: usize = 4 * 7;
 
 fn draw_shader() -> String {
     format!(
@@ -345,7 +346,7 @@ struct Placement {{
     output_b: vec4<f32>,   // blue
     timeline_a: vec4<f32>,
     timeline_b: vec4<f32>,
-    pad: vec4<f32>,        // the graticule gain
+    graticule: vec4<f32>,  // the graticule gain, then three unused
     locus: array<vec4<f32>, 17>,   // two points each
 }};
 @group(0) @binding(0) var<uniform> placement: Placement;
@@ -405,7 +406,7 @@ fn fs(@builtin(position) position: vec4<f32>) -> @location(0) vec4<f32> {{
     // A faint grid every 0.1.
     let grid = abs(fract(xy / 0.1 + vec2<f32>(0.5, 0.5)) - vec2<f32>(0.5, 0.5)) * 0.1 * r.zw / (vec2<f32>(DOMAIN.z - DOMAIN.x, DOMAIN.w - DOMAIN.y));
     if (min(grid.x, grid.y) < 0.5) {{
-        colour = clamp(PLOT + (GRID - PLOT) * placement.pad.x, vec3<f32>(0.0), vec3<f32>(1.0));
+        colour = clamp(PLOT + (GRID - PLOT) * placement.graticule.x, vec3<f32>(0.0), vec3<f32>(1.0));
     }}
     // The spectral locus, and the line of purples closing it.
     var d = 1e9;
@@ -593,7 +594,7 @@ impl CiePlot {
         let timeline = plot.timeline_triangle();
         let shown = if timeline.is_some() { 1.0 } else { 0.0 };
         u[8..12].copy_from_slice(&[plot.gain, state.pixels as f32, shown, shown]);
-        u[28..32].copy_from_slice(&[plot.graticule, 0.0, 0.0, 0.0]);
+        u[GRATICULE_AT..GRATICULE_AT + 4].copy_from_slice(&[plot.graticule, 0.0, 0.0, 0.0]);
         let triangle = |t: [[f32; 2]; 3]| [t[0][0], t[0][1], t[1][0], t[1][1], t[2][0], t[2][1], 0.0, 0.0];
         u[12..20].copy_from_slice(&triangle(plot.output_triangle()));
         if let Some(t) = timeline {

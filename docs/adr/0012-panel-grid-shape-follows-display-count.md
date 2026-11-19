@@ -28,3 +28,7 @@ The default layout has one Vectorscope Panel, two cells wide, in place of the tw
 ## Update 2026-11-18 (#98): named layouts
 
 Layouts are saved copies of this grid's text in nine named slots (ADR 0030). Recalling one uses the same rules as above: Panels that have gone are dropped and a neighbour widens or deepens into each cell they leave; new ones take the first free cell; a layout that leaves a cell empty after a display was also missing from it shows the default layout.
+
+## Update 2026-11-19 (#151): the luma waveform follows the footage's aspect again
+
+The luma waveform's plot no longer fills its whole Panel (#50 dropped the aspect on purpose). It takes the Feed frame's aspect (16:9 gives a 16:9 plot, 2.39:1 a wide short one, 9:16 a tall narrow one), scaled to fit and centred in the Panel's display area, the way the Picture stage fits a picture (ADR 0028). The gutter for the scale's numbers travels with the plot, so the numbers stay beside the axis, and the edge rows stay directly above and below it; the rest of the Panel is empty. A change of resolution re-lays it out on the next frame. Counts, traces, edge rows and Colorise are unchanged. The Vectorscope stays square and the Picture Views are untouched. No new trade-off: the plot is smaller on a Panel whose shape differs from the footage's, which is what the product owner asked for.

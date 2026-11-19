@@ -1,7 +1,7 @@
 //! Panel settings and the right-click menu that edits them (spec #49, "Settings"). Pure: no GPU, no window.
 //!
-//! A display lists the settings it offers as [`SettingDef`]s, each a short list of choices (the first is the
-//! default), so only sensible values can be picked. The user's choices are kept per Panel in [`PanelSettings`],
+//! A display lists the settings it offers as [`SettingDef`]s: either a short list of choices (the first is the
+//! default) or an [`Amount`] set with a slider, so only sensible values can be picked. The user's choices are kept per Panel in [`PanelSettings`],
 //! and remembered between sessions as text. [`Menu`] is the right-click menu for one Panel: where its rows go and
 //! which choice a click lands on.
 use std::collections::BTreeMap;

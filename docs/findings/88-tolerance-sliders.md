@@ -7,4 +7,4 @@ What the ticket (#88, spec #83) verified, headlessly (the Feed seam, `app/tests/
 - A list value an earlier version saved ("2", "3", "8", "10", "0.5", "1", "5") is the number it named; a value out of range is clamped; unreadable text is the default.
 - The label shows the value in the slider's unit and rounding ("±7°", "within 3.0 %"); the Skin Tone bands in it are 6 times the slider's value. The Skin Tone title-bar tag follows the same rule when it is not the default.
 
-Not verified (a person at the app): that dragging the sliders feels right on real footage, covered by the spec's ready-for-human check.
+Not verified (a person at the app): that dragging the sliders feels right on real footage, covered by #91.

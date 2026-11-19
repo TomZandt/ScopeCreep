@@ -166,11 +166,10 @@ pub const SPREAD_SETTING: &str = "spread";
 
 /// The trace brightness slider, in percent of the normal look (#86). The range reaches the old Brighter (4 times the
 /// gain) and Dimmer (a quarter), so a file saved with either still draws as it did.
-pub const BRIGHTNESS_AMOUNT: Amount =
-    Amount { min: 20.0, max: 400.0, step: 5.0, default: 100.0, unit: " %", decimals: 0, legacy: &[("normal", 100.0), ("bright", 400.0), ("dim", 25.0)] };
+pub const BRIGHTNESS_AMOUNT: Amount = crate::scope_shader::trace_brightness_amount(400.0, &[("normal", 100.0), ("bright", 400.0), ("dim", 25.0)]);
 
-/// The soft spread slider: how far the trace is spread, in device pixels (#86). 0 is the old Off, 1 the old On.
-pub const SPREAD_AMOUNT: Amount = Amount { min: 0.0, max: 3.0, step: 0.1, default: 1.0, unit: " px", decimals: 1, legacy: &[("on", 1.0), ("off", 0.0)] };
+/// The soft spread slider (#86), shared with the waveforms: 0 is the old Off, 1 the old On.
+pub use crate::scope_shader::SPREAD_AMOUNT;
 /// Which plots show: both (the default), only 100 % or only 200 % (#123).
 pub const PLOTS_SETTING: &str = "plots";
 /// The trace in neutral grey instead of the colour it stands for (#123); off by default.

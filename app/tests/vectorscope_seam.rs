@@ -708,7 +708,7 @@ fn brightness_and_spread_are_sliders_whose_old_list_values_and_defaults_draw_as_
     // Old list values map to the numbers that drew the same; junk is the default; out of range is clamped.
     assert_eq!((BRIGHTNESS_AMOUNT.read(Some("normal")), BRIGHTNESS_AMOUNT.read(Some("bright")), BRIGHTNESS_AMOUNT.read(Some("dim"))), (100.0, 400.0, 25.0));
     assert_eq!((SPREAD_AMOUNT.read(Some("on")), SPREAD_AMOUNT.read(Some("off")), SPREAD_AMOUNT.read(Some("x")), SPREAD_AMOUNT.read(Some("9"))), (1.0, 0.0, 1.0, 3.0));
-    assert_eq!(SPREAD_AMOUNT.text(1.0), "1.0 px");
+    assert_eq!(SPREAD_AMOUNT.text(1.0), "1.00 px");
 
     // At the Feed seam: the old values and their numbers draw the same pixels; the label does not change.
     let (w, h) = (1920u32, 1080u32);

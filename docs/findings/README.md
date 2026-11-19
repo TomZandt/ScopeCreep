@@ -81,3 +81,4 @@ Anything the ticket could not verify becomes a GitHub issue (or a comment on the
 | [87](87-cie-brightness-slider.md) | Does the CIE plot trace brightness slider keep the old look at its default and old list values, scale the trace monotonically and leave the label alone (display seam)? |
 | [90](90-heatmap-scale-slider.md) | Does a scale slider on the saturation heatmap keep the default look, take any step, read old list values, clamp, and move the picture, label and tag (display seam)? |
 | [127](127-graticule-brightness.md) | Does a graticule brightness slider on every trace display keep the default look, scale only the marks (never the trace, clipping, locus or label), and never fade a mark below the plot (Feed seam)? |
+| [151](151-waveform-aspect.md) | Does the luma waveform's plot take the Feed frame's aspect (16:9, 2.39:1, 4:3, 9:16), centred with its gutter and edge rows, and follow a resolution change (pure seam and drawing seam)? |

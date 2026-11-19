@@ -79,7 +79,7 @@ fn the_code(counts: &WaveformCounts, height: u32) -> u32 {
 /// What the Colour waveform drew at `code` of the middle picture column.
 fn drawn_at_code(b: &Bench, code: u32) -> [u8; 3] {
     let (image, panels) = b.render(1280, 760, 1.0);
-    let layout = PlotLayout::new(panels[index_of(b, COLOUR)].content, 1.0);
+    let layout = PlotLayout::fitted(panels[index_of(b, COLOUR)].content, 1.0, [1920, 1080]);
     pixel(&image, 1280, layout.x_of_column(960, 1920).floor(), layout.y_of_code(code).floor())
 }
 

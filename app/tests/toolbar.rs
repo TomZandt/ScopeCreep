@@ -456,3 +456,17 @@ mod vectorscope_chips {
         assert!(!tags.iter().any(|t| t.contains("only")), "All is not tagged: {tags:?}");
     }
 }
+
+#[test]
+fn a_vectorscope_setting_is_a_chip_or_in_the_popover_never_both() {
+    use scopecreep::vectorscope::{SETTINGS, TOOLBAR};
+    let popover: Vec<&str> = popover_defs(&SETTINGS, &TOOLBAR).iter().map(|d| d.key).collect();
+    for chip in TOOLBAR.iter() {
+        assert!(!popover.contains(&chip.key), "{} is a chip and in the popover", chip.key);
+        assert!(SETTINGS.iter().any(|d| d.key == chip.key), "{} is a chip without a setting", chip.key);
+    }
+    let mut seen = popover.clone();
+    seen.sort();
+    seen.dedup();
+    assert_eq!(seen.len(), popover.len(), "no setting twice in the popover");
+}

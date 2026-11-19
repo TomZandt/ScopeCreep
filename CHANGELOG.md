@@ -8,7 +8,11 @@ The format follows [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/
 
 ### Changed
 
+- Vectorscope: the soft spread slider moves in steps of 0.25 pixel, as on the waveforms (it was 0.1), and shows two decimals; a saved value reads as before.
+
 - Legends: ARRI False Colour's legend is a proportional 0 to 100 % scale bar under the picture instead of six equal swatches. Tick numbers run along its top (every 5 % where they fit, thinning to 10, 20, 25 or 50 % on a narrower Panel), each band sits at its true position and width, the gaps are the same greys the picture draws there, and short marks under it name "near black clip", "18 % grey" and "near white clip" (and the clip ends where there is room), dropped rather than overlapped. The saturation heatmap's legend is the same scale bar from 0 % to its scale's top. The legend can still be turned off; labels and the ADR 0010 wording are unchanged (#122).
+
+- Luma waveform: the plot takes the footage's aspect ratio again (16:9 footage gives a 16:9 plot), scaled to fit its Panel and centred with its scale numbers beside it and the rest of the Panel left empty, and follows a change of resolution without a restart. Counts, traces, edge rows and Colorise are unchanged (#151, ADR 0012).
 
 - The Colour Waveform is out of the Window, as Colorise on the luma waveform does its job: the Window shows 8 Panels, the Channel view now 2 x 2 at the bottom left and ARRI False Colour three columns wide in the default layout. A saved layout that names the Colour Waveform still recalls. Its code, tests and saved settings are kept (#145, ADR 0032).
 
