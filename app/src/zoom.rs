@@ -18,6 +18,16 @@ pub const WHEEL_RATIO: f32 = 1.25;
 /// setting: every session starts at Fit.
 pub const ZOOM_KEY: &str = "zoom";
 
+/// The key of the link chip's click (#168), and where Link is remembered: Window-wide state beside the Panel
+/// settings (ADR 0015), under the name [`LINK_STATE_PANEL`]. Zoom and pan are never saved; only Link is.
+pub const LINK_KEY: &str = "link";
+pub const LINK_STATE_PANEL: &str = "Window";
+
+/// Whether Link was left on: anything but "on" (rubbish, nothing saved) is off.
+pub fn link_remembered(settings: &crate::settings::PanelSettings) -> bool {
+    settings.state_of(LINK_STATE_PANEL, &[LINK_KEY]).get(LINK_KEY).is_some_and(|v| v == "on")
+}
+
 /// How much of the picture a Panel shows.
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub enum Zoom {
@@ -242,19 +252,77 @@ impl ZoomModel {
     }
 }
 
+/// The Window's one Link (#168): whether picture Panels zoom together, and the one view they share while it is on
+/// (a zoom and a centre point in picture coordinates, so Panels of different sizes look at the same pixels and each
+/// fits its own Panel at Fit). Cheap to clone (shared state).
+#[derive(Clone, Default)]
+pub struct Link(Arc<Mutex<LinkState>>);
+
+#[derive(Default)]
+struct LinkState {
+    on: bool,
+    /// The shared view while on; the view every Panel keeps when it goes off.
+    model: ZoomModel,
+    /// Counts the times Link was switched, so a Panel can tell it must take the shared view when Link goes off.
+    generation: u64,
+}
+
+impl Link {
+    pub fn on(&self) -> bool {
+        self.0.lock().unwrap().on
+    }
+
+    /// Switch Link. Turning it on takes `from` (the view of the Panel it was clicked on; Fit when `None`) as the
+    /// view of every Panel; turning it off leaves each Panel at the shared view it had.
+    pub fn set(&self, on: bool, from: Option<ZoomModel>) {
+        let mut state = self.0.lock().unwrap();
+        if on && !state.on {
+            state.model = from.unwrap_or_default();
+        }
+        state.on = on;
+        state.generation += 1;
+    }
+}
+
 /// A picture Panel's zoom as a display holds it (#167): the [`ZoomModel`] and a middle-drag in progress, with the
-/// wheel, middle-button and slider handling every picture Panel shares. Cheap to clone (shared state).
+/// wheel, middle-button and slider handling every picture Panel shares. While the Window's [`Link`] is on it works
+/// on the shared view instead of its own. Cheap to clone (shared state).
 #[derive(Clone, Default)]
 pub struct PanelZoom {
     model: Arc<Mutex<ZoomModel>>,
     /// Where the pointer was at the last step of a middle-drag, while one is going.
     pan_from: Arc<Mutex<Option<[f32; 2]>>>,
+    link: Arc<Mutex<Option<Link>>>,
+    /// The [`Link`] generation this Panel's own view last took the shared one at.
+    seen: Arc<Mutex<u64>>,
 }
 
 impl PanelZoom {
+    /// Join the Window's Link (the display set does this on registering).
+    pub fn link_to(&self, link: &Link) {
+        *self.link.lock().unwrap() = Some(link.clone());
+    }
+
+    /// Run `f` on the view this Panel draws and zooms with: the shared one while Link is on, else its own (which
+    /// first takes the shared view if Link was just turned off, so each Panel keeps where it was).
+    fn with<R>(&self, f: impl FnOnce(&mut ZoomModel) -> R) -> R {
+        let link = self.link.lock().unwrap().clone();
+        let Some(link) = link else { return f(&mut self.model.lock().unwrap()) };
+        let mut shared = link.0.lock().unwrap();
+        if shared.on {
+            return f(&mut shared.model);
+        }
+        let (mut own, mut seen) = (self.model.lock().unwrap(), self.seen.lock().unwrap());
+        if *seen != shared.generation {
+            *own = shared.model;
+            *seen = shared.generation;
+        }
+        f(&mut own)
+    }
+
     /// The model, for drawing through [`crate::picture_stage::PictureStage::draw_zoomed`].
     pub fn model(&self) -> ZoomModel {
-        *self.model.lock().unwrap()
+        self.with(|m| *m)
     }
 
     /// The wheel (zooms toward the pointer) and the middle button (pans) over a Panel of content `area` showing a
@@ -265,7 +333,7 @@ impl PanelZoom {
         match event {
             Pointer::Wheel { at, lines } => {
                 let picture = picture?;
-                self.model.lock().unwrap().wheel(area, picture, strip, at, lines);
+                self.with(|m| m.wheel(area, picture, strip, at, lines));
                 Some(used)
             }
             Pointer::MiddleDown(at) => {
@@ -277,7 +345,7 @@ impl PanelZoom {
                 let mut from = self.pan_from.lock().unwrap();
                 let (last, picture) = (from.as_ref().copied()?, picture?);
                 *from = Some(at);
-                self.model.lock().unwrap().pan(area, picture, strip, [at[0] - last[0], at[1] - last[1]]);
+                self.with(|m| m.pan(area, picture, strip, [at[0] - last[0], at[1] - last[1]]));
                 Some(used)
             }
             _ => None,
@@ -286,13 +354,13 @@ impl PanelZoom {
 
     /// What the zoom chip says (see [`ZoomModel::readout`]); `None` before a frame has arrived.
     pub fn readout(&self, area: [f32; 4], picture: Option<[u32; 2]>, strip: f32) -> Option<Readout> {
-        self.model.lock().unwrap().readout(area, picture?, strip)
+        self.with(|m| m.readout(area, picture?, strip))
     }
 
     /// Set the zoom from the chip's slider (see [`ZoomModel::set_percent`]).
     pub fn set_percent(&self, percent: f32, area: [f32; 4], picture: Option<[u32; 2]>, strip: f32) {
         if let Some(picture) = picture {
-            self.model.lock().unwrap().set_percent(percent, area, picture, strip);
+            self.with(|m| m.set_percent(percent, area, picture, strip));
         }
     }
 }

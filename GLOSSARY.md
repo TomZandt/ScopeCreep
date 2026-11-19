@@ -120,7 +120,7 @@ The one part of the code every Picture View draws through. It places the frame i
 _Avoid_: Renderer, canvas
 
 **Zoom**:
-How much of a picture Panel's frame is shown, in percent of source pixels: 100 % is one picture pixel to one device pixel. It runs from Fit to 400 %, free below 100 % and in whole steps (200, 300, 400 %) above, so every picture pixel is an exact square. The scroll wheel zooms toward the pointer and the zoom chip on the title bar says it and opens a slider. It is not a setting: it is not saved and every session starts at Fit (ADR 0035). On every picture Panel in the Window, each on its own until Link (#168).
+How much of a picture Panel's frame is shown, in percent of source pixels: 100 % is one picture pixel to one device pixel. It runs from Fit to 400 %, free below 100 % and in whole steps (200, 300, 400 %) above, so every picture pixel is an exact square. The scroll wheel zooms toward the pointer and the zoom chip on the title bar says it and opens a slider. It is not a setting: it is not saved and every session starts at Fit (ADR 0035). On every picture Panel in the Window, each on its own, or all together while Link is on.
 _Avoid_: Magnify (that is the Loupe), scale
 
 **Pan**:
@@ -128,6 +128,9 @@ Moving a zoomed picture inside its Panel by dragging with the middle mouse butto
 
 **Fit**:
 The zoom that shows the whole frame in the Panel, as a picture Panel always did. The zoom chip says how much that scales the frame: "Fit 23 %". A frame already larger than 100 % at Fit (a small frame in a big Panel) starts at Fit and zooms on in whole steps.
+
+**Link**:
+One Window-wide switch, a link chip beside the zoom chip on every picture Panel (lit on all of them while on). With Link on, every picture Panel shares one zoom and one centre point in picture coordinates, so Panels of different sizes look at the same pixels and each fits its own Panel at Fit; scroll, middle-drag and the slider on any of them move all of them. Turning it on brings every Panel to the zoom and spot of the Panel it was clicked on; turning it off leaves each where it is. Link is remembered between sessions; zoom and pan are not (ADR 0035, 0015).
 
 **Matte**:
 A black bar around the picture: whole rows at the top and bottom, or whole columns at the sides, in which every pixel is exactly black. The Picture stage finds them once per frame and draws them black on every Picture View. A black pixel inside the picture is not a matte.

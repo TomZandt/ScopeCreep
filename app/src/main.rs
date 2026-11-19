@@ -266,6 +266,7 @@ impl AppWindow {
 
         let displays = DisplaySet::standard(&device, &queue, format, filterable);
         let settings = Arc::new(Mutex::new(settings_file().and_then(|path| std::fs::read_to_string(path).ok()).map_or_else(PanelSettings::default, |text| PanelSettings::from_text(&text))));
+        displays.set_link(scopecreep::zoom::link_remembered(&settings.lock().unwrap()), 0);
         let names = displays.names();
         let grid = grid_file().and_then(|path| std::fs::read_to_string(path).ok()).map_or_else(|| PanelGrid::default_for(&names), |text| PanelGrid::from_text(&names, &text));
         let mut font_system = FontSystem::new();
@@ -455,6 +456,17 @@ impl AppWindow {
         let shown = self.displays.zoom(panel, area, self.scale).map(|r| r.percent);
         if let (Some((menu, _)), Some(shown)) = (self.menu.as_mut(), shown) {
             menu.show_value(scopecreep::zoom::ZOOM_KEY, shown);
+        }
+        self.window.request_redraw();
+    }
+
+    /// Switch the Window's Link from the link chip on Panel `panel` (turning it on takes that Panel's view) and
+    /// remember it; zoom and pan are not remembered.
+    fn set_link(&mut self, panel: usize, on: bool) {
+        self.displays.set_link(on, panel);
+        let changed = self.settings.lock().unwrap().set_state(scopecreep::zoom::LINK_STATE_PANEL, scopecreep::zoom::LINK_KEY, if on { "on" } else { "off" });
+        if changed {
+            self.save_settings();
         }
         self.window.request_redraw();
     }
@@ -801,6 +813,8 @@ impl AppWindow {
                                     self.open_zoom_popover(panel, [r[0], r[1] + r[3]]);
                                     self.window.request_redraw();
                                 }
+                            } else if key == scopecreep::zoom::LINK_KEY {
+                                self.set_link(panel, value == "on");
                             } else {
                                 self.choose(panel, key, &value);
                             }

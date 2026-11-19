@@ -166,6 +166,14 @@ impl Display for PictureView {
         self.zoom.set_percent(percent, area, self.frame_size(), 0.0);
     }
 
+    fn link_to(&self, link: &crate::zoom::Link) {
+        self.zoom.link_to(link);
+    }
+
+    fn zoom_model(&self) -> Option<crate::zoom::ZoomModel> {
+        Some(self.zoom.model())
+    }
+
     fn label(&self) -> String {
         Self::label_with(self.frame_size(), &self.label_tail.lock().unwrap())
     }

@@ -139,6 +139,14 @@ impl Display for SkinTone {
         self.zoom.set_percent(percent, area, self.stage.size(), 0.0);
     }
 
+    fn link_to(&self, link: &crate::zoom::Link) {
+        self.zoom.link_to(link);
+    }
+
+    fn zoom_model(&self) -> Option<crate::zoom::ZoomModel> {
+        Some(self.zoom.model())
+    }
+
     /// States only what is proven (ADR 0007): the bands in degrees from the line, and that the line's angle is
     /// measured in Resolve 21.2 (#60).
     fn label(&self) -> String {

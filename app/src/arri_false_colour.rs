@@ -190,6 +190,14 @@ impl Display for ArriFalseColour {
         self.zoom.set_percent(percent, area, self.stage.size(), self.strip(area, scale));
     }
 
+    fn link_to(&self, link: &crate::zoom::Link) {
+        self.zoom.link_to(link);
+    }
+
+    fn zoom_model(&self) -> Option<crate::zoom::ZoomModel> {
+        Some(self.zoom.model())
+    }
+
     fn label(&self) -> String {
         self.state.lock().unwrap().label.clone()
     }

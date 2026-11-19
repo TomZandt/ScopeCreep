@@ -26,4 +26,12 @@ A colourist checking noise, grain, focus or a key edge needs to see single pictu
 - The Stage uniform grew by two vec4s (the window of the picture drawn, and the exact-texel flag).
 - ADR 0015's display state now includes the zoom, kept beside the settings but not in them (and never saved).
 - `Display::zoom` and `set_zoom` take the device scale, because a legend's strip is in device pixels and Fit depends on it.
-- The clean picture's chips are six at the left of the settings button; the narrowest Panels still run over (#171).
+- The clean picture's chips are seven (with the link chip) at the left of the settings button; the narrowest Panels still run over (#171).
+
+## Note, 2026-11-19 (#168): Link
+
+- **One Window-wide Link.** A link chip, second on every picture Panel's title bar (after the zoom chip), switches one Link for the whole Window and is lit on every picture Panel while it is on. The display set owns the one `zoom::Link` and hands it to every display on registering; each Panel's `PanelZoom` joins it.
+- **One shared view, in picture coordinates.** While Link is on every `PanelZoom` zooms, pans and reads the shared `ZoomModel` instead of its own: one zoom and one centre point in source pixels, so Panels of different sizes look at the same pixels. A shared zoom at or below a Panel's own Fit is Fit for that Panel, so at Fit each fits its own Panel ("Fit 50 %" here, "Fit 31 %" there). Scroll, middle-drag and the slider on any Panel move all of them. Z (#169) works on the same model, so it moves all of them too.
+- **On takes the clicked Panel's view; off keeps each.** Turning Link on copies the clicked Panel's view into the shared one. Turning it off leaves every Panel at the shared view it had; each Panel takes it on its next use (a generation counter on the Link), and from then on they move apart.
+- **Link is remembered, zoom is not.** Link is Window-wide state under the name "Window" beside the Panel settings (ADR 0015, `state:link`); anything but "on" reads as off. Every session starts at Fit.
+- **Rejected:** a Link flag per Panel (they could disagree, and "lit on all of them" would need syncing); the Window moving every Panel's own model (it would have to know each Panel's frame and strip).

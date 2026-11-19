@@ -114,6 +114,10 @@ pub struct Toolbar {
 /// The tip on a picture Panel's zoom chip.
 pub const ZOOM_TOOLTIP: &str = "Zoom: scroll over the picture, or click for a slider from Fit to 400 %";
 
+/// The link chip's text and tip.
+pub const LINK_CHIP: &str = "Link";
+pub const LINK_TOOLTIP: &str = "Link: picture Panels zoom and pan together";
+
 impl Toolbar {
     /// The toolbar with the zoom chip first when the Panel zooms (`readout` is `Some`): lit while zoomed in, and a
     /// click on it asks for the zoom popover (the key [`crate::zoom::ZOOM_KEY`], no value).
@@ -123,6 +127,20 @@ impl Toolbar {
         self.on.insert(0, r.percent > r.fit + 0.01);
         self.tooltips.insert(0, ZOOM_TOOLTIP.to_string());
         self.picks.insert(0, (crate::zoom::ZOOM_KEY, String::new()));
+        self
+    }
+
+    /// The toolbar with the link chip beside the zoom chip (second) when the Panel zooms: lit on every picture Panel
+    /// while Link is on, and a click on it asks to switch it (the key [`crate::zoom::LINK_KEY`] and the value it
+    /// would then have).
+    pub fn with_link(mut self, on: bool) -> Toolbar {
+        if !self.picks.first().is_some_and(|p| p.0 == crate::zoom::ZOOM_KEY) {
+            return self;
+        }
+        self.chips.insert(1, Chip::new(LINK_CHIP));
+        self.on.insert(1, on);
+        self.tooltips.insert(1, LINK_TOOLTIP.to_string());
+        self.picks.insert(1, (crate::zoom::LINK_KEY, if on { TOGGLE_OFF } else { "on" }.to_string()));
         self
     }
 

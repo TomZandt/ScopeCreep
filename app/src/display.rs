@@ -139,6 +139,14 @@ pub trait Display: Send + Sync {
     /// Set the zoom from the chip's slider, in percent of source pixels (see [`crate::zoom::ZoomModel::set_percent`]).
     /// Zoom is not a setting and is never saved. Nothing by default.
     fn set_zoom(&self, _area: [f32; 4], _scale: f32, _percent: f32) {}
+    /// Join the Window's Link (#168): the display set hands every display the one [`crate::zoom::Link`] on
+    /// registering. Nothing by default (a Scope does not zoom).
+    fn link_to(&self, _link: &crate::zoom::Link) {}
+    /// The view of a picture Panel now (what Link takes when it is turned on from this Panel); `None` for a display
+    /// that does not zoom.
+    fn zoom_model(&self) -> Option<crate::zoom::ZoomModel> {
+        None
+    }
     /// The quiet label: what the display shows, and how far it can be trusted (ADR 0007).
     fn label(&self) -> String;
     /// Draw into `area` (left, top, width, height in pixels of a `surface`-sized target) at `scale` device pixels
@@ -177,6 +185,8 @@ pub struct ScopeHandles {
 #[derive(Clone, Default)]
 pub struct DisplaySet {
     displays: Vec<Arc<dyn Display>>,
+    /// The Window's one Link: picture Panels zoom and pan together while it is on (#168).
+    link: crate::zoom::Link,
 }
 
 impl DisplaySet {
@@ -221,7 +231,19 @@ impl DisplaySet {
 
     /// Add a display after the others.
     pub fn register(&mut self, display: Arc<dyn Display>) {
+        display.link_to(&self.link);
         self.displays.push(display);
+    }
+
+    /// Whether Link is on.
+    pub fn link_on(&self) -> bool {
+        self.link.on()
+    }
+
+    /// Switch the Window's Link. Turning it on from Panel `from` brings every picture Panel to that Panel's zoom
+    /// and spot; turning it off leaves each where it is.
+    pub fn set_link(&self, on: bool, from: usize) {
+        self.link.set(on, self.displays.get(from).and_then(|d| d.zoom_model()));
     }
 
     pub fn len(&self) -> usize {
@@ -292,7 +314,7 @@ impl DisplaySet {
     /// whose content is `area` starts with its zoom chip.
     pub fn toolbar(&self, index: usize, settings: &PanelSettings, area: [f32; 4], scale: f32) -> Toolbar {
         let own = self.settings_of(index, settings);
-        Toolbar::new(self.displays[index].toolbar_defs_for(&own), &own).with_zoom(self.displays[index].zoom(area, scale).as_ref())
+        Toolbar::new(self.displays[index].toolbar_defs_for(&own), &own).with_zoom(self.displays[index].zoom(area, scale).as_ref()).with_link(self.link.on())
     }
 
     /// What the zoom chip of the display in Panel `index` says, with its content in `area`.

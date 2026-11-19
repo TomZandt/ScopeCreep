@@ -27,3 +27,7 @@ The Loupe's state (on, position, zoom, size) is now also the clean picture's, ke
 ## Note, 2026-11-19 (#165)
 
 A picture Panel's zoom (and later pan and Link, spec #163) is display state of the other kind: held in memory by the display and never written to this file, so every session starts at Fit. Only Link is to be remembered (#168).
+
+## Note, 2026-11-19 (#168)
+
+Link (picture Panels zoom and pan together, ADR 0035) is the one Window-wide piece of state here: saved under the name "Window" as `state:link`, "on" or "off"; anything else reads as off. It is read once at start-up and written when the link chip is clicked. Zoom and pan stay unsaved.

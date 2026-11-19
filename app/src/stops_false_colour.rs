@@ -736,6 +736,14 @@ impl Display for StopsFalseColour {
         self.zoom.set_percent(percent, area, self.zoomable(), self.strip(area, scale));
     }
 
+    fn link_to(&self, link: &crate::zoom::Link) {
+        self.zoom.link_to(link);
+    }
+
+    fn zoom_model(&self) -> Option<crate::zoom::ZoomModel> {
+        Some(self.zoom.model())
+    }
+
     /// The legend's numbers and captions, or the message when nothing can be measured.
     fn scale_texts(&self, area: [f32; 4], scale: f32) -> Vec<ScaleText> {
         // Lock the state before the config, as everywhere else.

@@ -143,7 +143,7 @@ fn the_clean_picture_shows_a_zoom_chip_that_reads_fit_by_default() {
     assert_eq!(toolbar.chips[0].text, "Fit 75 %");
     assert!(!toolbar.on[0], "not lit at Fit");
     assert_eq!(toolbar.click(0), Some((scopecreep::zoom::ZOOM_KEY, "")), "a click asks for the slider");
-    assert_eq!(toolbar.chips.len(), 6, "the chip, then the channel and Loupe chips");
+    assert_eq!(toolbar.chips.len(), 7, "the zoom and link chips, then the channel and Loupe chips");
     wheel_to(&b, "200 %");
     let zoomed = b.set.toolbar(0, &b.settings, AREA, 1.0);
     assert!(zoomed.on[0], "lit while zoomed in");
