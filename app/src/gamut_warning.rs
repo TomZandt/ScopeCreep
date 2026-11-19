@@ -15,7 +15,7 @@ use crate::display::{Display, DisplayContext};
 use crate::gpu_frame::GpuFrame;
 use crate::picture_stage::{PictureStage, Rule};
 use crate::settings::{Choice, SettingDef};
-use crate::waveform::Measurement;
+use crate::measurement::Measurement;
 use std::sync::{Arc, Mutex};
 
 /// EBU R103: signals up to -5 % and 105 % are tolerated.

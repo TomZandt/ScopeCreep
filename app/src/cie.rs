@@ -14,7 +14,7 @@
 use crate::colour_setup::{KnownColourSetup, TimelineSpace};
 use crate::gpu_frame::GpuFrame;
 use crate::settings::{Choice, SettingDef};
-use crate::waveform::{LumaWeights, MeasuredSpace};
+use crate::measurement::{LumaWeights, MeasuredSpace};
 use scopecreep_accuracy::colour::{AP1, Chromaticities, DWG, P3_D65, REC2020, REC709, rgb_to_xyz};
 use scopecreep_accuracy::transfer;
 use std::sync::{Arc, Mutex};

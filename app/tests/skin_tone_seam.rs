@@ -95,7 +95,7 @@ const DWG_REC709: &str = "timeline=DaVinci WG/Intermediate\noutput=Rec.709 Gamma
 /// A flat frame at `offset` degrees from the shared skin-tone line (BT.709 Cb/Cr angle), luma `y`, saturation
 /// `chroma`, shown as sent. The weights are the ones the Panel uses when no Colour Setup is known.
 fn hue_frame(offset: f64, y: f64, chroma: f64) -> Vec<f32> {
-    let [wr, wg, wb] = scopecreep::output_conversion::measurement(None, scopecreep::waveform::LumaWeights::FromPrimaries).weights();
+    let [wr, wg, wb] = scopecreep::output_conversion::measurement(None, scopecreep::measurement::LumaWeights::FromPrimaries).weights();
     let angle = (SKIN_TONE_LINE_DEGREES + offset).to_radians();
     let (cb, cr) = (chroma * angle.cos(), chroma * angle.sin());
     let r = y + 2.0 * (1.0 - wr) * cr;

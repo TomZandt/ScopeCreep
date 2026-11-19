@@ -7,7 +7,8 @@ use scopecreep::display::{DisplayContext, DisplaySet};
 use scopecreep::panel_grid::PanelLayout;
 use scopecreep::settings::PanelSettings;
 use scopecreep::picture_view::PictureView;
-use scopecreep::waveform::{Measurement, PlotLayout, Waveform, WaveformCounts};
+use scopecreep::measurement::Measurement;
+use scopecreep::waveform::{PlotLayout, Waveform, WaveformCounts};
 use std::sync::Arc;
 
 

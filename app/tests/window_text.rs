@@ -5,7 +5,7 @@ use scopecreep::colour_setup::{ColourSetup, KnownColourSetup, Provenance};
 use scopecreep::display::DisplayContext;
 use scopecreep::panel_grid::{PanelGrid, PanelLayout};
 use scopecreep::settings::Settings;
-use scopecreep::waveform::LumaWeights;
+use scopecreep::measurement::LumaWeights;
 use scopecreep::window_text::{self, PanelTitle, panel_title};
 use scopecreep_feed::SentColourSetup;
 

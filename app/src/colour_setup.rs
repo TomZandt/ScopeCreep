@@ -5,7 +5,7 @@
 //! helper ([`ColourSetup::from_resolve_settings`]). A Colour Setup set by hand on the Sender node travels in the
 //! Feed, in the protocol's `key=value` vocabulary ([`ColourSetup::from_feed`]). The manual one wins.
 pub use scopecreep_feed::Provenance;
-use crate::waveform::MeasuredSpace;
+use crate::measurement::MeasuredSpace;
 use scopecreep_feed::SentColourSetup;
 
 /// How Resolve manages colour in the project.

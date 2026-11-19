@@ -62,6 +62,7 @@ Anything the ticket could not verify becomes a GitHub issue (or a comment on the
 | [92](92-one-vectorscope-panel.md) | Does one Vectorscope Panel show both plots with one setting, one measurement and the same clipping, and what happens to old saved layouts and settings (headless)? |
 | [97](97-swap-panels.md) | Does dragging a Panel onto another swap cells and spans, remember it, and never confuse a border drag with a Panel drag (pure seam)? |
 | [107](107-shared-gpu-test-bench.md) | Refactor: does one shared GPU test bench replace the copied setup with the tests unchanged? |
+| [108](108-measurement-module.md) | Refactor: do Measured Space and luma weights live in a measurement module of their own, with the seam tests unchanged? |
 | [116](116-panel-toolbar.md) | Does the Channel view's Y R G B toolbar switch, remember, shrink on small Panels and show the right tags (pure seam)? |
 | [118](118-bw-toggle.md) | Does the B/W toggle switch the unpainted picture between Luma grey and colour without changing what a Panel paints? |
 | [126](126-stops-mode-chips.md) | Is the Stops False Colour mode one click on the title bar, remembered, with B/W only in Grey +1? |

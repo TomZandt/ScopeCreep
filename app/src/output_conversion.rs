@@ -13,7 +13,7 @@
 //! handed over, and the tests taste every dish against the book (app/tests/output_conversion_seam.rs).
 use crate::colour_setup::{ColourSetup, KnownColourSetup, OutputSpace, Science, TimelineSpace};
 use crate::gpu_frame::{GpuFrame, new_texture_id};
-use crate::waveform::{LumaWeights, MeasuredSpace, Measurement};
+use crate::measurement::{LumaWeights, MeasuredSpace, Measurement};
 use scopecreep_accuracy::aces2::{self, AcesOutputTransform, Eotf};
 use scopecreep_accuracy::colour::{M3, REC2020, mmul};
 use scopecreep_accuracy::pipeline::{Encoding, Pipeline};

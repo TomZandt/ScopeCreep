@@ -10,7 +10,7 @@
 use crate::colour_setup::{KnownColourSetup, Levels};
 use crate::display::DisplayContext;
 use crate::output_conversion::{Accuracy, Plan, measurement};
-use crate::waveform::LumaWeights;
+use crate::measurement::LumaWeights;
 use scopecreep_feed::Provenance;
 
 /// Between the parts of a line.

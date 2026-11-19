@@ -13,7 +13,7 @@ use crate::display::{Display, DisplayContext};
 use crate::gpu_frame::GpuFrame;
 use crate::settings::{Choice, SettingDef};
 use crate::skin_tone::SKIN_TONE_LINE_DEGREES;
-use crate::waveform::Measurement;
+use crate::measurement::Measurement;
 use std::sync::{Arc, Mutex};
 
 /// Bins across (and down) the plot.

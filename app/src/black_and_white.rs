@@ -7,7 +7,7 @@
 use crate::display::{Display, DisplayContext};
 use crate::gpu_frame::GpuFrame;
 use crate::picture_stage::{PictureStage, Rule};
-use crate::waveform::Measurement;
+use crate::measurement::Measurement;
 use std::sync::{Arc, Mutex};
 
 /// The colour rule: Luma, the weights being the values.

@@ -84,7 +84,7 @@ pub struct SaturationHeatmap {
 impl SaturationHeatmap {
     pub fn new(device: &wgpu::Device, queue: &wgpu::Queue, target: wgpu::TextureFormat) -> SaturationHeatmap {
         let stage = PictureStage::new::<[f32; 4]>(device, queue, target, false, Rule { label: "saturation heatmap", wgsl: rule(), has_legend: true });
-        let display = SaturationHeatmap { stage, state: Arc::new(Mutex::new(State { legend: true, scale: 75.0, weights: crate::waveform::REC709_LUMA, label: String::new() })) };
+        let display = SaturationHeatmap { stage, state: Arc::new(Mutex::new(State { legend: true, scale: 75.0, weights: crate::measurement::REC709_LUMA, label: String::new() })) };
         display.configure(&DisplayContext::default());
         display
     }

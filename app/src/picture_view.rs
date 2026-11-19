@@ -47,7 +47,7 @@ impl PictureView {
     /// `filterable`: the device can smooth 32-bit float textures (else the picture is drawn nearest-neighbour).
     pub fn new(device: &wgpu::Device, queue: &wgpu::Queue, target: wgpu::TextureFormat, filterable: bool) -> PictureView {
         let stage = PictureStage::new::<[f32; 4]>(device, queue, target, filterable, Rule { label: "picture view", wgsl: RULE.into(), has_legend: false });
-        let view = PictureView { stage, label_tail: Arc::new(Mutex::new(String::new())), look: Arc::new(Mutex::new(Look { weights: crate::waveform::REC709_LUMA.map(|v| v as f32), bw: false })) };
+        let view = PictureView { stage, label_tail: Arc::new(Mutex::new(String::new())), look: Arc::new(Mutex::new(Look { weights: crate::measurement::REC709_LUMA.map(|v| v as f32), bw: false })) };
         view.configure(&DisplayContext::default());
         view
     }

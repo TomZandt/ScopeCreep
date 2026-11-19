@@ -107,7 +107,7 @@ fn the_y_chip_draws_luma_as_grey_with_the_waveforms_weights_in_the_picture_and_i
     b.play(64, 36, &solid(64, 36, [0.4, 0.6, 0.8]));
     b.set.configure(&DisplayContext::default(), &with_setting(&b, "channel", "luma"));
     // The weights the waveform measures with (Rec.709 here: no Colour Setup is known).
-    let [wr, wg, wb] = scopecreep::output_conversion::measurement(None, scopecreep::waveform::DEFAULT_LUMA_WEIGHTS).weights();
+    let [wr, wg, wb] = scopecreep::output_conversion::measurement(None, scopecreep::measurement::DEFAULT_LUMA_WEIGHTS).weights();
     let luma = ((wr * 0.4 + wg * 0.6 + wb * 0.8) * 255.0).round() as i32;
     let image = b.render();
     let near = |p: [u8; 3]| p[0] == p[1] && p[1] == p[2] && (p[0] as i32 - luma).abs() <= 1;

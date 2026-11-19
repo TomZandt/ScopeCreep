@@ -8,7 +8,8 @@
 use scopecreep::gpu_frame::FrameUploader;
 use scopecreep::monitor::Monitor;
 use scopecreep::resolve_helper::ScriptHelper;
-use scopecreep::waveform::{LumaWeights, Measurement, Waveform};
+use scopecreep::measurement::{LumaWeights, Measurement};
+use scopecreep::waveform::Waveform;
 use std::time::{Duration, Instant};
 
 fn main() {

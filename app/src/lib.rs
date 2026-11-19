@@ -22,6 +22,7 @@ pub mod flat_rects;
 pub mod picture_stage;
 pub mod picture_view;
 pub mod highlight_neutrals;
+pub mod measurement;
 pub mod waveform;
 pub mod channel_view;
 pub mod arri_false_colour;

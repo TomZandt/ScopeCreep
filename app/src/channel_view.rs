@@ -299,7 +299,7 @@ impl ChannelView {
             loupe_layout,
             loupe_params,
             loupe_bound: Arc::new(Mutex::new(None)),
-            state: Arc::new(Mutex::new(State { channel: Channel::Blue, weights: crate::waveform::REC709_LUMA.map(|v| v as f32), loupe: Loupe::new(), loaded: false, area: None, tail: String::new() })),
+            state: Arc::new(Mutex::new(State { channel: Channel::Blue, weights: crate::measurement::REC709_LUMA.map(|v| v as f32), loupe: Loupe::new(), loaded: false, area: None, tail: String::new() })),
         }
     }
 }

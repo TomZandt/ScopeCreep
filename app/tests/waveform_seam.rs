@@ -6,7 +6,8 @@ mod common;
 use common::{Rig, TARGET};
 use scopecreep::colour_setup::{Levels, Provenance};
 use scopecreep::components::Channel;
-use scopecreep::waveform::{Brightness, Channels, Look, LumaWeights, MeasuredSpace, Measurement, PlotLayout, Waveform, WaveformCounts};
+use scopecreep::measurement::{LumaWeights, MeasuredSpace, Measurement};
+use scopecreep::waveform::{Brightness, Channels, Look, PlotLayout, Waveform, WaveformCounts};
 
 /// A stand-in Resolve (the synthetic writer), the app's Feed monitor, and the app's GPU side of the Feed: the
 /// frame upload and the waveform.

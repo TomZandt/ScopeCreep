@@ -81,7 +81,7 @@ struct Config {
 
 impl Default for Config {
     fn default() -> Config {
-        Config { weights: crate::waveform::REC709_LUMA.map(|v| v as f32), degrees: DEFAULT_TOLERANCE.into(), tolerance: 5.0, bw: false, source: String::new() }
+        Config { weights: crate::measurement::REC709_LUMA.map(|v| v as f32), degrees: DEFAULT_TOLERANCE.into(), tolerance: 5.0, bw: false, source: String::new() }
     }
 }
 

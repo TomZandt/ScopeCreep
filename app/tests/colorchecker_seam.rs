@@ -6,7 +6,8 @@
 mod common;
 use common::{Rig, TARGET};
 use scopecreep::output_conversion::{self, OutputConversion};
-use scopecreep::waveform::{LumaWeights, Waveform, WaveformCounts};
+use scopecreep::measurement::LumaWeights;
+use scopecreep::waveform::{Waveform, WaveformCounts};
 use scopecreep_accuracy::aces2::AcesOutputTransform;
 use scopecreep_accuracy::colorchecker::{ColorChecker, TimelineSpace};
 use scopecreep_accuracy::colour::{REC709, luma_weights};

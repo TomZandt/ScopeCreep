@@ -368,7 +368,7 @@ fn a_project_reading_lists_studio_and_the_product() {
 #[test]
 fn the_waveform_measures_in_the_output_colour_space_of_the_colour_setup() {
     use scopecreep::colour_setup::ColourSetup;
-    use scopecreep::waveform::MeasuredSpace;
+    use scopecreep::measurement::MeasuredSpace;
     let space = |output: &str| {
         let setup = ColourSetup::new(None, "DaVinci WG/Intermediate".into(), output.into(), None, None, None, None);
         setup.measured_space()
@@ -387,7 +387,7 @@ fn the_waveform_measures_in_the_output_colour_space_of_the_colour_setup() {
 
 #[test]
 fn the_waveform_follows_the_project_levels_and_says_when_they_are_set_manually() {
-    use scopecreep::waveform::{LumaWeights, Measurement};
+    use scopecreep::measurement::{LumaWeights, Measurement};
     let measuring = |b: &Bench| Measurement::for_colour_setup(b.monitor.status().colour_setup(), LumaWeights::FromPrimaries);
     let scale_of = |m: Measurement| m.label().split("  ·  ").nth(1).unwrap().to_string();
 

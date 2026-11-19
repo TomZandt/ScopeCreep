@@ -14,7 +14,8 @@ use crate::colour_setup::KnownColourSetup;
 use crate::gpu_frame::GpuFrame;
 use crate::settings::{PanelSettings, SettingDef, Settings};
 use crate::toolbar::{Toolbar, ToolbarDef};
-use crate::waveform::{LumaWeights, Waveform};
+use crate::measurement::LumaWeights;
+use crate::waveform::Waveform;
 use std::any::Any;
 use std::sync::Arc;
 
@@ -34,7 +35,7 @@ pub struct DisplayContext {
 
 impl Default for DisplayContext {
     fn default() -> DisplayContext {
-        DisplayContext { colour_setup: None, colour_label: "Colour Setup unknown".into(), settings: Settings::new(), luma: crate::waveform::DEFAULT_LUMA_WEIGHTS }
+        DisplayContext { colour_setup: None, colour_label: "Colour Setup unknown".into(), settings: Settings::new(), luma: crate::measurement::DEFAULT_LUMA_WEIGHTS }
     }
 }
 
@@ -214,7 +215,7 @@ impl DisplaySet {
     /// Every Panel's title bar: its name and short tags (only state that changes how to read it), with the full
     /// label for the hover (#99). `context` and `settings` are what [`DisplaySet::configure`] was given.
     pub fn titles(&self, context: &DisplayContext, settings: &PanelSettings) -> Vec<crate::window_text::PanelTitle> {
-        let luma = crate::waveform::luma_weights_of(&settings.resolve(crate::waveform::NAME, &crate::waveform::SETTINGS));
+        let luma = crate::measurement::luma_weights_of(&settings.resolve(crate::waveform::NAME, &crate::waveform::SETTINGS));
         self.displays
             .iter()
             .map(|display| {
@@ -241,7 +242,7 @@ impl DisplaySet {
 
     /// Give every display the Colour Setup and its own settings (`settings` holds every Panel's choices).
     pub fn configure(&self, context: &DisplayContext, settings: &PanelSettings) {
-        let luma = crate::waveform::luma_weights_of(&settings.resolve(crate::waveform::NAME, &crate::waveform::SETTINGS));
+        let luma = crate::measurement::luma_weights_of(&settings.resolve(crate::waveform::NAME, &crate::waveform::SETTINGS));
         for display in &self.displays {
             let mut own = DisplayContext { settings: settings.resolve(display.name(), display.setting_defs()), luma, ..context.clone() };
             own.settings.extend(settings.state_of(display.name(), display.state_keys()));
