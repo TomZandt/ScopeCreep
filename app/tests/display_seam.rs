@@ -194,7 +194,7 @@ fn the_waveform_offers_luma_weights_and_the_first_is_from_primaries() {
     let defs = b.set.setting_defs(1);
     assert_eq!(defs.iter().map(|d| d.key).collect::<Vec<_>>(), ["luma", "brightness", "spread", "channels", "colorise", "scale_units"]);
     assert_eq!(defs[1].amount.map(|a| (a.default, a.unit)), Some((100.0, " %")), "trace brightness is a slider that starts at the normal look");
-    assert_eq!(defs[2].choices[0].value, "on", "the soft spread starts on");
+    assert_eq!(defs[2].amount.map(|a| a.default), Some(1.0), "the soft spread starts at about 1 pixel, the old on");
     assert_eq!(defs[0].choices.iter().map(|c| c.value).collect::<Vec<_>>(), ["primaries", "match-resolve"]);
     assert_eq!(b.set.setting_defs(0).iter().map(|d| d.key).collect::<Vec<_>>(), ["bw"]);
     assert!(b.set.popover_defs(0).is_empty(), "the clean picture has only the B/W chip, so no menu");
@@ -272,9 +272,18 @@ fn the_trace_brightness_and_soft_spread_settings_change_the_drawing_but_not_the_
     assert!(normal < between && between < brighter, "100 % < 170 % < 240 %: {normal} {between} {brighter}");
     settings.set(name, "brightness", "100");
     assert_eq!(lit(&b, &settings), normal);
+    settings.set(name, "spread", "on");
+    assert_eq!(lit(&b, &settings), normal, "the old list value On draws as the default does");
     settings.set(name, "spread", "off");
     let unspread = lit(&b, &settings);
     assert_ne!(unspread, normal, "the soft spread changes the drawing");
+    settings.set(name, "spread", "0");
+    assert_eq!(lit(&b, &settings), unspread, "0 draws what Off drew");
+    settings.set(name, "spread", "0.5");
+    let between = lit(&b, &settings);
+    assert!(between != unspread && between != normal, "0.5 px draws between off and on");
+    settings.set(name, "spread", "1");
+    assert_eq!(lit(&b, &settings), normal, "1 px is the default");
     assert_eq!(b.set.labels()[1], label, "drawing settings do not change what the label claims");
 }
 

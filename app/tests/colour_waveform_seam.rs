@@ -159,8 +159,15 @@ fn trace_brightness_and_soft_spread_change_the_drawing_but_not_the_label() {
     let dimmer = lit(&b, &settings);
     assert!(dimmer < normal && normal < brighter, "dimmer {dimmer} < normal {normal} < brighter {brighter}");
     settings.set(COLOUR, "brightness", "normal");
+    settings.set(COLOUR, "spread", "on");
+    assert_eq!(lit(&b, &settings), normal, "the old list value On draws as the default does");
     settings.set(COLOUR, "spread", "off");
-    assert_ne!(lit(&b, &settings), normal, "the soft spread changes the drawing");
+    let off = lit(&b, &settings);
+    assert_ne!(off, normal, "the soft spread changes the drawing");
+    settings.set(COLOUR, "spread", "0");
+    assert_eq!(lit(&b, &settings), off, "0 draws what Off drew");
+    settings.set(COLOUR, "spread", "2");
+    assert_ne!(lit(&b, &settings), normal, "2 px draws more spread than the default");
     assert_eq!(b.set.labels()[i], label, "drawing settings do not change the label");
 }
 

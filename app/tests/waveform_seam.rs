@@ -7,7 +7,7 @@ use common::{Rig, TARGET};
 use scopecreep::colour_setup::{Levels, Provenance};
 use scopecreep::components::Channel;
 use scopecreep::measurement::{LumaWeights, MeasuredSpace, Measurement};
-use scopecreep::waveform::{Brightness, Channels, Look, PlotLayout, Waveform, WaveformCounts};
+use scopecreep::waveform::{Brightness, Channels, Look, PlotLayout, Spread, Waveform, WaveformCounts, SPREAD_AMOUNT};
 
 /// A stand-in Resolve (the synthetic writer), the app's Feed monitor, and the app's GPU side of the Feed: the
 /// frame upload and the waveform.
@@ -290,7 +290,7 @@ fn mean_drawn(image: &[u8], width: u32, layout: &PlotLayout, columns: u32, codes
 }
 
 fn look(brightness: Brightness, spread: bool) -> Look {
-    Look { brightness, spread }
+    Look { brightness, spread: Spread(if spread { 1.0 } else { 0.0 }) }
 }
 
 /// A frame whose tones thin out towards white: code = 1023 · (row / height)², so each column holds many pixels
@@ -367,6 +367,38 @@ fn soft_spread_off_draws_a_code_on_its_own_row_and_on_spreads_it_by_about_one_pi
     assert!(on[2] > base + 10.0 && on[4] > base + 10.0, "on: the next rows are lit {on:?}");
     assert!(on[1] == base && on[5] == base && on[0] == base && on[6] == base, "on: nothing beyond about 1 pixel {on:?}");
     assert!(on[3] < off[3] + 1.0 && on[3] > 150.0, "the code's own row stays bright {on:?}");
+}
+
+#[test]
+fn the_soft_spread_amount_runs_from_none_to_about_three_pixels_and_its_default_is_the_old_on() {
+    let mut b = Bench::new("spread-amount");
+    b.play(1920, 1080, &picture(1920, 1080, |_, _| grey(600)));
+    let (width, height) = (400, 1024 + 22);
+    let layout = PlotLayout::new([0.0, 0.0, width as f32, height as f32], 1.0);
+    let rows = |b: &mut Bench, look: Look| {
+        b.waveform.set_look(look);
+        let image = draw(b, width, height);
+        [0i32, 1, 2, 3, 4].map(|d| drawn_at(&image, width, &layout, 1000, 1920, (600 + d) as u32))
+    };
+    // The default is the old "on"; 0 is the old "off" (nothing beside the code's own row).
+    assert_eq!(Look::default().spread, Spread(1.0));
+    assert_eq!(rows(&mut b, Look::default()), rows(&mut b, look(Brightness(100.0), true)));
+    let none = rows(&mut b, Look { brightness: Brightness(100.0), spread: Spread(0.0) });
+    assert_eq!(none, rows(&mut b, look(Brightness(100.0), false)));
+    assert!(none[1] == none[4] && none[0] > 200.0, "0: only the code's own row {none:?}");
+    // In between spreads between the two, and more spread reaches further and takes more from the centre.
+    let mut last = none;
+    for amount in [0.25, 0.5, 1.0, 1.5, 2.0, 2.5, 3.0] {
+        let now = rows(&mut b, Look { brightness: Brightness(100.0), spread: Spread(amount) });
+        assert!(now[1] >= last[1] && now[2] >= last[2] && now[3] >= last[3], "{amount}: spread grows {last:?} {now:?}");
+        assert!(now[0] <= last[0], "{amount}: the centre gives way {last:?} {now:?}");
+        last = now;
+    }
+    let half = rows(&mut b, Look { brightness: Brightness(100.0), spread: Spread(0.5) });
+    let one = rows(&mut b, Look::default());
+    assert!(half[1] > none[1] + 1.0 && half[1] < one[1], "0.5 sits between off and on {none:?} {half:?} {one:?}");
+    assert!(one[2] == none[2] && last[3] > none[3], "1 px reaches one pixel, 3 px reaches three {one:?} {last:?}");
+    assert_eq!((SPREAD_AMOUNT.min, SPREAD_AMOUNT.max), (0.0, 3.0));
 }
 
 #[test]

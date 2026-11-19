@@ -180,7 +180,7 @@ The one piece of shader code the waveforms and the vectorscope share: the phosph
 _Avoid_: Common shader, shader utils
 
 **Soft spread**:
-A blur of the waveform trace of about 1 device pixel, on by default and switchable off in the Panel's settings. Drawing only: it never changes what is measured.
+A blur of the waveform trace, a Slider in the Panel's settings from 0 to 3 device pixels (default 1; 0 is off). Drawing only: it never changes what is measured.
 _Avoid_: Glow, blur, smoothing
 
 **Picture View**:

@@ -81,17 +81,25 @@ pub const BRIGHTNESS_AMOUNT: Amount = Amount {
     legacy: &[("normal", 100.0), ("dim", 48.0), ("dimmer", 48.0), ("brighter", 240.0)],
 };
 
+/// How far the trace is spread over its neighbours, in device pixels (the soft spread slider, #85).
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Spread(pub f32);
+
+/// The soft spread slider, the same on both waveforms: 0 is no spread, 1 pixel (the default) is the look before the
+/// slider. The on and off earlier versions saved map to 1 and 0.
+pub const SPREAD_AMOUNT: Amount = Amount { min: 0.0, max: 3.0, step: 0.25, default: 1.0, unit: " px", decimals: 2, legacy: &[("on", 1.0), ("off", 0.0)] };
+
 /// How the waveform is drawn. Drawing only: it never changes what is measured or what the label says.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Look {
     pub brightness: Brightness,
-    /// A soft spread of about 1 device pixel, done in a separate pass into a texture.
-    pub spread: bool,
+    /// The soft spread, in device pixels (0 skips it), done in a separate pass into a texture.
+    pub spread: Spread,
 }
 
 impl Default for Look {
     fn default() -> Look {
-        Look { brightness: Brightness(BRIGHTNESS_AMOUNT.default), spread: true }
+        Look { brightness: Brightness(BRIGHTNESS_AMOUNT.default), spread: Spread(SPREAD_AMOUNT.default) }
     }
 }
 
@@ -359,7 +367,7 @@ struct Placement {
     below: vec4<f32>,
     info: vec4<f32>,      // waveform columns, picture height, device pixels per logical pixel
     legal: vec4<f32>,     // the codes of black and white for the Levels in use
-    look: vec4<f32>,      // the gain of the phosphor response, 1 when the soft spread is on, 1 for the Colour Waveform, the chips on (bits: Y R G B)
+    look: vec4<f32>,      // the gain of the phosphor response, the soft spread in device pixels (0 is off), 1 for the Colour Waveform, the chips on (bits: Y R G B)
     red: vec4<f32>,       // the channels' trace colours
     green: vec4<f32>,
     blue: vec4<f32>,
@@ -521,19 +529,33 @@ fn fs_trace(@builtin(position) position: vec4<f32>) -> @location(0) vec4<f32> {
     return trace_at(floor(position.xy) + floor(placement.plot.xy));
 }
 
-// Pass 2 reads it back, spread by at most 1 device pixel when the soft spread is on.
+// Pass 2 reads it back, spread by up to 3 device pixels (the soft spread amount; 0 reads the pixel as it is). At 1
+// pixel the weights are 0.6 for the pixel and 0.1 for each of its four neighbours; each further pixel of the amount
+// adds a ring of neighbours one pixel out at half that weight, and a part of a pixel adds that part of the weight.
+fn tap(at: vec2<i32>, size: vec2<i32>) -> vec4<f32> {
+    return textureLoad(trace, clamp(at, vec2<i32>(0), size - vec2<i32>(1)), 0);
+}
+
 fn soft(q: vec2<f32>) -> vec4<f32> {
     let size = vec2<i32>(textureDimensions(trace));
     let at = vec2<i32>(q);
-    let centre = textureLoad(trace, clamp(at, vec2<i32>(0), size - vec2<i32>(1)), 0);
-    if (placement.look.y < 0.5) {
+    let centre = tap(at, size);
+    let amount = placement.look.y;
+    if (amount <= 0.0) {
         return centre;
     }
-    var sum = 0.6 * centre;
-    sum += 0.1 * textureLoad(trace, clamp(at + vec2<i32>(1, 0), vec2<i32>(0), size - vec2<i32>(1)), 0);
-    sum += 0.1 * textureLoad(trace, clamp(at - vec2<i32>(1, 0), vec2<i32>(0), size - vec2<i32>(1)), 0);
-    sum += 0.1 * textureLoad(trace, clamp(at + vec2<i32>(0, 1), vec2<i32>(0), size - vec2<i32>(1)), 0);
-    sum += 0.1 * textureLoad(trace, clamp(at - vec2<i32>(0, 1), vec2<i32>(0), size - vec2<i32>(1)), 0);
+    let near = clamp(amount, 0.0, 1.0);
+    var sum = (0.6 + 0.4 * (1.0 - near)) * centre;
+    sum += 0.1 * near * (tap(at + vec2<i32>(1, 0), size) + tap(at - vec2<i32>(1, 0), size) + tap(at + vec2<i32>(0, 1), size) + tap(at - vec2<i32>(0, 1), size));
+    for (var d = 2; d <= 3; d++) {
+        let part = clamp(amount - f32(d - 1), 0.0, 1.0);
+        if (part > 0.0) {
+            let o = vec2<i32>(d, 0);
+            let p = vec2<i32>(0, d);
+            sum += 0.05 * part * (tap(at + o, size) + tap(at - o, size) + tap(at + p, size) + tap(at - p, size));
+            sum -= 0.2 * part * centre;
+        }
+    }
     return max(sum, centre);   // a faint stray pixel never fades below the floor
 }
 
@@ -995,7 +1017,7 @@ impl Waveform {
         placement[20..22].copy_from_slice(&[black as f32, white as f32]);
         let channels = self.channels();
         let mask = if state.rgb.is_some() || !channels.colour_channels() { channels.mask() } else { channels.mask() & 1 };
-        placement[24..28].copy_from_slice(&[look.brightness.gain(), if look.spread { 1.0 } else { 0.0 }, if self.needs_colour_sums() { 1.0 } else { 0.0 }, (mask | if self.colour || self.colorise() { 1 << COLORISE_BIT } else { 0 }) as f32]);
+        placement[24..28].copy_from_slice(&[look.brightness.gain(), look.spread.0, if self.needs_colour_sums() { 1.0 } else { 0.0 }, (mask | if self.colour || self.colorise() { 1 << COLORISE_BIT } else { 0 }) as f32]);
         for (i, colour) in [crate::style::CHANNEL_R, crate::style::CHANNEL_G, crate::style::CHANNEL_B].into_iter().enumerate() {
             placement[28 + i * 4..31 + i * 4].copy_from_slice(&colour);
         }
@@ -1102,8 +1124,8 @@ pub const SETTINGS: [SettingDef; 6] = [
     SettingDef {
         key: SPREAD_SETTING,
         label: "Soft spread",
-        amount: None,
-        choices: &[Choice { value: "on", text: "On (about 1 pixel)" }, Choice { value: "off", text: "Off" }],
+        amount: Some(SPREAD_AMOUNT),
+        choices: &[],
     },
     // Shown as the Y R G B chips on the title bar, not in the popover: the letters of the chips that are on.
     SettingDef {
@@ -1191,7 +1213,7 @@ pub const SPREAD_SETTING: &str = "spread";
 /// How the waveform is drawn, from its settings (a value that is not a choice falls back to the default).
 pub fn look_from(settings: &crate::settings::Settings) -> Look {
     let brightness = Brightness(BRIGHTNESS_AMOUNT.read(settings.get(BRIGHTNESS_SETTING).map(String::as_str)));
-    Look { brightness, spread: settings.get(SPREAD_SETTING).map(String::as_str) != Some("off") }
+    Look { brightness, spread: Spread(SPREAD_AMOUNT.read(settings.get(SPREAD_SETTING).map(String::as_str))) }
 }
 
 /// Logical pixels: the size of the numbers on the scale.
