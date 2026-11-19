@@ -9,7 +9,7 @@ use scopecreep::display::{DisplayContext, DisplaySet, ScopeHandles};
 use scopecreep::panel_grid::PanelLayout;
 use scopecreep::settings::PanelSettings;
 use scopecreep::skin_tone::SKIN_TONE_LINE_DEGREES;
-use scopecreep::vectorscope::{PlotSquare, Plots, VectorscopeCounts, VectorscopePlots, Zoom, halves};
+use scopecreep::vectorscope::{HIGHLIGHTS_FROM, PlotSquare, Plots, SHADOWS_BELOW, Tonal, VectorscopeCounts, VectorscopePlots, Zoom, halves};
 use scopecreep_accuracy::colorchecker::{ColorChecker, TimelineSpace};
 use scopecreep_accuracy::transfer::bt709_oetf;
 
@@ -466,7 +466,7 @@ fn the_menu_offers_trace_brightness_targets_and_the_skin_tone_line_with_sensible
     let b = Bench::new("menu");
     let defs = b.set.setting_defs(b.index(V));
     let keys: Vec<_> = defs.iter().map(|d| (d.key, d.choices.iter().map(|c| c.value).collect::<Vec<_>>())).collect();
-    assert_eq!(keys, [("brightness", vec!["normal", "bright", "dim"]), ("spread", vec!["on", "off"]), ("targets", vec!["75", "100"]), ("skin-line", vec!["on", "off"]), ("plots", vec!["both", "100", "200"]), ("mono", vec!["off", "on"])]);
+    assert_eq!(keys, [("brightness", vec!["normal", "bright", "dim"]), ("spread", vec!["on", "off"]), ("targets", vec!["75", "100"]), ("skin-line", vec!["on", "off"]), ("plots", vec!["both", "100", "200"]), ("tonal", vec!["all", "shadows", "mids", "highlights"]), ("mono", vec!["off", "on"])]);
 }
 
 #[test]
@@ -618,4 +618,82 @@ fn the_plots_chip_shows_one_plot_filling_the_panel_or_both() {
     let (image, panels) = b.render(width, 900, 1.0);
     assert!(brightest_near(&image, width, b.square(&panels, 1).position(cb, cr, Zoom::X2)) > 60);
     assert!(b.label(V).starts_with("Vectorscope 100 % and 200 %"));
+}
+
+// ------------------------------------------------------------------ the tonal range chip (#124)
+
+/// A frame in three bands of rows, shadows, mids and highlights, each with a plain colour on its left half and an
+/// overdriven one (beyond the ring, so clipping) on its right half.
+fn tonal_frame() -> (u32, u32, Vec<f32>, [[f64; 3]; 3]) {
+    let plain = [[0.2, 0.0, 0.0], [0.0, 0.6, 0.0], [1.0, 0.9, 0.5]];
+    let over = [[1.3, 0.0, 0.0], [0.0, 0.5, 1.9], [1.4, 1.4, 0.0]];
+    let (w, h) = (64u32, 36u32);
+    let pixels = (0..w * h)
+        .flat_map(|i| {
+            let (col, band) = (i % w, (i / w / 12) as usize);
+            let c = if col < w / 2 { plain[band] } else { over[band] };
+            [c[0] as f32, c[1] as f32, c[2] as f32, 1.0]
+        })
+        .collect();
+    (w, h, pixels, plain)
+}
+
+fn luma(rgb: [f64; 3]) -> f64 {
+    0.2126 * rgb[0] + 0.7152 * rgb[1] + 0.0722 * rgb[2]
+}
+
+#[test]
+fn the_tonal_ranges_are_thirds_by_resolves_boundaries_and_cover_every_luma_once() {
+    assert_eq!((SHADOWS_BELOW, HIGHLIGHTS_FROM), (0.30, 0.70));
+    for y in [f64::MIN, -0.1, 0.0, 0.2999, 0.30, 0.5, 0.6999, 0.70, 1.0, 1.3] {
+        let hits = [Tonal::Shadows, Tonal::Mids, Tonal::Highlights].iter().filter(|t| t.includes(y)).count();
+        assert_eq!(hits, 1, "luma {y} is in exactly one range");
+        assert!(Tonal::All.includes(y));
+    }
+    assert!(Tonal::Shadows.includes(0.2999) && Tonal::Mids.includes(0.30) && Tonal::Mids.includes(0.6999) && Tonal::Highlights.includes(0.70));
+    assert!(![Tonal::Shadows, Tonal::Mids, Tonal::Highlights].iter().any(|t| t.includes(f64::NAN)), "a luma that is not a number is in no range");
+    assert_eq!(Tonal::from_setting(None), Tonal::All);
+    assert_eq!(Tonal::from_setting(Some("garbage")), Tonal::All);
+}
+
+#[test]
+fn each_tonal_chip_plots_only_its_ranges_colours_and_clipping_counts_only_those_pixels() {
+    let mut b = Bench::new("tonal");
+    let (w, h, pixels, plain) = tonal_frame();
+    for (rgb, range) in plain.iter().zip([Tonal::Shadows, Tonal::Mids, Tonal::Highlights]) {
+        assert!(range.includes(luma(*rgb)), "the test colour {rgb:?} is in {range:?}");
+    }
+    b.play(w, h, &pixels);
+    let all = b.x1();
+    let band = (w * 12) as u64;
+    let near = |c: &VectorscopeCounts, rgb: [f64; 3]| {
+        let [cb, cr] = cb_cr(rgb);
+        c.near(cb, cr)
+    };
+    for rgb in plain {
+        assert!(near(&all, rgb) > 0, "All plots {rgb:?}");
+    }
+    assert_eq!(all.clipped_total(), 3 * band / 2, "All counts every overdriven pixel");
+
+    for (value, index) in [("shadows", 0usize), ("mids", 1), ("highlights", 2)] {
+        b.choose(V, "tonal", value);
+        b.play(w, h, &pixels); // a tonal range changes what is measured, so the Feed measures again
+        let (x1, x2) = (b.x1(), b.x2());
+        for (i, rgb) in plain.iter().enumerate() {
+            let (n1, n2) = (near(&x1, *rgb), near(&x2, *rgb));
+            if i == index {
+                assert_eq!(n1 as u64, band / 2, "{value}: its own colour is plotted, every pixel of it");
+                assert_eq!(n2 as u64, band / 2, "{value}: at 200 % too");
+            } else {
+                assert_eq!((n1, n2), (0, 0), "{value}: the colour {rgb:?} of another range is not plotted");
+            }
+        }
+        assert_eq!(x1.clipped_total(), band / 2, "{value}: clipping counts only this range's pixels");
+        assert_eq!(x2.clipped_total(), band / 2);
+        assert!(b.label(V).contains(&format!("{value} only")), "{}", b.label(V));
+    }
+    b.choose(V, "tonal", "all");
+    b.play(w, h, &pixels);
+    assert_eq!(b.x1(), all, "back to All is the same measurement");
+    assert!(!b.label(V).contains("only:"), "{}", b.label(V));
 }

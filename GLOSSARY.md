@@ -147,6 +147,10 @@ _Avoid_: Monitor, meter, graph
 A Scope that plots each pixel's colour as Cb across and Cr up, so hue is the angle and saturation the distance from the middle. One Panel shows it twice, side by side: at 100 % (left) the whole picture, at 200 % (right) the same data at twice the radius. One label, one right-click menu and one set of settings serve both. Cb/Cr use the Measured Space's luma weights.
 _Avoid_: Chroma scope, colour wheel
 
+**Tonal range**:
+A chip on the Vectorscope's title bar (All by default, remembered per Panel, tagged when not All) that plots only the pixels whose Luma is in one third of the signal: Shadows below 30 %, Mids from 30 % to below 70 %, Highlights 70 % and above (Resolve's own Low and High boundaries, of Y with the Measured Space's weights; the Levels do not move them). It changes what is measured: the plot and the ring-clipping counts only include the plotted pixels. Resolve and Tektronix call it a luma-qualified vectorscope.
+_Avoid_: Luma key, qualifier
+
 **Saturation heatmap**:
 A Picture View that draws the Output picture as its Luma in grey with saturation laid over it in a colour that strengthens with saturation, cool to hot: neutral areas show the grey picture, saturated areas a strong colour. Saturation is the distance from neutral on the vectorscope's scale (100 % is the vectorscope's outer ring).
 _Avoid_: Chroma map, saturation false colour

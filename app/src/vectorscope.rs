@@ -94,6 +94,58 @@ impl Plots {
     }
 }
 
+/// Where Shadows end and Highlights begin, as Y of the Feed's full-range values (0 black, 1 white): Resolve's own
+/// vectorscope defaults for its Low and High boundaries (0.30 and 0.70, #124). Fixed here; the Levels do not move them.
+pub const SHADOWS_BELOW: f64 = 0.30;
+pub const HIGHLIGHTS_FROM: f64 = 0.70;
+
+/// Which pixels are plotted, by their Luma (#124): all of them, or only those in one third of the tonal range.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Tonal {
+    All,
+    Shadows,
+    Mids,
+    Highlights,
+}
+
+impl Tonal {
+    /// From the setting's stored value; anything else is all.
+    pub fn from_setting(value: Option<&str>) -> Tonal {
+        match value {
+            Some("shadows") => Tonal::Shadows,
+            Some("mids") => Tonal::Mids,
+            Some("highlights") => Tonal::Highlights,
+            _ => Tonal::All,
+        }
+    }
+
+    /// Whether a pixel of luma `y` is plotted. Shadows are below [`SHADOWS_BELOW`], Highlights from [`HIGHLIGHTS_FROM`] up
+    /// (including anything above white), Mids between; a luma that is not a number is in no range but All's.
+    pub fn includes(self, y: f64) -> bool {
+        match self {
+            Tonal::All => true,
+            Tonal::Shadows => y < SHADOWS_BELOW,
+            Tonal::Mids => (SHADOWS_BELOW..HIGHLIGHTS_FROM).contains(&y),
+            Tonal::Highlights => y >= HIGHLIGHTS_FROM,
+        }
+    }
+
+    /// The code the measuring shader switches on.
+    fn code(self) -> u32 {
+        self as u32
+    }
+
+    /// The tag and label words, or None for All.
+    pub fn tag(self) -> Option<&'static str> {
+        match self {
+            Tonal::All => None,
+            Tonal::Shadows => Some("shadows only"),
+            Tonal::Mids => Some("mids only"),
+            Tonal::Highlights => Some("highlights only"),
+        }
+    }
+}
+
 /// Cb and Cr of an encoded `rgb` for luma `weights` (Wr, Wg, Wb).
 pub fn chroma(weights: [f64; 3], rgb: [f64; 3]) -> [f64; 2] {
     let y = weights[0] * rgb[0] + weights[1] * rgb[1] + weights[2] * rgb[2];
@@ -116,7 +168,10 @@ pub const PLOTS_SETTING: &str = "plots";
 /// The trace in neutral grey instead of the colour it stands for (#123); off by default.
 pub const MONO_SETTING: &str = "mono";
 
-pub const SETTINGS: [SettingDef; 6] = [
+/// Which tonal range is plotted: all (the default), shadows, mids or highlights (#124).
+pub const TONAL_SETTING: &str = "tonal";
+
+pub const SETTINGS: [SettingDef; 7] = [
     SettingDef {
         key: BRIGHTNESS_SETTING,
         label: "Trace brightness",
@@ -132,11 +187,17 @@ pub const SETTINGS: [SettingDef; 6] = [
         amount: None,
         choices: &[Choice { value: "both", text: "100 % and 200 %" }, Choice { value: "100", text: "100 % only" }, Choice { value: "200", text: "200 % only" }],
     },
+    SettingDef {
+        key: TONAL_SETTING,
+        label: "Tonal range",
+        amount: None,
+        choices: &[Choice { value: "all", text: "All" }, Choice { value: "shadows", text: "Shadows" }, Choice { value: "mids", text: "Mids" }, Choice { value: "highlights", text: "Highlights" }],
+    },
     SettingDef { key: MONO_SETTING, label: "Trace colour", amount: None, choices: &[Choice { value: TOGGLE_OFF, text: "Colour" }, Choice { value: "on", text: "Mono" }] },
 ];
 
 /// The chips on the title bar (#123): which plots show, one at a time, and the colour or mono trace.
-pub static TOOLBAR: [ToolbarDef; 2] = [
+pub static TOOLBAR: [ToolbarDef; 3] = [
     ToolbarDef {
         key: PLOTS_SETTING,
         mode: ChipMode::Single,
@@ -151,6 +212,16 @@ pub static TOOLBAR: [ToolbarDef; 2] = [
         mode: ChipMode::Toggle,
         chips: &[ToolbarChip { value: "on", text: "Mono", tooltip: "Trace in neutral grey instead of colour (the same counts)", channel: None }],
     },
+    ToolbarDef {
+        key: TONAL_SETTING,
+        mode: ChipMode::Single,
+        chips: &[
+            ToolbarChip { value: "all", text: "All", tooltip: "Plot every pixel", channel: None },
+            ToolbarChip { value: "shadows", text: "Shadows", tooltip: "Plot only pixels with Luma below 30 % (Resolve's Low boundary); clipping counts only these", channel: None },
+            ToolbarChip { value: "mids", text: "Mids", tooltip: "Plot only pixels with Luma from 30 % to below 70 %; clipping counts only these", channel: None },
+            ToolbarChip { value: "highlights", text: "Highlights", tooltip: "Plot only pixels with Luma of 70 % and above (Resolve's High boundary); clipping counts only these", channel: None },
+        ],
+    },
 ];
 
 /// Everything the user and the Colour Setup decide about how the vectorscope measures and draws.
@@ -164,6 +235,7 @@ struct Config {
     spread: bool,
     plots: Plots,
     mono: bool,
+    tonal: Tonal,
 }
 
 /// Where the plot goes inside a Panel's display area, in pixels: a square, centred. Left, top, width, height.
@@ -272,6 +344,7 @@ struct Params {
     weights: vec4<f32>,   // luma weights for R, G, B
     size: vec4<u32>,      // picture width, height
     scale: vec4<f32>,     // 1 / half extent at 100 %, Cb per (B - Y), Cr per (R - Y), 1 / half extent at 200 %
+    tonal: vec4<f32>,     // the tonal range plotted (0 all, 1 shadows, 2 mids, 3 highlights), where shadows end, where highlights begin
 };
 @group(0) @binding(0) var<uniform> params: Params;
 @group(0) @binding(1) var frame: texture_2d<f32>;
@@ -287,6 +360,11 @@ fn measure(@builtin(global_invocation_id) id: vec3<u32>) {
     }
     let rgb = textureLoad(frame, vec2<u32>(id.x, id.y), 0).rgb;
     let y = dot(rgb, params.weights.xyz);
+    // A tonal range plots, and counts for clipping, only the pixels whose luma is in it (a luma that is not a number is in none).
+    let tonal = u32(params.tonal.x);
+    if ((tonal == 1u && !(y < params.tonal.y)) || (tonal == 2u && !(y >= params.tonal.y && y < params.tonal.z)) || (tonal == 3u && !(y >= params.tonal.z))) {
+        return;
+    }
     // One pass, two plots: the 100 % bins first, then the 200 % bins.
     for (var k = 0u; k < 2u; k++) {
         let zoom = select(params.scale.x, params.scale.w, k == 1u);
@@ -310,7 +388,7 @@ fn measure(@builtin(global_invocation_id) id: vec3<u32>) {
 
 /// Hue-angle bins for clipping, after the plot's bins.
 const CLIP_BINS: u32 = 720;
-const PARAMS_BYTES: u64 = 48;
+const PARAMS_BYTES: u64 = 64;
 const DRAW_UNIFORM_BYTES: u64 = 192;
 
 const DRAW_SHADER: &str = r#"
@@ -534,7 +612,7 @@ impl Vectorscope {
             params: uniform("vectorscope params", PARAMS_BYTES),
             draw,
             placement: [uniform("vectorscope placement 100 %", DRAW_UNIFORM_BYTES), uniform("vectorscope placement 200 %", DRAW_UNIFORM_BYTES)],
-            config: Arc::new(Mutex::new(Config { measurement: Measurement::default(), bars: 0.75, skin_line: true, gain: 1.0, spread: true, plots: Plots::Both, mono: false })),
+            config: Arc::new(Mutex::new(Config { measurement: Measurement::default(), bars: 0.75, skin_line: true, gain: 1.0, spread: true, plots: Plots::Both, mono: false, tonal: Tonal::All })),
             state: Arc::new(Mutex::new(State { bins, pixels: 0, bound: None, draw_bound: None, measured: false })),
         }
     }
@@ -581,6 +659,9 @@ impl Vectorscope {
             m.weights_how(),
             (config.bars * 100.0).round()
         );
+        if let Some(tonal) = config.tonal.tag() {
+            label += &format!("  ·  {tonal}: Luma below 30 % (shadows), 30 % to below 70 % (mids), 70 % and up (highlights); clipping counts only these pixels");
+        }
         if config.skin_line {
             label += &format!("  ·  skin-tone line {SKIN_TONE_LINE_DEGREES}° (as Resolve 21.2 draws it)");
         }
@@ -604,6 +685,7 @@ impl Display for Vectorscope {
             (1.0 / (2.0 * (1.0 - w[0]))) as f32,
             (1.0 / Zoom::X2.half_extent()) as f32,
         ]));
+        params[48..64].copy_from_slice(bytemuck::cast_slice(&[self.config().tonal.code() as f32, SHADOWS_BELOW as f32, HIGHLIGHTS_FROM as f32, 0.0]));
         self.queue.write_buffer(&self.params, 0, &params);
 
         let mut state = self.state.lock().unwrap();
@@ -638,6 +720,7 @@ impl Display for Vectorscope {
             spread: get(SPREAD_SETTING) != Some("off"),
             plots: Plots::from_setting(get(PLOTS_SETTING)),
             mono: get(MONO_SETTING) == Some("on"),
+            tonal: Tonal::from_setting(get(TONAL_SETTING)),
             gain: match get(BRIGHTNESS_SETTING) {
                 Some("bright") => 4.0,
                 Some("dim") => 0.25,

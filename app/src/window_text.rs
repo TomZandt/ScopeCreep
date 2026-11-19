@@ -138,6 +138,10 @@ pub fn panel_title(display_name: &str, context: &DisplayContext, full: String) -
             if let crate::vectorscope::Plots::Only(zoom) = crate::vectorscope::Plots::from_setting(setting(crate::vectorscope::PLOTS_SETTING)) {
                 tags.push(format!("{} % plot only", zoom.factor() as u32 * 100));
             }
+            // The tonal range changes what is plotted and what clipping counts (#124).
+            if let Some(tag) = crate::vectorscope::Tonal::from_setting(setting(crate::vectorscope::TONAL_SETTING)).tag() {
+                tags.push(tag.into());
+            }
             (crate::vectorscope::NAME.into(), tags)
         }
         "Saturation heatmap" => {

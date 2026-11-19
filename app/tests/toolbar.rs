@@ -399,19 +399,19 @@ mod vectorscope_chips {
     fn plots_are_three_chips_one_at_a_time_both_by_default_and_mono_is_a_toggle_off_by_default() {
         let mut s = PanelSettings::default();
         let t = toolbar(&s);
-        assert_eq!(t.chips.iter().map(|c| c.text.as_str()).collect::<Vec<_>>(), ["100 %", "200 %", "Both", "Mono"]);
-        assert_eq!(t.on, [false, false, true, false]);
+        assert_eq!(t.chips.iter().map(|c| c.text.as_str()).collect::<Vec<_>>(), ["100 %", "200 %", "Both", "Mono", "All", "Shadows", "Mids", "Highlights"]);
+        assert_eq!(t.on, [false, false, true, false, true, false, false, false]);
         let (k, v) = t.click(0).unwrap();
         s.set(NAME, k, v);
-        assert_eq!(toolbar(&s).on, [true, false, false, false]);
+        assert_eq!(toolbar(&s).on, [true, false, false, false, true, false, false, false]);
         let t = toolbar(&s);
         let (k, v) = t.click(3).unwrap();
         s.set(NAME, k, v);
-        assert_eq!(toolbar(&s).on, [true, false, false, true]);
+        assert_eq!(toolbar(&s).on, [true, false, false, true, true, false, false, false]);
         let t = toolbar(&s);
         let (k, v) = t.click(3).unwrap();
         s.set(NAME, k, v);
-        assert_eq!(toolbar(&s).on, [true, false, false, false], "a second click turns mono off");
+        assert_eq!(toolbar(&s).on, [true, false, false, false, true, false, false, false], "a second click turns mono off");
     }
 
     #[test]
@@ -420,7 +420,7 @@ mod vectorscope_chips {
         s.set(NAME, "plots", "200");
         s.set(NAME, "mono", "on");
         let back = PanelSettings::from_text(&s.to_text());
-        assert_eq!(toolbar(&back).on, [false, true, false, true]);
+        assert_eq!(toolbar(&back).on, [false, true, false, true, true, false, false, false]);
         assert_eq!(popover_defs(&SETTINGS, &TOOLBAR).iter().map(|d| d.key).collect::<Vec<_>>(), ["brightness", "spread", "targets", "skin-line"]);
     }
 
@@ -434,5 +434,25 @@ mod vectorscope_chips {
         assert!(tags("100", "off").contains(&"100 % plot only".to_string()));
         assert!(tags("200", "off").contains(&"200 % plot only".to_string()));
         assert_eq!(tags("both", "on"), tags("both", "off"), "mono changes no reading");
+    }
+
+    #[test]
+    fn the_tonal_range_is_four_chips_one_at_a_time_all_by_default_tagged_when_not_all_and_remembered() {
+        let mut s = PanelSettings::default();
+        assert_eq!(&toolbar(&s).on[4..], [true, false, false, false], "All is lit when nothing is stored");
+        for (chip, value, tag) in [(5, "shadows", "shadows only"), (6, "mids", "mids only"), (7, "highlights", "highlights only")] {
+            let t = toolbar(&s);
+            let (k, v) = t.click(chip).unwrap();
+            assert_eq!((k, v), ("tonal", value));
+            s.set(NAME, k, v);
+            let on = toolbar(&PanelSettings::from_text(&s.to_text())).on;
+            assert_eq!(&on[4..], (4..8).map(|i| i == chip).collect::<Vec<_>>(), "{value} is the only one lit, and remembered");
+            let settings: Settings = [("tonal".to_string(), value.to_string())].into();
+            let tags = panel_title(NAME, &DisplayContext { settings, ..DisplayContext::default() }, String::new()).tags;
+            assert!(tags.contains(&tag.to_string()), "{tags:?}");
+        }
+        let settings: Settings = [("tonal".to_string(), "all".to_string())].into();
+        let tags = panel_title(NAME, &DisplayContext { settings, ..DisplayContext::default() }, String::new()).tags;
+        assert!(!tags.iter().any(|t| t.contains("only")), "All is not tagged: {tags:?}");
     }
 }
