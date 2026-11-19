@@ -1,3 +1,7 @@
+
+## Note, 2026-11-19: amounts are sliders (#83, #84)
+
+A setting is either a list of choices or an **amount**: a number with a range, a step, a default, a unit, how many digits to show, and a map from the list values an earlier version saved. Choices stay lists; amounts are sliders in the popover with the number and its unit beside them, and a "Reset to default" row under each. The menu stays open while a slider is dragged, and the Panel is drawn again after each change. The range is limited to sensible values (the same rule as the lists: nothing that could mislead), a dragged value is a multiple of the step, and every default reproduces the look of the old default exactly. The file still keeps one value per Panel setting, now a plain number for an amount; a stored number is clamped into the range, one that cannot be read falls back to the default, and an old list value maps to the number it produced (trace brightness Dimmer, Normal, Brighter are 48, 100 and 240 %, both spellings "dim" and "dimmer"). The decision above is otherwise unchanged. Trace brightness is the first amount (luma and Colour Waveform); the rest of spec #83 follows.
 # Panel settings are lists of choices, kept by display name in a plain-text file, in a menu the app draws itself
 
 ## Decision

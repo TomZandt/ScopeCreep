@@ -12,7 +12,7 @@ use crate::colour_setup::Levels;
 use crate::measurement::{luma_weights_of, MeasuredSpace, Measurement, LUMA_SETTING};
 use crate::gpu_frame::GpuFrame;
 use crate::waveform_scale::{Unit, UNIT_SETTING};
-use crate::settings::{Choice, SettingDef};
+use crate::settings::{Amount, Choice, SettingDef};
 use std::sync::{Arc, Mutex};
 
 /// Code values on the 10-bit scale: 0 to 1023.
@@ -57,27 +57,32 @@ impl Levels {
     }
 }
 
-/// How bright the trace is drawn: the gain of the phosphor response (#53).
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum Brightness {
-    Normal,
-    Dimmer,
-    Brighter,
-}
+/// How bright the trace is drawn, in percent of the normal look (the trace brightness slider, #84).
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Brightness(pub f32);
 
 impl Brightness {
-    /// The gain in `1 - exp(-gain * density)`, where density is 1 for a trace spread evenly over every code.
+    /// The gain in `1 - exp(-gain * density)`, where density is 1 for a trace spread evenly over every code:
+    /// 0.25 at 100 %, the look before the slider (#53).
     fn gain(self) -> f32 {
-        match self {
-            Brightness::Dimmer => 0.12,
-            Brightness::Normal => 0.25,
-            Brightness::Brighter => 0.6,
-        }
+        0.25 * (self.0 / 100.0)
     }
 }
 
+/// The trace brightness slider, the same on every scope that draws a trace: 100 % is the normal look. The lists
+/// earlier versions saved (Dimmer, Normal, Brighter) map to the percentages that gave the same gains.
+pub const BRIGHTNESS_AMOUNT: Amount = Amount {
+    min: 20.0,
+    max: 300.0,
+    step: 5.0,
+    default: 100.0,
+    unit: " %",
+    decimals: 0,
+    legacy: &[("normal", 100.0), ("dim", 48.0), ("dimmer", 48.0), ("brighter", 240.0)],
+};
+
 /// How the waveform is drawn. Drawing only: it never changes what is measured or what the label says.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Look {
     pub brightness: Brightness,
     /// A soft spread of about 1 device pixel, done in a separate pass into a texture.
@@ -86,7 +91,7 @@ pub struct Look {
 
 impl Default for Look {
     fn default() -> Look {
-        Look { brightness: Brightness::Normal, spread: true }
+        Look { brightness: Brightness(BRIGHTNESS_AMOUNT.default), spread: true }
     }
 }
 
@@ -1082,6 +1087,7 @@ pub const SETTINGS: [SettingDef; 6] = [
     SettingDef {
         key: LUMA_SETTING,
         label: "Luma weights",
+        amount: None,
         choices: &[
             Choice { value: "primaries", text: "From the Measured Space's primaries" },
             Choice { value: "match-resolve", text: "Match Resolve's waveform" },
@@ -1090,21 +1096,20 @@ pub const SETTINGS: [SettingDef; 6] = [
     SettingDef {
         key: BRIGHTNESS_SETTING,
         label: "Trace brightness",
-        choices: &[
-            Choice { value: "normal", text: "Normal" },
-            Choice { value: "dimmer", text: "Dimmer" },
-            Choice { value: "brighter", text: "Brighter" },
-        ],
+        amount: Some(BRIGHTNESS_AMOUNT),
+        choices: &[],
     },
     SettingDef {
         key: SPREAD_SETTING,
         label: "Soft spread",
+        amount: None,
         choices: &[Choice { value: "on", text: "On (about 1 pixel)" }, Choice { value: "off", text: "Off" }],
     },
     // Shown as the Y R G B chips on the title bar, not in the popover: the letters of the chips that are on.
     SettingDef {
         key: CHANNELS_SETTING,
         label: "Channels",
+        amount: None,
         choices: &[
             Choice { value: "y", text: "Y" },
             Choice { value: "r", text: "R" },
@@ -1127,6 +1132,7 @@ pub const SETTINGS: [SettingDef; 6] = [
     SettingDef {
         key: COLORISE_SETTING,
         label: "Colorise",
+        amount: None,
         choices: &[Choice { value: crate::toolbar::TOGGLE_OFF, text: "Off" }, Choice { value: "on", text: "On" }],
     },
     SCALE_DEF,
@@ -1136,11 +1142,12 @@ pub const SETTINGS: [SettingDef; 6] = [
 const SCALE_DEF: SettingDef = SettingDef {
     key: UNIT_SETTING,
     label: "Scale units",
+    amount: None,
     choices: &[Choice { value: "codes", text: "10-bit codes" }, Choice { value: "percent", text: "Percent" }, Choice { value: "nits", text: "Nits" }],
 };
 
 /// The same without nits, for an Output Colour Space that has no light to name.
-const SCALE_DEF_NO_NITS: SettingDef = SettingDef { key: UNIT_SETTING, label: "Scale units", choices: SCALE_DEF.choices.split_at(2).0 };
+const SCALE_DEF_NO_NITS: SettingDef = SettingDef { key: UNIT_SETTING, label: "Scale units", amount: None, choices: SCALE_DEF.choices.split_at(2).0 };
 
 /// The key of the Colorise setting: whether the traces are drawn in colour.
 pub const COLORISE_SETTING: &str = "colorise";
@@ -1183,11 +1190,7 @@ pub const SPREAD_SETTING: &str = "spread";
 
 /// How the waveform is drawn, from its settings (a value that is not a choice falls back to the default).
 pub fn look_from(settings: &crate::settings::Settings) -> Look {
-    let brightness = match settings.get(BRIGHTNESS_SETTING).map(String::as_str) {
-        Some("dimmer") => Brightness::Dimmer,
-        Some("brighter") => Brightness::Brighter,
-        _ => Brightness::Normal,
-    };
+    let brightness = Brightness(BRIGHTNESS_AMOUNT.read(settings.get(BRIGHTNESS_SETTING).map(String::as_str)));
     Look { brightness, spread: settings.get(SPREAD_SETTING).map(String::as_str) != Some("off") }
 }
 

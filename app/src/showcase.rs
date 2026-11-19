@@ -59,8 +59,8 @@ pub fn showcase(scale: f32) -> Showcase {
     // Popover and tooltip side by side.
     prims.push(caption("Popover, Tooltip", margin, y, label_w));
     let defs = [
-        crate::settings::SettingDef { key: "weights", label: "Luma weights", choices: &[crate::settings::Choice { value: "a", text: "Measured Space" }, crate::settings::Choice { value: "b", text: "Match Resolve" }] },
-        crate::settings::SettingDef { key: "spread", label: "Soft spread", choices: &[crate::settings::Choice { value: "on", text: "On" }, crate::settings::Choice { value: "off", text: "Off" }] },
+        crate::settings::SettingDef { key: "weights", label: "Luma weights", amount: None, choices: &[crate::settings::Choice { value: "a", text: "Measured Space" }, crate::settings::Choice { value: "b", text: "Match Resolve" }] },
+        crate::settings::SettingDef { key: "spread", label: "Soft spread", amount: None, choices: &[crate::settings::Choice { value: "on", text: "On" }, crate::settings::Choice { value: "off", text: "Off" }] },
     ];
     let current = crate::settings::PanelSettings::default().resolve("sample", &defs);
     let menu = Menu::new(0, &defs, &current).expect("the sample has settings");

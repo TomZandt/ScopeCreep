@@ -29,7 +29,7 @@ use scopecreep::flat_rects::FlatRects;
 use scopecreep::components::{self, Align, BarKind, Prim, State, Tooltip};
 use scopecreep::toolbar::Toolbar;
 use scopecreep::window_text;
-use scopecreep::settings::{Menu, PanelSettings};
+use scopecreep::settings::{Amount, Menu, PanelSettings};
 use scopecreep::style;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -176,6 +176,8 @@ struct AppWindow {
     settings: Arc<Mutex<PanelSettings>>,
     /// The right-click menu, while open, with where it opened.
     menu: Option<(Menu, [f32; 2])>,
+    /// The key of the slider being dragged in the menu, while the button is down.
+    slider_drag: Option<&'static str>,
     /// The saved layouts (#98), and whether the open menu is their menu (opened by a right-click on the status
     /// line) and not a Panel's settings.
     layouts: Layouts,
@@ -337,6 +339,7 @@ impl AppWindow {
             grid,
             settings,
             menu: None,
+            slider_drag: None,
             layouts: layouts_file().and_then(|path| std::fs::read_to_string(path).ok()).map_or_else(Layouts::default, |text| Layouts::from_text(&text)),
             layout_menu: false,
             renaming: None,
@@ -452,6 +455,13 @@ impl AppWindow {
 
     fn pointer_moved(&mut self, x: f32, y: f32) {
         self.cursor = [x, y];
+        if let (Some(key), Some((menu, _)), Some(rect)) = (self.slider_drag, self.menu.as_ref(), self.menu_rect()) {
+            if let Some(value) = menu.slider_value(rect, key, x, self.scale) {
+                let panel = menu.panel;
+                self.choose(panel, key, &Amount::store(value));
+            }
+            return;
+        }
         self.update_hover();
         if let Some(panel) = self.pointer_panel {
             self.display_pointer(panel, Pointer::Move(self.cursor));
@@ -642,12 +652,22 @@ impl AppWindow {
             return self.layout_menu_click();
         }
         let (Some((menu, _)), Some(rect)) = (self.menu.as_ref(), self.menu_rect()) else { return };
-        let choice = menu.choice_at(rect, self.cursor, self.scale);
+        let (panel, cursor, scale) = (menu.panel, self.cursor, self.scale);
+        // A press on a slider takes it (the menu stays open while it is dragged); on a reset row, sets the default.
+        if let Some((key, value)) = menu.slider_at(rect, cursor, scale) {
+            self.slider_drag = Some(key);
+            self.choose(panel, key, &Amount::store(value));
+            return;
+        }
+        if let Some((key, value)) = menu.reset_at(rect, cursor, scale) {
+            self.choose(panel, key, &Amount::store(value));
+            return;
+        }
+        let choice = menu.choice_at(rect, cursor, scale);
         if let Some((key, value)) = choice {
-            let panel = menu.panel;
             self.choose(panel, key, value);
         }
-        if choice.is_none() && Menu::contains(rect, self.cursor) {
+        if choice.is_none() && Menu::contains(rect, cursor) {
             return;
         }
         self.menu = None;
@@ -701,6 +721,7 @@ impl AppWindow {
     fn button(&mut self, state: ElementState) {
         // Letting go always ends a drag, even with a menu open over it (a right click can open one meanwhile).
         if state == ElementState::Released {
+            self.slider_drag = None;
             if let Some(panel) = self.pointer_panel.take() {
                 self.display_pointer(panel, Pointer::Up);
             }

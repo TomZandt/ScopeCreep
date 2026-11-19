@@ -45,7 +45,7 @@ pub fn band_at(percent: f64) -> Option<&'static Band> {
 
 /// The settings: the legend (on by default) and B/W, a chip on the title bar (grey by default, as ARRI draws it).
 pub static SETTINGS: [SettingDef; 2] = [
-    SettingDef { key: "legend", label: "Legend", choices: &[Choice { value: "on", text: "On" }, Choice { value: "off", text: "Off" }] },
+    SettingDef { key: "legend", label: "Legend", amount: None, choices: &[Choice { value: "on", text: "On" }, Choice { value: "off", text: "Off" }] },
     BW_DEFAULT_GREY,
 ];
 pub static TOOLBAR: [ToolbarDef; 1] = BW_TOOLBAR;

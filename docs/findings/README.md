@@ -73,3 +73,4 @@ Anything the ticket could not verify becomes a GitHub issue (or a comment on the
 | [145](145-colour-waveform-out.md) | Does the Window register 8 Panels, fill every cell of its default layout at the minimum size, and still recall a layout saved with the Colour Waveform (pure seam)? |
 | [123](123-vectorscope-chips.md) | Does the Vectorscope title bar choose 100 %, 200 % or both plots and a colour or mono trace, remembered, with the plots tagged and the counts unchanged (headless)? |
 | [109](109-feed-loop.md) | Refactor: do the app and the tests run one Feed loop, and does it measure again after a setting or a Colour Setup change with Resolve stopped, and stay quiet when idle? |
+| [84](84-brightness-slider.md) | Does a slider row in the Panel menu set waveform trace brightness (range, step, clamp, reset, legacy list values, default identical to the old Normal, drag past the ends) without changing the label or counts (pure and display seam)? |

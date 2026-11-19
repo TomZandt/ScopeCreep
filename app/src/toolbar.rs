@@ -13,8 +13,8 @@ pub const TOGGLE_OFF: &str = "off";
 /// The B/W toggle (#118): the setting and its chip, for the Panels that draw their unpainted picture in Luma grey
 /// or in colour. The setting's first choice is its default, so each Panel picks the one that suits it.
 pub const BW_SETTING: &str = "bw";
-pub const BW_DEFAULT_COLOUR: SettingDef = SettingDef { key: BW_SETTING, label: "Black and white", choices: &[Choice { value: TOGGLE_OFF, text: "Colour" }, Choice { value: "on", text: "Black and white" }] };
-pub const BW_DEFAULT_GREY: SettingDef = SettingDef { key: BW_SETTING, label: "Black and white", choices: &[Choice { value: "on", text: "Black and white" }, Choice { value: TOGGLE_OFF, text: "Colour" }] };
+pub const BW_DEFAULT_COLOUR: SettingDef = SettingDef { key: BW_SETTING, label: "Black and white", amount: None, choices: &[Choice { value: TOGGLE_OFF, text: "Colour" }, Choice { value: "on", text: "Black and white" }] };
+pub const BW_DEFAULT_GREY: SettingDef = SettingDef { key: BW_SETTING, label: "Black and white", amount: None, choices: &[Choice { value: "on", text: "Black and white" }, Choice { value: TOGGLE_OFF, text: "Colour" }] };
 pub static BW_TOOLBAR: [ToolbarDef; 1] = [ToolbarDef {
     key: BW_SETTING,
     mode: ChipMode::Toggle,

@@ -309,7 +309,7 @@ const PLOT_H: u32 = 500;
 fn the_trace_is_brighter_where_more_pixels_land_and_is_not_a_flat_floor() {
     let mut b = Bench::new("phosphor-density");
     b.play(1920, 1080, &thinning_gradient());
-    b.waveform.set_look(look(Brightness::Normal, false));
+    b.waveform.set_look(look(Brightness(100.0), false));
     let image = draw(&b, PLOT_W, PLOT_H);
     let layout = PlotLayout::new([0.0, 0.0, PLOT_W as f32, PLOT_H as f32], 1.0);
     let dense = mean_drawn(&image, PLOT_W, &layout, 1920, 40..80, 1000, 1400);
@@ -325,7 +325,7 @@ fn one_stray_pixel_shows_in_the_plot_but_is_clearly_dimmer_than_a_dense_area() {
     let mut b = Bench::new("phosphor-stray");
     // Mid grey everywhere, and one pixel at code 800 in column 1000.
     b.play(1920, 1080, &picture(1920, 1080, |x, from_top| if (x, from_top) == (1000, 300) { grey(800) } else { grey(600) }));
-    b.waveform.set_look(look(Brightness::Normal, false));
+    b.waveform.set_look(look(Brightness(100.0), false));
     let image = draw(&b, PLOT_W, PLOT_H);
     let layout = PlotLayout::new([0.0, 0.0, PLOT_W as f32, PLOT_H as f32], 1.0);
     let (stray, dense) = (drawn_at(&image, PLOT_W, &layout, 1000, 1920, 800), drawn_at(&image, PLOT_W, &layout, 1000, 1920, 600));
@@ -340,7 +340,7 @@ fn trace_brightness_changes_the_drawn_brightness() {
     b.play(1920, 1080, &thinning_gradient());
     let layout = PlotLayout::new([0.0, 0.0, PLOT_W as f32, PLOT_H as f32], 1.0);
     let mut means = Vec::new();
-    for brightness in [Brightness::Dimmer, Brightness::Normal, Brightness::Brighter] {
+    for brightness in [Brightness(48.0), Brightness(100.0), Brightness(240.0)] {
         b.waveform.set_look(look(brightness, false));
         let image = draw(&b, PLOT_W, PLOT_H);
         means.push(mean_drawn(&image, PLOT_W, &layout, 1920, 40..400, 1000, 1400));
@@ -360,8 +360,8 @@ fn soft_spread_off_draws_a_code_on_its_own_row_and_on_spreads_it_by_about_one_pi
         let image = draw(&b, width, height);
         [-4i32, -2, -1, 0, 1, 2, 4].map(|d| drawn_at(&image, width, &layout, 1000, 1920, (600 + d) as u32))
     };
-    let off = rows(look(Brightness::Normal, false));
-    let on = rows(look(Brightness::Normal, true));
+    let off = rows(look(Brightness(100.0), false));
+    let on = rows(look(Brightness(100.0), true));
     let base = off[0];
     assert!(off[3] > 200.0 && off[2] == base && off[4] == base && off[1] == base, "off: only the code's own row is lit {off:?}");
     assert!(on[2] > base + 10.0 && on[4] > base + 10.0, "on: the next rows are lit {on:?}");
@@ -373,7 +373,7 @@ fn soft_spread_off_draws_a_code_on_its_own_row_and_on_spreads_it_by_about_one_pi
 fn the_same_frame_looks_the_same_brightness_in_a_large_and_a_small_panel() {
     let mut b = Bench::new("phosphor-size");
     b.play(1920, 1080, &picture(1920, 1080, |_, from_top| grey((from_top as f32 * 1023.0 / 1079.0).round() as u32)));
-    b.waveform.set_look(look(Brightness::Normal, false));
+    b.waveform.set_look(look(Brightness(100.0), false));
     let mean = |width: u32, height: u32| {
         let image = draw(&b, width, height);
         let layout = PlotLayout::new([0.0, 0.0, width as f32, height as f32], 1.0);

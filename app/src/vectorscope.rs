@@ -120,17 +120,19 @@ pub const SETTINGS: [SettingDef; 6] = [
     SettingDef {
         key: BRIGHTNESS_SETTING,
         label: "Trace brightness",
+        amount: None,
         choices: &[Choice { value: "normal", text: "Normal" }, Choice { value: "bright", text: "Brighter" }, Choice { value: "dim", text: "Dimmer" }],
     },
-    SettingDef { key: SPREAD_SETTING, label: "Soft spread", choices: &[Choice { value: "on", text: "On" }, Choice { value: "off", text: "Off" }] },
-    SettingDef { key: TARGETS_SETTING, label: "Colour targets", choices: &[Choice { value: "75", text: "75 % bars" }, Choice { value: "100", text: "100 % bars" }] },
-    SettingDef { key: SKIN_LINE_SETTING, label: "Skin-tone line", choices: &[Choice { value: "on", text: "On" }, Choice { value: "off", text: "Off" }] },
+    SettingDef { key: SPREAD_SETTING, label: "Soft spread", amount: None, choices: &[Choice { value: "on", text: "On" }, Choice { value: "off", text: "Off" }] },
+    SettingDef { key: TARGETS_SETTING, label: "Colour targets", amount: None, choices: &[Choice { value: "75", text: "75 % bars" }, Choice { value: "100", text: "100 % bars" }] },
+    SettingDef { key: SKIN_LINE_SETTING, label: "Skin-tone line", amount: None, choices: &[Choice { value: "on", text: "On" }, Choice { value: "off", text: "Off" }] },
     SettingDef {
         key: PLOTS_SETTING,
         label: "Plots",
+        amount: None,
         choices: &[Choice { value: "both", text: "100 % and 200 %" }, Choice { value: "100", text: "100 % only" }, Choice { value: "200", text: "200 % only" }],
     },
-    SettingDef { key: MONO_SETTING, label: "Trace colour", choices: &[Choice { value: TOGGLE_OFF, text: "Colour" }, Choice { value: "on", text: "Mono" }] },
+    SettingDef { key: MONO_SETTING, label: "Trace colour", amount: None, choices: &[Choice { value: TOGGLE_OFF, text: "Colour" }, Choice { value: "on", text: "Mono" }] },
 ];
 
 /// The chips on the title bar (#123): which plots show, one at a time, and the colour or mono trace.

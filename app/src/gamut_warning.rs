@@ -60,6 +60,7 @@ static SETTINGS: [SettingDef; 3] = [
     SettingDef {
         key: LOW_SETTING,
         label: "Blue starts at",
+        amount: None,
         choices: &[
             Choice { value: "10", text: "10 %" },
             Choice { value: "5", text: "5 %" },
@@ -70,6 +71,7 @@ static SETTINGS: [SettingDef; 3] = [
     SettingDef {
         key: HIGH_SETTING,
         label: "Red starts at",
+        amount: None,
         choices: &[
             Choice { value: "90", text: "90 %" },
             Choice { value: "95", text: "95 %" },
@@ -80,6 +82,7 @@ static SETTINGS: [SettingDef; 3] = [
     SettingDef {
         key: R103_SETTING,
         label: "EBU R103 tolerance (-5 % to 105 %)",
+        amount: None,
         choices: &[Choice { value: "off", text: "Off" }, Choice { value: "on", text: "On" }],
     },
 ];

@@ -125,6 +125,7 @@ const SETTINGS: [SettingDef; 2] = [
     SettingDef {
         key: BRIGHTNESS_SETTING,
         label: "Trace brightness",
+        amount: None,
         choices: &[
             Choice { value: "normal", text: "Normal" },
             Choice { value: "bright", text: "Bright (sparse colours)" },
@@ -134,6 +135,7 @@ const SETTINGS: [SettingDef; 2] = [
     SettingDef {
         key: TIMELINE_SETTING,
         label: "Timeline triangle",
+        amount: None,
         choices: &[Choice { value: "on", text: "Shown" }, Choice { value: "off", text: "Hidden" }],
     },
 ];

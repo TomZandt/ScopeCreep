@@ -25,6 +25,7 @@ const SETTINGS: [SettingDef; 2] = [
     SettingDef {
         key: SCALE_SETTING,
         label: "Scale (hot end)",
+        amount: None,
         choices: &[
             Choice { value: "75", text: "75 % (default)" },
             Choice { value: "25", text: "25 %" },
@@ -34,7 +35,7 @@ const SETTINGS: [SettingDef; 2] = [
             Choice { value: "200", text: "200 %" },
         ],
     },
-    SettingDef { key: LEGEND_SETTING, label: "Legend", choices: &[Choice { value: "on", text: "On" }, Choice { value: "off", text: "Off" }] },
+    SettingDef { key: LEGEND_SETTING, label: "Legend", amount: None, choices: &[Choice { value: "on", text: "On" }, Choice { value: "off", text: "Off" }] },
 ];
 
 /// Saturation as a percentage of the vectorscope's 100 % ring, for an encoded `rgb` and luma `weights`.

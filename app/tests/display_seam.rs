@@ -193,7 +193,7 @@ fn the_waveform_offers_luma_weights_and_the_first_is_from_primaries() {
     let b = Bench::new("luma-menu");
     let defs = b.set.setting_defs(1);
     assert_eq!(defs.iter().map(|d| d.key).collect::<Vec<_>>(), ["luma", "brightness", "spread", "channels", "colorise", "scale_units"]);
-    assert_eq!(defs[1].choices[0].value, "normal", "trace brightness starts normal");
+    assert_eq!(defs[1].amount.map(|a| (a.default, a.unit)), Some((100.0, " %")), "trace brightness is a slider that starts at the normal look");
     assert_eq!(defs[2].choices[0].value, "on", "the soft spread starts on");
     assert_eq!(defs[0].choices.iter().map(|c| c.value).collect::<Vec<_>>(), ["primaries", "match-resolve"]);
     assert_eq!(b.set.setting_defs(0).iter().map(|d| d.key).collect::<Vec<_>>(), ["bw"]);
@@ -265,6 +265,13 @@ fn the_trace_brightness_and_soft_spread_settings_change_the_drawing_but_not_the_
     let dimmer = lit(&b, &settings);
     assert!(dimmer < normal && normal < brighter, "dimmer {dimmer} < normal {normal} < brighter {brighter}");
     settings.set(name, "brightness", "normal");
+    // The slider's default is the old Normal exactly, and a value between steps sits between their drawings (#84).
+    assert_eq!(lit(&b, &settings), normal, "the old list value Normal draws as the default does");
+    settings.set(name, "brightness", "170");
+    let between = lit(&b, &settings);
+    assert!(normal < between && between < brighter, "100 % < 170 % < 240 %: {normal} {between} {brighter}");
+    settings.set(name, "brightness", "100");
+    assert_eq!(lit(&b, &settings), normal);
     settings.set(name, "spread", "off");
     let unspread = lit(&b, &settings);
     assert_ne!(unspread, normal, "the soft spread changes the drawing");

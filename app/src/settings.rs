@@ -15,12 +15,62 @@ pub struct Choice {
     pub text: &'static str,
 }
 
-/// A setting a display offers. The first choice is the default.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+/// An amount: a number in a range, set with a slider (spec #83, ADR 0013). Whatever is stored, a reader gets a
+/// value in the range.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Amount {
+    pub min: f32,
+    pub max: f32,
+    /// What the slider moves in: a dragged value is a multiple of it from `min`.
+    pub step: f32,
+    pub default: f32,
+    /// Shown after the number, with its space (" %").
+    pub unit: &'static str,
+    /// Digits after the decimal point in the number shown.
+    pub decimals: usize,
+    /// Values an earlier version saved as a list choice, and the number each one produced.
+    pub legacy: &'static [(&'static str, f32)],
+}
+
+impl Amount {
+    /// The valid value for what was stored (`None`, or something unreadable, is the default; a leftover list
+    /// value is the number it produced; a number out of the range is clamped).
+    pub fn read(&self, stored: Option<&str>) -> f32 {
+        let Some(stored) = stored else { return self.default };
+        let number = self.legacy.iter().find(|(old, _)| *old == stored).map(|(_, v)| *v).or_else(|| stored.parse::<f32>().ok().filter(|v| v.is_finite()));
+        number.map_or(self.default, |v| v.clamp(self.min, self.max))
+    }
+
+    /// The nearest step to `fraction` (0 to 1) along the slider.
+    pub fn at_fraction(&self, fraction: f32) -> f32 {
+        let steps = ((fraction.clamp(0.0, 1.0) * (self.max - self.min)) / self.step).round();
+        (self.min + steps * self.step).clamp(self.min, self.max)
+    }
+
+    /// How far along the slider (0 to 1) `value` is.
+    pub fn fraction(&self, value: f32) -> f32 {
+        ((value - self.min) / (self.max - self.min)).clamp(0.0, 1.0)
+    }
+
+    /// The number with its unit, as the slider and the labels show it.
+    pub fn text(&self, value: f32) -> String {
+        format!("{value:.*}{}", self.decimals, self.unit)
+    }
+
+    /// How a value is kept in the saved text.
+    pub fn store(value: f32) -> String {
+        format!("{value}")
+    }
+}
+
+/// A setting a display offers: a short list of choices (the first is the default), or an amount.
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub struct SettingDef {
     pub key: &'static str,
     /// The menu's heading for the setting.
     pub label: &'static str,
+    /// An amount, set with a slider; `choices` is then empty.
+    pub amount: Option<Amount>,
     pub choices: &'static [Choice],
 }
 
@@ -92,6 +142,9 @@ impl PanelSettings {
         let chosen = self.panels.get(panel);
         defs.iter()
             .filter_map(|def| {
+                if let Some(amount) = &def.amount {
+                    return Some((def.key.to_string(), Amount::store(amount.read(chosen.and_then(|c| c.get(def.key)).map(String::as_str)))));
+                }
                 let wanted = chosen.and_then(|c| c.get(def.key));
                 let choice = def.choices.iter().find(|c| Some(c.value) == wanted.map(String::as_str)).or(def.choices.first())?;
                 Some((def.key.to_string(), choice.value.to_string()))
@@ -148,16 +201,20 @@ pub const MENU_ROW: f32 = crate::style::SPACE_MENU_ROW;
 pub const MENU_PAD: f32 = crate::style::SPACE_MENU_PAD;
 
 /// What one row of the menu says.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum MenuRow {
     /// A setting's name; not clickable.
     Heading(String),
     /// A choice; `on` when it is the setting's current value.
     Choice { key: &'static str, value: &'static str, text: String, on: bool },
+    /// An amount: a slider with its number.
+    Slider { key: &'static str, amount: Amount, value: f32 },
+    /// The way back to an amount's default, under its slider.
+    Reset { key: &'static str, value: f32, text: String },
 }
 
 /// The right-click menu of one Panel.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct Menu {
     /// The Panel (its index in the grid) the menu belongs to.
     pub panel: usize,
@@ -174,6 +231,12 @@ impl Menu {
         let mut rows = Vec::new();
         for def in defs {
             rows.push(MenuRow::Heading(def.label.to_string()));
+            if let Some(amount) = def.amount {
+                let value = amount.read(current.get(def.key).map(String::as_str));
+                rows.push(MenuRow::Slider { key: def.key, amount, value });
+                rows.push(MenuRow::Reset { key: def.key, value: amount.default, text: format!("Reset to default ({})", amount.text(amount.default)) });
+                continue;
+            }
             for choice in def.choices {
                 rows.push(MenuRow::Choice { key: def.key, value: choice.value, text: choice.text.to_string(), on: current.get(def.key).map(String::as_str) == Some(choice.value) });
             }
@@ -204,7 +267,46 @@ impl Menu {
         }
         match self.rows.get((offset / (MENU_ROW * scale)) as usize)? {
             MenuRow::Choice { key, value, .. } => Some((key, value)),
-            MenuRow::Heading(_) => None,
+            _ => None,
+        }
+    }
+
+    /// The row under `point`'s y, when `point` is inside the menu's width.
+    fn row_at(&self, rect: [f32; 4], point: [f32; 2], scale: f32) -> Option<usize> {
+        let offset = point[1] - rect[1] - MENU_PAD * scale;
+        (offset >= 0.0 && point[0] >= rect[0] && point[0] < rect[0] + rect[2]).then(|| (offset / (MENU_ROW * scale)) as usize)
+    }
+
+    /// Where a slider's row begins, for [`crate::components::Slider`] to place its parts.
+    pub fn slider_origin(rect: [f32; 4], row: usize, scale: f32) -> [f32; 2] {
+        [rect[0] + crate::style::SPACE_MENU_HEADING_LEFT * scale, Menu::row_top(rect, row, scale)]
+    }
+
+    /// The setting and value a press at `point` means when it is on a slider's track, handle or number.
+    pub fn slider_at(&self, rect: [f32; 4], point: [f32; 2], scale: f32) -> Option<(&'static str, f32)> {
+        let row = self.row_at(rect, point, scale)?;
+        let MenuRow::Slider { key, .. } = self.rows.get(row)? else { return None };
+        let at = Menu::slider_origin(rect, row, scale);
+        let slider = crate::components::Slider { value: 0.0, number: String::new() };
+        let (grab, layout) = (slider.grab(at, scale), slider.layout(at, scale));
+        let in_row = point[0] >= grab[0] && point[0] < layout.row[0] + layout.row[2];
+        in_row.then(|| self.slider_value(rect, key, point[0], scale)).flatten().map(|v| (*key, v))
+    }
+
+    /// The value of slider `key` with the pointer at `x`, wherever it is: a drag goes on past the ends of the
+    /// track and out of the menu.
+    pub fn slider_value(&self, rect: [f32; 4], key: &str, x: f32, scale: f32) -> Option<f32> {
+        let row = self.rows.iter().position(|r| matches!(r, MenuRow::Slider { key: k, .. } if *k == key))?;
+        let MenuRow::Slider { amount, .. } = &self.rows[row] else { return None };
+        let at = Menu::slider_origin(rect, row, scale);
+        Some(amount.at_fraction(crate::components::Slider { value: 0.0, number: String::new() }.value_at(at, x, scale)))
+    }
+
+    /// The setting and default value when `point` is on an amount's reset row.
+    pub fn reset_at(&self, rect: [f32; 4], point: [f32; 2], scale: f32) -> Option<(&'static str, f32)> {
+        match self.rows.get(self.row_at(rect, point, scale)?)? {
+            MenuRow::Reset { key, value, .. } => Some((key, *value)),
+            _ => None,
         }
     }
 

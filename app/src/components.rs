@@ -361,6 +361,17 @@ pub fn popover(menu: &Menu, area: [f32; 4], cursor: [f32; 2], scale: f32) -> Vec
                 let left = area[0] + style::SPACE_MENU_HEADING_LEFT * scale;
                 prims.push(text(label, [left, top, text_width, row_rect[3]], Face::Label, style::TEXT_SECONDARY, Align::Left));
             }
+            MenuRow::Slider { amount, value, .. } => {
+                let state = if contains(row_rect, cursor) { State::Hover } else { State::Normal };
+                prims.extend(Slider { value: amount.fraction(*value), number: amount.text(*value) }.draw(Menu::slider_origin(area, i, scale), state, scale));
+            }
+            MenuRow::Reset { text: label, .. } => {
+                if contains(row_rect, cursor) {
+                    prims.push(rect(row_rect, style::STATE_HOVER));
+                }
+                let left = area[0] + style::SPACE_MENU_TEXT_LEFT * scale;
+                prims.push(text(label, [left, top, text_width, row_rect[3]], Face::Label, style::TEXT_SECONDARY, Align::Left));
+            }
             MenuRow::Choice { text: label, on, .. } => {
                 if contains(row_rect, cursor) {
                     prims.push(rect(row_rect, style::STATE_HOVER));

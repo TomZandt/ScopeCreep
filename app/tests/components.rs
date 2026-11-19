@@ -192,8 +192,8 @@ fn a_slider_states_differ_and_a_disabled_one_is_dimmed() {
 }
 
 const DEFS: [SettingDef; 2] = [
-    SettingDef { key: "weights", label: "Weights", choices: &[Choice { value: "a", text: "Alpha" }, Choice { value: "b", text: "Beta" }] },
-    SettingDef { key: "spread", label: "Spread", choices: &[Choice { value: "on", text: "On" }, Choice { value: "off", text: "Off" }] },
+    SettingDef { key: "weights", label: "Weights", amount: None, choices: &[Choice { value: "a", text: "Alpha" }, Choice { value: "b", text: "Beta" }] },
+    SettingDef { key: "spread", label: "Spread", amount: None, choices: &[Choice { value: "on", text: "On" }, Choice { value: "off", text: "Off" }] },
 ];
 
 #[test]

@@ -143,9 +143,10 @@ pub static SETTINGS: [SettingDef; 3] = [
     SettingDef {
         key: MODE_SETTING,
         label: "Mode",
+        amount: None,
         choices: &[Choice { value: "zones", text: "Full zones" }, Choice { value: "grey-plus-one", text: "Grey and +1 stop" }],
     },
-    SettingDef { key: LEGEND_SETTING, label: "Legend", choices: &[Choice { value: "on", text: "Legend on" }, Choice { value: "off", text: "Legend off" }] },
+    SettingDef { key: LEGEND_SETTING, label: "Legend", amount: None, choices: &[Choice { value: "on", text: "Legend on" }, Choice { value: "off", text: "Legend off" }] },
     BW_DEFAULT_GREY,
 ];
 

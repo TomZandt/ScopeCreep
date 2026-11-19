@@ -17,6 +17,7 @@ pub const TOLERANCE_SETTING: &str = "tolerance";
 const SETTINGS: [SettingDef; 1] = [SettingDef {
     key: TOLERANCE_SETTING,
     label: "Neutral tolerance",
+    amount: None,
     choices: &[
         Choice { value: "3", text: "3 % (default)" },
         Choice { value: "0.5", text: "0.5 %" },

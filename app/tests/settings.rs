@@ -2,8 +2,8 @@
 use scopecreep::settings::{Choice, Menu, MenuRow, PanelSettings, SettingDef, MENU_ROW};
 
 const DEFS: [SettingDef; 2] = [
-    SettingDef { key: "weights", label: "Weights", choices: &[Choice { value: "a", text: "Alpha" }, Choice { value: "b", text: "Beta" }] },
-    SettingDef { key: "spread", label: "Spread", choices: &[Choice { value: "on", text: "On" }, Choice { value: "off", text: "Off" }] },
+    SettingDef { key: "weights", label: "Weights", amount: None, choices: &[Choice { value: "a", text: "Alpha" }, Choice { value: "b", text: "Beta" }] },
+    SettingDef { key: "spread", label: "Spread", amount: None, choices: &[Choice { value: "on", text: "On" }, Choice { value: "off", text: "Off" }] },
 ];
 
 #[test]
@@ -101,4 +101,115 @@ fn saving_replaces_the_file_whole_and_leaves_no_temporary_behind() {
     let names: Vec<_> = std::fs::read_dir(path.parent().unwrap()).unwrap().map(|e| e.unwrap().file_name()).collect();
     assert_eq!(names, ["panel-settings"]);
     let _ = std::fs::remove_dir_all(&dir);
+}
+
+// ---- Amounts and sliders (#84) ----
+
+use scopecreep::settings::Amount;
+use scopecreep::waveform::{look_from, Brightness, Look, BRIGHTNESS_AMOUNT};
+
+const AMOUNT_DEFS: [SettingDef; 1] = [SettingDef { key: "brightness", label: "Trace brightness", amount: Some(BRIGHTNESS_AMOUNT), choices: &[] }];
+
+fn brightness_of(all: &PanelSettings) -> f32 {
+    all.resolve("P", &AMOUNT_DEFS)["brightness"].parse().unwrap()
+}
+
+#[test]
+fn an_untouched_amount_is_its_default_and_the_default_is_todays_normal_look() {
+    assert_eq!(brightness_of(&PanelSettings::default()), 100.0);
+    assert_eq!(look_from(&PanelSettings::default().resolve("P", &AMOUNT_DEFS)), Look::default());
+    assert_eq!(Look::default().brightness, Brightness(100.0));
+}
+
+#[test]
+fn an_amount_is_clamped_to_its_range_and_rubbish_falls_back_to_the_default() {
+    let read = |v: &str| brightness_of(&PanelSettings::from_text(&format!("P\tbrightness\t{v}\n")));
+    assert_eq!(read("170"), 170.0);
+    assert_eq!(read("9999"), BRIGHTNESS_AMOUNT.max);
+    assert_eq!(read("-5"), BRIGHTNESS_AMOUNT.min);
+    assert_eq!(read("lots"), 100.0);
+    assert_eq!(read("NaN"), 100.0);
+}
+
+#[test]
+fn a_list_value_saved_by_an_older_version_maps_to_the_number_it_produced() {
+    let read = |v: &str| brightness_of(&PanelSettings::from_text(&format!("P\tbrightness\t{v}\n")));
+    assert_eq!((read("normal"), read("dimmer"), read("dim"), read("brighter")), (100.0, 48.0, 48.0, 240.0));
+    // The gains they gave before were 0.12, 0.25 and 0.6: 48 %, 100 % and 240 % of 0.25.
+    let gain = |v: &str| look_from(&PanelSettings::from_text(&format!("P\tbrightness\t{v}\n")).resolve("P", &AMOUNT_DEFS)).brightness;
+    assert_eq!(gain("normal"), Brightness(100.0));
+    assert_eq!(gain("dimmer"), Brightness(48.0));
+}
+
+#[test]
+fn an_amount_round_trips_through_the_saved_text() {
+    let mut all = PanelSettings::default();
+    all.set("P", "brightness", &Amount::store(137.5));
+    assert_eq!(brightness_of(&PanelSettings::from_text(&all.to_text())), 137.5);
+}
+
+#[test]
+fn a_menu_for_an_amount_has_a_heading_a_slider_and_a_reset_row() {
+    let mut all = PanelSettings::default();
+    all.set("P", "brightness", "150");
+    let menu = Menu::new(0, &AMOUNT_DEFS, &all.resolve("P", &AMOUNT_DEFS)).unwrap();
+    assert_eq!(menu.rows.len(), 3);
+    assert_eq!(menu.rows[0], MenuRow::Heading("Trace brightness".into()));
+    assert!(matches!(&menu.rows[1], MenuRow::Slider { key: "brightness", value, .. } if *value == 150.0));
+    assert!(matches!(&menu.rows[2], MenuRow::Reset { value, text, .. } if *value == 100.0 && text == "Reset to default (100 %)"));
+}
+
+#[test]
+fn pressing_on_the_track_gives_a_value_in_steps_and_dragging_past_the_ends_gives_the_ends() {
+    let menu = Menu::new(0, &AMOUNT_DEFS, &PanelSettings::default().resolve("P", &AMOUNT_DEFS)).unwrap();
+    for scale in [1.0_f32, 2.0] {
+        let rect = menu.rect([100.0, 100.0], [1280.0, 760.0], scale);
+        let at = Menu::slider_origin(rect, 1, scale);
+        let slider = scopecreep::components::Slider { value: 0.0, number: String::new() };
+        let track = slider.layout(at, scale).track;
+        let y = at[1] + 12.0 * scale;
+        let (min, max) = (BRIGHTNESS_AMOUNT.min, BRIGHTNESS_AMOUNT.max);
+        assert_eq!(menu.slider_at(rect, [track[0], y], scale), Some(("brightness", min)));
+        assert_eq!(menu.slider_at(rect, [track[0] + track[2], y], scale), Some(("brightness", max)));
+        let (_, middle) = menu.slider_at(rect, [track[0] + track[2] / 2.0, y], scale).unwrap();
+        assert_eq!((middle - min) % BRIGHTNESS_AMOUNT.step, 0.0, "a multiple of the step: {middle}");
+        assert!((middle - (min + max) / 2.0).abs() <= BRIGHTNESS_AMOUNT.step);
+        // A drag goes on beyond the track and out of the menu, and clamps.
+        assert_eq!(menu.slider_value(rect, "brightness", track[0] - 500.0, scale), Some(min));
+        assert_eq!(menu.slider_value(rect, "brightness", track[0] + track[2] + 5000.0, scale), Some(max));
+        assert_eq!(menu.slider_value(rect, "nothing", track[0], scale), None);
+        // A press on the heading is not a slider press, and neither is one in the slider row's left padding.
+        assert_eq!(menu.slider_at(rect, [track[0], Menu::row_top(rect, 0, scale) + 2.0], scale), None);
+        assert_eq!(menu.slider_at(rect, [rect[0] + 1.0, y], scale), None);
+        // Neither the slider row nor the reset row is a choice.
+        assert_eq!(menu.choice_at(rect, [track[0], y], scale), None);
+    }
+}
+
+#[test]
+fn the_reset_row_gives_the_default_and_is_not_a_slider() {
+    let menu = Menu::new(0, &AMOUNT_DEFS, &PanelSettings::default().resolve("P", &AMOUNT_DEFS)).unwrap();
+    let rect = menu.rect([100.0, 100.0], [1280.0, 760.0], 1.0);
+    let on_reset = [rect[0] + 40.0, Menu::row_top(rect, 2, 1.0) + MENU_ROW / 2.0];
+    assert_eq!(menu.reset_at(rect, on_reset, 1.0), Some(("brightness", 100.0)));
+    assert_eq!(menu.slider_at(rect, on_reset, 1.0), None);
+    assert_eq!(menu.reset_at(rect, [on_reset[0], Menu::row_top(rect, 1, 1.0) + 5.0], 1.0), None);
+}
+
+#[test]
+fn the_slider_and_its_number_are_drawn_at_the_scale_and_inside_the_menu() {
+    use scopecreep::components::Prim;
+    let mut all = PanelSettings::default();
+    all.set("P", "brightness", "240");
+    let menu = Menu::new(0, &AMOUNT_DEFS, &all.resolve("P", &AMOUNT_DEFS)).unwrap();
+    for scale in [1.0_f32, 2.0] {
+        let rect = menu.rect([100.0, 100.0], [1280.0, 760.0], scale);
+        let prims = scopecreep::components::popover(&menu, rect, [-1.0, -1.0], scale);
+        let numbers: Vec<String> = prims.iter().filter_map(|p| if let Prim::Text { text, .. } = p { Some(text.clone()) } else { None }).collect();
+        assert!(numbers.contains(&"240 %".to_string()), "{numbers:?}");
+        for p in &prims {
+            let (Prim::Rect { rect: r, .. } | Prim::Text { rect: r, .. }) = p;
+            assert!(r[0] >= rect[0] - 2.0 * scale && r[0] + r[2] <= rect[0] + rect[2] + 2.0 * scale, "inside the menu's width: {r:?} in {rect:?}");
+        }
+    }
 }

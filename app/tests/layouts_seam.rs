@@ -178,7 +178,8 @@ fn texts(menu: &scopecreep::settings::Menu) -> Vec<String> {
         .iter()
         .map(|r| match r {
             MenuRow::Heading(t) => t.clone(),
-            MenuRow::Choice { text, .. } => text.clone(),
+            MenuRow::Choice { text, .. } | MenuRow::Reset { text, .. } => text.clone(),
+            MenuRow::Slider { amount, value, .. } => amount.text(*value),
         })
         .collect()
 }

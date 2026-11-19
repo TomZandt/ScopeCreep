@@ -24,6 +24,7 @@ pub const DEFAULT_TOLERANCE: &str = "5";
 pub static SETTINGS: [SettingDef; 2] = [SettingDef {
     key: TOLERANCE_SETTING,
     label: "On-line tolerance",
+    amount: None,
     choices: &[
         Choice { value: DEFAULT_TOLERANCE, text: "±5° (default)" },
         Choice { value: "2", text: "±2°" },

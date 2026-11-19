@@ -16,6 +16,8 @@ The format follows [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/
 
 ### Added
 
+- Luma waveform: trace brightness is a slider in its popover instead of Dimmer, Normal and Brighter. Drag it (the menu stays open and the trace follows with Resolve stopped) to any value from 20 % to 300 % in steps of 5, with the number and its unit beside it; the default, 100 %, draws exactly as Normal did, and a row under the slider puts it back. The value is remembered per Panel, and a Dimmer, Normal or Brighter saved by an earlier version becomes 48, 100 or 240 %. Brightness is still a drawing choice, so it is not in the label or the tags (#84, ADR 0013).
+
 - Vectorscope: chips on its title bar choose the plots, 100 %, 200 % or Both (the default; one plot fills the Panel), and a Mono chip draws the trace in neutral grey instead of the colour it stands for. Both are remembered per Panel; the single plot is in the tags, the trace colour is not, and the counts are the same either way (#123).
 
 - Luma and Colour Waveforms: a Scale units setting in the popover, 10-bit codes (default), percent of the Levels' range, or nits (offered only when the Output Colour Space is PQ or HLG; HLG assumes a 1000 nit display). The scale numbers, reference lines and edge rows follow; what is measured does not change. The tag names the unit when it is not 10-bit, and the choice is remembered (#125, ADR 0033).

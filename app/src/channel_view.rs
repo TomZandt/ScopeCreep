@@ -28,11 +28,13 @@ pub static SETTINGS: [SettingDef; 2] = [
     SettingDef {
         key: "channel",
         label: "Channel",
+        amount: None,
         choices: &[Choice { value: "blue", text: "Blue" }, Choice { value: "red", text: "Red" }, Choice { value: "green", text: "Green" }, Choice { value: "luma", text: "Luma" }],
     },
     SettingDef {
         key: "size",
         label: "Loupe size",
+        amount: None,
         choices: &[Choice { value: "medium", text: "Medium" }, Choice { value: "small", text: "Small" }, Choice { value: "large", text: "Large" }],
     },
 ];

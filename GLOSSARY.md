@@ -132,8 +132,12 @@ An arrangement of the Panel grid saved in one of nine slots (Ctrl+Shift+1 to 9),
 _Avoid_: Preset, workspace, profile
 
 **Panel settings**:
-The choices a display offers in its Panel's right-click menu, each from a short list so a display can't be set up to mislead. Kept per Panel between sessions. A setting that changes what is measured is named in the Panel's label.
+The choices a display offers in its Panel's right-click menu, each from a short list so a display can't be set up to mislead. Kept per Panel between sessions. A setting that changes what is measured is named in the Panel's label. A setting is a list of choices or a Slider.
 _Avoid_: Preferences, options, properties
+
+**Slider**:
+The row in a Panel's menu for a setting that is an amount (trace brightness): a track with a handle, the current value as a number with its unit beside it, dragged with the mouse while the menu stays open, with a row to put it back to its default. Its range is limited to sensible values and the value is kept per Panel.
+_Avoid_: Dial, knob, spinner
 
 **Scope**:
 A display that measures the Feed's pixel values, such as a waveform, RGB parade or vectorscope.
