@@ -5,7 +5,7 @@
 mod common;
 use common::{Rig, TARGET, layouts, solid};
 use scopecreep::colour_setup::{ColourSetup, KnownColourSetup, Levels, Provenance, Science};
-use scopecreep::display::{DisplayContext, DisplaySet};
+use scopecreep::display::{DisplayContext, DisplaySet, ScopeHandles};
 use scopecreep::panel_grid::PanelLayout;
 use scopecreep::settings::PanelSettings;
 use scopecreep::skin_tone::SKIN_TONE_LINE_DEGREES;
@@ -18,6 +18,7 @@ const V: &str = "Vectorscope";
 struct Bench {
     rig: Rig,
     set: DisplaySet,
+    scopes: ScopeHandles,
     settings: PanelSettings,
     context: DisplayContext,
 }
@@ -25,8 +26,10 @@ struct Bench {
 impl Bench {
     fn new(name: &str) -> Bench {
         let rig = Rig::new(name);
+        let (set, scopes) = DisplaySet::standard_with_handles(&rig.device, &rig.queue, TARGET, false);
         let b = Bench {
-            set: DisplaySet::standard(&rig.device, &rig.queue, TARGET, false),
+            set,
+            scopes,
             settings: PanelSettings::default(),
             context: DisplayContext::default(),
             rig,
@@ -53,7 +56,7 @@ impl Bench {
     }
 
     fn plots(&self) -> VectorscopePlots {
-        *self.set.read_back(self.index(V)).and_then(|r| r.downcast::<VectorscopePlots>().ok()).expect("the vectorscope reads back")
+        self.scopes.vectorscope.plots()
     }
 
     fn x1(&self) -> VectorscopeCounts {

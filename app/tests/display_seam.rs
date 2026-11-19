@@ -3,12 +3,11 @@
 //! tests look at what each display measured, what it drew and its label. Needs a GPU.
 mod common;
 use common::{Rig, TARGET, layouts, solid};
-use scopecreep::display::{Display, DisplayContext, DisplaySet, ScaleText};
+use scopecreep::display::{Display, DisplayContext, DisplaySet, ScaleText, ScopeHandles};
 use scopecreep::gpu_frame::GpuFrame;
 use scopecreep::colour_setup::{ColourSetup, KnownColourSetup, Levels, Provenance, Science};
 use scopecreep::panel_grid::PanelLayout;
 use scopecreep::settings::PanelSettings;
-use scopecreep::waveform::WaveformCounts;
 use std::sync::{Arc, Mutex};
 
 
@@ -37,13 +36,14 @@ impl Display for Recorder {
 struct Bench {
     rig: Rig,
     set: DisplaySet,
+    scopes: ScopeHandles,
 }
 
 impl Bench {
     fn new(name: &str) -> Bench {
         let rig = Rig::new(name);
-        let set = DisplaySet::standard(&rig.device, &rig.queue, TARGET, false);
-        Bench { rig, set }
+        let (set, scopes) = DisplaySet::standard_with_handles(&rig.device, &rig.queue, TARGET, false);
+        Bench { rig, set, scopes }
     }
 
     /// Resolve plays one frame (RGBA, bottom row first) and the app has a moment to take it.
@@ -109,7 +109,7 @@ fn every_display_gets_the_same_viewer_frame_from_one_upload() {
     assert_eq!(a, c, "both displays saw exactly the same frames");
     assert!(a.iter().all(|f| *f == a[0]), "one texture, uploaded into again, not one per display: {a:?}");
     // The built-in displays took the same frame: the waveform counted every pixel of it.
-    let counts = b.set.read_back(1).and_then(|r| r.downcast::<WaveformCounts>().ok()).expect("the waveform reads back");
+    let counts = b.scopes.luma_waveform.counts();
     assert_eq!(counts.total(), 64 * 36);
 }
 
@@ -125,7 +125,6 @@ fn a_new_display_is_one_module_registered_and_gets_everything_a_display_gets() {
     let context = DisplayContext { colour_label: "Colour Setup unknown".into(), ..DisplayContext::default() };
     b.set.configure(&context, &PanelSettings::default());
     assert_eq!(recorder.context.lock().unwrap().as_ref().unwrap().colour_label, "Colour Setup unknown");
-    assert_eq!(b.set.read_back(before).is_none(), true, "a Picture View has nothing to read back");
     assert_eq!(b.set.scale_texts(before, [0.0, 0.0, 200.0, 200.0], 1.0), Vec::<ScaleText>::new());
 }
 
@@ -183,7 +182,7 @@ fn p3_d65_setup() -> DisplayContext {
 /// The 10-bit code every pixel of a one-colour frame lands on, as the waveform's first column counted it.
 fn code_of_solid(b: &mut Bench, rgb: [f32; 3]) -> u32 {
     b.play(64, 36, &solid(64, 36, rgb));
-    let counts = b.set.read_back(1).and_then(|r| r.downcast::<WaveformCounts>().ok()).expect("the waveform reads back");
+    let counts = b.scopes.luma_waveform.counts();
     let codes: Vec<u32> = (0..1024).filter(|code| counts.at(0, *code) == 36).collect();
     assert_eq!(codes.len(), 1, "all 36 pixels of the column share one code");
     codes[0]

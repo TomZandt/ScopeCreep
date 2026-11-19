@@ -1278,8 +1278,4 @@ impl crate::display::Display for Waveform {
             .map(|((text, top, _), _)| crate::display::ScaleText { text, left: area[0], top, width, right_aligned: true, centred: false })
             .collect()
     }
-
-    fn read_back(&self) -> Option<Box<dyn std::any::Any>> {
-        Some(Box::new(self.counts()))
-    }
 }

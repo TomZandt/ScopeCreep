@@ -3,7 +3,7 @@
 //! the label, and what the Loupe reports it drew. Needs a GPU.
 mod common;
 use common::{Rig, TARGET, solid};
-use scopecreep::display::{ChannelViewDrawn, DisplayContext, DisplaySet, Pointer};
+use scopecreep::display::{ChannelViewDrawn, DisplayContext, DisplaySet, Pointer, ScopeHandles};
 use scopecreep::settings::PanelSettings;
 
 const W: u32 = 800;
@@ -14,15 +14,16 @@ const AREA: [f32; 4] = [20.0, 20.0, 600.0, 400.0];
 struct Bench {
     rig: Rig,
     set: DisplaySet,
+    scopes: ScopeHandles,
     index: usize,
 }
 
 impl Bench {
     fn new(name: &str) -> Bench {
         let rig = Rig::new(name);
-        let set = DisplaySet::standard(&rig.device, &rig.queue, TARGET, false);
+        let (set, scopes) = DisplaySet::standard_with_handles(&rig.device, &rig.queue, TARGET, false);
         let index = set.names().iter().position(|n| *n == "Channel view").expect("the Channel view is registered");
-        Bench { rig, set, index }
+        Bench { rig, set, scopes, index }
     }
 
     fn play(&mut self, width: u32, height: u32, pixels: &[f32]) {
@@ -35,7 +36,7 @@ impl Bench {
     }
 
     fn drawn(&self) -> ChannelViewDrawn {
-        *self.set.read_back(self.index).and_then(|r| r.downcast::<ChannelViewDrawn>().ok()).expect("the Channel view reports what it drew")
+        self.scopes.channel_view.drawn().expect("the Channel view reports what it drew")
     }
 
     /// Draw the Channel view into [`AREA`] of a W x H target and read it back (RGBA8, rows top first).

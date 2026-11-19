@@ -6,7 +6,7 @@
 //! - draws into its Panel's rectangle, in [`Display::draw`];
 //! - takes its settings and the Colour Setup, in [`Display::configure`];
 //! - reports its label, in [`Display::label`];
-//! - and, for Scopes, can be read back for tests, in [`Display::read_back`].
+//! - and, for Scopes, are read back for tests through their own typed methods (see [`ScopeHandles`]).
 //!
 //! Every Panel's display sees the same frame: the app puts each Viewer Frame on the GPU once (and converts it
 //! once) and hands that one [`GpuFrame`] to every display.
@@ -16,7 +16,6 @@ use crate::settings::{PanelSettings, SettingDef, Settings};
 use crate::toolbar::{Toolbar, ToolbarDef};
 use crate::measurement::LumaWeights;
 use crate::waveform::Waveform;
-use std::any::Any;
 use std::sync::Arc;
 
 /// What a display needs to know besides the frame: the Colour Setup and the user's settings.
@@ -137,10 +136,6 @@ pub trait Display: Send + Sync {
     fn scale_texts(&self, _area: [f32; 4], _scale: f32) -> Vec<ScaleText> {
         Vec::new()
     }
-    /// For tests: what a Scope measured, read back from the GPU. `None` for a Picture View.
-    fn read_back(&self) -> Option<Box<dyn Any>> {
-        None
-    }
 }
 
 /// One switch per display that can leave the Window: whether [`DisplaySet::standard`] registers it. A display
@@ -158,6 +153,14 @@ pub struct InWindow {
 /// does its job).
 pub const IN_WINDOW: InWindow = InWindow { gamut_legal_warning: false, highlight_neutrals: false, cie_plot: false, black_and_white: false, colour_waveform: false };
 
+/// The Scopes of [`DisplaySet::standard`] kept with their own types, so a test reads their counts through typed
+/// methods (no untyped read-back on [`Display`]).
+pub struct ScopeHandles {
+    pub luma_waveform: Waveform,
+    pub vectorscope: Arc<crate::vectorscope::Vectorscope>,
+    pub channel_view: Arc<crate::channel_view::ChannelView>,
+}
+
 /// Every display, in Panel order (the order of the grid, left to right then down).
 #[derive(Clone, Default)]
 pub struct DisplaySet {
@@ -168,6 +171,11 @@ impl DisplaySet {
     /// The displays the app shows, in Panel order. A new display is one module that implements [`Display`], and
     /// one line here.
     pub fn standard(device: &wgpu::Device, queue: &wgpu::Queue, target: wgpu::TextureFormat, filterable: bool) -> DisplaySet {
+        Self::standard_with_handles(device, queue, target, filterable).0
+    }
+
+    /// [`DisplaySet::standard`], and the typed handles of its Scopes for tests.
+    pub fn standard_with_handles(device: &wgpu::Device, queue: &wgpu::Queue, target: wgpu::TextureFormat, filterable: bool) -> (DisplaySet, ScopeHandles) {
         let mut set = DisplaySet::default();
         set.register(Arc::new(crate::picture_view::PictureView::new(device, queue, target, filterable)));
         let luma_waveform = Waveform::new(device, queue, target);
@@ -178,12 +186,14 @@ impl DisplaySet {
         if IN_WINDOW.highlight_neutrals {
             set.register(Arc::new(crate::highlight_neutrals::HighlightNeutrals::new(device, queue, target, filterable)));
         }
-        set.register(Arc::new(crate::channel_view::ChannelView::new(device, queue, target, filterable)));
+        let channel_view = Arc::new(crate::channel_view::ChannelView::new(device, queue, target, filterable));
+        set.register(channel_view.clone());
         set.register(Arc::new(crate::arri_false_colour::ArriFalseColour::new(device, queue, target)));
         if IN_WINDOW.black_and_white {
             set.register(Arc::new(crate::black_and_white::BlackAndWhite::new(device, queue, target, filterable)));
         }
-        set.register(Arc::new(crate::vectorscope::Vectorscope::new(device, queue, target)));
+        let vectorscope = Arc::new(crate::vectorscope::Vectorscope::new(device, queue, target));
+        set.register(vectorscope.clone());
         set.register(Arc::new(crate::saturation_heatmap::SaturationHeatmap::new(device, queue, target)));
         set.register(Arc::new(crate::skin_tone_view::SkinTone::new(device, queue, target, filterable)));
         set.register(Arc::new(crate::stops_false_colour::StopsFalseColour::new(device, queue, target)));
@@ -193,7 +203,7 @@ impl DisplaySet {
         if IN_WINDOW.colour_waveform {
             set.register(Arc::new(Waveform::new_colour(device, queue, target, &luma_waveform)));
         }
-        set
+        (set, ScopeHandles { luma_waveform, vectorscope, channel_view })
     }
 
     /// Add a display after the others.
@@ -298,9 +308,5 @@ impl DisplaySet {
     /// Whether the display in Panel `index` wants the pointer (it has state to move).
     pub fn takes_pointer(&self, index: usize) -> bool {
         !self.displays[index].state_keys().is_empty()
-    }
-
-    pub fn read_back(&self, index: usize) -> Option<Box<dyn Any>> {
-        self.displays[index].read_back()
     }
 }

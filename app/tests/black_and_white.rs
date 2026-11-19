@@ -24,6 +24,7 @@ struct Bench {
     rig: Rig,
     conversion: OutputConversion,
     set: DisplaySet,
+    luma: Waveform,
     settings: PanelSettings,
 }
 
@@ -40,21 +41,21 @@ fn poll(rig: &mut Rig, conversion: &mut OutputConversion, set: &DisplaySet, sett
 }
 
 /// The Window's displays plus the black and white Panel, which is out of the Window (#118) but kept and tested.
-fn standard_with_black_and_white(rig: &Rig) -> DisplaySet {
+fn standard_with_black_and_white(rig: &Rig) -> (DisplaySet, Waveform) {
     let mut set = DisplaySet::default();
     set.register(Arc::new(PictureView::new(&rig.device, &rig.queue, TARGET, false)));
     let luma = Waveform::new(&rig.device, &rig.queue, TARGET);
-    set.register(Arc::new(luma));
+    set.register(Arc::new(luma.clone()));
     set.register(Arc::new(BlackAndWhite::new(&rig.device, &rig.queue, TARGET, false)));
-    set
+    (set, luma)
 }
 
 impl Bench {
     fn new(name: &str, colour_setup: &str) -> Bench {
         let mut rig = Rig::with_colour_setup(name, Some(colour_setup));
-        let (mut conversion, set, settings) = (OutputConversion::new(&rig.device, &rig.queue), standard_with_black_and_white(&rig), PanelSettings::default());
+        let (mut conversion, (set, luma), settings) = (OutputConversion::new(&rig.device, &rig.queue), standard_with_black_and_white(&rig), PanelSettings::default());
         poll(&mut rig, &mut conversion, &set, &settings);
-        Bench { rig, conversion, set, settings }
+        Bench { rig, conversion, set, luma, settings }
     }
 
     fn index(&self, name: &str) -> usize {
@@ -75,7 +76,7 @@ impl Bench {
     }
 
     fn counts(&self) -> WaveformCounts {
-        *self.set.read_back(self.index(WAVEFORM)).and_then(|r| r.downcast::<WaveformCounts>().ok()).expect("the waveform reads back")
+        self.luma.counts()
     }
 
     /// Draw every display into its Panel of a `width` × `height` target as the window does and read it back

@@ -647,8 +647,4 @@ impl crate::display::Display for CiePlot {
     fn draw(&self, pass: &mut wgpu::RenderPass<'_>, area: [f32; 4], surface: [f32; 2], scale: f32) {
         CiePlot::draw(self, pass, area, surface, scale);
     }
-
-    fn read_back(&self) -> Option<Box<dyn std::any::Any>> {
-        Some(Box::new(self.counts()))
-    }
 }

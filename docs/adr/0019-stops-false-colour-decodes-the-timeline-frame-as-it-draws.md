@@ -6,7 +6,7 @@ Every display used to get one frame: the picture after Output Conversion. Stops 
 
 - The Display trait gets `on_timeline_frame`, called with the Timeline Colour Space frame right after `on_frame`. It does nothing by default, so no other display changes.
 - Stops False Colour keeps that frame on the GPU and decodes it (curve, luma, stops, zone colour) in its draw shader. Nothing is measured ahead of drawing.
-- Its read-back (for tests) runs the same decoding into a map of stops, on demand.
+- Its typed `stops()` (for tests) runs the same decoding into a map of stops, on demand.
 - A Timeline Colour Space with no curve here (or no Colour Setup) is labelled "not measured" and draws nothing. Rec.709 Gamma 2.4 is decoded by inverting its display curve and labelled "approximated" (ADR 0007).
 
 ## Considered and rejected

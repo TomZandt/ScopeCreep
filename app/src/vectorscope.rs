@@ -490,6 +490,11 @@ pub struct Vectorscope {
 }
 
 impl Vectorscope {
+    /// For tests: both plots' counts, read back from the GPU.
+    pub fn plots(&self) -> VectorscopePlots {
+        VectorscopePlots { x1: self.counts(Zoom::X1), x2: self.counts(Zoom::X2) }
+    }
+
     /// `target`: the format of what [`Display::draw`] draws into.
     pub fn new(device: &wgpu::Device, queue: &wgpu::Queue, target: wgpu::TextureFormat) -> Vectorscope {
         let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor { label: Some("vectorscope measure"), source: wgpu::ShaderSource::Wgsl(MEASURE_SHADER.into()) });
@@ -697,9 +702,5 @@ impl Display for Vectorscope {
             pass.set_bind_group(0, &state.draw_bound.as_ref().unwrap()[i], &[]);
             pass.draw(0..4, 0..1);
         }
-    }
-
-    fn read_back(&self) -> Option<Box<dyn std::any::Any>> {
-        Some(Box::new(VectorscopePlots { x1: self.counts(Zoom::X1), x2: self.counts(Zoom::X2) }))
     }
 }

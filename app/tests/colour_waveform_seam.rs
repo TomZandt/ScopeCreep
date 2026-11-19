@@ -15,6 +15,8 @@ use std::sync::Arc;
 struct Bench {
     rig: Rig,
     set: DisplaySet,
+    luma: Waveform,
+    colour: Waveform,
 }
 
 impl Bench {
@@ -25,8 +27,9 @@ impl Bench {
         set.register(Arc::new(PictureView::new(&rig.device, &rig.queue, TARGET, false)));
         let luma = Waveform::new(&rig.device, &rig.queue, TARGET);
         set.register(Arc::new(luma.clone()));
-        set.register(Arc::new(Waveform::new_colour(&rig.device, &rig.queue, TARGET, &luma)));
-        Bench { rig, set }
+        let colour = Waveform::new_colour(&rig.device, &rig.queue, TARGET, &luma);
+        set.register(Arc::new(colour.clone()));
+        Bench { rig, set, luma, colour }
     }
 
     /// Resolve plays one frame (RGBA, bottom row first) and the app has a moment to take it.
@@ -56,7 +59,11 @@ fn index_of(b: &Bench, name: &str) -> usize {
 }
 
 fn counts_of(b: &Bench, name: &str) -> WaveformCounts {
-    *b.set.read_back(index_of(b, name)).and_then(|r| r.downcast::<WaveformCounts>().ok()).expect("a waveform reads back")
+    match name {
+        COLOUR => b.colour.counts(),
+        LUMA => b.luma.counts(),
+        _ => panic!("no waveform called {name}"),
+    }
 }
 
 fn pixel(image: &[u8], width: u32, x: f32, y: f32) -> [u8; 3] {

@@ -258,6 +258,13 @@ pub struct ChannelView {
 }
 
 impl ChannelView {
+    /// For tests: what the Loupe reports it drew, `None` before the first draw.
+    pub fn drawn(&self) -> Option<ChannelViewDrawn> {
+        let state = self.state.lock().unwrap();
+        let (area, scale) = state.area?;
+        Some(ChannelViewDrawn { loupe: state.loupe.rect(area, scale), zoom: state.loupe.zoom })
+    }
+
     pub fn new(device: &wgpu::Device, queue: &wgpu::Queue, target: wgpu::TextureFormat, filterable: bool) -> ChannelView {
         let stage = PictureStage::new::<[[f32; 4]; 2]>(device, queue, target, filterable, Rule { label: "channel view", wgsl: RULE.into(), has_legend: false });
         let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor { label: Some("channel view loupe"), source: wgpu::ShaderSource::Wgsl(LOUPE_SHADER.into()) });
@@ -442,11 +449,5 @@ impl Display for ChannelView {
             }
             _ => PointerResult::default(),
         }
-    }
-
-    fn read_back(&self) -> Option<Box<dyn std::any::Any>> {
-        let state = self.state.lock().unwrap();
-        let (area, scale) = state.area?;
-        Some(Box::new(ChannelViewDrawn { loupe: state.loupe.rect(area, scale), zoom: state.loupe.zoom }))
     }
 }

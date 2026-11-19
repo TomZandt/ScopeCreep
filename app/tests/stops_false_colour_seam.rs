@@ -52,7 +52,7 @@ impl Bench {
     }
 
     fn measured(&self) -> StopsMap {
-        *self.set.read_back(0).and_then(|r| r.downcast::<StopsMap>().ok()).expect("the display reads back what it measured")
+        self.display.stops().expect("the display reads back what it measured")
     }
 
     /// Draw the display into a `width` × `height` target at scale 1 (RGBA8, rows top first).

@@ -13,7 +13,7 @@
 //!
 //! Nothing is measured ahead of drawing: the Panel keeps the latest Timeline Colour Space frame on the GPU and
 //! decodes it as it draws, so the Colour Setup and the settings always apply to the frame on screen.
-//! [`Display::read_back`] runs the same decoding into a stops map, for tests.
+//! [`StopsFalseColour::stops`] runs the same decoding into a stops map, for tests.
 //!
 //! Two modes: full zones (17 zones centred on the stop marks -6 to +6, with half-stop zones beside middle grey,
 //! black beyond -6 1/2 and white beyond +6 1/2) and grey and +1 stop (a black and white picture, green within a
@@ -725,9 +725,5 @@ impl Display for StopsFalseColour {
             return Vec::new();
         }
         Geometry::new(area, scale, config.mode, true).legend_texts(scale, config.mode)
-    }
-
-    fn read_back(&self) -> Option<Box<dyn std::any::Any>> {
-        self.stops().map(|m| Box::new(m) as Box<dyn std::any::Any>)
     }
 }
