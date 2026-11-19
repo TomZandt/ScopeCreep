@@ -7,31 +7,20 @@ mod common;
 use common::{Rig, TARGET};
 use scopecreep::display::DisplaySet;
 use scopecreep::gamut_warning::GamutWarning;
+use scopecreep::feed_loop::FeedLoop;
 use scopecreep::output_conversion::OutputConversion;
 use scopecreep::settings::PanelSettings;
 use scopecreep_accuracy::colorchecker::{ColorChecker, TimelineSpace};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 
 /// A stand-in Resolve and Sender, the app's Feed monitor and Output Conversion, and the gamut/legal warning alone
 /// in its set.
 struct Bench {
     rig: Rig,
-    conversion: OutputConversion,
+    feed: FeedLoop,
     set: DisplaySet,
-    settings: PanelSettings,
-}
-
-/// What the app does after every poll of the Feed: upload, Output Conversion, the display, the Colour Setup and
-/// settings given to it, and the conversion following the Colour Setup.
-fn poll(rig: &mut Rig, conversion: &mut OutputConversion, set: &DisplaySet, settings: &PanelSettings) {
-    rig.poll(|encoder, gpu_frame| {
-        let shown = conversion.convert(encoder, gpu_frame);
-        set.on_frame(encoder, shown);
-    });
-    set.configure(&rig.monitor.status().display_context(), settings);
-    let setup = rig.monitor.status().colour_setup().map(|c| c.setup);
-    conversion.follow(setup.as_ref(), rig.uploader.frame(), |encoder, shown| set.on_frame(encoder, shown));
+    settings: Arc<Mutex<PanelSettings>>,
 }
 
 /// Colour Setups that convert nothing, at either Levels.
@@ -44,19 +33,22 @@ impl Bench {
         let mut rig = Rig::with_colour_setup(name, Some(colour_setup));
         let mut set = DisplaySet::default();
         set.register(Arc::new(GamutWarning::new(&rig.device, &rig.queue, TARGET)));
-        let (mut conversion, settings) = (OutputConversion::new(&rig.device, &rig.queue), PanelSettings::default());
-        poll(&mut rig, &mut conversion, &set, &settings);
-        Bench { rig, conversion, set, settings }
+        let settings = Arc::new(Mutex::new(PanelSettings::default()));
+        let mut feed = FeedLoop::new(set.clone(), settings.clone(), OutputConversion::new(&rig.device, &rig.queue));
+        rig.step(&mut feed);
+        Bench { rig, feed, set, settings }
     }
 
     fn choose(&mut self, key: &str, value: &str) {
-        self.settings.set(self.set.name(0), key, value);
-        self.set.configure(&self.rig.monitor.status().display_context(), &self.settings);
+        self.settings.lock().unwrap().set(self.set.name(0), key, value);
+        self.rig.step(&mut self.feed);
     }
 
     fn play(&mut self, width: u32, height: u32, pixels: &[f32]) {
-        let (conversion, set, settings) = (&mut self.conversion, &self.set, &self.settings);
-        self.rig.play(width, height, pixels, |rig| poll(rig, conversion, set, settings));
+        let feed = &mut self.feed;
+        self.rig.play(width, height, pixels, |rig| {
+            rig.step(feed);
+        });
     }
 
     fn render(&self, width: u32, height: u32) -> Vec<u8> {

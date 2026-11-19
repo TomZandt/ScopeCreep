@@ -5,11 +5,12 @@ mod common;
 use common::{Rig, TARGET};
 use scopecreep::arri_false_colour::ArriFalseColour;
 use scopecreep::display::DisplaySet;
+use scopecreep::feed_loop::FeedLoop;
 use scopecreep::output_conversion::OutputConversion;
 use scopecreep::picture_view::PictureView;
 use scopecreep::settings::PanelSettings;
 use scopecreep::stops_false_colour::StopsFalseColour;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 const W: u32 = 16;
 const H: u32 = 9;
@@ -22,18 +23,9 @@ const COLOURFUL: [f32; 3] = [0.6, 0.4, 0.3];
 
 struct Bench {
     rig: Rig,
-    conversion: OutputConversion,
+    feed: FeedLoop,
     set: DisplaySet,
-    settings: PanelSettings,
-}
-
-fn poll(rig: &mut Rig, conversion: &mut OutputConversion, set: &DisplaySet, settings: &PanelSettings) {
-    rig.poll(|encoder, gpu_frame| {
-        let shown = conversion.convert(encoder, gpu_frame);
-        set.on_frame(encoder, shown);
-        set.on_timeline_frame(encoder, gpu_frame);
-    });
-    set.configure(&rig.monitor.status().display_context(), settings);
+    settings: Arc<Mutex<PanelSettings>>,
 }
 
 impl Bench {
@@ -43,25 +35,28 @@ impl Bench {
         set.register(Arc::new(PictureView::new(&rig.device, &rig.queue, TARGET, false)));
         set.register(Arc::new(ArriFalseColour::new(&rig.device, &rig.queue, TARGET)));
         set.register(Arc::new(StopsFalseColour::new(&rig.device, &rig.queue, TARGET)));
-        let mut conversion = OutputConversion::new(&rig.device, &rig.queue);
         let mut settings = PanelSettings::default();
         for name in [ARRI, STOPS] {
             settings.set(name, "legend", "off");
         }
         settings.set(STOPS, "mode", "grey-plus-one");
-        poll(&mut rig, &mut conversion, &set, &settings);
-        Bench { rig, conversion, set, settings }
+        let settings = Arc::new(Mutex::new(settings));
+        let mut feed = FeedLoop::new(set.clone(), settings.clone(), OutputConversion::new(&rig.device, &rig.queue));
+        rig.step(&mut feed);
+        Bench { rig, feed, set, settings }
     }
 
     fn play(&mut self, rgb: [f32; 3]) {
         let pixels = common::solid(W, H, rgb);
-        let (conversion, set, settings) = (&mut self.conversion, &self.set, &self.settings);
-        self.rig.play(W, H, &pixels, |rig| poll(rig, conversion, set, settings));
+        let feed = &mut self.feed;
+        self.rig.play(W, H, &pixels, |rig| {
+            rig.step(feed);
+        });
     }
 
     fn bw(&mut self, panel: &str, on: bool) {
-        self.settings.set(panel, "bw", if on { "on" } else { "off" });
-        self.set.configure(&self.rig.monitor.status().display_context(), &self.settings);
+        self.settings.lock().unwrap().set(panel, "bw", if on { "on" } else { "off" });
+        self.rig.step(&mut self.feed);
     }
 
     /// The middle pixel of `panel`.

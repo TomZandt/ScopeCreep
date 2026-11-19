@@ -8,6 +8,10 @@ An external monitoring app for DaVinci Resolve: it receives the picture Resolve 
 The single stream of frames scopecreep receives from Resolve, equivalent to what Resolve's Video Clean Feed shows. Every Scope and Picture View is derived from the one Feed; nothing takes its own copy from Resolve.
 _Avoid_: Input, stream, signal
 
+**Feed loop**:
+The app's one step per poll of the Feed: take a new frame, convert it once, hand it to every display, measure the frame on screen again when a setting or the Colour Setup changed, and remake the labels. The app's Feed thread and the display tests run the same code.
+_Avoid_: Feed thread (that is only where it runs)
+
 **Feed Source**:
 Where the Feed comes from: either the Sender or a Capture.
 _Avoid_: Input, source type, tap

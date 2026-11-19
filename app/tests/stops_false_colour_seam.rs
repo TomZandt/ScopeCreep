@@ -6,33 +6,24 @@
 mod common;
 use common::{Rig, TARGET};
 use scopecreep::display::{Display, DisplaySet};
+use scopecreep::feed_loop::FeedLoop;
 use scopecreep::output_conversion::OutputConversion;
 use scopecreep::settings::PanelSettings;
 use scopecreep::stops_false_colour::{StopsFalseColour, StopsMap, ZONE_COLOURS, ZONE_NAMES, zone_of};
 use scopecreep_accuracy::colorchecker::{ColorChecker, TimelineSpace};
 use scopecreep_accuracy::transfer;
 use std::path::PathBuf;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 
-/// A stand-in Resolve and Sender, the app's Feed monitor and its GPU side, with only Stops False Colour shown.
+/// A stand-in Resolve and Sender, the app's Feed monitor and its GPU side (the app's Feed loop), with only Stops
+/// False Colour shown.
 struct Bench {
     rig: Rig,
-    conversion: OutputConversion,
+    feed: FeedLoop,
     set: DisplaySet,
     display: Arc<StopsFalseColour>,
-    settings: PanelSettings,
-}
-
-/// As the app does: the picture after Output Conversion to every display, and the Timeline Colour Space frame
-/// to the displays that measure scene light.
-fn poll(rig: &mut Rig, conversion: &mut OutputConversion, set: &DisplaySet, settings: &PanelSettings) {
-    rig.poll(|encoder, gpu_frame| {
-        let shown = conversion.convert(encoder, gpu_frame);
-        set.on_frame(encoder, shown);
-        set.on_timeline_frame(encoder, gpu_frame);
-    });
-    set.configure(&rig.monitor.status().display_context(), settings);
+    settings: Arc<Mutex<PanelSettings>>,
 }
 
 impl Bench {
@@ -41,23 +32,23 @@ impl Bench {
         let mut set = DisplaySet::default();
         let display = Arc::new(StopsFalseColour::new(&rig.device, &rig.queue, TARGET));
         set.register(display.clone());
-        let (mut conversion, settings) = (OutputConversion::new(&rig.device, &rig.queue), PanelSettings::default());
-        poll(&mut rig, &mut conversion, &set, &settings);
-        Bench { rig, conversion, set, display, settings }
+        let settings = Arc::new(Mutex::new(PanelSettings::default()));
+        let mut feed = FeedLoop::new(set.clone(), settings.clone(), OutputConversion::new(&rig.device, &rig.queue));
+        rig.step(&mut feed);
+        Bench { rig, feed, set, display, settings }
     }
 
+    /// The user picks `value` for `key` in the Panel's menu; the Feed loop measures the frame on screen again.
     fn choose(&mut self, key: &str, value: &str) {
-        self.settings.set("Stops False Colour", key, value);
-        self.configure();
-    }
-
-    fn configure(&self) {
-        self.set.configure(&self.rig.monitor.status().display_context(), &self.settings);
+        self.settings.lock().unwrap().set("Stops False Colour", key, value);
+        self.rig.step(&mut self.feed);
     }
 
     fn play(&mut self, width: u32, height: u32, pixels: &[f32]) {
-        let (conversion, set, settings) = (&mut self.conversion, &self.set, &self.settings);
-        self.rig.play(width, height, pixels, |rig| poll(rig, conversion, set, settings));
+        let feed = &mut self.feed;
+        self.rig.play(width, height, pixels, |rig| {
+            rig.step(feed);
+        });
     }
 
     fn measured(&self) -> StopsMap {

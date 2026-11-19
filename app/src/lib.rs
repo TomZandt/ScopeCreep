@@ -16,6 +16,7 @@ pub mod layout;
 pub mod panel_grid;
 pub mod layouts;
 pub mod display;
+pub mod feed_loop;
 pub mod settings;
 pub mod toolbar;
 pub mod flat_rects;

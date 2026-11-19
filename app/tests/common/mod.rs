@@ -3,6 +3,7 @@
 //! Panels and read the pixels back. A test file wraps a [`Rig`] with the displays it looks at and its own
 //! assertions; it never sets up the GPU itself. Needs a GPU.
 #![allow(dead_code)]
+use scopecreep::feed_loop::{Changed, FeedLoop};
 use scopecreep::gpu_frame::{FrameUploader, GpuFrame};
 use scopecreep::monitor::Monitor;
 use scopecreep::panel_grid::{PanelGrid, PanelLayout};
@@ -75,6 +76,11 @@ impl Rig {
     pub fn poll(&mut self, mut on_frame: impl FnMut(&mut wgpu::CommandEncoder, &GpuFrame)) {
         let uploader = &mut self.uploader;
         self.monitor.poll(self.now, &mut |frame| uploader.upload(frame, |encoder, gpu_frame| on_frame(encoder, gpu_frame)));
+    }
+
+    /// The app's Feed loop takes one step at the rig's clock: the same code the app's Feed thread runs.
+    pub fn step(&mut self, feed_loop: &mut FeedLoop) -> Changed {
+        feed_loop.step(&mut self.monitor, &mut self.uploader, self.now)
     }
 
     /// Resolve plays one frame (RGBA, bottom row first); nothing has taken it yet.

@@ -16,18 +16,19 @@
 //! puts the frames to show on the GPU once, converts them once, hands that one frame to every display, and wakes
 //! the window. The window thread only draws.
 use glyphon::{Attrs, Buffer, Cache, Color, ColorMode, Family, FontSystem, Metrics, Resolution, Shaping, SwashCache, TextArea, TextAtlas, TextBounds, TextRenderer, Viewport};
-use scopecreep::display::{DisplayContext, DisplaySet, Pointer};
+use scopecreep::display::{DisplaySet, Pointer};
+use scopecreep::feed_loop::{FeedLoop, Texts};
 use scopecreep::gpu_frame::FrameUploader;
 use scopecreep::layout::MARGIN;
 use scopecreep::layouts::{self, Action, Click, Layouts, Rename};
-use scopecreep::monitor::{FeedState, Monitor};
+use scopecreep::monitor::Monitor;
 use scopecreep::output_conversion::OutputConversion;
 use scopecreep::panel_grid::{Border, PanelGrid, PanelLayout, Press, min_panel_size};
 use scopecreep::resolve_helper::ScriptHelper;
 use scopecreep::flat_rects::FlatRects;
 use scopecreep::components::{self, Align, BarKind, Prim, State, Tooltip};
 use scopecreep::toolbar::Toolbar;
-use scopecreep::window_text::{self, PanelTitle};
+use scopecreep::window_text;
 use scopecreep::settings::{Menu, PanelSettings};
 use scopecreep::style;
 use std::path::PathBuf;
@@ -45,20 +46,6 @@ use winit::window::{CursorIcon, Window, WindowId};
 /// Chrome colours and sizes come from the style tokens (ADR 0026); this gives text colours to glyphon.
 fn text_colour(c: [u8; 3]) -> Color {
     Color::rgb(c[0], c[1], c[2])
-}
-
-/// What the labels say, as the Feed thread last saw it.
-#[derive(Clone, Default, PartialEq)]
-struct Texts {
-    /// Each Panel's title bar (name, tags, and the full label for its hover), in Panel order.
-    titles: Vec<PanelTitle>,
-    /// The Colour Setup line across the top.
-    top_bar: String,
-    /// The status line's choices, longest first (the window picks what fits), and its hover.
-    status: Vec<String>,
-    status_hover: String,
-    notice: Option<String>,
-    has_picture: bool,
 }
 
 struct Wake;
@@ -275,7 +262,6 @@ impl AppWindow {
 
         let displays = DisplaySet::standard(&device, &queue, format, filterable);
         let settings = Arc::new(Mutex::new(settings_file().and_then(|path| std::fs::read_to_string(path).ok()).map_or_else(PanelSettings::default, |text| PanelSettings::from_text(&text))));
-        displays.configure(&DisplayContext::default(), &settings.lock().unwrap());
         let names = displays.names();
         let grid = grid_file().and_then(|path| std::fs::read_to_string(path).ok()).map_or_else(|| PanelGrid::default_for(&names), |text| PanelGrid::from_text(&names, &text));
         let mut font_system = FontSystem::new();
@@ -290,12 +276,12 @@ impl AppWindow {
         let notice = Text::new(&mut font_system);
         let panel_texts = (0..displays.len()).map(|_| PanelText { label: Text::new(&mut font_system), tags: Text::new(&mut font_system), scale: Vec::new() }).collect();
 
-        let texts = Arc::new(Mutex::new(Texts::default()));
+        let mut feed_loop = FeedLoop::new(displays.clone(), settings.clone(), OutputConversion::new(&device, &queue));
+        let texts = feed_loop.texts();
         let stop = Arc::new(AtomicBool::new(false));
         let feed_thread = {
-            let (texts, stop, displays, settings) = (texts.clone(), stop.clone(), displays.clone(), settings.clone());
+            let stop = stop.clone();
             let mut uploader = FrameUploader::new(&device, &queue);
-            let mut conversion = OutputConversion::new(&device, &queue);
             std::thread::Builder::new().name("feed".into()).spawn(move || {
                 // The Resolve scripting helper is owned by this thread's Monitor: it is killed when the app quits.
                 let mut monitor = if scripting { Monitor::with_project_reader(&feed, Box::new(ScriptHelper::from_env())) } else { Monitor::new(&feed) };
@@ -306,16 +292,6 @@ impl AppWindow {
                         Err(e) => eprintln!("scopecreep: cannot write the frame log: {e}"),
                     }
                 }
-                // Frames put on the GPU and handed to the displays.
-                let mut scope_frames = 0u64;
-                // Displays measure in the Colour Setup's Output Colour Space (the default Measured Space).
-                let mut context = DisplayContext::default();
-                let mut chosen = settings.lock().unwrap().clone();
-                let (mut seen_version, mut seen_state_version) = (chosen.version(), chosen.state_version());
-                // What the Feed's status said when last looked at, and the texts made from it.
-                let mut seen: Option<scopecreep::monitor::Status> = None;
-                let (mut status_text, mut status_hover, mut top_bar, mut notice, mut has_picture) = (Vec::new(), String::new(), String::new(), None, false);
-                let mut last = Texts::default();
                 // SCOPECREEP_STATUS_LOG=1: one line a second on stderr with what the app made of the Feed (diagnostics).
                 let status_log = std::env::var_os("SCOPECREEP_STATUS_LOG").is_some_and(|v| v != "0");
                 let mut next_log = scopecreep_feed::now_ns();
@@ -329,7 +305,7 @@ impl AppWindow {
                             s.feed,
                             fed,
                             s.viewer_frames,
-                            scope_frames,
+                            feed_loop.scope_frames,
                             s.repeat_renders,
                             s.cache_renders_ignored,
                             s.dropped,
@@ -344,84 +320,7 @@ impl AppWindow {
                             s.notice()
                         );
                     }
-                    let mut shown = false;
-                    monitor.poll(scopecreep_feed::now_ns(), &mut |frame| {
-                        uploader.upload(frame, |encoder, gpu_frame| {
-                            // Every display sees the picture after Output Conversion: one upload, one conversion.
-                            let picture = conversion.convert(encoder, gpu_frame);
-                            displays.on_frame(encoder, picture);
-                            // Stops False Colour measures scene light: the frame before Output Conversion.
-                            displays.on_timeline_frame(encoder, gpu_frame);
-                            scope_frames += 1;
-                        });
-                        shown = true;
-                    });
-                    // Idle costs a comparison, nothing more: the slower work below happens only when something it
-                    // depends on changed (the Feed's status, a menu choice, remembered state, a frame shown).
-                    let mut labels_stale = shown;
-                    let status = monitor.status();
-                    let status_changed = seen.as_ref() != Some(status);
-                    if status_changed {
-                        seen = Some(status.clone());
-                        labels_stale = true;
-                        let connected = status.feed == FeedState::Connected;
-                        status_text = if connected { status.status_candidates() } else { Vec::new() };
-                        status_hover = if connected { status.status_hover() } else { String::new() };
-                        top_bar = status.top_bar();
-                        notice = status.notice();
-                        has_picture = status.picture.is_some();
-                        let now_context = status.display_context();
-                        if now_context != context {
-                            context = now_context;
-                            displays.configure(&context, &chosen);
-                        }
-                    }
-                    // A setting changed in a menu measures the frame on screen again, even with Resolve stopped.
-                    let (version, state_version) = {
-                        let guard = settings.lock().unwrap();
-                        (guard.version(), guard.state_version())
-                    };
-                    if state_version != seen_state_version {
-                        seen_state_version = state_version;
-                        labels_stale = true;
-                    }
-                    if version != seen_version {
-                        seen_version = version;
-                        chosen = settings.lock().unwrap().clone();
-                        displays.configure(&context, &chosen);
-                        let on_screen = uploader.frame();
-                        conversion.again(on_screen, |encoder, picture| {
-                            displays.on_frame(encoder, picture);
-                            if let Some(t) = on_screen {
-                                displays.on_timeline_frame(encoder, t);
-                            }
-                        });
-                        shown = true;
-                        labels_stale = true;
-                    }
-                    // A Colour Setup that arrives or changes while Resolve is stopped converts the frame on screen.
-                    if status_changed {
-                        let setup = status.colour_setup().map(|c| c.setup);
-                        let on_screen = uploader.frame();
-                        if conversion.follow(setup.as_ref(), on_screen, |encoder, picture| {
-                            displays.on_frame(encoder, picture);
-                            if let Some(t) = on_screen {
-                                displays.on_timeline_frame(encoder, t);
-                            }
-                        }) {
-                            shown = true;
-                            labels_stale = true;
-                        }
-                    }
-                    if labels_stale {
-                        let now = Texts { titles: displays.titles(&context, &chosen), top_bar: top_bar.clone(), status: status_text.clone(), status_hover: status_hover.clone(), notice: notice.clone(), has_picture };
-                        if now != last {
-                            *texts.lock().unwrap() = now.clone();
-                            last = now;
-                            shown = true;
-                        }
-                    }
-                    if shown && proxy.send_event(Wake).is_err() {
+                    if feed_loop.step(&mut monitor, &mut uploader, scopecreep_feed::now_ns()).any() && proxy.send_event(Wake).is_err() {
                         break;
                     }
                     std::thread::sleep(Duration::from_millis(1));
