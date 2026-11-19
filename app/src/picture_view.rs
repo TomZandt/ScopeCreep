@@ -9,7 +9,9 @@ use crate::gpu_frame::GpuFrame;
 use crate::output_conversion::Plan;
 use crate::picture_stage::{PictureStage, Rule};
 use crate::settings::SettingDef;
-use crate::toolbar::{CHANNEL_DEF, CHANNEL_SETTING, CHANNEL_TOOLBAR, ToolbarDef};
+use crate::display::{ChannelViewDrawn, Pointer, PointerResult};
+use crate::loupe::{self, Loupe};
+use crate::toolbar::{CHANNEL_DEF, CHANNEL_SETTING, CHANNEL_TOOLBAR, LOUPE_DEF, LOUPE_SETTING, LOUPE_TOOLBAR, ToolbarDef};
 use std::sync::{Arc, Mutex};
 
 /// The colour rule: the frame as it is.
@@ -28,9 +30,10 @@ fn colour(uv: vec2<f32>) -> vec3<f32> {
 }
 "#;
 
-/// The channel is Y R G B chips on the title bar, none lit (colour) by default.
-pub static SETTINGS: [SettingDef; 1] = [CHANNEL_DEF];
-pub static TOOLBAR: [ToolbarDef; 1] = CHANNEL_TOOLBAR;
+/// The channel is Y R G B chips on the title bar, none lit (colour) by default; the Loupe is a chip after them, off
+/// by default, with its size in the popover (#161).
+pub static SETTINGS: [SettingDef; 3] = [CHANNEL_DEF, LOUPE_DEF, loupe::SIZE_SETTING];
+pub static TOOLBAR: [ToolbarDef; 2] = [CHANNEL_TOOLBAR[0], LOUPE_TOOLBAR[0]];
 
 /// What the last [`DisplayContext`] set for drawing.
 #[derive(Clone, Copy)]
@@ -38,6 +41,8 @@ struct Look {
     weights: [f32; 3],
     /// 0 colour, 1 Luma, 2 red, 3 green, 4 blue: what the rule reads.
     channel: f32,
+    /// The Loupe is on: it is drawn and takes the pointer.
+    loupe: bool,
 }
 
 /// The Picture View's GPU state. Cheap to clone: the Feed thread uploads frames through one clone while the
@@ -45,6 +50,7 @@ struct Look {
 #[derive(Clone)]
 pub struct PictureView {
     stage: PictureStage,
+    loupe: Loupe,
     /// The Colour Setup and conversion part of the label, from the last [`DisplayContext`].
     label_tail: Arc<Mutex<String>>,
     look: Arc<Mutex<Look>>,
@@ -54,8 +60,10 @@ impl PictureView {
     /// `filterable`: the device can smooth 32-bit float textures (else the picture is drawn nearest-neighbour).
     pub fn new(device: &wgpu::Device, queue: &wgpu::Queue, target: wgpu::TextureFormat, filterable: bool) -> PictureView {
         let stage = PictureStage::new::<[f32; 4]>(device, queue, target, filterable, Rule { label: "picture view", wgsl: RULE.into(), has_legend: false });
-        let view = PictureView { stage, label_tail: Arc::new(Mutex::new(String::new())), look: Arc::new(Mutex::new(Look { weights: crate::measurement::REC709_LUMA.map(|v| v as f32), channel: 0.0 })) };
-        view.configure(&DisplayContext::default());
+        let loupe = Loupe::new::<[f32; 4]>(device, queue, target, RULE);
+        let view = PictureView { stage, loupe, label_tail: Arc::new(Mutex::new(String::new())), look: Arc::new(Mutex::new(Look { weights: crate::measurement::REC709_LUMA.map(|v| v as f32), channel: 0.0, loupe: false })) };
+        // Only the label's tail: the Loupe takes its remembered state from the first real `configure`.
+        *view.label_tail.lock().unwrap() = Self::label_tail(&DisplayContext::default());
         view
     }
 
@@ -86,6 +94,11 @@ impl PictureView {
 
     /// The size of the frame on screen (width, height), once one has arrived: the window lays the panels out in
     /// its shape, so they follow a change of timeline resolution.
+    /// For tests: what the Loupe reports it drew, `None` while it is off or before the first draw.
+    pub fn drawn(&self) -> Option<ChannelViewDrawn> {
+        if self.look.lock().unwrap().loupe { self.loupe.drawn() } else { None }
+    }
+
     pub fn frame_size(&self) -> Option<[u32; 2]> {
         self.stage.size()
     }
@@ -110,7 +123,9 @@ impl Display for PictureView {
             Some("blue") => 4.0,
             _ => 0.0,
         },
+        loupe: context.settings.get(LOUPE_SETTING).is_some_and(|v| v == "on"),
         };
+        self.loupe.configure(&context.settings);
     }
 
     fn setting_defs(&self) -> &'static [SettingDef] {
@@ -121,13 +136,31 @@ impl Display for PictureView {
         &TOOLBAR
     }
 
+    fn state_keys(&self) -> &'static [&'static str] {
+        loupe::STATE_KEYS
+    }
+
+    /// The Loupe takes the pointer only while it is on; off, the Panel takes no pointer or wheel events.
+    fn pointer(&self, area: [f32; 4], scale: f32, event: Pointer) -> PointerResult {
+        if !self.look.lock().unwrap().loupe {
+            return PointerResult::default();
+        }
+        self.loupe.pointer(area, scale, event)
+    }
+
     fn label(&self) -> String {
         Self::label_with(self.frame_size(), &self.label_tail.lock().unwrap())
     }
 
     /// Draw the picture, scaled to fit inside `area` with its shape kept.
-    fn draw(&self, pass: &mut wgpu::RenderPass<'_>, area: [f32; 4], surface: [f32; 2], _scale: f32) {
+    fn draw(&self, pass: &mut wgpu::RenderPass<'_>, area: [f32; 4], surface: [f32; 2], scale: f32) {
         let look = *self.look.lock().unwrap();
-        self.stage.draw(pass, area, surface, &[look.weights[0], look.weights[1], look.weights[2], look.channel], None);
+        let values = [look.weights[0], look.weights[1], look.weights[2], look.channel];
+        self.stage.draw(pass, area, surface, &values, None);
+        if look.loupe && area[2] >= 1.0 && area[3] >= 1.0 {
+            if let Some(shown) = self.stage.shown() {
+                self.loupe.draw(pass, &shown, area, surface, scale, &values);
+            }
+        }
     }
 }

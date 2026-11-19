@@ -228,3 +228,18 @@ fn a_saved_clean_picture_b_w_reads_as_luma_or_colour_and_other_panels_keep_their
     let stale = PanelSettings::from_text("Clean picture\tchannel\tpurple\n");
     assert_eq!(stale.resolve("Clean picture", &picture_view::SETTINGS)["channel"], "off", "no longer offered falls back to colour");
 }
+
+#[test]
+fn the_clean_picture_loupe_state_round_trips_and_rubbish_falls_back_to_the_defaults() {
+    use scopecreep::picture_view;
+    let mut s = PanelSettings::default();
+    s.set("Clean picture", "loupe", "on");
+    s.set("Clean picture", "size", "large");
+    let back = PanelSettings::from_text(&s.to_text());
+    let own = back.resolve("Clean picture", &picture_view::SETTINGS);
+    assert_eq!((own["loupe"].as_str(), own["size"].as_str()), ("on", "large"));
+    let default = PanelSettings::default().resolve("Clean picture", &picture_view::SETTINGS);
+    assert_eq!((default["loupe"].as_str(), default["size"].as_str()), ("off", "medium"));
+    let rubbish = PanelSettings::from_text("Clean picture\tloupe\tmaybe\nClean picture\tsize\thuge\n").resolve("Clean picture", &picture_view::SETTINGS);
+    assert_eq!((rubbish["loupe"].as_str(), rubbish["size"].as_str()), ("off", "medium"));
+}

@@ -149,7 +149,7 @@ fn bw_state(name: &str, defs: &[scopecreep::settings::SettingDef], toolbar: &[sc
 #[test]
 fn the_clean_picture_and_skin_tone_start_in_colour_and_arri_and_stops_start_grey() {
     let (chips, on) = bw_state("Clean picture", &picture_view::SETTINGS, &picture_view::TOOLBAR, &[]);
-    assert_eq!((chips, on), (["Y", "R", "G", "B"].map(String::from).to_vec(), vec![false; 4]));
+    assert_eq!((chips, on), (["Y", "R", "G", "B", "L"].map(String::from).to_vec(), vec![false; 5]));
     assert_eq!(bw_state("Skin tone", &skin_tone_view::SETTINGS, &skin_tone_view::TOOLBAR, &[]).1, [false]);
     assert_eq!(bw_state("ARRI False Colour", &arri_false_colour::SETTINGS, &arri_false_colour::TOOLBAR, &[]).1, [true]);
     // Stops' toolbar is the mode chips then B/W: Zones (default), Grey +1, B/W.
@@ -168,12 +168,12 @@ fn the_clean_picture_channel_chips_switch_turn_off_on_a_second_click_and_are_rem
     let on = |s: &PanelSettings| Toolbar::new(&picture_view::TOOLBAR, &s.resolve(name, &picture_view::SETTINGS)).on;
     click(&mut s, 3);
     let back = PanelSettings::from_text(&s.to_text());
-    assert_eq!(on(&back), [false, false, false, true]);
+    assert_eq!(on(&back), [false, false, false, true, false]);
     assert_eq!(Toolbar::new(&skin_tone_view::TOOLBAR, &back.resolve("Skin tone", &skin_tone_view::SETTINGS)).on, [false], "another Panel is unaffected");
     click(&mut s, 1);
-    assert_eq!(on(&s), [false, true, false, false], "straight to another channel");
+    assert_eq!(on(&s), [false, true, false, false, false], "straight to another channel");
     click(&mut s, 1);
-    assert_eq!(on(&s), [false; 4], "a second click is colour again");
+    assert_eq!(on(&s), [false; 5], "a second click is colour again");
 }
 
 #[test]
@@ -182,9 +182,9 @@ fn the_clean_picture_chips_stay_on_a_small_panel() {
     let settings: Settings = [("channel".to_string(), "blue".to_string())].into();
     let title = panel_title("Clean picture", &DisplayContext { settings, ..DisplayContext::default() }, String::new());
     for scale in [1.0, 2.0] {
-        let small = PanelLayout::new([0.0, 0.0, 130.0 * scale, 200.0 * scale], scale).title;
-        let (l, _, all) = window_text::lay_out_toolbar_title(&title, &toolbar.chips, false, small, scale);
-        assert_eq!(l.chips.len(), 4);
+        let small = PanelLayout::new([0.0, 0.0, 190.0 * scale, 200.0 * scale], scale).title;
+        let (l, _, all) = window_text::lay_out_toolbar_title(&title, &toolbar.chips, true, small, scale);
+        assert_eq!(l.chips.len(), 5);
         assert!(!all, "the tag goes to the hover");
         for chip in &l.chips {
             assert!(chip[0] >= small[0] && chip[0] + chip[2] <= small[0] + small[2] + 0.01, "{chip:?} stays inside {small:?}");
@@ -226,7 +226,7 @@ fn stops_shows_bw_only_in_grey_and_plus_one_and_the_heatmap_has_none() {
 #[test]
 fn the_channel_is_a_chip_not_a_popover_row() {
     let left = popover_defs(&picture_view::SETTINGS, &picture_view::TOOLBAR);
-    assert!(left.is_empty(), "the clean picture has no popover");
+    assert_eq!(left.iter().map(|d| d.key).collect::<Vec<_>>(), ["size"], "the clean picture's popover holds the Loupe size only");
     assert_eq!(popover_defs(&stops_false_colour::SETTINGS, &stops_false_colour::TOOLBAR).iter().map(|d| d.key).collect::<Vec<_>>(), ["legend"]);
 }
 
@@ -493,4 +493,32 @@ fn a_vectorscope_setting_is_a_chip_or_in_the_popover_never_both() {
     seen.sort();
     seen.dedup();
     assert_eq!(seen.len(), popover.len(), "no setting twice in the popover");
+}
+
+#[test]
+fn the_clean_picture_loupe_chip_is_off_by_default_toggles_is_remembered_and_tags_only_when_on() {
+    let name = "Clean picture";
+    let mut s = PanelSettings::default();
+    let toolbar = |s: &PanelSettings| Toolbar::new(&picture_view::TOOLBAR, &s.resolve(name, &picture_view::SETTINGS));
+    assert!(!toolbar(&s).on[4], "off by default");
+    let tags = |s: &PanelSettings| {
+        let mut own = s.resolve(name, &picture_view::SETTINGS);
+        own.extend(s.state_of(name, scopecreep::loupe::STATE_KEYS));
+        panel_title(name, &DisplayContext { settings: own, ..DisplayContext::default() }, String::new()).tags
+    };
+    assert!(!tags(&s).iter().any(|t| t.starts_with("Loupe")), "no tag when off");
+    let t = toolbar(&s);
+    let (k, v) = t.click(4).unwrap();
+    s.set(name, k, v);
+    let back = PanelSettings::from_text(&s.to_text());
+    assert!(toolbar(&back).on[4], "on, and remembered");
+    assert!(tags(&back).contains(&"Loupe 200 %".to_string()), "{:?}", tags(&back));
+    let mut zoomed = back.clone();
+    zoomed.set_state(name, "loupe_zoom", "400");
+    assert!(tags(&zoomed).contains(&"Loupe 400 %".to_string()), "{:?}", tags(&zoomed));
+    let t = toolbar(&back);
+    let (k, v) = t.click(4).unwrap();
+    s.set(name, k, v);
+    assert!(!toolbar(&s).on[4], "a second click turns it off");
+    assert!(!tags(&s).iter().any(|t| t.starts_with("Loupe")));
 }

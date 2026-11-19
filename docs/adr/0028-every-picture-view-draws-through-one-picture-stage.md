@@ -22,3 +22,7 @@ Nine Picture Views each carried their own copy of the same drawing code: fit and
 ## Note, 2026-11-19 (#159)
 
 The Loupe is no longer part of the Channel view: it is its own piece (`loupe.rs`) that any Picture View can draw on top of the stage. It is built from the Panel's own colour rule (the same WGSL the stage gets, with the same `Values`), so it magnifies exactly what the Panel shows. It still uses `place` and the stage's texture, as this ADR said. The Channel view is its first user.
+
+## Note, 2026-11-19 (#161)
+
+The clean picture is the Loupe's second user: it draws the Loupe on top of the stage only while its Loupe chip is on, with the same `Values` it gave the stage, and passes pointer events to it only while on.

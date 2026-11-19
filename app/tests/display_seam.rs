@@ -196,8 +196,8 @@ fn the_waveform_offers_luma_weights_and_the_first_is_from_primaries() {
     assert_eq!(defs[1].amount.map(|a| (a.default, a.unit)), Some((100.0, " %")), "trace brightness is a slider that starts at the normal look");
     assert_eq!(defs[2].amount.map(|a| a.default), Some(1.0), "the soft spread starts at about 1 pixel, the old on");
     assert_eq!(defs[0].choices.iter().map(|c| c.value).collect::<Vec<_>>(), ["primaries", "match-resolve"]);
-    assert_eq!(b.set.setting_defs(0).iter().map(|d| d.key).collect::<Vec<_>>(), ["channel"]);
-    assert!(b.set.popover_defs(0).is_empty(), "the clean picture has only the channel chips, so no menu");
+    assert_eq!(b.set.setting_defs(0).iter().map(|d| d.key).collect::<Vec<_>>(), ["channel", "loupe", "size"]);
+    assert_eq!(b.set.popover_defs(0).iter().map(|d| d.key).collect::<Vec<_>>(), ["size"], "the clean picture's menu holds the Loupe size only");
 }
 
 #[test]

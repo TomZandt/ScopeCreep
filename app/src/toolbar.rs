@@ -41,6 +41,15 @@ pub static CHANNEL_TOOLBAR: [ToolbarDef; 1] = [ToolbarDef {
     ],
 }];
 
+/// The clean picture's Loupe toggle (#161): off by default; its size is the popover's `size` choice.
+pub const LOUPE_SETTING: &str = "loupe";
+pub const LOUPE_DEF: SettingDef = SettingDef { key: LOUPE_SETTING, label: "Loupe", amount: None, choices: &[Choice { value: TOGGLE_OFF, text: "Off" }, Choice { value: "on", text: "On" }] };
+pub static LOUPE_TOOLBAR: [ToolbarDef; 1] = [ToolbarDef {
+    key: LOUPE_SETTING,
+    mode: ChipMode::Toggle,
+    chips: &[ToolbarChip { value: "on", text: "L", tooltip: "Loupe: drag it, scroll over it to zoom", channel: None }],
+}];
+
 /// One chip: the setting's choice it selects, the letter on it, what hovering it says, and the colour it takes
 /// when on (neutral accent when `None`).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

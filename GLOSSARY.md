@@ -240,7 +240,7 @@ Stops False Colour's chart mode: a black and white picture where pixels within a
 The Feed's frame as Resolve sends it, before Output Conversion. Stops False Colour measures this one; every other display sees the Output picture.
 
 **Loupe**:
-A movable square on a Picture View that shows the picture under it magnified, so single pixels (and noise) can be seen. Its zoom is of source pixels, in device pixels of the screen: at 200 % each picture pixel is 2 × 2 device pixels, whatever the Panel's size. It is one shared piece any Picture View can use; it is built from the Panel's colour rule, so it shows what the Panel shows. Today it is on the Channel view.
+A movable square on a Picture View that shows the picture under it magnified, so single pixels (and noise) can be seen. Its zoom is of source pixels, in device pixels of the screen: at 200 % each picture pixel is 2 × 2 device pixels, whatever the Panel's size. It is one shared piece any Picture View can use; it is built from the Panel's colour rule, so it shows what the Panel shows. It is on the Channel view, and on the clean picture as a toolbar chip (off by default): the clean picture's Loupe magnifies whatever its chips show (colour or one channel), is dragged anywhere in the Panel, zooms 100 to 800 % with the scroll wheel, takes its size (small, medium, large) from the popover, and is remembered per Panel. While it is on, "Loupe N %" is a tag; while it is off the clean picture takes no pointer or wheel events.
 
 **Channel view**:
 The Panel showing one channel of the Output picture (blue by default, or red, green or Luma) as grey, with the Loupe on top, for inspecting noise.
