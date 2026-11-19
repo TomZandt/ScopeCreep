@@ -82,6 +82,7 @@ What we learned by testing, kept in the repo so it isn't lost when an issue thre
 | [85](85-soft-spread-slider.md) | Does a soft spread slider on the luma and Colour Waveforms keep the old On and Off looks, take any step from 0 to 3 pixels and leave counts and label alone? |
 | [102](102-mattes-stay-black.md) | Do black mattes (letterbox and pillarbox) stay black on ARRI False Colour, Stops False Colour, Skin Tone and the saturation heatmap (Feed seam)? |
 | [165](165-clean-picture-zoom.md) | Does the clean picture zoom from Fit to 400 % with the wheel toward the pointer and a chip with a slider, in exact squares above 100 %, with mattes and strip untouched, and never save the zoom (pure and Feed seam)? |
+| [166](166-clean-picture-pan.md) | Does a middle-drag pan the zoomed clean picture exactly with the pointer, clamped at the Panel's edge and centred when smaller, and does zoom after a pan still go toward the pointer (pure and Feed seam)? |
 
 ## Adding findings
 

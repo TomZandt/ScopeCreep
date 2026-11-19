@@ -123,6 +123,9 @@ _Avoid_: Renderer, canvas
 How much of a picture Panel's frame is shown, in percent of source pixels: 100 % is one picture pixel to one device pixel. It runs from Fit to 400 %, free below 100 % and in whole steps (200, 300, 400 %) above, so every picture pixel is an exact square. The scroll wheel zooms toward the pointer and the zoom chip on the title bar says it and opens a slider. It is not a setting: it is not saved and every session starts at Fit (ADR 0035). On the clean picture so far.
 _Avoid_: Magnify (that is the Loupe), scale
 
+**Pan**:
+Moving a zoomed picture inside its Panel by dragging with the middle mouse button, as in Resolve's Viewer. The picture moves exactly as far as the pointer; its edge stops at the Panel's edge, so the Panel is never left empty, and an axis on which the picture is smaller than the Panel stays centred. Nothing to pan at Fit. Not saved.
+
 **Fit**:
 The zoom that shows the whole frame in the Panel, as a picture Panel always did. The zoom chip says how much that scales the frame: "Fit 23 %". A frame already larger than 100 % at Fit (a small frame in a big Panel) starts at Fit and zooms on in whole steps.
 

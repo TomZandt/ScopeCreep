@@ -183,6 +183,23 @@ impl ZoomModel {
         self.centre = Some([hold(c[0], width, picture[0]), hold(c[1], height, picture[1])]);
     }
 
+    /// The picture was dragged by `delta` device pixels (spec #163, #166): it moves exactly as far as the pointer, and
+    /// is held so the Panel is never left empty (a picture smaller than the Panel on an axis stays centred). At Fit
+    /// there is nothing to pan. Returns whether the picture moved.
+    pub fn pan(&mut self, area: [f32; 4], picture: [u32; 2], strip: f32, delta: [f32; 2]) -> bool {
+        let Some(fit) = Self::fit(area, picture, strip) else { return false };
+        if self.at_fit(fit) {
+            return false;
+        }
+        let Some(percent) = self.percent(area, picture, strip) else { return false };
+        let k = percent / 100.0;
+        let before = self.centre;
+        let c = before.unwrap_or([picture[0] as f32 / 2.0, picture[1] as f32 / 2.0]);
+        self.centre = Some([c[0] - delta[0] / k, c[1] - delta[1] / k]);
+        self.hold(area, picture, strip);
+        self.centre != before
+    }
+
     /// The scroll wheel turned `lines` over the device point `at` (positive zooms in): whole notches step the
     /// zoom, parts of one wait for the rest. The picture pixel under `at` stays under it. Returns whether the zoom
     /// changed.

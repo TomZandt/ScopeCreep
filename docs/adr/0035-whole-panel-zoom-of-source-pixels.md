@@ -22,7 +22,7 @@ A colourist checking noise, grain, focus or a key edge needs to see single pictu
 
 ## Consequences
 
-- ADR 0028's stage asks the zoom model for the view (`PictureStage::draw_zoomed`); `draw` is Fit. Pan (#166), the other picture Panels (#167), Link (#168) and Z (#169) grow the same model.
+- ADR 0028's stage asks the zoom model for the view (`PictureStage::draw_zoomed`); `draw` is Fit. Pan (#166, done: a middle-drag moves the centre point by the pointer's movement over the zoom, held by the same clamp the wheel uses) , the other picture Panels (#167), Link (#168) and Z (#169) grow the same model.
 - The Stage uniform grew by two vec4s (the window of the picture drawn, and the exact-texel flag).
 - ADR 0015's display state now includes the zoom, kept beside the settings but not in them (and never saved).
 - The clean picture's chips are six at the left of the settings button; the narrowest Panels still run over (#171).

@@ -56,6 +56,8 @@ pub struct PictureView {
     look: Arc<Mutex<Look>>,
     /// How much of the picture the Panel shows (spec #163): not a setting, so never saved; every session starts at Fit.
     zoom: Arc<Mutex<ZoomModel>>,
+    /// Where the pointer was at the last step of a middle-drag (pan), while one is going.
+    pan_from: Arc<Mutex<Option<[f32; 2]>>>,
 }
 
 impl PictureView {
@@ -63,7 +65,7 @@ impl PictureView {
     pub fn new(device: &wgpu::Device, queue: &wgpu::Queue, target: wgpu::TextureFormat, filterable: bool) -> PictureView {
         let stage = PictureStage::new::<[f32; 4]>(device, queue, target, filterable, Rule { label: "picture view", wgsl: RULE.into(), has_legend: false });
         let loupe = Loupe::new::<[f32; 4]>(device, queue, target, RULE);
-        let view = PictureView { stage, loupe, label_tail: Arc::new(Mutex::new(String::new())), zoom: Arc::new(Mutex::new(ZoomModel::default())), look: Arc::new(Mutex::new(Look { weights: crate::measurement::REC709_LUMA.map(|v| v as f32), channel: 0.0, loupe: false })) };
+        let view = PictureView { stage, loupe, label_tail: Arc::new(Mutex::new(String::new())), zoom: Arc::new(Mutex::new(ZoomModel::default())), pan_from: Arc::new(Mutex::new(None)), look: Arc::new(Mutex::new(Look { weights: crate::measurement::REC709_LUMA.map(|v| v as f32), channel: 0.0, loupe: false })) };
         // Only the label's tail: the Loupe takes its remembered state from the first real `configure`.
         *view.label_tail.lock().unwrap() = Self::label_tail(&DisplayContext::default());
         view
@@ -151,6 +153,26 @@ impl Display for PictureView {
                 return PointerResult { used: true, remember: Vec::new() };
             }
             return PointerResult::default();
+        }
+        // The middle button pans the zoomed picture; its movement is the pan's, whatever the Loupe is doing.
+        match event {
+            Pointer::MiddleDown(at) => {
+                *self.pan_from.lock().unwrap() = Some(at);
+                return PointerResult { used: true, remember: Vec::new() };
+            }
+            Pointer::MiddleUp => {
+                let was = self.pan_from.lock().unwrap().take();
+                return PointerResult { used: was.is_some(), remember: Vec::new() };
+            }
+            Pointer::Move(at) => {
+                let mut from = self.pan_from.lock().unwrap();
+                if let (Some(last), Some(picture)) = (*from, self.frame_size()) {
+                    *from = Some(at);
+                    self.zoom.lock().unwrap().pan(area, picture, 0.0, [at[0] - last[0], at[1] - last[1]]);
+                    return PointerResult { used: true, remember: Vec::new() };
+                }
+            }
+            _ => {}
         }
         if !loupe {
             return PointerResult::default();

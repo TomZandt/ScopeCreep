@@ -215,3 +215,54 @@ fn zoom_is_not_saved_and_the_next_session_opens_at_fit() {
     let next = Bench::new("clean-zoom-next-session");
     assert_eq!(next.chip(), "Fit 75 %");
 }
+
+// ---- pan with the middle button (#166)
+
+impl Bench {
+    fn pointer(&self, event: Pointer) -> bool {
+        self.set.pointer(0, AREA, 1.0, event).used
+    }
+}
+
+/// A frame split down the middle: dark on the left, bright on the right.
+fn split(width: u32, height: u32) -> Vec<f32> {
+    (0..height).flat_map(|_| (0..width).flat_map(move |x| if x < width / 2 { [0.1, 0.1, 0.1, 1.0] } else { [0.9, 0.9, 0.9, 1.0] })).collect()
+}
+
+#[test]
+fn a_middle_drag_over_the_zoomed_picture_moves_what_is_drawn() {
+    let mut b = Bench::new("clean-zoom-pan");
+    b.play(FRAME[0], FRAME[1], &split(FRAME[0], FRAME[1]));
+    wheel_to(&b, "200 %");
+    let y = (AREA[1] + AREA[3] / 2.0) as u32;
+    let first = b.render();
+    // Zoomed on the middle of the frame: the split sits at the middle of the Panel.
+    let (left, right) = (px(&first, 100, y)[0], px(&first, 540, y)[0]);
+    assert!(left < 80 && right > 200, "dark left of the split, bright right of it: {left} {right}");
+    // Drag 200 px to the left: the picture follows the pointer, so the split moves left by 200 px.
+    let from = middle();
+    assert!(b.pointer(Pointer::MiddleDown(from)));
+    assert!(b.pointer(Pointer::Move([from[0] - 100.0, from[1]])));
+    assert!(b.pointer(Pointer::Move([from[0] - 200.0, from[1]])));
+    assert!(b.pointer(Pointer::MiddleUp));
+    let panned = b.render();
+    assert_ne!(panned, first);
+    assert!(px(&panned, 300, y)[0] > 200 && px(&panned, 100, y)[0] < 80, "the split moved with the pointer");
+    assert!(px(&panned, 110, y)[0] < 80 && px(&panned, 130, y)[0] > 200, "split at about x = 120");
+    // Letting go ends the drag.
+    assert!(!b.pointer(Pointer::Move([from[0] + 100.0, from[1]])));
+    assert_eq!(b.render(), panned);
+}
+
+#[test]
+fn a_middle_drag_at_fit_moves_nothing_and_the_left_button_and_right_click_are_as_before() {
+    let b = Bench::new("clean-zoom-pan-fit");
+    let fit = b.render();
+    b.pointer(Pointer::MiddleDown(middle()));
+    b.pointer(Pointer::Move([middle()[0] - 90.0, middle()[1]]));
+    b.pointer(Pointer::MiddleUp);
+    assert_eq!(b.render(), fit);
+    assert!(!b.pointer(Pointer::Down(middle())), "the left button is not the Panel's with the Loupe off");
+    assert!(!b.pointer(Pointer::Up));
+    assert!(!b.pointer(Pointer::Move(middle())), "no drag going: a move is nobody's");
+}

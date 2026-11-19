@@ -218,3 +218,59 @@ fn a_frame_already_over_100_percent_at_fit_zooms_on_from_fit_in_whole_steps() {
     big.wheel(PANEL, [100, 50], 0.0, [200.0, 150.0], 1.0);
     assert_eq!(big.zoom, Zoom::Fit, "nothing beyond Fit when Fit is already 400 % or more");
 }
+
+// ---- pan (#166)
+
+fn zoomed(percent: f32) -> Model {
+    let mut m = Model::default();
+    m.set_percent(percent, PANEL, FRAME, 0.0);
+    m
+}
+
+#[test]
+fn pan_moves_the_picture_exactly_as_far_as_the_pointer() {
+    let mut m = zoomed(200.0);
+    let before = m.placement(PANEL, FRAME, 0.0).unwrap();
+    assert!(m.pan(PANEL, FRAME, 0.0, [-30.0, 12.0]));
+    let after = m.placement(PANEL, FRAME, 0.0).unwrap();
+    assert_eq!((after.x - before.x, after.y - before.y), (-30.0, 12.0));
+    assert_eq!((after.w, after.h), (before.w, before.h));
+}
+
+#[test]
+fn pan_clamps_so_the_picture_edge_stops_at_the_panel_edge() {
+    let mut m = zoomed(200.0);
+    m.pan(PANEL, FRAME, 0.0, [1.0e6, 1.0e6]);
+    let p = m.placement(PANEL, FRAME, 0.0).unwrap();
+    assert_eq!((p.x, p.y), (PANEL[0], PANEL[1]), "left and top edges at the Panel's");
+    m.pan(PANEL, FRAME, 0.0, [-1.0e6, -1.0e6]);
+    let p = m.placement(PANEL, FRAME, 0.0).unwrap();
+    assert_eq!((p.x + p.w, p.y + p.h), (PANEL[0] + PANEL[2], PANEL[1] + PANEL[3]), "right and bottom edges at the Panel's");
+    assert!(!m.pan(PANEL, FRAME, 0.0, [-5.0, -5.0]), "already at the edge: nothing moves");
+}
+
+#[test]
+fn a_picture_smaller_than_the_panel_stays_centred_and_fit_does_not_pan() {
+    let mut m = Model::default();
+    assert!(!m.pan(PANEL, FRAME, 0.0, [40.0, 40.0]), "nothing to pan at Fit");
+    // 300 x 100 at 200 % is 600 x 200: wider than the Panel, centred in its height.
+    let mut m = Model::default();
+    m.set_percent(200.0, PANEL, [300, 100], 0.0);
+    m.pan(PANEL, [300, 100], 0.0, [25.0, 60.0]);
+    let p = m.placement(PANEL, [300, 100], 0.0).unwrap();
+    assert_eq!(p.y, PANEL[1] + (PANEL[3] - p.h) / 2.0);
+    assert!(p.x <= PANEL[0] && p.x + p.w >= PANEL[0] + PANEL[2]);
+}
+
+#[test]
+fn zooming_after_a_pan_still_zooms_toward_the_pointer() {
+    let mut m = zoomed(200.0);
+    m.pan(PANEL, FRAME, 0.0, [-80.0, -40.0]);
+    let at = [150.0, 120.0];
+    let (p, k) = (m.placement(PANEL, FRAME, 0.0).unwrap(), 2.0);
+    let under = [(at[0] - p.x) / k, (at[1] - p.y) / k];
+    m.wheel(PANEL, FRAME, 0.0, at, 1.0);
+    let (q, k) = (m.placement(PANEL, FRAME, 0.0).unwrap(), 3.0);
+    let now = [(at[0] - q.x) / k, (at[1] - q.y) / k];
+    assert!((now[0] - under[0]).abs() < 1.0 && (now[1] - under[1]).abs() < 1.0, "{under:?} vs {now:?}");
+}
