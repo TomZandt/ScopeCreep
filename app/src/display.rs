@@ -56,10 +56,14 @@ pub struct ScaleText {
 pub enum Pointer {
     /// The left button went down here.
     Down([f32; 2]),
-    /// The pointer moved here (with the left button down, if it went down on the display).
+    /// The pointer moved here (with the left or middle button down, if it went down on the display).
     Move([f32; 2]),
     /// The left button went up.
     Up,
+    /// The middle button went down here.
+    MiddleDown([f32; 2]),
+    /// The middle button went up.
+    MiddleUp,
     /// The scroll wheel turned over `at`; `lines` is positive for scrolling up (several for a fast turn, fractions
     /// for a smooth wheel).
     Wheel { at: [f32; 2], lines: f32 },

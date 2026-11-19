@@ -21,6 +21,7 @@ pub mod settings;
 pub mod toolbar;
 pub mod flat_rects;
 pub mod picture_stage;
+pub mod zoom;
 pub mod scale_bar;
 pub mod picture_view;
 pub mod highlight_neutrals;

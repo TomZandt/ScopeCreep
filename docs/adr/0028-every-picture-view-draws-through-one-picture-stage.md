@@ -26,3 +26,7 @@ The Loupe is no longer part of the Channel view: it is its own piece (`loupe.rs`
 ## Note, 2026-11-19 (#161)
 
 The clean picture is the Loupe's second user: it draws the Loupe on top of the stage only while its Loupe chip is on, with the same `Values` it gave the stage, and passes pointer events to it only while on.
+
+## Note, 2026-11-19 (#164)
+
+Placement of a Picture View's frame comes from the zoom model (`zoom.rs`, spec #163), which the stage asks instead of calling `place` directly. At Fit it gives exactly what `place` gives, so nothing on screen changes; `place` stays the Fit answer and what the Loupe uses.

@@ -404,7 +404,7 @@ impl PictureStage {
         let guard = self.bound.lock().unwrap();
         let Some(bound) = guard.as_ref() else { return };
         let strip = legend.map_or(0.0, |l| l.strip);
-        let Some(p) = place(area, [bound.width, bound.height], strip) else { return };
+        let Some(p) = crate::zoom::ZoomModel::default().placement(area, [bound.width, bound.height], strip) else { return };
         self.write_values(values);
         self.write_stage(&self.picture_stage, bound, [p.x, p.y, p.w, p.h], surface, 0.0);
         pass.set_pipeline(&self.pipeline);

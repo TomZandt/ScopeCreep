@@ -194,6 +194,8 @@ struct AppWindow {
     contents: Vec<[f32; 4]>,
     /// The Panel whose display holds the pointer (a Loupe being dragged), if any.
     pointer_panel: Option<usize>,
+    /// The Panel a middle-button press went down on, which gets the movement until the button is let go.
+    middle_panel: Option<usize>,
     /// The border being dragged, if any.
     drag: Option<Border>,
     /// The Panel being dragged by its title bar, to swap with the one it is let go on.
@@ -350,6 +352,7 @@ impl AppWindow {
             cells: Vec::new(),
             contents: Vec::new(),
             pointer_panel: None,
+            middle_panel: None,
             drag: None,
             panel_drag: None,
             state_unsaved: false,
@@ -404,7 +407,7 @@ impl AppWindow {
     /// Rest the hover on what is under the pointer: a Panel's title bar or the status line (never while a drag or
     /// a Loupe holds the pointer).
     fn update_hover(&mut self) {
-        let busy = self.pointer_panel.is_some() || self.drag.is_some() || self.panel_drag.is_some();
+        let busy = self.pointer_panel.is_some() || self.middle_panel.is_some() || self.drag.is_some() || self.panel_drag.is_some();
         let hover = if busy {
             None
         } else if components::contains(self.status_bar, self.cursor) {
@@ -463,7 +466,7 @@ impl AppWindow {
             return;
         }
         self.update_hover();
-        if let Some(panel) = self.pointer_panel {
+        if let Some(panel) = self.pointer_panel.or(self.middle_panel) {
             self.display_pointer(panel, Pointer::Move(self.cursor));
         } else if let Some(border) = self.drag {
             self.grid.drag(border, self.cursor, self.grid_area, self.grid_gap, min_panel_size(self.scale));
@@ -715,6 +718,29 @@ impl AppWindow {
         let panel = self.contents.iter().position(|c| Menu::contains(*c, self.cursor)).filter(|p| self.displays.takes_pointer(*p));
         if let Some(panel) = panel {
             self.display_pointer(panel, Pointer::Wheel { at: self.cursor, lines });
+        }
+    }
+
+    /// Middle button: the Panel under the pointer gets the press, the movement and the release, as the left button
+    /// does for a display that uses it. A menu open over it takes no middle button.
+    fn middle_button(&mut self, state: ElementState) {
+        match state {
+            ElementState::Released => {
+                if let Some(panel) = self.middle_panel.take() {
+                    self.display_pointer(panel, Pointer::MiddleUp);
+                }
+            }
+            ElementState::Pressed => {
+                if self.menu.is_some() {
+                    return;
+                }
+                let panel = self.contents.iter().position(|c| Menu::contains(*c, self.cursor));
+                if let Some(panel) = panel {
+                    if self.display_pointer(panel, Pointer::MiddleDown(self.cursor)) {
+                        self.middle_panel = Some(panel);
+                    }
+                }
+            }
         }
     }
 
@@ -1079,6 +1105,7 @@ impl ApplicationHandler<Wake> for App {
             WindowEvent::CursorMoved { position, .. } => w.pointer_moved(position.x as f32, position.y as f32),
             WindowEvent::MouseInput { state, button: MouseButton::Left, .. } => w.button(state),
             WindowEvent::MouseInput { state: ElementState::Pressed, button: MouseButton::Right, .. } => w.right_click(),
+            WindowEvent::MouseInput { state, button: MouseButton::Middle, .. } => w.middle_button(state),
             WindowEvent::ModifiersChanged(m) => w.modifiers = m.state(),
             WindowEvent::KeyboardInput { event, is_synthetic: false, .. } => w.key(&event),
             WindowEvent::MouseWheel { delta, .. } => w.wheel(match delta {
