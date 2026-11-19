@@ -230,23 +230,23 @@ fn the_legend_toggles_and_shows_the_palette_with_its_ends() {
     assert_eq!(defs[1].choices.iter().map(|c| c.value).collect::<Vec<_>>(), ["on", "off"]);
     let image = b.render(width, height);
     // The bar under the picture runs cool (left) to warm (right).
-    assert_overlay(pixel(&image, width, 2, height - 26 + 4), 0.5, 2.5 / width as f32, "legend left");
-    assert_overlay(pixel(&image, width, width - 3, height - 26 + 4), 0.5, (width as f32 - 2.5) / width as f32, "legend right");
+    assert_overlay(pixel(&image, width, 2, height - 6), 0.5, 2.5 / width as f32, "legend left");
+    assert_overlay(pixel(&image, width, width - 3, height - 6), 0.5, (width as f32 - 2.5) / width as f32, "legend right");
     // Along the bar the colour is the picture's own: a pixel at that place on the scale, over mid grey.
     for x in [width / 10, width / 4, width / 2, width * 3 / 4] {
-        assert_overlay(pixel(&image, width, x, height - 26 + 4), 0.5, (x as f32 + 0.5) / width as f32, "legend");
+        assert_overlay(pixel(&image, width, x, height - 6), 0.5, (x as f32 + 0.5) / width as f32, "legend");
     }
     let texts = b.set.scale_texts(0, [0.0, 0.0, width as f32, height as f32], 1.0);
-    assert_eq!(texts.iter().map(|t| t.text.as_str()).collect::<Vec<_>>(), ["0 %", "100 %"]);
+    assert_eq!(texts.iter().map(|t| t.text.as_str()).collect::<Vec<_>>(), ["0", "10", "20", "30", "40", "50", "60", "70", "80", "90", "100 %"]);
     // The picture still shows above it (a grey: the cool end).
     assert_overlay(pixel(&image, width, 300, 100), 0.5, 0.0, "the picture");
     b.configure("on", "50");
-    assert_eq!(b.set.scale_texts(0, [0.0, 0.0, width as f32, height as f32], 1.0)[1].text, "50 %");
+    assert_eq!(b.set.scale_texts(0, [0.0, 0.0, width as f32, height as f32], 1.0).last().unwrap().text, "50 %");
 
     // Off: no bar, no text, the picture takes the whole Panel.
     b.configure("off", "100");
     let image = b.render(width, height);
-    assert_overlay(pixel(&image, width, width - 3, height - 26 + 4), 0.5, 0.0, "picture runs to the bottom");
+    assert_overlay(pixel(&image, width, width - 3, height - 6), 0.5, 0.0, "picture runs to the bottom");
     assert!(b.set.scale_texts(0, [0.0, 0.0, width as f32, height as f32], 1.0).is_empty());
 }
 

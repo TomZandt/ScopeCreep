@@ -100,6 +100,9 @@ The settings a display marks to show as chips on its Panel's title bar (the Chan
 The colour scale of a display, always horizontal: under the picture, full width, read left to right.
 _Avoid_: Vertical legend
 
+**Scale bar**:
+The legend strip of ARRI False Colour and the saturation heatmap: a bar proportional to a range (0 to 100 % of Output Luma, or 0 to the heatmap's scale), tick numbers along its top and marks under it at the meaningful points. Ticks thin out and marks drop out on a small Panel; text never overlaps.
+
 **Panel**:
 One area of the Window that shows one Scope or Picture View. Every display in the Window has its own Panel, so everything can be seen at once (8 Panels; the gamut/legal warning, Highlight Neutrals, CIE plot, Black and white and Colour Waveform are out of the Window but their code and saved settings are kept); the Panels sit in an ordered grid whose borders the user can drag.
 _Avoid_: Pane, view, tile, window (for one display)

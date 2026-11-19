@@ -8,7 +8,8 @@
 //! end; more saturated pixels stay at the hot end.
 use crate::display::{Display, DisplayContext, ScaleText};
 use crate::gpu_frame::GpuFrame;
-use crate::picture_stage::{BAR, BAR_STRIP, Legend, PictureStage, Rule};
+use crate::picture_stage::{PictureStage, Rule};
+use crate::scale_bar::ScaleBar;
 use crate::muted_palette;
 use crate::output_conversion;
 use crate::settings::{Choice, SettingDef};
@@ -63,6 +64,11 @@ fn colour(uv: vec2<f32>) -> vec3<f32> {{
 "#,
         palette = muted_palette::wgsl()
     )
+}
+
+/// The legend: the same ruler as ARRI False Colour's, from 0 % to the scale's top, with no marks (#122).
+fn bar(top: f64) -> ScaleBar<'static> {
+    ScaleBar { from: 0.0, to: top, unit: " %", steps: &[10.0, 20.0, 25.0, 50.0, 100.0], marks: &[] }
 }
 
 struct State {
@@ -126,18 +132,12 @@ impl Display for SaturationHeatmap {
         let state = self.state.lock().unwrap();
         let gain = (100.0 / (state.scale * RING)) as f32;
         let w = state.weights;
-        self.stage.draw(pass, area, surface, &[w[0] as f32, w[1] as f32, w[2] as f32, gain], Legend::bar(state.legend, area, scale));
+        self.stage.draw(pass, area, surface, &[w[0] as f32, w[1] as f32, w[2] as f32, gain], bar(state.scale).layout(state.legend, area, scale, false).map(|l| l.legend));
     }
 
-    /// The two ends of the legend: 0 % under the cool end and the scale's top under the hot end.
+    /// The ruler's tick numbers, from 0 % to the scale's top.
     fn scale_texts(&self, area: [f32; 4], scale: f32) -> Vec<ScaleText> {
         let state = self.state.lock().unwrap();
-        let Some(legend) = Legend::bar(state.legend, area, scale).filter(|_| self.stage.has_picture() && area[2] >= 80.0 * scale) else { return Vec::new() };
-        let top = area[1] + area[3] - legend.strip + (BAR + (BAR_STRIP - BAR) / 2.0) * scale;
-        let width = area[2] / 2.0;
-        vec![
-            ScaleText { text: "0 %".into(), left: area[0], top, width, right_aligned: false, centred: false },
-            ScaleText { text: format!("{} %", state.scale), left: area[0] + width, top, width, right_aligned: true, centred: false },
-        ]
+        bar(state.scale).layout(state.legend, area, scale, self.stage.has_picture()).map_or(Vec::new(), |l| l.ticks)
     }
 }

@@ -56,19 +56,9 @@ pub struct Legend {
     pub bar: f32,
 }
 
-/// The strip the bar legends share (ARRI False Colour, the saturation heatmap): the bar at the top of the strip
-/// and its numbers under it, logical pixels.
-pub const BAR_STRIP: f32 = 26.0;
-pub const BAR: f32 = 8.0;
-/// It is only drawn in a Panel at least this tall (logical pixels), so it never crowds the picture out.
+/// A scale-bar legend (ARRI False Colour, the saturation heatmap; see `scale_bar.rs`) is only drawn in a Panel at
+/// least this tall (logical pixels), so it never crowds the picture out.
 pub const BAR_MIN_HEIGHT: f32 = 110.0;
-
-impl Legend {
-    /// The shared bar legend in a Panel of `area` at `scale`, when it is `on` and there is room.
-    pub fn bar(on: bool, area: [f32; 4], scale: f32) -> Option<Legend> {
-        (on && area[3] >= BAR_MIN_HEIGHT * scale).then_some(Legend { strip: BAR_STRIP * scale, bar_offset: 0.0, bar: BAR * scale })
-    }
-}
 
 const PRELUDE: &str = r#"
 struct Stage {

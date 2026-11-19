@@ -42,6 +42,10 @@ impl Bench {
     }
 }
 
+/// A row through the legend's bar in a 400 pixel tall Panel at scale 1: the strip is 40.6 pixels, its bar in the
+/// middle rows of 14.3 to 22.3 down from its top.
+const BAR_Y: u32 = 400 - 22;
+
 fn pixel(image: &[u8], width: u32, x: u32, y: u32) -> [u8; 3] {
     let i = (y as usize * width as usize + x as usize) * 4;
     [image[i], image[i + 1], image[i + 2]]
@@ -188,18 +192,25 @@ fn the_legend_toggles_and_the_label_says_the_bands_are_third_party_and_not_affil
     let (width, height) = (600u32, 400u32);
     b.play(width, height, &columns(&vec![0.2f32; width as usize], height));
 
-    // On by default: six swatches under the picture, each band's colour, with the band edges as text.
+    // On by default: a 0 to 100 % ruler under the picture with tick numbers and marks.
     b.configure("on");
     let defs = b.set.setting_defs(0);
     assert_eq!(defs.len(), 2, "the legend and B/W");
     assert_eq!((defs[0].key, defs[0].choices.iter().map(|c| c.value).collect::<Vec<_>>()), ("legend", vec!["on", "off"]));
     let image = b.render(width, height);
-    for (i, band) in BANDS.iter().enumerate() {
-        let got = pixel(&image, width, 50 + 100 * i as u32, height - 26 + 4);
-        assert!(near(got, band.colour), "legend swatch {i} is {}: {got:?}", band.name);
+    // Each band sits at its true position: the middle of each band on the ruler is its colour.
+    for band in BANDS.iter() {
+        let x = ((band.from + band.to) / 2.0 / 100.0 * width as f64) as u32;
+        let got = pixel(&image, width, x, BAR_Y);
+        assert!(near(got, band.colour), "legend {} at {x}: {got:?}", band.name);
     }
     let texts = b.set.scale_texts(0, [0.0, 0.0, width as f32, height as f32], 1.0);
-    assert_eq!(texts.iter().map(|t| t.text.as_str()).collect::<Vec<_>>(), ["0–2.5", "2.5–4", "38–42", "52–56", "97–99", "99–100"]);
+    let said = texts.iter().map(|t| t.text.as_str()).collect::<Vec<_>>();
+    assert_eq!(&said[..3], ["0", "5", "10"], "ticks every 5 % where they fit: {said:?}");
+    assert!(said.contains(&"100 %"), "{said:?}");
+    for mark in ["near black clip", "18 % grey", "near white clip"] {
+        assert!(said.contains(&mark), "{mark} is under the bar: {said:?}");
+    }
     // The picture is still there above it (a grey of 20 %, not a band).
     let got = pixel(&image, width, 300, 100);
     assert!(got[0] == got[1] && got[1] == got[2] && got[0] > 40, "the picture shows above the legend: {got:?}");
@@ -207,7 +218,7 @@ fn the_legend_toggles_and_the_label_says_the_bands_are_third_party_and_not_affil
     // Off: no swatches, no text, and the picture takes the whole Panel.
     b.configure("off");
     let image = b.render(width, height);
-    assert_eq!(pixel(&image, width, 50, height - 26 + 4)[0], pixel(&image, width, 50, 100)[0], "the picture runs to the bottom");
+    assert_eq!(pixel(&image, width, 50, BAR_Y)[0], pixel(&image, width, 50, 100)[0], "the picture runs to the bottom");
     assert!(b.set.scale_texts(0, [0.0, 0.0, width as f32, height as f32], 1.0).is_empty());
 
     // The label, with the legend off as well as on.
@@ -239,4 +250,58 @@ fn a_panel_too_short_for_the_legend_keeps_the_whole_picture() {
     let image = b.render(200, 100);
     assert_eq!(pixel(&image, 200, 100, 97)[0], pixel(&image, 200, 100, 50)[0], "no legend strip in a short Panel");
     assert!(b.set.scale_texts(0, [0.0, 0.0, 200.0, 100.0], 1.0).is_empty());
+}
+
+#[test]
+fn the_legend_greys_are_the_greys_the_picture_draws_at_that_percentage() {
+    let mut b = Bench::new("ruler");
+    b.configure("on");
+    let (width, height) = (600u32, 400u32);
+    // Every column of the picture is the grey at the same position along the ruler (the picture is 1:1 in the Panel).
+    let levels: Vec<f32> = (0..width).map(|x| (x as f32 + 0.5) / width as f32).collect();
+    b.play(width, 200, &columns(&levels, 200));
+    let image = b.render(width, height);
+    let edges = [0.0, 2.5, 4.0, 38.0, 42.0, 52.0, 56.0, 97.0, 99.0, 100.0];
+    let mut checked = 0;
+    for x in 0..width {
+        let percent = (x as f64 + 0.5) / width as f64 * 100.0;
+        if edges.iter().any(|e| (percent - e).abs() < 0.3) {
+            continue; // a band edge falls inside this column
+        }
+        let (bar, picture) = (pixel(&image, width, x, BAR_Y), pixel(&image, width, x, 180));
+        assert!((0..3).all(|c| (bar[c] as i32 - picture[c] as i32).abs() <= 2), "at {percent:.2} %: bar {bar:?}, picture {picture:?}");
+        checked += 1;
+    }
+    assert!(checked > 550);
+}
+
+#[test]
+fn ticks_and_marks_never_overlap_and_thin_out_on_a_small_panel_and_follow_the_scale() {
+    let mut b = Bench::new("thin");
+    b.configure("on");
+    b.play(600, 200, &columns(&vec![0.2f32; 600], 200));
+    let overlap = |texts: &[scopecreep::display::ScaleText]| {
+        let mut rows: std::collections::BTreeMap<i32, Vec<(f32, f32)>> = Default::default();
+        for t in texts {
+            rows.entry(t.top as i32).or_default().push((t.left, t.left + t.width));
+        }
+        rows.values().any(|r| r.iter().any(|a| r.iter().any(|c| a != c && a.0 < c.1 && c.0 < a.1)))
+    };
+    let mut counts = Vec::new();
+    for width in [900.0f32, 600.0, 300.0, 160.0, 100.0] {
+        let texts = b.set.scale_texts(0, [0.0, 0.0, width, 400.0], 1.0);
+        assert!(!overlap(&texts), "no text touches another at {width}: {:?}", texts.iter().map(|t| &t.text).collect::<Vec<_>>());
+        assert!(texts.iter().all(|t| t.left >= 0.0 && t.left + t.width <= width + 0.5), "text stays inside the bar at {width}");
+        counts.push(texts.len());
+    }
+    assert!(counts.windows(2).all(|w| w[0] >= w[1]), "fewer texts as the Panel narrows: {counts:?}");
+    assert!(counts[4] < counts[0]);
+    // At 2x the strip is twice as tall and the numbers sit in it.
+    let tall = b.set.scale_texts(0, [0.0, 0.0, 1200.0, 800.0], 2.0);
+    let flat = b.set.scale_texts(0, [0.0, 0.0, 600.0, 400.0], 1.0);
+    assert_eq!(tall.len(), flat.len());
+    for (t, f) in tall.iter().zip(&flat) {
+        assert_eq!(t.text, f.text);
+        assert!((t.top - (800.0 - (400.0 - f.top) * 2.0)).abs() < 0.5, "{} sits in the doubled strip", t.text);
+    }
 }

@@ -193,16 +193,6 @@ fn the_legend_bar_is_drawn_under_a_picture_that_leaves_room_for_it() {
 }
 
 #[test]
-fn the_shared_bar_legend_goes_only_in_a_panel_tall_enough_and_follows_the_scale() {
-    let area = |h: f32| [0.0, 0.0, 200.0, h];
-    assert_eq!(Legend::bar(true, area(109.0), 1.0), None);
-    assert_eq!(Legend::bar(false, area(300.0), 1.0), None);
-    assert_eq!(Legend::bar(true, area(110.0), 1.0), Some(Legend { strip: 26.0, bar_offset: 0.0, bar: 8.0 }));
-    assert_eq!(Legend::bar(true, area(220.0), 2.0), Some(Legend { strip: 52.0, bar_offset: 0.0, bar: 16.0 }));
-    assert_eq!(Legend::bar(true, area(219.0), 2.0), None);
-}
-
-#[test]
 fn fill_covers_the_whole_panel_whatever_the_frames_shape() {
     let mut rig = Rig::new("stage-fill");
     let stage = stage(&rig);

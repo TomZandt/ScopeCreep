@@ -7,7 +7,8 @@
 //! signal. Nothing is clamped first: a channel below 0 counts as the negative number it is.
 use crate::display::{Display, DisplayContext, ScaleText};
 use crate::gpu_frame::GpuFrame;
-use crate::picture_stage::{BAR, BAR_STRIP, Legend, PictureStage, Rule};
+use crate::picture_stage::{PictureStage, Rule};
+use crate::scale_bar::{BarMark, ScaleBar};
 use crate::output_conversion;
 use crate::settings::{Choice, SettingDef};
 use crate::toolbar::{BW_DEFAULT_GREY, BW_SETTING, BW_TOOLBAR, ToolbarDef};
@@ -67,8 +68,25 @@ fn band_function() -> String {
     code
 }
 
-/// The colour rule: the band the Luma falls in, else its grey; the legend is the six swatches side by side, a hair
-/// of black between them.
+/// The legend: a proportional ruler from 0 to 100 % of the Output Luma, ticked every 5, 10, 20, 25 or 50 % as many
+/// as fit, with the meaningful points marked under it (#122). Most important mark first.
+pub const BAR: ScaleBar<'static> = ScaleBar {
+    from: 0.0,
+    to: 100.0,
+    unit: " %",
+    steps: &[5.0, 10.0, 20.0, 25.0, 50.0],
+    marks: &[
+        BarMark { from: 2.5, to: 5.0, text: "near black clip" },
+        BarMark { from: 38.0, to: 42.0, text: "18 % grey" },
+        BarMark { from: 97.0, to: 99.0, text: "near white clip" },
+        BarMark { from: 0.0, to: 0.0, text: "black clip" },
+        BarMark { from: 100.0, to: 100.0, text: "white clip" },
+    ],
+};
+
+/// The colour rule: the band the Luma falls in, else its grey. The legend is the same rule over the ruler: each
+/// band at its true position and width, and the grey the picture shows in between (the picture's own colour
+/// cannot be drawn on a ruler, so a Panel in colour mode shows the same greys).
 fn rule() -> String {
     format!(
         r#"
@@ -77,9 +95,10 @@ struct Values {{ weights: vec4<f32> }};   // luma weights for R, G, B; w: 1 for 
 {band}
 
 fn legend(uv: vec2<f32>) -> vec3<f32> {{
-    let cell = uv.x * {count}.0;
-    if (fract(cell) < 0.03 || fract(cell) > 0.97) {{ return vec3<f32>(0.0); }}
-    return swatch(u32(cell));
+    let percent = uv.x * 100.0;
+    let coloured = band(percent);
+    if (coloured.a > 0.5) {{ return coloured.rgb; }}
+    return vec3<f32>(clamp(percent / 100.0, 0.0, 1.0));
 }}
 
 fn colour(uv: vec2<f32>) -> vec3<f32> {{
@@ -90,18 +109,8 @@ fn colour(uv: vec2<f32>) -> vec3<f32> {{
     return clamp(load_picture(uv), vec3<f32>(0.0), vec3<f32>(1.0));
 }}
 "#,
-        band = band_function() + &swatch_function(),
-        count = BANDS.len()
+        band = band_function()
     )
-}
-
-fn swatch_function() -> String {
-    let mut code = String::from("fn swatch(i: u32) -> vec3<f32> {\n");
-    for (i, b) in BANDS.iter().enumerate() {
-        code += &format!("    if (i == {i}u) {{ return vec3<f32>({:?}, {:?}, {:?}); }}\n", b.colour[0], b.colour[1], b.colour[2]);
-    }
-    code += "    return vec3<f32>(0.0);\n}\n";
-    code
 }
 
 struct State {
@@ -168,21 +177,13 @@ impl Display for ArriFalseColour {
     fn draw(&self, pass: &mut wgpu::RenderPass<'_>, area: [f32; 4], surface: [f32; 2], scale: f32) {
         let state = self.state.lock().unwrap();
         let w = state.weights;
-        self.stage.draw(pass, area, surface, &[w[0] as f32, w[1] as f32, w[2] as f32, state.grey as u32 as f32], Legend::bar(state.legend, area, scale));
+        self.stage.draw(pass, area, surface, &[w[0] as f32, w[1] as f32, w[2] as f32, state.grey as u32 as f32], BAR.layout(state.legend, area, scale, false).map(|l| l.legend));
     }
 
-    /// The band edges under their swatches, where they fit.
+    /// The ruler's tick numbers and the marks under the bar, where they fit.
     fn scale_texts(&self, area: [f32; 4], scale: f32) -> Vec<ScaleText> {
         let state = self.state.lock().unwrap();
-        let legend = Legend::bar(state.legend, area, scale);
-        let cell = area[2] / BANDS.len() as f32;
-        // "97–99" at the scale text size needs about this much room.
-        let Some(legend) = legend.filter(|_| self.stage.has_picture() && cell >= 34.0 * scale) else { return Vec::new() };
-        let top = area[1] + area[3] - legend.strip + (BAR + (BAR_STRIP - BAR) / 2.0) * scale;
-        BANDS
-            .iter()
-            .enumerate()
-            .map(|(i, b)| ScaleText { text: format!("{}–{}", b.from, b.to), left: area[0] + i as f32 * cell, top, width: cell, right_aligned: false, centred: false })
-            .collect()
+        let Some(layout) = BAR.layout(state.legend, area, scale, self.stage.has_picture()) else { return Vec::new() };
+        layout.ticks.into_iter().chain(layout.marks).collect()
     }
 }
