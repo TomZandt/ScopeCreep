@@ -9,7 +9,7 @@ use scopecreep::display::{DisplayContext, DisplaySet};
 use scopecreep::panel_grid::PanelLayout;
 use scopecreep::settings::PanelSettings;
 use scopecreep::skin_tone::SKIN_TONE_LINE_DEGREES;
-use scopecreep::vectorscope::{PlotSquare, VectorscopeCounts, VectorscopePlots, Zoom, halves};
+use scopecreep::vectorscope::{PlotSquare, Plots, VectorscopeCounts, VectorscopePlots, Zoom, halves};
 use scopecreep_accuracy::colorchecker::{ColorChecker, TimelineSpace};
 use scopecreep_accuracy::transfer::bt709_oetf;
 
@@ -463,7 +463,7 @@ fn the_menu_offers_trace_brightness_targets_and_the_skin_tone_line_with_sensible
     let b = Bench::new("menu");
     let defs = b.set.setting_defs(b.index(V));
     let keys: Vec<_> = defs.iter().map(|d| (d.key, d.choices.iter().map(|c| c.value).collect::<Vec<_>>())).collect();
-    assert_eq!(keys, [("brightness", vec!["normal", "bright", "dim"]), ("spread", vec!["on", "off"]), ("targets", vec!["75", "100"]), ("skin-line", vec!["on", "off"])]);
+    assert_eq!(keys, [("brightness", vec!["normal", "bright", "dim"]), ("spread", vec!["on", "off"]), ("targets", vec!["75", "100"]), ("skin-line", vec!["on", "off"]), ("plots", vec!["both", "100", "200"]), ("mono", vec!["off", "on"])]);
 }
 
 #[test]
@@ -542,4 +542,77 @@ fn old_vectorscope_settings_carry_over_to_the_one_panel_and_the_200_percent_ones
     assert!(label.contains("100 % targets") && !label.contains("skin-tone"), "the 100 % Panel's choices apply: {label}");
     let resolved = b.set.settings_of(b.index(V), &b.settings);
     assert_eq!(resolved["brightness"], "normal", "the 200 % Panel's are not used");
+}
+
+// ------------------------------------------------------------------ the title bar's chips (#123)
+
+/// The brightest pixel (by sum of channels) in the 3 x 3 pixels around `at`.
+fn lit_near(image: &[u8], width: u32, at: [f32; 2]) -> [u8; 3] {
+    let mut best = [0u8; 3];
+    for dy in -1..=1 {
+        for dx in -1..=1 {
+            let p = pixel(image, width, [at[0] + dx as f32, at[1] + dy as f32]);
+            if p.iter().map(|&v| v as u32).sum::<u32>() > best.iter().map(|&v| v as u32).sum::<u32>() {
+                best = p;
+            }
+        }
+    }
+    best
+}
+
+#[test]
+fn mono_draws_the_same_counts_in_grey_and_colour_is_as_before() {
+    let mut b = Bench::new("mono");
+    let width = 2000;
+    // A saturated red patch: strong colour on the plot.
+    b.play(64, 36, &solid(64, 36, [0.5, 0.1, 0.1]));
+    let [cb, cr] = cb_cr([0.5, 0.1, 0.1]);
+    let at = |b: &Bench| {
+        let (image, panels) = b.render(width, 900, 1.0);
+        lit_near(&image, width, b.square(&panels, 0).position(cb, cr, Zoom::X1))
+    };
+    let colour = at(&b);
+    assert!(colour[0] as i32 - colour[2] as i32 > 40, "the colour trace is red: {colour:?}");
+    let counts = b.plots();
+    b.choose(V, "mono", "on");
+    let mono = at(&b);
+    assert!(mono.iter().all(|&v| (v as i32 - mono[0] as i32).abs() <= 2) && mono[0] > 60, "the mono trace is grey and lit: {mono:?}");
+    assert_eq!(b.plots(), counts, "the same counts, only the colour differs");
+    b.choose(V, "mono", "off");
+    assert_eq!(at(&b), colour, "colour as before");
+}
+
+#[test]
+fn the_plots_chip_shows_one_plot_filling_the_panel_or_both() {
+    let area = [10.0, 20.0, 900.0, 400.0];
+    assert_eq!(Plots::from_setting(None), Plots::Both);
+    assert_eq!(Plots::from_setting(Some("garbage")), Plots::Both);
+    assert_eq!(Plots::Both.areas(area), vec![(Zoom::X1, halves(area)[0]), (Zoom::X2, halves(area)[1])]);
+    assert_eq!(Plots::from_setting(Some("100")).areas(area), vec![(Zoom::X1, area)]);
+    assert_eq!(Plots::from_setting(Some("200")).areas(area), vec![(Zoom::X2, area)]);
+
+    let mut b = Bench::new("plots");
+    let width = 2000;
+    let mut pixels = solid(64, 36, [0.0; 3]);
+    pixels[..3].copy_from_slice(&[0.25, 0.0, 0.0]);
+    let [cb, cr] = cb_cr([0.25, 0.0, 0.0]);
+    b.play(64, 36, &pixels);
+    // Only 200 %: the plot fills the Panel, so the red pixel sits on a bigger square than in the half.
+    b.choose(V, "plots", "200");
+    let (image, panels) = b.render(width, 900, 1.0);
+    let whole = PlotSquare::new(panels[b.index(V)].content, 1.0);
+    assert!(whole.plot[2] > b.square(&panels, 1).plot[2], "one plot is bigger than a half");
+    assert!(brightest_near(&image, width, whole.position(cb, cr, Zoom::X2)) > 60, "the 200 % plot is drawn, filling the Panel");
+    assert_eq!(b.plots().x1.total(), b.plots().x2.total(), "both are still measured");
+    assert!(b.label(V).starts_with("Vectorscope 200 %  ·"), "{}", b.label(V));
+    // Only 100 %: the 100 % plot's target boxes are there, the 200 % plot is not (its own centre mark is the same, so look at the trace).
+    b.choose(V, "plots", "100");
+    let (image, panels) = b.render(width, 900, 1.0);
+    let whole = PlotSquare::new(panels[b.index(V)].content, 1.0);
+    assert!(brightest_near(&image, width, whole.position(cb, cr, Zoom::X1)) > 60);
+    // Back to both: the halves again.
+    b.choose(V, "plots", "both");
+    let (image, panels) = b.render(width, 900, 1.0);
+    assert!(brightest_near(&image, width, b.square(&panels, 1).position(cb, cr, Zoom::X2)) > 60);
+    assert!(b.label(V).starts_with("Vectorscope 100 % and 200 %"));
 }

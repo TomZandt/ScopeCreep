@@ -11,7 +11,9 @@
 //! measured once, into one set of bins per zoom, and one label, one menu and one set of settings serve both.
 use crate::display::{Display, DisplayContext};
 use crate::gpu_frame::GpuFrame;
+use crate::components::ChipMode;
 use crate::settings::{Choice, SettingDef};
+use crate::toolbar::{TOGGLE_OFF, ToolbarChip, ToolbarDef};
 use crate::skin_tone::SKIN_TONE_LINE_DEGREES;
 use crate::measurement::Measurement;
 use std::sync::{Arc, Mutex};
@@ -66,6 +68,32 @@ pub fn halves([left, top, width, height]: [f32; 4]) -> [[f32; 4]; 2] {
     [[left, top, first, height], [left + first, top, width - first, height]]
 }
 
+/// Which plots a Panel shows (#123): both side by side as ever, or one filling the Panel.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Plots {
+    Both,
+    Only(Zoom),
+}
+
+impl Plots {
+    /// From the setting's stored value; anything else is both.
+    pub fn from_setting(value: Option<&str>) -> Plots {
+        match value {
+            Some("100") => Plots::Only(Zoom::X1),
+            Some("200") => Plots::Only(Zoom::X2),
+            _ => Plots::Both,
+        }
+    }
+
+    /// The plots drawn in a Panel's display area, each with its zoom and its area (left, top, width, height).
+    pub fn areas(self, area: [f32; 4]) -> Vec<(Zoom, [f32; 4])> {
+        match self {
+            Plots::Both => [Zoom::X1, Zoom::X2].into_iter().zip(halves(area)).collect(),
+            Plots::Only(zoom) => vec![(zoom, area)],
+        }
+    }
+}
+
 /// Cb and Cr of an encoded `rgb` for luma `weights` (Wr, Wg, Wb).
 pub fn chroma(weights: [f64; 3], rgb: [f64; 3]) -> [f64; 2] {
     let y = weights[0] * rgb[0] + weights[1] * rgb[1] + weights[2] * rgb[2];
@@ -83,8 +111,12 @@ pub const TARGETS_SETTING: &str = "targets";
 pub const SKIN_LINE_SETTING: &str = "skin-line";
 pub const BRIGHTNESS_SETTING: &str = "brightness";
 pub const SPREAD_SETTING: &str = "spread";
+/// Which plots show: both (the default), only 100 % or only 200 % (#123).
+pub const PLOTS_SETTING: &str = "plots";
+/// The trace in neutral grey instead of the colour it stands for (#123); off by default.
+pub const MONO_SETTING: &str = "mono";
 
-const SETTINGS: [SettingDef; 4] = [
+pub const SETTINGS: [SettingDef; 6] = [
     SettingDef {
         key: BRIGHTNESS_SETTING,
         label: "Trace brightness",
@@ -93,6 +125,30 @@ const SETTINGS: [SettingDef; 4] = [
     SettingDef { key: SPREAD_SETTING, label: "Soft spread", choices: &[Choice { value: "on", text: "On" }, Choice { value: "off", text: "Off" }] },
     SettingDef { key: TARGETS_SETTING, label: "Colour targets", choices: &[Choice { value: "75", text: "75 % bars" }, Choice { value: "100", text: "100 % bars" }] },
     SettingDef { key: SKIN_LINE_SETTING, label: "Skin-tone line", choices: &[Choice { value: "on", text: "On" }, Choice { value: "off", text: "Off" }] },
+    SettingDef {
+        key: PLOTS_SETTING,
+        label: "Plots",
+        choices: &[Choice { value: "both", text: "100 % and 200 %" }, Choice { value: "100", text: "100 % only" }, Choice { value: "200", text: "200 % only" }],
+    },
+    SettingDef { key: MONO_SETTING, label: "Trace colour", choices: &[Choice { value: TOGGLE_OFF, text: "Colour" }, Choice { value: "on", text: "Mono" }] },
+];
+
+/// The chips on the title bar (#123): which plots show, one at a time, and the colour or mono trace.
+pub static TOOLBAR: [ToolbarDef; 2] = [
+    ToolbarDef {
+        key: PLOTS_SETTING,
+        mode: ChipMode::Single,
+        chips: &[
+            ToolbarChip { value: "100", text: "100 %", tooltip: "Show only the 100 % plot", channel: None },
+            ToolbarChip { value: "200", text: "200 %", tooltip: "Show only the 200 % plot", channel: None },
+            ToolbarChip { value: "both", text: "Both", tooltip: "Show the 100 % and 200 % plots side by side", channel: None },
+        ],
+    },
+    ToolbarDef {
+        key: MONO_SETTING,
+        mode: ChipMode::Toggle,
+        chips: &[ToolbarChip { value: "on", text: "Mono", tooltip: "Trace in neutral grey instead of colour (the same counts)", channel: None }],
+    },
 ];
 
 /// Everything the user and the Colour Setup decide about how the vectorscope measures and draws.
@@ -104,6 +160,8 @@ struct Config {
     skin_line: bool,
     gain: f32,
     spread: bool,
+    plots: Plots,
+    mono: bool,
 }
 
 /// Where the plot goes inside a Panel's display area, in pixels: a square, centred. Left, top, width, height.
@@ -259,7 +317,7 @@ struct Placement {
     plot: vec4<f32>,      // the square plot in pixels: left, top, width, height
     info: vec4<f32>,      // half extent (Cb/Cr), trace gain, pixels counted, device pixels per logical pixel
     opts: vec4<f32>,      // skin line on, its cos and sin, target box half size (Cb/Cr)
-    rings: vec4<f32>,     // the outer ring as a fraction of the plot's radius, soft spread on, where this plot's bins start
+    rings: vec4<f32>,     // the outer ring as a fraction of the plot's radius, soft spread on, where this plot's bins start, mono trace on
     targets: array<vec4<f32>, 6>,   // Cb, Cr of each colour target
     weights: vec4<f32>,   // luma weights for R, G, B, to turn a position back into a colour
 };
@@ -399,7 +457,9 @@ fn fs(@builtin(position) position: vec4<f32>) -> @location(0) vec4<f32> {
     var trace = TRACE;
     if (shown > 0.0) {
         let spot = (p - plot.xy + vec2<f32>(0.5, 0.5)) / plot.z;
-        trace = tint((spot.x - 0.5) * 2.0 * placement.info.x, (0.5 - spot.y) * 2.0 * placement.info.x);
+        if (placement.rings.w < 0.5) {
+            trace = tint((spot.x - 0.5) * 2.0 * placement.info.x, (0.5 - spot.y) * 2.0 * placement.info.x);
+        }
     }
     return vec4<f32>(mix(base, trace, shown), 1.0);
 }
@@ -467,7 +527,7 @@ impl Vectorscope {
             params: uniform("vectorscope params", PARAMS_BYTES),
             draw,
             placement: [uniform("vectorscope placement 100 %", DRAW_UNIFORM_BYTES), uniform("vectorscope placement 200 %", DRAW_UNIFORM_BYTES)],
-            config: Arc::new(Mutex::new(Config { measurement: Measurement::default(), bars: 0.75, skin_line: true, gain: 1.0, spread: true })),
+            config: Arc::new(Mutex::new(Config { measurement: Measurement::default(), bars: 0.75, skin_line: true, gain: 1.0, spread: true, plots: Plots::Both, mono: false })),
             state: Arc::new(Mutex::new(State { bins, pixels: 0, bound: None, draw_bound: None, measured: false })),
         }
     }
@@ -504,8 +564,13 @@ impl Vectorscope {
         let [r, g, b] = m.weights();
         let name = m.space.name();
         let space = if m.assumed { format!("{name} assumed, measured as sent, unconverted") } else { name.to_string() };
+        let shown = match config.plots {
+            Plots::Both => "100 % and 200 %",
+            Plots::Only(Zoom::X1) => "100 %",
+            Plots::Only(Zoom::X2) => "200 %",
+        };
         let mut label = format!(
-            "Vectorscope 100 % and 200 %  ·  Cb/Cr  ·  {space}  ·  Y = {r:.4} R + {g:.4} G + {b:.4} B {}  ·  {} % targets  ·  colours beyond the 100 % bars mark the ring",
+            "Vectorscope {shown}  ·  Cb/Cr  ·  {space}  ·  Y = {r:.4} R + {g:.4} G + {b:.4} B {}  ·  {} % targets  ·  colours beyond the 100 % bars mark the ring",
             m.weights_how(),
             (config.bars * 100.0).round()
         );
@@ -564,6 +629,8 @@ impl Display for Vectorscope {
             bars: if get(TARGETS_SETTING) == Some("100") { 1.0 } else { 0.75 },
             skin_line: get(SKIN_LINE_SETTING) != Some("off"),
             spread: get(SPREAD_SETTING) != Some("off"),
+            plots: Plots::from_setting(get(PLOTS_SETTING)),
+            mono: get(MONO_SETTING) == Some("on"),
             gain: match get(BRIGHTNESS_SETTING) {
                 Some("bright") => 4.0,
                 Some("dim") => 0.25,
@@ -574,6 +641,10 @@ impl Display for Vectorscope {
 
     fn setting_defs(&self) -> &'static [SettingDef] {
         &SETTINGS
+    }
+
+    fn toolbar_defs(&self) -> &'static [ToolbarDef] {
+        &TOOLBAR
     }
 
     fn label(&self) -> String {
@@ -602,7 +673,8 @@ impl Display for Vectorscope {
         let config = self.config();
         let clip = |px: f32, size: f32| px / size * 2.0 - 1.0;
         pass.set_pipeline(&self.draw);
-        for (i, (zoom, half)) in [Zoom::X1, Zoom::X2].into_iter().zip(halves(area)).enumerate() {
+        for (zoom, half) in config.plots.areas(area) {
+            let i = if zoom == Zoom::X1 { 0 } else { 1 };
             let [left, top, width, height] = half;
             let square = PlotSquare::new(half, scale);
             let mut placement = [0f32; (DRAW_UNIFORM_BYTES / 4) as usize];
@@ -614,6 +686,7 @@ impl Display for Vectorscope {
             placement[16] = (RING / HALF_EXTENT) as f32;
             placement[17] = if config.spread { 1.0 } else { 0.0 };
             placement[18] = zoom.first_bin() as f32;
+            placement[19] = if config.mono { 1.0 } else { 0.0 };
             for (t, [cb, cr]) in bar_targets(config.measurement.weights(), config.bars).iter().enumerate() {
                 placement[20 + t * 4] = *cb as f32;
                 placement[21 + t * 4] = *cr as f32;

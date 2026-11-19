@@ -71,4 +71,5 @@ Anything the ticket could not verify becomes a GitHub issue (or a comment on the
 | [144](144-colorise-channels.md) | Does Colorise work on any Y R G B combination (channel colours on, neutral off, each trace at its code, edge rows per channel), and do three neutral traces read on ColorChecker frames (headless)? |
 | [125](125-waveform-scale-units.md) | Does each scale unit (10-bit codes, %, nits) name the same trace positions, leave the counts alone, offer nits only for PQ and HLG, and tag the unit (pure and Feed seam)? |
 | [145](145-colour-waveform-out.md) | Does the Window register 8 Panels, fill every cell of its default layout at the minimum size, and still recall a layout saved with the Colour Waveform (pure seam)? |
+| [123](123-vectorscope-chips.md) | Does the Vectorscope title bar choose 100 %, 200 % or both plots and a colour or mono trace, remembered, with the plots tagged and the counts unchanged (headless)? |
 | [109](109-feed-loop.md) | Refactor: do the app and the tests run one Feed loop, and does it measure again after a setting or a Colour Setup change with Resolve stopped, and stay quiet when idle? |

@@ -381,3 +381,58 @@ mod colorise_chip {
         }
     }
 }
+
+// ------------------------------------------------------------------ the vectorscope's chips (#123)
+
+mod vectorscope_chips {
+    use scopecreep::display::DisplayContext;
+    use scopecreep::settings::{PanelSettings, Settings};
+    use scopecreep::toolbar::{Toolbar, popover_defs};
+    use scopecreep::vectorscope::{NAME, SETTINGS, TOOLBAR};
+    use scopecreep::window_text::panel_title;
+
+    fn toolbar(s: &PanelSettings) -> Toolbar {
+        Toolbar::new(&TOOLBAR, &s.resolve(NAME, &SETTINGS))
+    }
+
+    #[test]
+    fn plots_are_three_chips_one_at_a_time_both_by_default_and_mono_is_a_toggle_off_by_default() {
+        let mut s = PanelSettings::default();
+        let t = toolbar(&s);
+        assert_eq!(t.chips.iter().map(|c| c.text.as_str()).collect::<Vec<_>>(), ["100 %", "200 %", "Both", "Mono"]);
+        assert_eq!(t.on, [false, false, true, false]);
+        let (k, v) = t.click(0).unwrap();
+        s.set(NAME, k, v);
+        assert_eq!(toolbar(&s).on, [true, false, false, false]);
+        let t = toolbar(&s);
+        let (k, v) = t.click(3).unwrap();
+        s.set(NAME, k, v);
+        assert_eq!(toolbar(&s).on, [true, false, false, true]);
+        let t = toolbar(&s);
+        let (k, v) = t.click(3).unwrap();
+        s.set(NAME, k, v);
+        assert_eq!(toolbar(&s).on, [true, false, false, false], "a second click turns mono off");
+    }
+
+    #[test]
+    fn the_choices_are_remembered_per_panel_and_the_popover_keeps_the_rest() {
+        let mut s = PanelSettings::default();
+        s.set(NAME, "plots", "200");
+        s.set(NAME, "mono", "on");
+        let back = PanelSettings::from_text(&s.to_text());
+        assert_eq!(toolbar(&back).on, [false, true, false, true]);
+        assert_eq!(popover_defs(&SETTINGS, &TOOLBAR).iter().map(|d| d.key).collect::<Vec<_>>(), ["brightness", "spread", "targets", "skin-line"]);
+    }
+
+    #[test]
+    fn the_plots_shown_are_tagged_and_the_trace_colour_is_not() {
+        let tags = |plots: &str, mono: &str| {
+            let settings: Settings = [("plots".to_string(), plots.to_string()), ("mono".to_string(), mono.to_string())].into();
+            panel_title(NAME, &DisplayContext { settings, ..DisplayContext::default() }, String::new()).tags
+        };
+        assert!(!tags("both", "off").iter().any(|t| t.contains("plot")), "both is the default");
+        assert!(tags("100", "off").contains(&"100 % plot only".to_string()));
+        assert!(tags("200", "off").contains(&"200 % plot only".to_string()));
+        assert_eq!(tags("both", "on"), tags("both", "off"), "mono changes no reading");
+    }
+}
