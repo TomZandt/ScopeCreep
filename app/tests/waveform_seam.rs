@@ -228,7 +228,7 @@ fn a_single_out_of_range_pixel_is_visible_in_the_edge_rows() {
     b.play(1920, 1080, &grey_with_two_stray_pixels());
     let (width, height) = (800, 500);
     let image = draw(&b, width, height);
-    let layout = PlotLayout::new([0.0, 0.0, width as f32, height as f32], 1.0);
+    let layout = PlotLayout::fitted([0.0, 0.0, width as f32, height as f32], 1.0, [1920, 1080]);
     let brightness = |x: f32, y: f32| image[(y as usize * width as usize + x as usize) * 4] as u32;
     let brightest_in = |rect: [f32; 4], column: u32| {
         let x = layout.x_of_column(column, 1920);
@@ -245,10 +245,10 @@ fn a_single_out_of_range_pixel_is_visible_in_the_edge_rows() {
 
 /// How bright the empty plot is drawn at each code's row, away from any trace (the graticule).
 fn graticule_at(b: &mut Bench, codes: &[u32]) -> Vec<u8> {
-    b.play(64, 4, &picture(64, 4, |_, _| [0.5; 3]));
-    let (width, height) = (400, 1100);
+    b.play(64, 1024, &picture(64, 1024, |_, _| [0.5; 3]));
+    let (width, height) = (400, 1024 + 22); // the plot is exactly 1024 tall: one row per code
     let image = draw(b, width, height);
-    let layout = PlotLayout::new([0.0, 0.0, width as f32, height as f32], 1.0);
+    let layout = PlotLayout::fitted([0.0, 0.0, width as f32, height as f32], 1.0, [64, 1024]);
     let x = layout.x_of_column(10, 64) as usize;
     codes.iter().map(|&code| image[(layout.y_of_code(code).floor() as usize * width as usize + x) * 4]).collect()
 }
@@ -310,7 +310,7 @@ fn the_trace_is_brighter_where_more_pixels_land_and_is_not_a_flat_floor() {
     b.play(1920, 1080, &thinning_gradient());
     b.waveform.set_look(look(Brightness::Normal, false));
     let image = draw(&b, PLOT_W, PLOT_H);
-    let layout = PlotLayout::new([0.0, 0.0, PLOT_W as f32, PLOT_H as f32], 1.0);
+    let layout = PlotLayout::fitted([0.0, 0.0, PLOT_W as f32, PLOT_H as f32], 1.0, [1920, 1080]);
     let dense = mean_drawn(&image, PLOT_W, &layout, 1920, 40..80, 1000, 1400);
     let sparse = mean_drawn(&image, PLOT_W, &layout, 1920, 880..920, 1000, 1400);
     let floor = (0.035 + 0.08 * (0.86 - 0.035)) * 255.0;
@@ -326,7 +326,7 @@ fn one_stray_pixel_shows_in_the_plot_but_is_clearly_dimmer_than_a_dense_area() {
     b.play(1920, 1080, &picture(1920, 1080, |x, from_top| if (x, from_top) == (1000, 300) { grey(800) } else { grey(600) }));
     b.waveform.set_look(look(Brightness::Normal, false));
     let image = draw(&b, PLOT_W, PLOT_H);
-    let layout = PlotLayout::new([0.0, 0.0, PLOT_W as f32, PLOT_H as f32], 1.0);
+    let layout = PlotLayout::fitted([0.0, 0.0, PLOT_W as f32, PLOT_H as f32], 1.0, [1920, 1080]);
     let (stray, dense) = (drawn_at(&image, PLOT_W, &layout, 1000, 1920, 800), drawn_at(&image, PLOT_W, &layout, 1000, 1920, 600));
     let empty = drawn_at(&image, PLOT_W, &layout, 1000, 1920, 700);
     assert!(stray >= 0.035 * 255.0 + 0.07 * 0.825 * 255.0, "the stray pixel shows (at least about 8 %): {stray}, empty {empty}");
@@ -337,7 +337,7 @@ fn one_stray_pixel_shows_in_the_plot_but_is_clearly_dimmer_than_a_dense_area() {
 fn trace_brightness_changes_the_drawn_brightness() {
     let mut b = Bench::new("phosphor-gain");
     b.play(1920, 1080, &thinning_gradient());
-    let layout = PlotLayout::new([0.0, 0.0, PLOT_W as f32, PLOT_H as f32], 1.0);
+    let layout = PlotLayout::fitted([0.0, 0.0, PLOT_W as f32, PLOT_H as f32], 1.0, [1920, 1080]);
     let mut means = Vec::new();
     for brightness in [Brightness::Dimmer, Brightness::Normal, Brightness::Brighter] {
         b.waveform.set_look(look(brightness, false));
@@ -350,14 +350,14 @@ fn trace_brightness_changes_the_drawn_brightness() {
 #[test]
 fn soft_spread_off_draws_a_code_on_its_own_row_and_on_spreads_it_by_about_one_pixel() {
     let mut b = Bench::new("phosphor-spread");
-    b.play(1920, 1080, &picture(1920, 1080, |_, _| grey(600)));
+    b.play(400, 1024, &picture(400, 1024, |_, _| grey(600)));
     // A plot exactly 1024 pixels tall: one row per code.
-    let (width, height) = (400, 1024 + 22);
-    let layout = PlotLayout::new([0.0, 0.0, width as f32, height as f32], 1.0);
+    let (width, height) = (500, 1024 + 22);
+    let layout = PlotLayout::fitted([0.0, 0.0, width as f32, height as f32], 1.0, [400, 1024]);
     let rows = |look: Look| {
         b.waveform.set_look(look);
         let image = draw(&b, width, height);
-        [-4i32, -2, -1, 0, 1, 2, 4].map(|d| drawn_at(&image, width, &layout, 1000, 1920, (600 + d) as u32))
+        [-4i32, -2, -1, 0, 1, 2, 4].map(|d| drawn_at(&image, width, &layout, 200, 400, (600 + d) as u32))
     };
     let off = rows(look(Brightness::Normal, false));
     let on = rows(look(Brightness::Normal, true));
@@ -375,7 +375,7 @@ fn the_same_frame_looks_the_same_brightness_in_a_large_and_a_small_panel() {
     b.waveform.set_look(look(Brightness::Normal, false));
     let mean = |width: u32, height: u32| {
         let image = draw(&b, width, height);
-        let layout = PlotLayout::new([0.0, 0.0, width as f32, height as f32], 1.0);
+        let layout = PlotLayout::fitted([0.0, 0.0, width as f32, height as f32], 1.0, [1920, 1080]);
         mean_drawn(&image, width, &layout, 1920, 300..700, 800, 1200)
     };
     let (small, large) = (mean(400, 300), mean(800, 600));
@@ -433,7 +433,7 @@ fn the_channels_are_drawn_in_their_own_colour_and_edge_rows_show_each_ones_out_o
     b.play(1920, 1080, &picture(1920, 1080, |x, _| [if x == 1000 { 1.3 } else { 700.0 / 1023.0 }, 0.0, 300.0 / 1023.0]));
     let (width, height) = (800, 500);
     let image = draw(&b, width, height);
-    let layout = PlotLayout::new([0.0, 0.0, width as f32, height as f32], 1.0);
+    let layout = PlotLayout::fitted([0.0, 0.0, width as f32, height as f32], 1.0, [1920, 1080]);
     let pixel = |x: f32, y: f32| {
         let at = (y as usize * width as usize + x as usize) * 4;
         [image[at] as i32, image[at + 1] as i32, image[at + 2] as i32]
@@ -519,7 +519,7 @@ fn colorise_on_draws_a_y_trace_in_the_colour_of_the_pixels_and_off_it_is_neutral
     let counts = b.play(1920, 1080, &picture(1920, 1080, |_, _| colour));
     let code = (0..1024).find(|&c| counts.at(0, c) == 1080).expect("one code");
     let (width, height) = (800, 500);
-    let layout = PlotLayout::new([0.0, 0.0, width as f32, height as f32], 1.0);
+    let layout = PlotLayout::fitted([0.0, 0.0, width as f32, height as f32], 1.0, [1920, 1080]);
 
     let neutral = colour_at(&draw(&b, width, height), width, &layout, 960, 1920, code);
     assert!(neutral[0] > 100 && spread_of(neutral) <= 3, "off: a white trace {neutral:?}");
@@ -540,7 +540,7 @@ fn colorise_on_a_colorchecker_frame_tints_each_patchs_trace_in_that_patchs_colou
     let chart = ColorChecker::new(TimelineSpace::Rec709Gamma24);
     let frame = chart.frame(600, 400);
     let (width, height) = (1200, 700);
-    let layout = PlotLayout::new([0.0, 0.0, width as f32, height as f32], 1.0);
+    let layout = PlotLayout::fitted([0.0, 0.0, width as f32, height as f32], 1.0, [600, 400]);
     let weights = Measurement::default().weights();
     // Patches 13 (blue), 14 (green), 15 (red) and 16 (yellow): clearly coloured.
     let patches: Vec<Patch> = chart.patches()[12..16].to_vec();
@@ -570,7 +570,7 @@ fn colorise_changes_neither_the_counts_nor_which_edge_rows_light() {
     b.waveform.set_channels(channels(true, true, true, true));
     let frame = picture(1920, 1080, |x, _| if x == 1000 { [1.3, -0.1, 0.4] } else { [0.7, 0.5, 0.3] });
     let (width, height) = (800, 500);
-    let layout = PlotLayout::new([0.0, 0.0, width as f32, height as f32], 1.0);
+    let layout = PlotLayout::fitted([0.0, 0.0, width as f32, height as f32], 1.0, [1920, 1080]);
     let measured = |b: &mut Bench| {
         let luma = b.play(1920, 1080, &frame);
         [Channel::R, Channel::G, Channel::B].map(|c| b.waveform.channel_counts(c)).into_iter().chain([luma]).collect::<Vec<_>>()
@@ -623,7 +623,7 @@ fn separate_traces(name: &str, chips: [bool; 4], colorise: bool) -> (Vec<u8>, Pl
     b.waveform.set_colorise(colorise);
     b.play(1920, 1080, &flat_codes(1920, 1080, SEPARATE));
     let (width, height) = (800, 500);
-    (draw(&b, width, height), PlotLayout::new([0.0, 0.0, width as f32, height as f32], 1.0), width, height)
+    (draw(&b, width, height), PlotLayout::fitted([0.0, 0.0, width as f32, height as f32], 1.0, [1920, 1080]), width, height)
 }
 
 #[test]
@@ -662,7 +662,7 @@ fn colorise_on_tints_y_and_the_channels_together_and_off_makes_them_all_neutral(
     // A flat colour (0.2, 0.8, 0.3): Y lands at its Luma code, R, G and B at their own, all apart.
     let frame = picture(1920, 1080, |_, _| [0.2, 0.8, 0.3]);
     let (width, height) = (800, 500);
-    let layout = PlotLayout::new([0.0, 0.0, width as f32, height as f32], 1.0);
+    let layout = PlotLayout::fitted([0.0, 0.0, width as f32, height as f32], 1.0, [1920, 1080]);
     let mut b = Bench::new("colorisetogether");
     b.waveform.set_channels(channels(true, true, true, true));
     let counts = b.play(1920, 1080, &frame);
@@ -684,7 +684,7 @@ fn colorise_on_tints_y_and_the_channels_together_and_off_makes_them_all_neutral(
 #[test]
 fn edge_rows_show_each_channels_out_of_range_in_its_colour_with_colorise_on_and_neutral_off() {
     let (width, height) = (800, 500);
-    let layout = PlotLayout::new([0.0, 0.0, width as f32, height as f32], 1.0);
+    let layout = PlotLayout::fitted([0.0, 0.0, width as f32, height as f32], 1.0, [1920, 1080]);
     for colorise in [false, true] {
         let mut b = Bench::new(if colorise { "edgecoloured" } else { "edgeneutral" });
         b.waveform.set_channels(channels(false, true, true, true));
@@ -717,7 +717,7 @@ fn three_neutral_traces_on_a_colorchecker_frame_stay_readable_by_position() {
     let chart = ColorChecker::new(TimelineSpace::Rec709Gamma24);
     let frame = chart.frame(600, 400);
     let (width, height) = (1200, 700);
-    let layout = PlotLayout::new([0.0, 0.0, width as f32, height as f32], 1.0);
+    let layout = PlotLayout::fitted([0.0, 0.0, width as f32, height as f32], 1.0, [600, 400]);
     b.play(600, 400, &frame.pixels);
     let image = draw(&b, width, height);
     // Patches 13 to 16 (blue, green, red, yellow): every trace is a lit neutral line at its code, and where channels
@@ -740,4 +740,28 @@ fn three_neutral_traces_on_a_colorchecker_frame_stay_readable_by_position() {
             assert!(lit[0] > 100 && spread_of(lit) <= 3, "patch {number}: a neutral line at code {code}: {lit:?}");
         }
     }
+}
+
+#[test]
+fn the_drawn_waveform_stays_in_the_frames_aspect_and_follows_a_resolution_change() {
+    let mut b = Bench::new("aspect");
+    let (width, height) = (800usize, 600usize);
+    let lit_box = |image: &[u8]| {
+        let lit: Vec<(usize, usize)> = (0..height).flat_map(|y| (0..width).map(move |x| (x, y))).filter(|&(x, y)| image[(y * width + x) * 4] > 20).collect();
+        let (x0, x1) = (lit.iter().map(|p| p.0).min().unwrap(), lit.iter().map(|p| p.0).max().unwrap());
+        let (y0, y1) = (lit.iter().map(|p| p.1).min().unwrap(), lit.iter().map(|p| p.1).max().unwrap());
+        (x1 - x0 + 1, y1 - y0 + 1)
+    };
+    let area = [0.0, 0.0, width as f32, height as f32];
+    b.play(2048, 858, &picture(2048, 858, |x, _| grey(x * 1023 / 2047)));
+    let wide = draw(&b, width as u32, height as u32);
+    let layout = PlotLayout::fitted(area, 1.0, [2048, 858]);
+    let (w, h) = lit_box(&wide);
+    assert!(w as f32 <= layout.plot()[2] + 1.0 && h as f32 <= layout.below()[1] + layout.below()[3] - layout.above()[1] + 1.0, "nothing is drawn outside the fitted plot and its edge rows: {w} x {h}");
+    b.play(1080, 1920, &picture(1080, 1920, |x, _| grey(x * 1023 / 1079)));
+    let tall = draw(&b, width as u32, height as u32);
+    let relaid = PlotLayout::fitted(area, 1.0, [1080, 1920]);
+    assert_ne!(layout, relaid);
+    let (w, h) = lit_box(&tall);
+    assert!(w as f32 <= relaid.plot()[2] + 1.0 && h as f32 <= relaid.below()[1] + relaid.below()[3] - relaid.above()[1] + 1.0, "the new resolution is laid out at once: {w} x {h}");
 }

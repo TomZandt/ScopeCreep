@@ -8,6 +8,8 @@ The format follows [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/
 
 ### Changed
 
+- Luma waveform: the plot takes the footage's aspect ratio again (16:9 footage gives a 16:9 plot), scaled to fit its Panel and centred with its scale numbers beside it and the rest of the Panel left empty, and follows a change of resolution without a restart. Counts, traces, edge rows and Colorise are unchanged (#151, ADR 0012).
+
 - The Colour Waveform is out of the Window, as Colorise on the luma waveform does its job: the Window shows 8 Panels, the Channel view now 2 x 2 at the bottom left and ARRI False Colour three columns wide in the default layout. A saved layout that names the Colour Waveform still recalls. Its code, tests and saved settings are kept (#145, ADR 0032).
 
 - Viewer gate: while the playhead is dragged in Resolve, every Panel follows the picture (the newest frame is shown at least every frame period) and lands on the stop frame at once, where before nothing was shown until the drag stopped. Cache fills stay hidden. Fast drags, which the gate used to mistake for a cache fill, are told apart by the time each render takes, not by how many frame numbers it jumps (#104, ADR 0031).

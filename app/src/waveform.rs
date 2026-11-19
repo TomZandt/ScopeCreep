@@ -443,6 +443,7 @@ pub struct PlotLayout {
     plot: [f32; 4],
     above: [f32; 4],
     below: [f32; 4],
+    gutter_left: f32,
 }
 
 /// Logical pixels.
@@ -459,7 +460,27 @@ impl PlotLayout {
         let (l, w) = (left + gutter, (width - gutter).max(1.0));
         let plot_top = top + row + gap;
         let plot_height = (height - 2.0 * (row + gap)).max(1.0);
-        PlotLayout { plot: [l, plot_top, w, plot_height], above: [l, top, w, row], below: [l, plot_top + plot_height + gap, w, row] }
+        PlotLayout { plot: [l, plot_top, w, plot_height], above: [l, top, w, row], below: [l, plot_top + plot_height + gap, w, row], gutter_left: left }
+    }
+    /// The layout for a frame of `picture` (width, height) pixels: the plot has the frame's aspect, scaled to fit
+    /// what [`PlotLayout::new`] would give it and centred in `area`, with the gutter on its left and an edge row
+    /// above and below it. The rest of the area is left empty. A frame with no size fills the area.
+    pub fn fitted(area: [f32; 4], scale: f32, picture: [u32; 2]) -> PlotLayout {
+        let full = PlotLayout::new(area, scale);
+        if picture[0] == 0 || picture[1] == 0 {
+            return full;
+        }
+        let left = area[0];
+        let [fl, ft, fw, fh] = full.plot;
+        let fit = (fw / picture[0] as f32).min(fh / picture[1] as f32);
+        let (w, h) = ((picture[0] as f32 * fit).round().clamp(1.0, fw), (picture[1] as f32 * fit).round().clamp(1.0, fh));
+        let (l, t) = ((fl + (fw - w) / 2.0).round(), (ft + (fh - h) / 2.0).round());
+        let (row, gap) = (full.above[3], full.below[1] - (ft + fh));
+        PlotLayout { plot: [l, t, w, h], above: [l, t - gap - row, w, row], below: [l, t + h + gap, w, row], gutter_left: l - (fl - left) }
+    }
+    /// Where the gutter for the scale's numbers starts.
+    pub fn gutter_left(&self) -> f32 {
+        self.gutter_left
     }
     /// The plot of codes 0 (bottom) to 1023 (top).
     pub fn plot(&self) -> [f32; 4] {
@@ -1083,7 +1104,7 @@ impl Waveform {
             return;
         }
         let (columns, picture_height) = (counts.columns, counts.picture_height);
-        let layout = PlotLayout::new(area, scale);
+        let layout = PlotLayout::fitted(area, scale, [columns, picture_height]);
         // The trace texture covers the plot, one texel per device pixel.
         let trace_size = [layout.plot[2].ceil().max(1.0) as u32, layout.plot[3].ceil().max(1.0) as u32];
         if state.trace.as_ref().is_none_or(|t| t.size != trace_size) {
@@ -1384,10 +1405,11 @@ impl crate::display::Display for Waveform {
     /// The codes the Levels name, and the edge rows, left out where they would overlap: black and white stay
     /// longest, then the edge rows, then the middle.
     fn scale_texts(&self, area: [f32; 4], scale: f32) -> Vec<crate::display::ScaleText> {
-        if self.state.lock().unwrap().counts.is_none() {
-            return Vec::new();
-        }
-        let plot = PlotLayout::new(area, scale);
+        let picture = match &self.state.lock().unwrap().counts {
+            Some(counts) => [counts.columns, counts.picture_height],
+            None => return Vec::new(),
+        };
+        let plot = PlotLayout::fitted(area, scale, picture);
         let codes = self.measurement().levels.scale_marks();
         let middle = |r: [f32; 4]| r[1] + r[3] / 2.0;
         // (text, height on screen, rank: lower matters more)
@@ -1405,7 +1427,7 @@ impl crate::display::Display for Waveform {
             .into_iter()
             .zip(shown)
             .filter(|(_, shown)| *shown)
-            .map(|((text, top, _), _)| crate::display::ScaleText { text, left: area[0], top, width, right_aligned: true, centred: false })
+            .map(|((text, top, _), _)| crate::display::ScaleText { text, left: plot.gutter_left(), top, width, right_aligned: true, centred: false })
             .collect()
     }
 
