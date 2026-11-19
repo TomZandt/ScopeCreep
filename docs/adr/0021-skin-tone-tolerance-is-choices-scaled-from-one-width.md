@@ -4,6 +4,8 @@ _Tint and fade rules superseded by [ADR 0025](0025-skin-tone-panel-paints-solid-
 
 Spec #49 asks for "a tolerance slider" with about ±5° on the line, fading out to ±20° and gone beyond ±30°. ADR 0013 says every setting is a short list of named choices, never a free number.
 
+_Update 2026-11-19 (#88): the tolerance is now a slider from 1 to 12 degrees (default 5) under ADR 0013; the bands still scale from it at the ratios below._
+
 ## Decision
 
 - The setting is one list of choices for the on-line half-width `t`: ±5° (default), ±2°, ±3°, ±8°, ±10°. The other two edges follow from it at fixed ratios: the colour is fully green or magenta at 4 t and gone (grey) at 6 t. At the default they are the spec's 20° and 30°.

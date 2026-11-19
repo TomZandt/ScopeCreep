@@ -154,8 +154,10 @@ pub fn panel_title(display_name: &str, context: &DisplayContext, full: String) -
         }
         "Skin tone" => {
             let mut tags: Vec<String> = bw_tag(context, false).into_iter().chain(conversion_tags(context)).collect();
-            if let Some(degrees) = setting(crate::skin_tone_view::TOLERANCE_SETTING).filter(|d| *d != crate::skin_tone_view::DEFAULT_TOLERANCE) {
-                tags.push(format!("±{degrees}°"));
+            let amount = crate::skin_tone_view::TOLERANCE_AMOUNT;
+            let degrees = amount.read(setting(crate::skin_tone_view::TOLERANCE_SETTING));
+            if degrees != amount.default {
+                tags.push(format!("±{}", amount.text(degrees)));
             }
             ("Skin tone".into(), tags)
         }

@@ -201,11 +201,13 @@ fn the_tolerance_widens_and_narrows_the_on_line_band() {
 }
 
 #[test]
-fn the_tolerance_is_a_list_of_choices_with_five_degrees_first_and_the_label_names_the_bands_and_the_angle() {
+fn the_tolerance_is_a_slider_of_degrees_defaulting_to_five_and_the_label_names_the_bands_and_the_angle() {
     let mut b = Bench::new("label", Some(DWG_REC709));
     let defs = b.display.setting_defs();
     assert_eq!(defs.iter().map(|d| d.key).collect::<Vec<_>>(), ["tolerance", "bw"]);
-    assert_eq!(defs[0].choices[0].value, "5");
+    let amount = defs[0].amount.expect("a slider");
+    assert_eq!((amount.default, amount.unit, amount.text(7.0).as_str()), (5.0, "°", "7°"));
+    assert!(defs[0].choices.is_empty());
     b.play(16, 9, &(0..16 * 9).flat_map(|_| [0.5, 0.5, 0.5, 1.0]).collect::<Vec<f32>>());
     let label = b.display.label();
     assert!(label.starts_with("Skin tone"), "{label}");
@@ -215,6 +217,30 @@ fn the_tolerance_is_a_list_of_choices_with_five_degrees_first_and_the_label_name
     b.configure(Some("10"));
     let label = b.display.label();
     assert!(label.contains("±10°") && label.contains("±60°"), "{label}");
+    // A value in between, in the slider's own unit.
+    b.configure(Some("7"));
+    let label = b.display.label();
+    assert!(label.contains("±7°") && label.contains("±42°"), "{label}");
+}
+
+#[test]
+fn dragging_the_tolerance_up_only_ever_lights_more_and_old_or_wild_values_are_safe() {
+    // A pixel 20 degrees out is lit only when 6 t reaches it.
+    let mut b = Bench::new("monotonic", None);
+    b.play(64, 36, &hue_frame(20.0, 0.5, 0.15));
+    let lit: Vec<bool> = (1..=12)
+        .map(|t| {
+            b.configure(Some(&t.to_string()));
+            is_painted(centre(&b))
+        })
+        .collect();
+    assert!(lit.windows(2).all(|w| !w[0] || w[1]), "lit area shrank as the slider went up: {lit:?}");
+    assert!(!lit[0] && lit[11], "from unlit at 1 degree to lit at 12: {lit:?}");
+    // Out of range clamps to the widest; unreadable text is the default (5: 20 degrees out is lit, green).
+    b.configure(Some("40"));
+    assert!(is_painted(centre(&b)));
+    b.configure(Some("Brighter"));
+    assert!(is_solid(centre(&b), GREEN), "{:?}", centre(&b));
 }
 
 #[test]

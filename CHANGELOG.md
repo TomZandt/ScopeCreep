@@ -17,6 +17,7 @@ The format follows [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/
 ### Added
 
 - Gamut/legal warning: the blue and red thresholds are sliders in its menu instead of lists, with the number and % beside each: blue starts at 0 to 50 % (default 10 %), red at 50 to 100 % (default 90 %), so blue can never be set above red. The defaults draw exactly as before, the label names both values and the codes they give for the project's Levels, a 5, 15, 20, 80, 85 or 95 saved by an earlier version keeps its number, and the values are remembered per Panel. EBU R103 tolerance stays on or off (#89).
+- Skin Tone and Highlight Neutrals: the tolerance is a slider in the popover instead of a list. Skin Tone runs from 1 to 12 degrees either side of the skin-tone line in steps of 1 (default 5, the bands in the label follow it), Highlight Neutrals from 0.5 to 10 % in steps of 0.5 (default 3 %); each shows its number with the unit and puts it in the label the same way, and a row under the slider puts it back. At the defaults both draw as before, and moving it widens or narrows the lit area. The value is remembered per Panel, and a list value saved by an earlier version becomes the number it named (#88, ADR 0013).
 
 - Vectorscope: a Tonal range chip (All, Shadows, Mids, Highlights) plots only the pixels whose Luma is below 30 %, from 30 % to below 70 %, or 70 % and above (Resolve's own Low and High boundaries). Clipping on the ring counts only the plotted pixels. Remembered per Panel; the tag names the range when it is not All (#124).
 

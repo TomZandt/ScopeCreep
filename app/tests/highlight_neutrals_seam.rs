@@ -140,6 +140,24 @@ fn a_grey_with_a_small_channel_offset_turns_green_only_once_the_tolerance_covers
 }
 
 #[test]
+fn dragging_the_tolerance_up_only_ever_lights_more_and_a_value_in_between_works() {
+    let mut b = Bench::new("monotonic", None);
+    b.play(64, 36, &offset_grey(0.5, 0.04));
+    let lit: Vec<bool> = (1..=20)
+        .map(|half| {
+            b.configure(Some(&(half as f32 * 0.5).to_string()));
+            is_green(centre(&b))
+        })
+        .collect();
+    assert!(lit.windows(2).all(|w| !w[0] || w[1]), "lit area shrank as the slider went up: {lit:?}");
+    // 4 % off: not neutral at 3.5 %, neutral at 4.5 % (4 % itself is a float coin toss).
+    assert!(!lit[6] && lit[8], "{lit:?}");
+    // Out of range clamps to 10 %, which lights it.
+    b.configure(Some("50"));
+    assert!(is_green(centre(&b)));
+}
+
+#[test]
 fn a_coloured_pixel_is_shown_in_grey_that_is_its_luma() {
     let mut b = Bench::new("colour", None);
     b.play(64, 36, &(0..64 * 36).flat_map(|_| [1.0, 0.0, 0.0, 1.0]).collect::<Vec<f32>>());
@@ -150,21 +168,23 @@ fn a_coloured_pixel_is_shown_in_grey_that_is_its_luma() {
 }
 
 #[test]
-fn the_tolerance_is_a_list_of_choices_with_three_percent_first_and_the_label_names_it() {
+fn the_tolerance_is_a_slider_of_percent_defaulting_to_three_and_the_label_names_it() {
     let mut b = Bench::new("label", Some(DWG_REC709));
     let defs = b.display.setting_defs();
     assert_eq!(defs.len(), 1);
     assert_eq!(defs[0].key, "tolerance");
-    assert_eq!(defs[0].choices[0].value, "3");
+    let amount = defs[0].amount.expect("a slider");
+    assert_eq!((amount.default, amount.text(3.0).as_str()), (3.0, "3.0 %"));
+    assert!(defs[0].choices.is_empty());
     b.play(16, 9, &(0..16 * 9).flat_map(|_| [0.5, 0.5, 0.5, 1.0]).collect::<Vec<f32>>());
     let label = b.display.label();
     assert!(label.starts_with("Highlight neutrals"), "{label}");
     assert!(label.contains("Output picture"), "{label}");
-    assert!(label.contains("within 3 %"), "{label}");
+    assert!(label.contains("within 3.0 %"), "{label}");
     assert!(label.contains("DaVinci WG/Intermediate"), "{label}");
     assert!(label.contains("Output Conversion"), "{label}");
     b.configure(Some("5"));
-    assert!(b.display.label().contains("within 5 %"), "{}", b.display.label());
+    assert!(b.display.label().contains("within 5.0 %"), "{}", b.display.label());
 }
 
 #[test]

@@ -5,33 +5,30 @@
 //!
 //! Hue is the angle of the pixel's Cb/Cr (the vectorscope's, with the same luma weights), measured from the
 //! shared [`SKIN_TONE_LINE_DEGREES`], which is the angle Resolve 21.2's own vectorscope draws its line at (#60, ADR 0018). The
-//! tolerance `t` is a list of choices (ADR 0013, ADR 0021): yellow within `t` of the line, green or magenta from `t`
+//! tolerance `t` is a slider (#88, ADR 0013): yellow within `t` of the line, green or magenta from `t`
 //! out to 6 t, and the pixel's own colour beyond. At the default 5 degrees that is the spec's 5 and 30. Towards a
 //! larger Cb/Cr angle (towards yellow) is green, the other way magenta.
 use crate::display::{Display, DisplayContext};
 use crate::gpu_frame::GpuFrame;
 use crate::picture_stage::{PictureStage, Rule};
 use crate::output_conversion::{Plan, measurement};
-use crate::settings::{Choice, SettingDef};
+use crate::settings::{Amount, SettingDef};
 use crate::toolbar::{BW_DEFAULT_COLOUR, BW_SETTING, BW_TOOLBAR, ToolbarDef};
 use crate::skin_tone::SKIN_TONE_LINE_DEGREES;
 use std::sync::{Arc, Mutex};
 
 pub const TOLERANCE_SETTING: &str = "tolerance";
 
-pub const DEFAULT_TOLERANCE: &str = "5";
+/// The tolerance slider (#88): degrees either side of the skin-tone line, 5 as before the slider. The bands run
+/// to 6 t, so 12 degrees is the widest (72 degrees each side, short of meaning everything). The lists earlier
+/// versions saved (2, 3, 5, 8, 10) are the degrees they name.
+pub const TOLERANCE_AMOUNT: Amount = Amount { min: 1.0, max: 12.0, step: 1.0, default: 5.0, unit: "°", decimals: 0, legacy: &[] };
 
 pub static SETTINGS: [SettingDef; 2] = [SettingDef {
     key: TOLERANCE_SETTING,
-    label: "On-line tolerance",
-    amount: None,
-    choices: &[
-        Choice { value: DEFAULT_TOLERANCE, text: "±5° (default)" },
-        Choice { value: "2", text: "±2°" },
-        Choice { value: "3", text: "±3°" },
-        Choice { value: "8", text: "±8°" },
-        Choice { value: "10", text: "±10°" },
-    ],
+    label: "On-line tolerance (± degrees)",
+    amount: Some(TOLERANCE_AMOUNT),
+    choices: &[],
 }, BW_DEFAULT_COLOUR];
 pub static TOOLBAR: [ToolbarDef; 1] = BW_TOOLBAR;
 
@@ -71,8 +68,7 @@ fn colour(uv: vec2<f32>) -> vec3<f32> {
 #[derive(Clone)]
 struct Config {
     weights: [f32; 3],
-    /// The tolerance as the setting says it (degrees).
-    degrees: String,
+    /// The tolerance in degrees.
     tolerance: f32,
     /// B/W: the unpainted picture in Luma grey.
     bw: bool,
@@ -82,7 +78,7 @@ struct Config {
 
 impl Default for Config {
     fn default() -> Config {
-        Config { weights: crate::measurement::REC709_LUMA.map(|v| v as f32), degrees: DEFAULT_TOLERANCE.into(), tolerance: 5.0, bw: false, source: String::new() }
+        Config { weights: crate::measurement::REC709_LUMA.map(|v| v as f32), tolerance: TOLERANCE_AMOUNT.default, bw: false, source: String::new() }
     }
 }
 
@@ -115,12 +111,11 @@ impl Display for SkinTone {
         let plan = Plan::for_setup(setup);
         // The weights the vectorscope uses, so the hue here is the angle the vectorscope shows.
         let [r, g, b] = measurement(context.colour_setup.clone(), context.luma).weights();
-        let degrees = context.settings.get(TOLERANCE_SETTING).cloned().unwrap_or_else(|| DEFAULT_TOLERANCE.into());
-        let tolerance = degrees.parse::<f32>().unwrap_or(5.0);
+        let tolerance = TOLERANCE_AMOUNT.read(context.settings.get(TOLERANCE_SETTING).map(String::as_str));
         // The picture is the Output picture only once it has been converted (ADR 0007).
         let what = if plan.method().is_some() || plan.measured_space(setup).is_some() { "Output picture" } else { "Picture as sent" };
         let source = format!("{what}  ·  {}  ·  {}", context.colour_label, plan.label());
-        *self.config.lock().unwrap() = Config { weights: [r as f32, g as f32, b as f32], degrees, tolerance, bw: context.settings.get(BW_SETTING).map(String::as_str) == Some("on"), source };
+        *self.config.lock().unwrap() = Config { weights: [r as f32, g as f32, b as f32], tolerance, bw: context.settings.get(BW_SETTING).map(String::as_str) == Some("on"), source };
     }
 
     fn setting_defs(&self) -> &'static [SettingDef] {
@@ -140,8 +135,8 @@ impl Display for SkinTone {
         let config = self.config.lock().unwrap();
         let t: f32 = config.tolerance;
         format!(
-            "Skin tone  ·  yellow within ±{}° of the skin-tone line {SKIN_TONE_LINE_DEGREES}° (as Resolve 21.2 draws it), green or magenta out to ±{}°, the picture's own colour beyond and where saturation is low  ·  {}",
-            config.degrees,
+            "Skin tone  ·  yellow within ±{} of the skin-tone line {SKIN_TONE_LINE_DEGREES}° (as Resolve 21.2 draws it), green or magenta out to ±{}°, the picture's own colour beyond and where saturation is low  ·  {}",
+            TOLERANCE_AMOUNT.text(t),
             t * 6.0,
             config.source
         )
