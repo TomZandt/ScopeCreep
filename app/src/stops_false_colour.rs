@@ -25,7 +25,8 @@ use crate::display::{Display, DisplayContext, ScaleText};
 use crate::gpu_frame::GpuFrame;
 use crate::picture_stage::{Legend, PictureStage, Rule};
 use crate::settings::{Choice, SettingDef, Settings};
-use crate::toolbar::{BW_DEFAULT_GREY, BW_SETTING, BW_TOOLBAR, ToolbarDef};
+use crate::components::ChipMode;
+use crate::toolbar::{BW_DEFAULT_GREY, BW_SETTING, BW_TOOLBAR, ToolbarChip, ToolbarDef};
 use scopecreep_accuracy::colorchecker::luma_weights_adapted_to_d65;
 use scopecreep_accuracy::colour::{AP1, DWG, P3_D65, REC2020, REC709};
 use std::sync::{Arc, Mutex};
@@ -148,14 +149,25 @@ pub static SETTINGS: [SettingDef; 3] = [
     BW_DEFAULT_GREY,
 ];
 
-/// B/W is a chip on the title bar, only in the grey and +1 stop mode: full zones paint every pixel.
-pub static TOOLBAR: [ToolbarDef; 1] = BW_TOOLBAR;
+/// The mode and B/W are chips on the title bar (#126, #118): the mode one at a time (the chart routine is one
+/// click), B/W only in the grey and +1 stop mode, because full zones paint every pixel.
+pub static TOOLBAR: [ToolbarDef; 2] = [
+    ToolbarDef {
+        key: MODE_SETTING,
+        mode: ChipMode::Single,
+        chips: &[
+            ToolbarChip { value: "zones", text: "Zones", tooltip: "Full zones: every pixel painted by its stop", channel: None },
+            ToolbarChip { value: "grey-plus-one", text: "Grey +1", tooltip: "Grey and +1 stop: 18 % grey green, one stop over pink", channel: None },
+        ],
+    },
+    BW_TOOLBAR[0],
+];
 
-/// The chips under `settings`: B/W only in grey and +1 stop mode.
+/// The chips under `settings`: the mode, and B/W only in grey and +1 stop mode.
 pub fn toolbar_for(settings: &Settings) -> &'static [ToolbarDef] {
     match settings.get(MODE_SETTING).map(String::as_str) {
         Some("grey-plus-one") => &TOOLBAR,
-        _ => &[],
+        _ => &TOOLBAR[..1],
     }
 }
 

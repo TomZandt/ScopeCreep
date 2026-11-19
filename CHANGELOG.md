@@ -14,6 +14,8 @@ The format follows [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/
 
 ### Added
 
+- Stops False Colour: the mode is two chips on its title bar, Zones and Grey +1, one click each (hover says what each does), instead of a menu row. The choice is remembered per Panel and the tag still says "grey and +1 stop" when it is not full zones; B/W appears beside them in Grey +1 only. The popover keeps just the legend (#126).
+
 - Luma waveform: a Col chip on its title bar (hover: Colorise) draws the Y trace in the average colour of the pixels at each position, so you can tell the wall's spike from the jacket's; off by default, where the trace stays white. It is a drawing choice: the counts and edge rows are the same either way, it is remembered per Panel and is not in the tags. R, G and B traces keep their channel colours for now (#143, ADR 0032).
 
 - Luma waveform: Col now works on any combination of Y R G B. On, R, G and B take their channel colours and Y the picture's colour; off, every trace is white, as in Resolve (this changes the R, G and B traces' default look from coloured to white). Each trace still lands at its own code and the edge rows still show out-of-range per channel (#144, ADR 0032).

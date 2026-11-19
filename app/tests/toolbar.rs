@@ -152,7 +152,8 @@ fn the_clean_picture_and_skin_tone_start_in_colour_and_arri_and_stops_start_grey
     assert_eq!((chips, on), (vec!["B/W".to_string()], vec![false]));
     assert_eq!(bw_state("Skin tone", &skin_tone_view::SETTINGS, &skin_tone_view::TOOLBAR, &[]).1, [false]);
     assert_eq!(bw_state("ARRI False Colour", &arri_false_colour::SETTINGS, &arri_false_colour::TOOLBAR, &[]).1, [true]);
-    assert_eq!(bw_state("Stops False Colour", &stops_false_colour::SETTINGS, &stops_false_colour::TOOLBAR, &[]).1, [true]);
+    // Stops' toolbar is the mode chips then B/W: Zones (default), Grey +1, B/W.
+    assert_eq!(bw_state("Stops False Colour", &stops_false_colour::SETTINGS, &stops_false_colour::TOOLBAR, &[]).1, [true, false, true]);
 }
 
 #[test]
@@ -173,19 +174,41 @@ fn a_click_flips_the_toggle_each_way_and_it_is_remembered_per_panel() {
 }
 
 #[test]
+fn stops_mode_is_two_chips_one_at_a_time_remembered_and_b_w_follows_grey_and_plus_one() {
+    let name = "Stops False Colour";
+    let toolbar = |s: &PanelSettings| {
+        let own = s.resolve(name, &stops_false_colour::SETTINGS);
+        Toolbar::new(stops_false_colour::toolbar_for(&own), &own)
+    };
+    let mut s = PanelSettings::default();
+    let t = toolbar(&s);
+    assert_eq!(t.chips.iter().map(|c| c.text.as_str()).collect::<Vec<_>>(), ["Zones", "Grey +1"], "full zones is the default; B/W is hidden");
+    assert_eq!(t.on, [true, false]);
+    let (k, v) = t.click(1).unwrap();
+    s.set(name, k, v);
+    let t = toolbar(&PanelSettings::from_text(&s.to_text()));
+    assert_eq!(t.chips.iter().map(|c| c.text.as_str()).collect::<Vec<_>>(), ["Zones", "Grey +1", "B/W"]);
+    assert_eq!(t.on, [false, true, true], "remembered, and B/W shows");
+    assert_eq!(t.click(1).unwrap(), ("mode", "grey-plus-one"), "clicking the chip already on keeps it on");
+    let (k, v) = t.click(0).unwrap();
+    s.set(name, k, v);
+    assert_eq!(toolbar(&s).on, [true, false]);
+}
+
+#[test]
 fn stops_shows_bw_only_in_grey_and_plus_one_and_the_heatmap_has_none() {
     let zones: Settings = [("mode".to_string(), "zones".to_string())].into();
     let grey: Settings = [("mode".to_string(), "grey-plus-one".to_string())].into();
-    assert!(Toolbar::new(stops_false_colour::toolbar_for(&zones), &zones).chips.is_empty());
-    assert_eq!(Toolbar::new(stops_false_colour::toolbar_for(&grey), &grey).chips.len(), 1);
-    assert!(Toolbar::new(stops_false_colour::toolbar_for(&Settings::default()), &Settings::default()).chips.is_empty(), "the default mode is full zones");
+    assert_eq!(Toolbar::new(stops_false_colour::toolbar_for(&zones), &zones).chips.len(), 2);
+    assert_eq!(Toolbar::new(stops_false_colour::toolbar_for(&grey), &grey).chips.len(), 3);
+    assert_eq!(Toolbar::new(stops_false_colour::toolbar_for(&Settings::default()), &Settings::default()).chips.len(), 2, "the default mode is full zones");
 }
 
 #[test]
 fn bw_is_a_chip_not_a_popover_row() {
     let left = popover_defs(&picture_view::SETTINGS, &picture_view::TOOLBAR);
     assert!(left.is_empty(), "the clean picture has no popover");
-    assert_eq!(popover_defs(&stops_false_colour::SETTINGS, &stops_false_colour::TOOLBAR).iter().map(|d| d.key).collect::<Vec<_>>(), ["mode", "legend"]);
+    assert_eq!(popover_defs(&stops_false_colour::SETTINGS, &stops_false_colour::TOOLBAR).iter().map(|d| d.key).collect::<Vec<_>>(), ["legend"]);
 }
 
 #[test]
