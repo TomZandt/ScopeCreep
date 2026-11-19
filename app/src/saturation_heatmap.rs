@@ -12,29 +12,23 @@ use crate::picture_stage::{PictureStage, Rule};
 use crate::scale_bar::ScaleBar;
 use crate::muted_palette;
 use crate::output_conversion;
-use crate::settings::{Choice, SettingDef};
+use crate::settings::{Amount, Choice, SettingDef};
 use crate::vectorscope::RING;
 use std::sync::{Arc, Mutex};
 
 pub const SCALE_SETTING: &str = "scale";
 pub const LEGEND_SETTING: &str = "legend";
-/// The heatmap's default hot end, in percent, as its setting says it.
-pub const DEFAULT_SCALE: &str = "75";
+/// The scale slider (#90): the percentage of the vectorscope's ring at the hot end. 75 % is the default (ADR 0023);
+/// the lists earlier versions saved (25, 50, 75, 100, 150, 200) are the same numbers, which a reader takes as they are.
+pub const SCALE_AMOUNT: Amount = Amount { min: 25.0, max: 200.0, step: 5.0, default: 75.0, unit: " %", decimals: 0, legacy: &[] };
+
+/// The hot end in percent for a stored setting (out of the range is clamped, unreadable is the default).
+pub fn scale_of(stored: Option<&str>) -> f64 {
+    SCALE_AMOUNT.read(stored) as f64
+}
 
 const SETTINGS: [SettingDef; 2] = [
-    SettingDef {
-        key: SCALE_SETTING,
-        label: "Scale (hot end)",
-        amount: None,
-        choices: &[
-            Choice { value: "75", text: "75 % (default)" },
-            Choice { value: "25", text: "25 %" },
-            Choice { value: "50", text: "50 %" },
-            Choice { value: "100", text: "100 %" },
-            Choice { value: "150", text: "150 %" },
-            Choice { value: "200", text: "200 %" },
-        ],
-    },
+    SettingDef { key: SCALE_SETTING, label: "Scale (hot end)", amount: Some(SCALE_AMOUNT), choices: &[] },
     SettingDef { key: LEGEND_SETTING, label: "Legend", amount: None, choices: &[Choice { value: "on", text: "On" }, Choice { value: "off", text: "Off" }] },
 ];
 
@@ -110,14 +104,14 @@ impl Display for SaturationHeatmap {
         let measurement = output_conversion::measurement(context.colour_setup.clone(), context.luma);
         let weights = measurement.weights();
         let space = if measurement.assumed { format!("{} assumed, unconverted", measurement.space.name()) } else { measurement.space.name().to_string() };
-        let scale = context.settings.get(SCALE_SETTING).and_then(|v| v.parse::<f64>().ok()).unwrap_or(75.0);
+        let scale = scale_of(context.settings.get(SCALE_SETTING).map(String::as_str));
         let mut state = self.state.lock().unwrap();
         state.weights = weights;
         state.scale = scale;
         state.legend = context.settings.get(LEGEND_SETTING).is_none_or(|v| v == "on");
         state.label = format!(
-            "Saturation heatmap  ·  Output picture, {space}  ·  distance from neutral in Cb/Cr (Y = {:.4} R + {:.4} G + {:.4} B), 100 % = the vectorscope's 100 % ring  ·  grey 0 % to hot {scale} %",
-            weights[0], weights[1], weights[2]
+            "Saturation heatmap  ·  Output picture, {space}  ·  distance from neutral in Cb/Cr (Y = {:.4} R + {:.4} G + {:.4} B), 100 % = the vectorscope's 100 % ring  ·  grey 0 % to hot {} %",
+            weights[0], weights[1], weights[2], SCALE_AMOUNT.text(scale as f32).trim_end_matches(" %")
         );
     }
 

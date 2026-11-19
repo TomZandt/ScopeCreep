@@ -146,8 +146,9 @@ pub fn panel_title(display_name: &str, context: &DisplayContext, full: String) -
         }
         "Saturation heatmap" => {
             let mut tags = Vec::new();
-            if let Some(scale) = setting(crate::saturation_heatmap::SCALE_SETTING).filter(|s| *s != crate::saturation_heatmap::DEFAULT_SCALE) {
-                tags.push(format!("hot {scale} %"));
+            let scale = crate::saturation_heatmap::scale_of(setting(crate::saturation_heatmap::SCALE_SETTING));
+            if scale != crate::saturation_heatmap::SCALE_AMOUNT.default as f64 {
+                tags.push(format!("hot {} %", crate::saturation_heatmap::SCALE_AMOUNT.text(scale as f32).trim_end_matches(" %")));
             }
             tags.extend(measurement_tags(context));
             ("Saturation heatmap".into(), tags)

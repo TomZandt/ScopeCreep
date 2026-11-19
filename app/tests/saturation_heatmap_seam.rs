@@ -184,7 +184,7 @@ fn the_default_scale_lets_a_graded_picture_use_most_of_it() {
     // Measured on the ColorChecker as the Output picture: the most saturated of the 18 colour patches uses at
     // least 70 % of the default scale and none is past it.
     let b = Bench::new("default");
-    let default: f64 = b.set.setting_defs(0)[0].choices[0].value.parse().unwrap();
+    let default = b.set.setting_defs(0)[0].amount.unwrap().default as f64;
     let chart = ColorChecker::new(TimelineSpace::Rec709Gamma24);
     let mut shares: Vec<f64> = chart.patches().iter().filter(|p| p.number < 19).map(|p| percent(encoded(p.rec709_linear)) / default).collect();
     shares.sort_by(|a, b| a.partial_cmp(b).unwrap());
@@ -210,12 +210,42 @@ fn changing_the_scale_remaps_the_colours() {
     // The offered scales, the first the default.
     let defs = b.set.setting_defs(0);
     assert_eq!(defs[0].key, "scale");
-    assert_eq!(defs[0].choices[0].value, "75");
+    let amount = defs[0].amount.expect("the scale is a slider (#90)");
+    assert_eq!((amount.default, amount.unit, amount.min <= 25.0, amount.max >= 200.0), (75.0, " %", true, true));
     // The label says the scale.
     b.configure("off", "50");
     assert!(b.set.labels()[0].contains("hot 50 %"), "{}", b.set.labels()[0]);
     b.configure("off", "200");
     assert!(b.set.labels()[0].contains("hot 200 %"), "{}", b.set.labels()[0]);
+}
+
+#[test]
+fn the_scale_slider_takes_any_step_and_clamps() {
+    let mut b = Bench::new("scale-slider");
+    let rgb = [0.75f64, 0.5, 0.25];
+    let at = percent(rgb);
+    b.play(40, 40, &solid(40, 40, rgb.map(|v| v as f32)));
+    // Between the old list's values: the colour sits where the number says, and the label says the number.
+    for scale in ["35", "85", "120"] {
+        b.configure("off", scale);
+        let image = b.render(40, 40);
+        let want = (at / scale.parse::<f64>().unwrap()).min(1.0) as f32;
+        assert_overlay(pixel(&image, 40, 20, 20), luma(rgb), want, &format!("scale {scale}"));
+        assert!(b.set.labels()[0].contains(&format!("hot {scale} %")), "{}", b.set.labels()[0]);
+    }
+    // A smaller scale pushes the colour towards the warm end, a larger one towards the cool end.
+    let mut t = |scale: &str| {
+        b.configure("off", scale);
+        pixel(&b.render(40, 40), 40, 20, 20)
+    };
+    let (small, default, large) = (t("40"), t("75"), t("150"));
+    let warmth = |p: [u8; 3]| p[0] as i32 - p[2] as i32;
+    assert!(warmth(small) > warmth(default) && warmth(default) > warmth(large), "{small:?} {default:?} {large:?}");
+    // Out of the range is clamped; nothing readable is the default.
+    b.configure("off", "1000");
+    assert!(b.set.labels()[0].contains("hot 200 %"), "{}", b.set.labels()[0]);
+    b.configure("off", "wide");
+    assert!(b.set.labels()[0].contains("hot 75 %"), "{}", b.set.labels()[0]);
 }
 
 #[test]
