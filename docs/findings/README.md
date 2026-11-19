@@ -78,4 +78,5 @@ Anything the ticket could not verify becomes a GitHub issue (or a comment on the
 | [89](89-gamut-thresholds.md) | Do the gamut/legal warning's blue and red thresholds work as sliders (defaults identical, blue never above red, old list values map to the number they named, the label names values and codes; Feed seam)? |
 | [88](88-tolerance-sliders.md) | Do the Skin Tone and Highlight Neutrals tolerance sliders keep today's default look, widen the lit area monotonically, map old list values and clamp (display seam)? |
 | [86](86-vectorscope-sliders.md) | Do the vectorscope trace brightness and soft spread sliders keep the old look at their defaults and old list values, make spread 0 the old Off, and leave the label alone (display seam)? |
+| [87](87-cie-brightness-slider.md) | Does the CIE plot trace brightness slider keep the old look at its default and old list values, scale the trace monotonically and leave the label alone (display seam)? |
 | [90](90-heatmap-scale-slider.md) | Does a scale slider on the saturation heatmap keep the default look, take any step, read old list values, clamp, and move the picture, label and tag (display seam)? |

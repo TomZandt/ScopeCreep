@@ -13,7 +13,7 @@
 //! and the label says so (the waveform's rule, ADR 0007).
 use crate::colour_setup::{KnownColourSetup, TimelineSpace};
 use crate::gpu_frame::GpuFrame;
-use crate::settings::{Choice, SettingDef};
+use crate::settings::{Amount, Choice, SettingDef};
 use crate::measurement::{LumaWeights, MeasuredSpace};
 use scopecreep_accuracy::colour::{AP1, Chromaticities, DWG, P3_D65, REC2020, REC709, rgb_to_xyz};
 use scopecreep_accuracy::transfer;
@@ -121,17 +121,13 @@ pub struct Plot {
 pub const BRIGHTNESS_SETTING: &str = "brightness";
 pub const TIMELINE_SETTING: &str = "timeline";
 
+/// The trace brightness slider, in percent of the normal look (#87). The range reaches the old Bright (4 times the
+/// gain) and Dim (a quarter), so a file saved with either still draws as it did.
+pub const BRIGHTNESS_AMOUNT: Amount =
+    Amount { min: 20.0, max: 400.0, step: 5.0, default: 100.0, unit: " %", decimals: 0, legacy: &[("normal", 100.0), ("bright", 400.0), ("dim", 25.0)] };
+
 const SETTINGS: [SettingDef; 2] = [
-    SettingDef {
-        key: BRIGHTNESS_SETTING,
-        label: "Trace brightness",
-        amount: None,
-        choices: &[
-            Choice { value: "normal", text: "Normal" },
-            Choice { value: "bright", text: "Bright (sparse colours)" },
-            Choice { value: "dim", text: "Dim (dense colours)" },
-        ],
-    },
+    SettingDef { key: BRIGHTNESS_SETTING, label: "Trace brightness", amount: Some(BRIGHTNESS_AMOUNT), choices: &[] },
     SettingDef {
         key: TIMELINE_SETTING,
         label: "Timeline triangle",
@@ -151,11 +147,7 @@ impl Plot {
             timeline_name: known.as_ref().map(|k| k.setup.timeline.clone()),
             timeline: timeline_space.as_ref().and_then(timeline_chromaticities).map(|c| corners(&c)),
             show_timeline: settings.get(TIMELINE_SETTING).map(String::as_str) != Some("off"),
-            gain: match settings.get(BRIGHTNESS_SETTING).map(String::as_str) {
-                Some("bright") => 4.0,
-                Some("dim") => 0.25,
-                _ => 1.0,
-            },
+            gain: BRIGHTNESS_AMOUNT.read(settings.get(BRIGHTNESS_SETTING).map(String::as_str)) / 100.0,
         }
     }
 

@@ -168,7 +168,15 @@ fn the_plot_offers_trace_brightness_and_the_timeline_triangle_as_settings() {
     assert_eq!(defs.iter().map(|d| d.key).collect::<Vec<_>>(), ["brightness", "timeline"]);
     assert_eq!(defs[1].choices.iter().map(|c| c.value).collect::<Vec<_>>(), ["on", "off"]);
     let gains = |v: &str| Plot::new(None, &[("brightness".to_string(), v.to_string())].into()).gain;
+    assert!(defs[0].amount.is_some() && defs[0].choices.is_empty(), "brightness is a slider");
     assert!(gains("bright") > gains("normal") && gains("normal") > gains("dim"));
+    // The default is today's Normal; old list values map to the numbers that drew the same; the slider is monotonic.
+    use scopecreep::cie::BRIGHTNESS_AMOUNT;
+    assert_eq!((BRIGHTNESS_AMOUNT.default, gains("normal"), gains("100"), gains("400"), gains("25")), (100.0, 1.0, 1.0, 4.0, 0.25));
+    assert_eq!(Plot::new(None, &Settings::new()).gain, 1.0);
+    assert!(gains("50") < gains("100") && gains("100") < gains("250") && gains("250") < gains("400"));
+    assert_eq!((gains("1"), gains("9999"), gains("junk")), (0.2, 4.0, 1.0));
+    assert_eq!(BRIGHTNESS_AMOUNT.text(100.0), "100 %");
 }
 
 fn lit(image: &[u8], width: u32, [x, y]: [f32; 2]) -> u8 {
