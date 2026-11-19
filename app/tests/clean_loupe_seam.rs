@@ -85,7 +85,7 @@ fn inside(inner: [f32; 4], outer: [f32; 4]) -> bool {
 }
 
 #[test]
-fn with_the_loupe_off_nothing_is_drawn_over_the_picture_and_no_pointer_event_is_used() {
+fn with_the_loupe_off_nothing_is_drawn_over_the_picture_and_only_the_wheel_is_used_to_zoom() {
     let mut b = Bench::new("clean-loupe-off");
     b.play(64, 36, &solid(64, 36, [0.4, 0.6, 0.8]));
     b.render();
@@ -93,8 +93,9 @@ fn with_the_loupe_off_nothing_is_drawn_over_the_picture_and_no_pointer_event_is_
     let c = [AREA[0] + AREA[2] / 2.0, AREA[1] + AREA[3] / 2.0];
     assert_eq!(b.pointer(Pointer::Down(c)), PointerResult::default());
     assert_eq!(b.pointer(Pointer::Move([c[0] + 30.0, c[1]])), PointerResult::default());
-    assert_eq!(b.pointer(Pointer::Wheel { at: c, lines: 3.0 }), PointerResult::default());
     assert_eq!(b.pointer(Pointer::Up), PointerResult::default());
+    // The wheel is the picture's zoom now (#165), and remembers nothing.
+    assert_eq!(b.pointer(Pointer::Wheel { at: c, lines: 3.0 }), PointerResult { used: true, remember: Vec::new() });
 }
 
 #[test]
@@ -152,7 +153,10 @@ fn the_loupe_zooms_100_to_800_percent_in_exact_whole_pixel_blocks() {
     assert_eq!(b.drawn().unwrap().zoom, 100);
     assert_blocks(&b, 1);
     let away = [AREA[0] + 2.0, AREA[1] + 2.0];
-    assert!(!b.pointer(Pointer::Wheel { at: away, lines: 1.0 }).used, "the wheel off the Loupe is not taken");
+    // Off the Loupe the wheel zooms the picture (#165) and leaves the Loupe's own zoom alone.
+    assert!(b.pointer(Pointer::Wheel { at: away, lines: 1.0 }).remember.is_empty());
+    b.render();
+    assert_eq!(b.drawn().unwrap().zoom, 100);
 }
 
 #[test]

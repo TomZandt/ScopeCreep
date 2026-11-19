@@ -30,3 +30,7 @@ The clean picture is the Loupe's second user: it draws the Loupe on top of the s
 ## Note, 2026-11-19 (#164)
 
 Placement of a Picture View's frame comes from the zoom model (`zoom.rs`, spec #163), which the stage asks instead of calling `place` directly. At Fit it gives exactly what `place` gives, so nothing on screen changes; `place` stays the Fit answer and what the Loupe uses.
+
+## Note, 2026-11-19 (#165)
+
+The stage draws the picture as the zoom model's view says (`PictureStage::draw_zoomed`; `draw` is Fit): only the part of the picture inside the Panel's picture area, so the legend strip is untouched, and above 100 % `sample_picture` reads the exact texel so every picture pixel is a square. The mattes are still found per frame and applied by picture coordinate, so they hold when zoomed. See ADR 0035.

@@ -131,6 +131,14 @@ pub trait Display: Send + Sync {
     fn pointer(&self, _area: [f32; 4], _scale: f32, _event: Pointer) -> PointerResult {
         PointerResult::default()
     }
+    /// What the zoom chip on the title bar says for a picture Panel whose content is `area` (spec #163): `None`
+    /// for a display that does not zoom (every Scope), and before a frame has arrived.
+    fn zoom(&self, _area: [f32; 4]) -> Option<crate::zoom::Readout> {
+        None
+    }
+    /// Set the zoom from the chip's slider, in percent of source pixels (see [`crate::zoom::ZoomModel::set_percent`]).
+    /// Zoom is not a setting and is never saved. Nothing by default.
+    fn set_zoom(&self, _area: [f32; 4], _percent: f32) {}
     /// The quiet label: what the display shows, and how far it can be trusted (ADR 0007).
     fn label(&self) -> String;
     /// Draw into `area` (left, top, width, height in pixels of a `surface`-sized target) at `scale` device pixels
@@ -280,10 +288,21 @@ impl DisplaySet {
         crate::toolbar::popover_defs(&self.displays[index].offered_defs(), self.displays[index].toolbar_defs())
     }
 
-    /// The chips on the title bar of the display in Panel `index`, given everyone's choices.
-    pub fn toolbar(&self, index: usize, settings: &PanelSettings) -> Toolbar {
+    /// The chips on the title bar of the display in Panel `index`, given everyone's choices: a picture Panel
+    /// whose content is `area` starts with its zoom chip.
+    pub fn toolbar(&self, index: usize, settings: &PanelSettings, area: [f32; 4]) -> Toolbar {
         let own = self.settings_of(index, settings);
-        Toolbar::new(self.displays[index].toolbar_defs_for(&own), &own)
+        Toolbar::new(self.displays[index].toolbar_defs_for(&own), &own).with_zoom(self.displays[index].zoom(area).as_ref())
+    }
+
+    /// What the zoom chip of the display in Panel `index` says, with its content in `area`.
+    pub fn zoom(&self, index: usize, area: [f32; 4]) -> Option<crate::zoom::Readout> {
+        self.displays[index].zoom(area)
+    }
+
+    /// Set the zoom of the display in Panel `index` from the chip's slider.
+    pub fn set_zoom(&self, index: usize, area: [f32; 4], percent: f32) {
+        self.displays[index].set_zoom(area, percent);
     }
 
     /// The settings the display in Panel `index` is using, given everyone's choices.

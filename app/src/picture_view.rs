@@ -10,6 +10,7 @@ use crate::loupe::{self, Loupe};
 use crate::output_conversion::Plan;
 use crate::picture_stage::{PictureStage, Rule};
 use crate::settings::SettingDef;
+use crate::zoom::{Readout, ZoomModel};
 use crate::toolbar::{CHANNEL_DEF, CHANNEL_SETTING, CHANNEL_TOOLBAR, LOUPE_DEF, LOUPE_TOOLBAR, ToolbarDef, channel_of};
 use std::sync::{Arc, Mutex};
 
@@ -53,6 +54,8 @@ pub struct PictureView {
     /// The Colour Setup and conversion part of the label, from the last [`DisplayContext`].
     label_tail: Arc<Mutex<String>>,
     look: Arc<Mutex<Look>>,
+    /// How much of the picture the Panel shows (spec #163): not a setting, so never saved; every session starts at Fit.
+    zoom: Arc<Mutex<ZoomModel>>,
 }
 
 impl PictureView {
@@ -60,7 +63,7 @@ impl PictureView {
     pub fn new(device: &wgpu::Device, queue: &wgpu::Queue, target: wgpu::TextureFormat, filterable: bool) -> PictureView {
         let stage = PictureStage::new::<[f32; 4]>(device, queue, target, filterable, Rule { label: "picture view", wgsl: RULE.into(), has_legend: false });
         let loupe = Loupe::new::<[f32; 4]>(device, queue, target, RULE);
-        let view = PictureView { stage, loupe, label_tail: Arc::new(Mutex::new(String::new())), look: Arc::new(Mutex::new(Look { weights: crate::measurement::REC709_LUMA.map(|v| v as f32), channel: 0.0, loupe: false })) };
+        let view = PictureView { stage, loupe, label_tail: Arc::new(Mutex::new(String::new())), zoom: Arc::new(Mutex::new(ZoomModel::default())), look: Arc::new(Mutex::new(Look { weights: crate::measurement::REC709_LUMA.map(|v| v as f32), channel: 0.0, loupe: false })) };
         // Only the label's tail: the Loupe takes its remembered state from the first real `configure`.
         *view.label_tail.lock().unwrap() = Self::label_tail(&DisplayContext::default());
         view
@@ -132,12 +135,37 @@ impl Display for PictureView {
         loupe::STATE_KEYS
     }
 
-    /// The Loupe takes the pointer only while it is on; off, the Panel takes no pointer or wheel events.
+    /// The scroll wheel zooms the picture toward the pointer (while the Loupe is on, over the Loupe it is the Loupe's
+    /// zoom); every other event is the Loupe's, and with it off the Panel takes none.
     fn pointer(&self, area: [f32; 4], scale: f32, event: Pointer) -> PointerResult {
-        if !self.look.lock().unwrap().loupe {
+        let loupe = self.look.lock().unwrap().loupe;
+        if let Pointer::Wheel { at, lines } = event {
+            if loupe {
+                let result = self.loupe.pointer(area, scale, event);
+                if result.used {
+                    return result;
+                }
+            }
+            if let Some(picture) = self.frame_size() {
+                self.zoom.lock().unwrap().wheel(area, picture, 0.0, at, lines);
+                return PointerResult { used: true, remember: Vec::new() };
+            }
+            return PointerResult::default();
+        }
+        if !loupe {
             return PointerResult::default();
         }
         self.loupe.pointer(area, scale, event)
+    }
+
+    fn zoom(&self, area: [f32; 4]) -> Option<Readout> {
+        self.zoom.lock().unwrap().readout(area, self.frame_size()?, 0.0)
+    }
+
+    fn set_zoom(&self, area: [f32; 4], percent: f32) {
+        if let Some(picture) = self.frame_size() {
+            self.zoom.lock().unwrap().set_percent(percent, area, picture, 0.0);
+        }
     }
 
     fn label(&self) -> String {
@@ -148,7 +176,7 @@ impl Display for PictureView {
     fn draw(&self, pass: &mut wgpu::RenderPass<'_>, area: [f32; 4], surface: [f32; 2], scale: f32) {
         let look = *self.look.lock().unwrap();
         let values = [look.weights[0], look.weights[1], look.weights[2], look.channel];
-        self.stage.draw(pass, area, surface, &values, None);
+        self.stage.draw_zoomed(pass, area, surface, &values, None, &self.zoom.lock().unwrap());
         if look.loupe && area[2] >= 1.0 && area[3] >= 1.0 {
             if let Some(shown) = self.stage.shown() {
                 self.loupe.draw(pass, &shown, area, surface, scale, &values);

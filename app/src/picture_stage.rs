@@ -45,6 +45,9 @@ pub fn place(area: [f32; 4], picture: [u32; 2], strip: f32) -> Option<Placement>
     Some(Placement { x: (left + (width - w) / 2.0).round(), y: (top + (room - h) / 2.0).round(), w, h })
 }
 
+/// The whole picture, for the parts of the stage that are not zoomed.
+const WHOLE: [f32; 4] = [0.0, 0.0, 1.0, 1.0];
+
 /// A strip under the picture with a bar drawn by the rule's `legend` function, in device pixels.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Legend {
@@ -64,6 +67,8 @@ const PRELUDE: &str = r#"
 struct Stage {
     rect: vec4<f32>,   // left, top, right, bottom in clip space
     info: vec4<f32>,   // picture width, height, bottom row first (> 0.5), what is drawn: 0 picture, 1 legend, 2 fill
+    window: vec4<f32>, // the part of the picture drawn: left, top, right, bottom (0 to 1, top first); the whole at Fit
+    extra: vec4<f32>,  // x: read the exact texel (above 100 % zoom, so every picture pixel is a square)
 };
 @group(0) @binding(0) var<uniform> stage: Stage;
 @group(0) @binding(1) var picture: texture_2d<f32>;
@@ -82,12 +87,15 @@ fn vs(@builtin(vertex_index) index: u32) -> VertexOut {
     let corner = vec2<f32>(f32(index & 1u), f32((index >> 1u) & 1u));
     var out: VertexOut;
     out.position = vec4<f32>(mix(stage.rect.x, stage.rect.z, corner.x), mix(stage.rect.y, stage.rect.w, corner.y), 0.0, 1.0);
-    out.uv = vec2<f32>(corner.x, mix(corner.y, 1.0 - corner.y, step(0.5, stage.info.z)));
+    let top_down = vec2<f32>(mix(stage.window.x, stage.window.z, corner.x), mix(stage.window.y, stage.window.w, corner.y));
+    out.uv = vec2<f32>(top_down.x, mix(top_down.y, 1.0 - top_down.y, step(0.5, stage.info.z)));
     return out;
 }
 
-// The frame at `uv`, smoothed where the device can smooth 32-bit float textures.
+// The frame at `uv`, smoothed where the device can smooth 32-bit float textures (the exact texel when zoomed in
+// past 100 %, where smoothing would blur what the zoom is for).
 fn sample_picture(uv: vec2<f32>) -> vec3<f32> {
+    if (stage.extra.x > 0.5) { return load_picture(uv); }
     return textureSampleLevel(picture, picture_sampler, uv, 0.0).rgb;
 }
 
@@ -145,6 +153,9 @@ fn find() {
     bounds[0] = top; bounds[1] = bottom; bounds[2] = left; bounds[3] = right;
 }
 "#;
+
+/// The size of the `Stage` uniform: four vec4s.
+const STAGE_BYTES: usize = 64;
 
 /// A legend that draws nothing, for a rule that has none.
 const NO_LEGEND: &str = "fn legend(uv: vec2<f32>) -> vec3<f32> { return vec3<f32>(0.0); }\n";
@@ -294,8 +305,8 @@ impl PictureStage {
             matte_layout,
             matte_mark,
             matte_find,
-            picture_stage: buffer(32),
-            legend_stage: buffer(32),
+            picture_stage: buffer(STAGE_BYTES),
+            legend_stage: buffer(STAGE_BYTES),
             values: buffer(values_size),
             values_size,
             bound: Arc::new(Mutex::new(None)),
@@ -401,18 +412,25 @@ impl PictureStage {
     /// Draw the picture fitted inside `area` (less the `legend`'s strip) on a `surface` of that size in device
     /// pixels, then the legend's bar.
     pub fn draw<V: Pod>(&self, pass: &mut wgpu::RenderPass<'_>, area: [f32; 4], surface: [f32; 2], values: &V, legend: Option<Legend>) {
+        self.draw_zoomed(pass, area, surface, values, legend, &crate::zoom::ZoomModel::default());
+    }
+
+    /// [`draw`](Self::draw) with the picture as `zoom` places it (spec #163): zoomed in, only the part of the picture
+    /// inside the Panel's picture area is drawn, the legend strip under it untouched, and above 100 % every picture
+    /// pixel is an exact square.
+    pub fn draw_zoomed<V: Pod>(&self, pass: &mut wgpu::RenderPass<'_>, area: [f32; 4], surface: [f32; 2], values: &V, legend: Option<Legend>, zoom: &crate::zoom::ZoomModel) {
         let guard = self.bound.lock().unwrap();
         let Some(bound) = guard.as_ref() else { return };
         let strip = legend.map_or(0.0, |l| l.strip);
-        let Some(p) = crate::zoom::ZoomModel::default().placement(area, [bound.width, bound.height], strip) else { return };
+        let Some(view) = zoom.view(area, [bound.width, bound.height], strip) else { return };
         self.write_values(values);
-        self.write_stage(&self.picture_stage, bound, [p.x, p.y, p.w, p.h], surface, 0.0);
+        self.write_stage(&self.picture_stage, bound, view.visible, surface, 0.0, view.window, view.nearest);
         pass.set_pipeline(&self.pipeline);
         pass.set_bind_group(0, &bound.picture_group, &[]);
         pass.draw(0..4, 0..1);
         if let Some(l) = legend.filter(|l| l.strip > 0.0) {
             let bar = [area[0], area[1] + area[3] - l.strip + l.bar_offset, area[2], l.bar];
-            self.write_stage(&self.legend_stage, bound, bar, surface, 1.0);
+            self.write_stage(&self.legend_stage, bound, bar, surface, 1.0, WHOLE, false);
             pass.set_bind_group(0, &bound.legend_group, &[]);
             pass.draw(0..4, 0..1);
         }
@@ -427,7 +445,7 @@ impl PictureStage {
             return;
         }
         self.write_values(values);
-        self.write_stage(&self.picture_stage, bound, area, surface, 2.0);
+        self.write_stage(&self.picture_stage, bound, area, surface, 2.0, WHOLE, false);
         pass.set_pipeline(&self.pipeline);
         pass.set_bind_group(0, &bound.picture_group, &[]);
         pass.draw(0..4, 0..1);
@@ -438,10 +456,11 @@ impl PictureStage {
         self.queue.write_buffer(&self.values, 0, bytemuck::bytes_of(values));
     }
 
-    /// `rect` is left, top, width, height in device pixels.
-    fn write_stage(&self, buffer: &wgpu::Buffer, bound: &Bound, rect: [f32; 4], surface: [f32; 2], what: f32) {
+    /// `rect` is left, top, width, height in device pixels; `window` the part of the picture it shows.
+    #[allow(clippy::too_many_arguments)]
+    fn write_stage(&self, buffer: &wgpu::Buffer, bound: &Bound, rect: [f32; 4], surface: [f32; 2], what: f32, window: [f32; 4], nearest: bool) {
         let clip = |px: f32, size: f32| px / size * 2.0 - 1.0;
-        let words: [f32; 8] = [
+        let words: [f32; 16] = [
             clip(rect[0], surface[0]),
             -clip(rect[1], surface[1]),
             clip(rect[0] + rect[2], surface[0]),
@@ -450,6 +469,14 @@ impl PictureStage {
             bound.height as f32,
             if bound.bottom_up { 1.0 } else { 0.0 },
             what,
+            window[0],
+            window[1],
+            window[2],
+            window[3],
+            if nearest { 1.0 } else { 0.0 },
+            0.0,
+            0.0,
+            0.0,
         ];
         self.queue.write_buffer(buffer, 0, bytemuck::cast_slice(&words));
     }

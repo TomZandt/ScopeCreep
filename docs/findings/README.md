@@ -81,6 +81,7 @@ What we learned by testing, kept in the repo so it isn't lost when an issue thre
 | [151](151-waveform-aspect.md) | Does the luma waveform's plot take the Feed frame's aspect (16:9, 2.39:1, 4:3, 9:16), centred with its gutter and edge rows, and follow a resolution change (pure seam and drawing seam)? |
 | [85](85-soft-spread-slider.md) | Does a soft spread slider on the luma and Colour Waveforms keep the old On and Off looks, take any step from 0 to 3 pixels and leave counts and label alone? |
 | [102](102-mattes-stay-black.md) | Do black mattes (letterbox and pillarbox) stay black on ARRI False Colour, Stops False Colour, Skin Tone and the saturation heatmap (Feed seam)? |
+| [165](165-clean-picture-zoom.md) | Does the clean picture zoom from Fit to 400 % with the wheel toward the pointer and a chip with a slider, in exact squares above 100 %, with mattes and strip untouched, and never save the zoom (pure and Feed seam)? |
 
 ## Adding findings
 

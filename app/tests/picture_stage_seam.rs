@@ -214,3 +214,100 @@ fn nothing_is_drawn_before_a_frame_arrives_and_the_size_follows_the_frame() {
     play(&mut rig, &stage, 6, 3, &solid(6, 3, [1.0, 1.0, 1.0]));
     assert_eq!(stage.size(), Some([6, 3]));
 }
+
+// ---- zoom (#165, spec #163)
+
+use scopecreep::zoom::{Zoom, ZoomModel};
+
+/// The rule of a Picture View that reads the frame the smoothed way, so zoom must make it exact.
+const SMOOTH_RULE: &str = r#"
+struct Values { tint: vec4<f32> };
+fn colour(uv: vec2<f32>) -> vec3<f32> { return sample_picture(uv); }
+fn legend(uv: vec2<f32>) -> vec3<f32> { return vec3<f32>(0.0, 1.0, 0.0); }
+"#;
+
+/// A rule that paints red wherever the stage lets it, to see the mattes and the strip.
+const RED_RULE: &str = r#"
+struct Values { tint: vec4<f32> };
+fn colour(uv: vec2<f32>) -> vec3<f32> { return vec3<f32>(1.0, 0.0, 0.0); }
+fn legend(uv: vec2<f32>) -> vec3<f32> { return vec3<f32>(0.0, 1.0, 0.0); }
+"#;
+
+fn stage_with(rig: &Rig, wgsl: &str) -> PictureStage {
+    PictureStage::new::<[f32; 4]>(&rig.device, &rig.queue, TARGET, false, Rule { label: "test", wgsl: wgsl.into(), has_legend: true })
+}
+
+/// Lengths of the runs of equal values, less the first and last (which the Panel's edge cuts short).
+fn runs(values: &[u8]) -> Vec<usize> {
+    let mut out = Vec::new();
+    let mut n = 1;
+    for pair in values.windows(2) {
+        if pair[0] == pair[1] {
+            n += 1;
+        } else {
+            out.push(n);
+            n = 1;
+        }
+    }
+    out.push(n);
+    out[1..out.len() - 1].to_vec()
+}
+
+fn zoomed(percent: f32) -> ZoomModel {
+    let mut m = ZoomModel::default();
+    m.set_percent(percent, [0.0, 0.0, W as f32, H as f32], [160, 100], 0.0);
+    assert_eq!(m.zoom, Zoom::Percent(percent));
+    m
+}
+
+#[test]
+fn zoomed_in_every_picture_pixel_is_an_exact_square_of_2_3_and_4_device_pixels() {
+    let mut rig = Rig::new("stage-zoom-squares");
+    let stage = stage_with(&rig, SMOOTH_RULE);
+    // Neighbouring pixels all differ: the red code moves by 3 along a row and 5 down a column.
+    let pixels: Vec<f32> = (0..100).flat_map(|y| (0..160).flat_map(move |x| [(((3 * x + 5 * y) % 200 + 20) as f32) / 255.0, 0.0, 0.0, 1.0])).collect();
+    play(&mut rig, &stage, 160, 100, &pixels);
+    for k in [2u32, 3, 4] {
+        let model = zoomed(k as f32 * 100.0);
+        let image = rig.render(W, H, |pass| stage.draw_zoomed(pass, [0.0, 0.0, W as f32, H as f32], [W as f32, H as f32], &ID, None, &model));
+        let row: Vec<u8> = (0..W).map(|x| px(&image, x, H / 2)[0]).collect();
+        let column: Vec<u8> = (0..H).map(|y| px(&image, W / 2, y)[0]).collect();
+        for (name, values) in [("row", row), ("column", column)] {
+            let r = runs(&values);
+            assert!(r.len() > 5 && r.iter().all(|n| *n == k as usize), "{k}00 % {name}: runs {r:?}");
+        }
+    }
+}
+
+#[test]
+fn at_fit_the_frame_is_drawn_exactly_as_it_always_was() {
+    let mut rig = Rig::new("stage-zoom-fit");
+    let stage = stage_with(&rig, SMOOTH_RULE);
+    play(&mut rig, &stage, 160, 100, &solid(160, 100, [0.0, 0.5, 1.0]));
+    let area = [0.0, 0.0, W as f32, H as f32];
+    let plain = rig.render(W, H, |pass| stage.draw(pass, area, [W as f32, H as f32], &ID, None));
+    let fit = rig.render(W, H, |pass| stage.draw_zoomed(pass, area, [W as f32, H as f32], &ID, None, &ZoomModel::default()));
+    assert_eq!(plain, fit);
+    // 120 x 75 centred in 120 x 100: black above and below.
+    assert!(filled(&plain, [0, 0, 120, 12], BLACK) && px(&plain, 60, 50) != BLACK);
+}
+
+#[test]
+fn zoomed_in_the_mattes_stay_black_and_the_legend_strip_is_untouched() {
+    let mut rig = Rig::new("stage-zoom-mattes");
+    let stage = stage_with(&rig, RED_RULE);
+    // 160 x 100 with the left 20 columns black bars.
+    let pixels: Vec<f32> = (0..100).flat_map(|_| (0..160).flat_map(|x| if x < 20 { [0.0, 0.0, 0.0, 1.0] } else { [0.5, 0.5, 0.5, 1.0] })).collect();
+    play(&mut rig, &stage, 160, 100, &pixels);
+    let legend = Legend { strip: 20.0, bar_offset: 5.0, bar: 10.0 };
+    let area = [0.0, 0.0, 120.0, 100.0];
+    let mut model = ZoomModel::default();
+    model.set_percent(200.0, area, [160, 100], 20.0);
+    model.centre = Some([30.0, 50.0]);
+    let image = rig.render(W, H, |pass| stage.draw_zoomed(pass, area, [W as f32, H as f32], &ID, Some(legend), &model));
+    // The picture shows its first 60 columns: 20 black picture columns are 40 black device columns.
+    assert!(filled(&image, [0, 0, 40, 80], BLACK), "the matte stays black");
+    assert!(filled(&image, [40, 0, 80, 80], RED), "the rest is the rule's colour, up to the strip");
+    assert!(filled(&image, [0, 80, 120, 5], BLACK) && filled(&image, [0, 95, 120, 5], BLACK), "nothing is drawn in the strip but the bar");
+    assert!(filled(&image, [0, 85, 120, 10], GREEN), "the legend bar is where it always is");
+}

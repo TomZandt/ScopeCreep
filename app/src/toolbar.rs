@@ -111,7 +111,37 @@ pub struct Toolbar {
     pub picks: Vec<(&'static str, String)>,
 }
 
+/// The tip on a picture Panel's zoom chip.
+pub const ZOOM_TOOLTIP: &str = "Zoom: scroll over the picture, or click for a slider from Fit to 400 %";
+
 impl Toolbar {
+    /// The toolbar with the zoom chip first when the Panel zooms (`readout` is `Some`): lit while zoomed in, and a
+    /// click on it asks for the zoom popover (the key [`crate::zoom::ZOOM_KEY`], no value).
+    pub fn with_zoom(mut self, readout: Option<&crate::zoom::Readout>) -> Toolbar {
+        let Some(r) = readout else { return self };
+        self.chips.insert(0, Chip::new(&r.text));
+        self.on.insert(0, r.percent > r.fit + 0.01);
+        self.tooltips.insert(0, ZOOM_TOOLTIP.to_string());
+        self.picks.insert(0, (crate::zoom::ZOOM_KEY, String::new()));
+        self
+    }
+
+    /// On a title bar `bar_width` wide (device pixels), shorten the zoom chip to its number ("23 %" for "Fit 23 %")
+    /// when the chips and the settings button would not fit with it long. It stays first, so it stays on the bar.
+    pub fn fit_to(&mut self, bar_width: f32, settings_button: bool, scale: f32) {
+        let zoom = self.picks.first().is_some_and(|p| p.0 == crate::zoom::ZOOM_KEY);
+        if !zoom {
+            return;
+        }
+        let button = if settings_button { (crate::style::SPACE_SETTINGS_BUTTON + crate::style::SPACE_CHIP_GAP) * scale } else { 0.0 };
+        let needed = crate::components::chip_row_width(&self.chips, scale) + button + 2.0 * crate::style::SPACE_BAR_PAD * scale;
+        if needed > bar_width {
+            if let Some(number) = self.chips[0].text.strip_prefix("Fit ") {
+                self.chips[0].text = number.to_string();
+            }
+        }
+    }
+
     /// The toolbar of `defs` showing `current`. A setting with no chip matching its value shows none on.
     pub fn new(defs: &[ToolbarDef], current: &Settings) -> Toolbar {
         let mut toolbar = Toolbar::default();

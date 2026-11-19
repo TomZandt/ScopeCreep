@@ -119,6 +119,13 @@ _Avoid_: Widget, plugin, module (for a display)
 The one part of the code every Picture View draws through. It places the frame in its Panel (fit, centre, whole device pixels), flips it, keeps the GPU binding and the legend strip; a Picture View supplies only its colour rule, its values and optionally a legend. The Loupe is a shared piece on top of it, built from the Panel's own colour rule (`loupe.rs`).
 _Avoid_: Renderer, canvas
 
+**Zoom**:
+How much of a picture Panel's frame is shown, in percent of source pixels: 100 % is one picture pixel to one device pixel. It runs from Fit to 400 %, free below 100 % and in whole steps (200, 300, 400 %) above, so every picture pixel is an exact square. The scroll wheel zooms toward the pointer and the zoom chip on the title bar says it and opens a slider. It is not a setting: it is not saved and every session starts at Fit (ADR 0035). On the clean picture so far.
+_Avoid_: Magnify (that is the Loupe), scale
+
+**Fit**:
+The zoom that shows the whole frame in the Panel, as a picture Panel always did. The zoom chip says how much that scales the frame: "Fit 23 %". A frame already larger than 100 % at Fit (a small frame in a big Panel) starts at Fit and zooms on in whole steps.
+
 **Matte**:
 A black bar around the picture: whole rows at the top and bottom, or whole columns at the sides, in which every pixel is exactly black. The Picture stage finds them once per frame and draws them black on every Picture View. A black pixel inside the picture is not a matte.
 _Avoid_: Letterbox (that is one kind of matte), border
@@ -240,7 +247,7 @@ Stops False Colour's chart mode: a black and white picture where pixels within a
 The Feed's frame as Resolve sends it, before Output Conversion. Stops False Colour measures this one; every other display sees the Output picture.
 
 **Loupe**:
-A movable square on a Picture View that shows the picture under it magnified, so single pixels (and noise) can be seen. Its zoom is of source pixels, in device pixels of the screen: at 200 % each picture pixel is 2 × 2 device pixels, whatever the Panel's size. It is one shared piece any Picture View can use; it is built from the Panel's colour rule, so it shows what the Panel shows. It is on the clean picture (and on the Channel view, which is out of the Window) as a toolbar chip (off by default): the clean picture's Loupe magnifies whatever its chips show (colour or one channel), is dragged anywhere in the Panel, zooms 100 to 800 % with the scroll wheel, takes its size (small, medium, large) from the popover, and is remembered per Panel. While it is on, "Loupe N %" is a tag; while it is off the clean picture takes no pointer or wheel events.
+A movable square on a Picture View that shows the picture under it magnified, so single pixels (and noise) can be seen. Its zoom is of source pixels, in device pixels of the screen: at 200 % each picture pixel is 2 × 2 device pixels, whatever the Panel's size. It is one shared piece any Picture View can use; it is built from the Panel's colour rule, so it shows what the Panel shows. It is on the clean picture (and on the Channel view, which is out of the Window) as a toolbar chip (off by default): the clean picture's Loupe magnifies whatever its chips show (colour or one channel), is dragged anywhere in the Panel, zooms 100 to 800 % with the scroll wheel, takes its size (small, medium, large) from the popover, and is remembered per Panel. While it is on, "Loupe N %" is a tag; while it is off the clean picture takes no pointer events and the wheel zooms the picture (Zoom).
 
 **Channel view**:
 The Panel showing one channel of the Output picture (blue by default, or red, green or Luma) as grey, with the Loupe on top, for inspecting noise. Out of the Window since #162 (the clean picture's Y R G B chips and Loupe do its job, ADR 0034); its code, tests and saved settings are kept.

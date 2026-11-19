@@ -441,8 +441,29 @@ impl AppWindow {
         self.menu = Menu::new(panel, &self.displays.popover_defs(panel), &current).map(|menu| (menu, at));
     }
 
+    /// Open Panel `panel`'s zoom popover at `at`: one slider from Fit to 400 %.
+    fn open_zoom_popover(&mut self, panel: usize, at: [f32; 2]) {
+        let Some(area) = self.contents.get(panel).copied() else { return };
+        self.menu = self.displays.zoom(panel, area).map(|readout| (Menu::zoom(panel, &readout), at));
+    }
+
+    /// Zoom Panel `panel` from the popover's slider (snapped above 100 %, which the slider then shows). Zoom is
+    /// display state: it is never put in the settings or saved.
+    fn set_zoom(&mut self, panel: usize, percent: f32) {
+        let Some(area) = self.contents.get(panel).copied() else { return };
+        self.displays.set_zoom(panel, area, percent);
+        let shown = self.displays.zoom(panel, area).map(|r| r.percent);
+        if let (Some((menu, _)), Some(shown)) = (self.menu.as_mut(), shown) {
+            menu.show_value(scopecreep::zoom::ZOOM_KEY, shown);
+        }
+        self.window.request_redraw();
+    }
+
     /// Set a Panel's setting from the popover or a chip, remembering it if it changed.
     fn choose(&mut self, panel: usize, key: &str, value: &str) {
+        if key == scopecreep::zoom::ZOOM_KEY {
+            return self.set_zoom(panel, value.parse().unwrap_or(0.0));
+        }
         let name = self.displays.name(panel);
         let changed = {
             let mut settings = self.settings.lock().unwrap();
@@ -775,7 +796,14 @@ impl AppWindow {
                 match self.toolbar_hit() {
                     Some(ToolbarHit::Chip(panel, chip)) => {
                         if let Some((key, value)) = self.toolbars.get(panel).and_then(|t| t.click(chip)).map(|(k, v)| (k, v.to_string())) {
-                            self.choose(panel, key, &value);
+                            if key == scopecreep::zoom::ZOOM_KEY {
+                                if let Some(r) = self.title_layouts.get(panel).and_then(|l| l.chips.get(chip)).copied() {
+                                    self.open_zoom_popover(panel, [r[0], r[1] + r[3]]);
+                                    self.window.request_redraw();
+                                }
+                            } else {
+                                self.choose(panel, key, &value);
+                            }
                         }
                         return;
                     }
@@ -844,8 +872,9 @@ impl AppWindow {
         for (i, cell) in cells.iter().enumerate() {
             let title = texts.titles.get(i).cloned().unwrap_or_default();
             let panel = PanelLayout::new(*cell, scale);
-            let toolbar = self.displays.toolbar(i, &settings_now);
+            let mut toolbar = self.displays.toolbar(i, &settings_now, panel.content);
             let has_popover = !self.displays.popover_defs(i).is_empty();
+            toolbar.fit_to(panel.title[2], has_popover, scale);
             let (l, tags, all_shown) = window_text::lay_out_toolbar_title(&title, &toolbar.chips, has_popover, panel.title, scale);
             toolbars.push(toolbar);
             self.panel_texts[i].label.set(&mut self.font_system, &title.name, TextStyle { wrap: false, ..TextStyle::LABEL }, scale, l.name[2].max(1.0));
