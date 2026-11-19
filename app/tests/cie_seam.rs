@@ -165,7 +165,7 @@ fn the_plot_offers_trace_brightness_and_the_timeline_triangle_as_settings() {
     let (device, queue) = (&rig.device, &rig.queue);
     let plot = CiePlot::new(device, queue, TARGET);
     let defs = plot.setting_defs();
-    assert_eq!(defs.iter().map(|d| d.key).collect::<Vec<_>>(), ["brightness", "timeline"]);
+    assert_eq!(defs.iter().map(|d| d.key).collect::<Vec<_>>(), ["brightness", "timeline", "graticule"]);
     assert_eq!(defs[1].choices.iter().map(|c| c.value).collect::<Vec<_>>(), ["on", "off"]);
     let gains = |v: &str| Plot::new(None, &[("brightness".to_string(), v.to_string())].into()).gain;
     assert!(defs[0].amount.is_some() && defs[0].choices.is_empty(), "brightness is a slider");
@@ -207,4 +207,29 @@ fn the_drawn_plot_shows_the_trace_the_locus_and_both_triangles() {
     b.configure(&[("timeline", "off")]);
     let image = b.render(600, 400);
     assert!(lit(&image, 600, layout.screen_of([0.1682, 0.9877])) < 20);
+}
+
+#[test]
+fn graticule_brightness_scales_the_grid_only_and_the_default_is_today() {
+    let (width, height) = (600u32, 400u32);
+    let mut b = Bench::new("graticule", DWG_REC709);
+    b.play(width, height, &ColorChecker::new(TimelineSpace::DavinciIntermediate).frame(width, height).pixels);
+    let layout = PlotLayout::new([0.0, 0.0, 600.0, 400.0], 1.0);
+    let drawn = |b: &Bench, value: &str| {
+        b.configure(&[("graticule", value)]);
+        b.render(600, 400)
+    };
+    b.configure(&[]);
+    let normal = b.render(600, 400);
+    assert!(drawn(&b, "100") == normal, "the default draws as today");
+    let (dim, bright) = (drawn(&b, "20"), drawn(&b, "300"));
+    let [x, y] = layout.screen_of([0.7, 0.15]);
+    let line = |image: &[u8]| lit(image, 600, [x, y]);
+    assert!(line(&dim) < line(&normal) && line(&normal) < line(&bright), "grid {} < {} < {}", line(&dim), line(&normal), line(&bright));
+    // The locus, the triangles and the trace are the measurement: they do not move.
+    let locus = layout.screen_of([0.0743, 0.8338]);
+    assert_eq!((lit(&dim, 600, locus), lit(&bright, 600, locus)), (lit(&normal, 600, locus), lit(&normal, 600, locus)));
+    let white = layout.screen_of([0.3127, 0.3290]);
+    assert_eq!(lit(&dim, 600, white), lit(&normal, 600, white));
+    assert_eq!(Plot::new(None, &[("graticule".to_string(), "250".to_string())].into()).graticule, 2.5);
 }

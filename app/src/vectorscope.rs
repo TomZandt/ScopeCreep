@@ -179,9 +179,10 @@ pub const MONO_SETTING: &str = "mono";
 /// Which tonal range is plotted: all (the default), shadows, mids or highlights (#124).
 pub const TONAL_SETTING: &str = "tonal";
 
-pub const SETTINGS: [SettingDef; 7] = [
+pub const SETTINGS: [SettingDef; 8] = [
     SettingDef { key: BRIGHTNESS_SETTING, label: "Trace brightness", amount: Some(BRIGHTNESS_AMOUNT), choices: &[] },
     SettingDef { key: SPREAD_SETTING, label: "Soft spread", amount: Some(SPREAD_AMOUNT), choices: &[] },
+    SettingDef { key: crate::scope_shader::GRATICULE_SETTING, label: "Graticule brightness", amount: Some(crate::scope_shader::GRATICULE_AMOUNT), choices: &[] },
     SettingDef { key: TARGETS_SETTING, label: "Colour targets", amount: None, choices: &[Choice { value: "75", text: "75 % bars" }, Choice { value: "100", text: "100 % bars" }] },
     SettingDef { key: SKIN_LINE_SETTING, label: "Skin-tone line", amount: None, choices: &[Choice { value: "on", text: "On" }, Choice { value: "off", text: "Off" }] },
     SettingDef {
@@ -235,6 +236,8 @@ struct Config {
     bars: f64,
     skin_line: bool,
     gain: f32,
+    /// The graticule gain (1 is the normal look).
+    graticule: f32,
     /// The soft spread in device pixels; 0 skips the spread.
     spread: f32,
     plots: Plots,
@@ -403,7 +406,7 @@ struct Placement {
     opts: vec4<f32>,      // skin line on, its cos and sin, target box half size (Cb/Cr)
     rings: vec4<f32>,     // the outer ring as a fraction of the plot's radius, soft spread in device pixels (0 off), where this plot's bins start, mono trace on
     targets: array<vec4<f32>, 6>,   // Cb, Cr of each colour target
-    weights: vec4<f32>,   // luma weights for R, G, B, to turn a position back into a colour
+    weights: vec4<f32>,   // luma weights for R, G, B, to turn a position back into a colour, the graticule gain
 };
 @group(0) @binding(0) var<uniform> placement: Placement;
 @group(0) @binding(1) var<storage, read> bins: array<u32>;
@@ -496,13 +499,13 @@ fn fs(@builtin(position) position: vec4<f32>) -> @location(0) vec4<f32> {
     var base = PLOT;
     let outer = placement.rings.x * radius;
     if (abs(q.x) <= half_line || abs(q.y) <= half_line || abs(r - outer / 2.0) <= half_line) {
-        base = GRID;
+        base = graticule(GRID, placement.weights.w);
     }
     // The outer ring is a hue wheel: each point is the colour that lands there, muted so it never competes with the
-    // trace.
+    // trace (the graticule brightness scales the muting, to at most 0.9 so the clipping marks stay the brightest).
     if (abs(r - outer) <= half_line * 2.0) {
         let d = q / max(r, 0.001);
-        base = tint(d.x * 0.5, -d.y * 0.5) * 0.7;
+        base = tint(d.x * 0.5, -d.y * 0.5) * min(0.7 * placement.weights.w, 0.9);
     }
     // Clipping: where colours beyond the 100 % bars have this hue, the ring is thicker and brighter, at either zoom.
     if (abs(r - outer) <= half_line * 5.0) {
@@ -523,7 +526,7 @@ fn fs(@builtin(position) position: vec4<f32>) -> @location(0) vec4<f32> {
         let along = dot(q, dir);
         let across = abs(q.x * dir.y - q.y * dir.x);
         if (along > 0.0 && along <= outer && across <= half_line * 1.5) {
-            base = MARK;
+            base = graticule(MARK, placement.weights.w);
         }
     }
     // The colour targets: a box around each.
@@ -533,7 +536,7 @@ fn fs(@builtin(position) position: vec4<f32>) -> @location(0) vec4<f32> {
         let c = vec2<f32>(placement.targets[i].x * k, -placement.targets[i].y * k);
         let d = max(abs(q.x - c.x), abs(q.y - c.y));
         if (d <= half_box + half_line && d > half_box - half_line) {
-            base = BARS[i] * 0.7;
+            base = BARS[i] * min(0.7 * placement.weights.w, 0.9);
         }
     }
     let rel = p - plot.xy;
@@ -616,7 +619,7 @@ impl Vectorscope {
             params: uniform("vectorscope params", PARAMS_BYTES),
             draw,
             placement: [uniform("vectorscope placement 100 %", DRAW_UNIFORM_BYTES), uniform("vectorscope placement 200 %", DRAW_UNIFORM_BYTES)],
-            config: Arc::new(Mutex::new(Config { measurement: Measurement::default(), bars: 0.75, skin_line: true, gain: 1.0, spread: SPREAD_AMOUNT.default, plots: Plots::Both, mono: false, tonal: Tonal::All })),
+            config: Arc::new(Mutex::new(Config { measurement: Measurement::default(), bars: 0.75, skin_line: true, gain: 1.0, graticule: 1.0, spread: SPREAD_AMOUNT.default, plots: Plots::Both, mono: false, tonal: Tonal::All })),
             state: Arc::new(Mutex::new(State { bins, pixels: 0, bound: None, draw_bound: None, measured: false })),
         }
     }
@@ -726,6 +729,7 @@ impl Display for Vectorscope {
             mono: get(MONO_SETTING) == Some("on"),
             tonal: Tonal::from_setting(get(TONAL_SETTING)),
             gain: BRIGHTNESS_AMOUNT.read(get(BRIGHTNESS_SETTING)) / 100.0,
+            graticule: crate::scope_shader::graticule_gain(get(crate::scope_shader::GRATICULE_SETTING)),
         };
     }
 
@@ -782,7 +786,7 @@ impl Display for Vectorscope {
                 placement[21 + t * 4] = *cr as f32;
             }
             let w = config.measurement.weights();
-            placement[44..48].copy_from_slice(&[w[0] as f32, w[1] as f32, w[2] as f32, 0.0]);
+            placement[44..48].copy_from_slice(&[w[0] as f32, w[1] as f32, w[2] as f32, config.graticule]);
             self.queue.write_buffer(&self.placement[i], 0, bytemuck::cast_slice(&placement));
             pass.set_bind_group(0, &state.draw_bound.as_ref().unwrap()[i], &[]);
             pass.draw(0..4, 0..1);

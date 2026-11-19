@@ -115,6 +115,8 @@ pub struct Plot {
     pub show_timeline: bool,
     /// Trace brightness: the gain on the counts.
     pub gain: f32,
+    /// Graticule brightness as a gain (1 is the normal look): the grid only; the locus and triangles are the measurement.
+    pub graticule: f32,
 }
 
 /// The key of the trace brightness setting, and of the Timeline triangle setting.
@@ -126,13 +128,19 @@ pub const TIMELINE_SETTING: &str = "timeline";
 pub const BRIGHTNESS_AMOUNT: Amount =
     Amount { min: 20.0, max: 400.0, step: 5.0, default: 100.0, unit: " %", decimals: 0, legacy: &[("normal", 100.0), ("bright", 400.0), ("dim", 25.0)] };
 
-const SETTINGS: [SettingDef; 2] = [
+const SETTINGS: [SettingDef; 3] = [
     SettingDef { key: BRIGHTNESS_SETTING, label: "Trace brightness", amount: Some(BRIGHTNESS_AMOUNT), choices: &[] },
     SettingDef {
         key: TIMELINE_SETTING,
         label: "Timeline triangle",
         amount: None,
         choices: &[Choice { value: "on", text: "Shown" }, Choice { value: "off", text: "Hidden" }],
+    },
+    SettingDef {
+        key: crate::scope_shader::GRATICULE_SETTING,
+        label: "Graticule brightness",
+        amount: Some(crate::scope_shader::GRATICULE_AMOUNT),
+        choices: &[],
     },
 ];
 
@@ -147,6 +155,7 @@ impl Plot {
             timeline_name: known.as_ref().map(|k| k.setup.timeline.clone()),
             timeline: timeline_space.as_ref().and_then(timeline_chromaticities).map(|c| corners(&c)),
             show_timeline: settings.get(TIMELINE_SETTING).map(String::as_str) != Some("off"),
+            graticule: crate::scope_shader::graticule_gain(settings.get(crate::scope_shader::GRATICULE_SETTING).map(String::as_str)),
             gain: BRIGHTNESS_AMOUNT.read(settings.get(BRIGHTNESS_SETTING).map(String::as_str)) / 100.0,
         }
     }
@@ -336,7 +345,7 @@ struct Placement {{
     output_b: vec4<f32>,   // blue
     timeline_a: vec4<f32>,
     timeline_b: vec4<f32>,
-    pad: vec4<f32>,
+    pad: vec4<f32>,        // the graticule gain
     locus: array<vec4<f32>, 17>,   // two points each
 }};
 @group(0) @binding(0) var<uniform> placement: Placement;
@@ -396,7 +405,7 @@ fn fs(@builtin(position) position: vec4<f32>) -> @location(0) vec4<f32> {{
     // A faint grid every 0.1.
     let grid = abs(fract(xy / 0.1 + vec2<f32>(0.5, 0.5)) - vec2<f32>(0.5, 0.5)) * 0.1 * r.zw / (vec2<f32>(DOMAIN.z - DOMAIN.x, DOMAIN.w - DOMAIN.y));
     if (min(grid.x, grid.y) < 0.5) {{
-        colour = GRID;
+        colour = clamp(PLOT + (GRID - PLOT) * placement.pad.x, vec3<f32>(0.0), vec3<f32>(1.0));
     }}
     // The spectral locus, and the line of purples closing it.
     var d = 1e9;
@@ -584,6 +593,7 @@ impl CiePlot {
         let timeline = plot.timeline_triangle();
         let shown = if timeline.is_some() { 1.0 } else { 0.0 };
         u[8..12].copy_from_slice(&[plot.gain, state.pixels as f32, shown, shown]);
+        u[28..32].copy_from_slice(&[plot.graticule, 0.0, 0.0, 0.0]);
         let triangle = |t: [[f32; 2]; 3]| [t[0][0], t[0][1], t[1][0], t[1][1], t[2][0], t[2][1], 0.0, 0.0];
         u[12..20].copy_from_slice(&triangle(plot.output_triangle()));
         if let Some(t) = timeline {

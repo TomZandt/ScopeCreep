@@ -20,3 +20,10 @@ fn phosphor(gain: f32, v: f32, expected: f32, floor_level: f32) -> f32 {
 fn spread_step(device_scale: f32) -> f32 {
     return max(1.0, device_scale);
 }
+
+// A graticule mark (grid, scale line) at `gain` times its normal contrast with the plot, never past white. The
+// graticule brightness setting is drawing only: one gain every scope applies to its reference marks, so a mark
+// never falls below the plot itself (it fades into it) and 1 is exactly today's look.
+fn graticule(colour: vec3<f32>, gain: f32) -> vec3<f32> {
+    return clamp(PLOT + (colour - PLOT) * gain, vec3<f32>(0.0), vec3<f32>(1.0));
+}

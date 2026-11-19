@@ -12,6 +12,7 @@ use crate::colour_setup::Levels;
 use crate::measurement::{luma_weights_of, MeasuredSpace, Measurement, LUMA_SETTING};
 use crate::gpu_frame::GpuFrame;
 use crate::waveform_scale::{Unit, UNIT_SETTING};
+use crate::scope_shader::{graticule_gain, GRATICULE_AMOUNT, GRATICULE_SETTING};
 use crate::settings::{Amount, Choice, SettingDef};
 use std::sync::{Arc, Mutex};
 
@@ -95,11 +96,13 @@ pub struct Look {
     pub brightness: Brightness,
     /// The soft spread, in device pixels (0 skips it), done in a separate pass into a texture.
     pub spread: Spread,
+    /// How bright the grid and scale lines are, as a gain (1 is the normal look; the graticule brightness slider, #127).
+    pub graticule: f32,
 }
 
 impl Default for Look {
     fn default() -> Look {
-        Look { brightness: Brightness(BRIGHTNESS_AMOUNT.default), spread: Spread(SPREAD_AMOUNT.default) }
+        Look { brightness: Brightness(BRIGHTNESS_AMOUNT.default), spread: Spread(SPREAD_AMOUNT.default), graticule: 1.0 }
     }
 }
 
@@ -366,7 +369,7 @@ struct Placement {
     above: vec4<f32>,
     below: vec4<f32>,
     info: vec4<f32>,      // waveform columns, picture height, device pixels per logical pixel
-    legal: vec4<f32>,     // the codes of black and white for the Levels in use
+    legal: vec4<f32>,     // the codes of black and white for the Levels in use, the graticule gain
     look: vec4<f32>,      // the gain of the phosphor response, the soft spread in device pixels (0 is off), 1 for the Colour Waveform, the chips on (bits: Y R G B)
     red: vec4<f32>,       // the channels' trace colours
     green: vec4<f32>,
@@ -565,10 +568,10 @@ fn fs(@builtin(position) position: vec4<f32>) -> @location(0) vec4<f32> {
     if (inside(p, placement.plot)) {
         var base = PLOT;
         if (on_grid(p.y)) {
-            base = GRID;
+            base = graticule(GRID, placement.legal.z);
         }
         if (on_line(p.y, placement.legal.x) || on_line(p.y, placement.legal.y)) {
-            base = LEGAL;
+            base = graticule(LEGAL, placement.legal.z);
         }
         // The codes under this screen row (bottom of the plot is code 0).
         let bottom = placement.plot.y + placement.plot.w;
@@ -1014,7 +1017,7 @@ impl Waveform {
         placement[12..16].copy_from_slice(&layout.below);
         placement[16..19].copy_from_slice(&[columns as f32, picture_height as f32, scale]);
         let (black, white) = self.measurement().levels.black_and_white();
-        placement[20..22].copy_from_slice(&[black as f32, white as f32]);
+        placement[20..23].copy_from_slice(&[black as f32, white as f32, look.graticule]);
         let channels = self.channels();
         let mask = if state.rgb.is_some() || !channels.colour_channels() { channels.mask() } else { channels.mask() & 1 };
         placement[24..28].copy_from_slice(&[look.brightness.gain(), look.spread.0, if self.needs_colour_sums() { 1.0 } else { 0.0 }, (mask | if self.colour || self.colorise() { 1 << COLORISE_BIT } else { 0 }) as f32]);
@@ -1105,7 +1108,7 @@ impl Waveform {
 pub const NAME: &str = "Luma waveform";
 
 /// The luma waveform's right-click menu: how Luma is weighted (ADR 0004). The label names the weights in use.
-pub const SETTINGS: [SettingDef; 6] = [
+pub const SETTINGS: [SettingDef; 7] = [
     SettingDef {
         key: LUMA_SETTING,
         label: "Luma weights",
@@ -1125,6 +1128,12 @@ pub const SETTINGS: [SettingDef; 6] = [
         key: SPREAD_SETTING,
         label: "Soft spread",
         amount: Some(SPREAD_AMOUNT),
+        choices: &[],
+    },
+    SettingDef {
+        key: GRATICULE_SETTING,
+        label: "Graticule brightness",
+        amount: Some(GRATICULE_AMOUNT),
         choices: &[],
     },
     // Shown as the Y R G B chips on the title bar, not in the popover: the letters of the chips that are on.
@@ -1203,7 +1212,7 @@ pub const COLOUR_NAME: &str = "Colour waveform";
 
 /// The Colour Waveform's right-click menu: the luma waveform's drawing settings. It has no luma weights of its
 /// own: it follows the luma waveform's, so the two always place a trace at the same code.
-pub const COLOUR_SETTINGS: [SettingDef; 3] = [SETTINGS[1], SETTINGS[2], SCALE_DEF];
+pub const COLOUR_SETTINGS: [SettingDef; 4] = [SETTINGS[1], SETTINGS[2], SETTINGS[3], SCALE_DEF];
 
 /// The key of the trace brightness setting.
 pub const BRIGHTNESS_SETTING: &str = "brightness";
@@ -1213,7 +1222,7 @@ pub const SPREAD_SETTING: &str = "spread";
 /// How the waveform is drawn, from its settings (a value that is not a choice falls back to the default).
 pub fn look_from(settings: &crate::settings::Settings) -> Look {
     let brightness = Brightness(BRIGHTNESS_AMOUNT.read(settings.get(BRIGHTNESS_SETTING).map(String::as_str)));
-    Look { brightness, spread: Spread(SPREAD_AMOUNT.read(settings.get(SPREAD_SETTING).map(String::as_str))) }
+    Look { brightness, spread: Spread(SPREAD_AMOUNT.read(settings.get(SPREAD_SETTING).map(String::as_str))), graticule: graticule_gain(settings.get(GRATICULE_SETTING).map(String::as_str)) }
 }
 
 /// Logical pixels: the size of the numbers on the scale.

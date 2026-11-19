@@ -290,7 +290,7 @@ fn mean_drawn(image: &[u8], width: u32, layout: &PlotLayout, columns: u32, codes
 }
 
 fn look(brightness: Brightness, spread: bool) -> Look {
-    Look { brightness, spread: Spread(if spread { 1.0 } else { 0.0 }) }
+    Look { brightness, spread: Spread(if spread { 1.0 } else { 0.0 }), graticule: 1.0 }
 }
 
 /// A frame whose tones thin out towards white: code = 1023 · (row / height)², so each column holds many pixels
@@ -383,18 +383,18 @@ fn the_soft_spread_amount_runs_from_none_to_about_three_pixels_and_its_default_i
     // The default is the old "on"; 0 is the old "off" (nothing beside the code's own row).
     assert_eq!(Look::default().spread, Spread(1.0));
     assert_eq!(rows(&mut b, Look::default()), rows(&mut b, look(Brightness(100.0), true)));
-    let none = rows(&mut b, Look { brightness: Brightness(100.0), spread: Spread(0.0) });
+    let none = rows(&mut b, Look { brightness: Brightness(100.0), spread: Spread(0.0), graticule: 1.0 });
     assert_eq!(none, rows(&mut b, look(Brightness(100.0), false)));
     assert!(none[1] == none[4] && none[0] > 200.0, "0: only the code's own row {none:?}");
     // In between spreads between the two, and more spread reaches further and takes more from the centre.
     let mut last = none;
     for amount in [0.25, 0.5, 1.0, 1.5, 2.0, 2.5, 3.0] {
-        let now = rows(&mut b, Look { brightness: Brightness(100.0), spread: Spread(amount) });
+        let now = rows(&mut b, Look { brightness: Brightness(100.0), spread: Spread(amount), graticule: 1.0 });
         assert!(now[1] >= last[1] && now[2] >= last[2] && now[3] >= last[3], "{amount}: spread grows {last:?} {now:?}");
         assert!(now[0] <= last[0], "{amount}: the centre gives way {last:?} {now:?}");
         last = now;
     }
-    let half = rows(&mut b, Look { brightness: Brightness(100.0), spread: Spread(0.5) });
+    let half = rows(&mut b, Look { brightness: Brightness(100.0), spread: Spread(0.5), graticule: 1.0 });
     let one = rows(&mut b, Look::default());
     assert!(half[1] > none[1] + 1.0 && half[1] < one[1], "0.5 sits between off and on {none:?} {half:?} {one:?}");
     assert!(one[2] == none[2] && last[3] > none[3], "1 px reaches one pixel, 3 px reaches three {one:?} {last:?}");
@@ -824,4 +824,31 @@ fn three_neutral_traces_on_a_colorchecker_frame_stay_readable_by_position() {
             assert!(lit[0] > 100 && spread_of(lit) <= 3, "patch {number}: a neutral line at code {code}: {lit:?}");
         }
     }
+}
+
+#[test]
+fn graticule_brightness_scales_the_grid_and_legal_lines_and_the_default_is_today() {
+    let mut b = Bench::new("graticule-gain");
+    b.waveform.set_measurement(levels(Levels::Video, Some(Provenance::Project)));
+    let codes: Vec<u32> = (0..1024).collect();
+    let drawn = |b: &mut Bench, graticule: f32| {
+        b.waveform.set_look(Look { graticule, ..Look::default() });
+        graticule_at(b, &codes)
+    };
+    let sum = |v: &[u8]| v.iter().map(|&x| x as u32).sum::<u32>();
+    let normal = drawn(&mut b, 1.0);
+    b.waveform.set_look(Look::default());
+    assert_eq!(normal, graticule_at(&mut b, &codes), "the default look draws as it always did");
+    let (dim, bright) = (drawn(&mut b, 0.2), drawn(&mut b, 3.0));
+    assert!(sum(&dim) < sum(&normal) && sum(&normal) < sum(&bright), "{} < {} < {}", sum(&dim), sum(&normal), sum(&bright));
+    // The legal line at 64 follows it, and is still above the plot at the lowest setting.
+    let plot = normal[600];
+    assert!(dim[64] > plot && dim[64] < normal[64] && normal[64] < bright[64], "{} {} {}", dim[64], normal[64], bright[64]);
+    assert_eq!((dim[600], bright[600]), (plot, plot), "the plot itself and the trace are not the graticule");
+    // From the settings: the slider's range, its default and the gain.
+    use scopecreep::scope_shader::{graticule_gain, GRATICULE_AMOUNT};
+    assert_eq!((GRATICULE_AMOUNT.min, GRATICULE_AMOUNT.default, GRATICULE_AMOUNT.max), (20.0, 100.0, 300.0));
+    assert_eq!((graticule_gain(None), graticule_gain(Some("250")), graticule_gain(Some("1")), graticule_gain(Some("junk"))), (1.0, 2.5, 0.2, 1.0));
+    let settings: scopecreep::settings::Settings = [("graticule".to_string(), "50".to_string())].into();
+    assert_eq!(scopecreep::waveform::look_from(&settings).graticule, 0.5);
 }

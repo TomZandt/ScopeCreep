@@ -421,7 +421,7 @@ mod vectorscope_chips {
         s.set(NAME, "mono", "on");
         let back = PanelSettings::from_text(&s.to_text());
         assert_eq!(toolbar(&back).on, [false, true, false, true, true, false, false, false]);
-        assert_eq!(popover_defs(&SETTINGS, &TOOLBAR).iter().map(|d| d.key).collect::<Vec<_>>(), ["brightness", "spread", "targets", "skin-line"]);
+        assert_eq!(popover_defs(&SETTINGS, &TOOLBAR).iter().map(|d| d.key).collect::<Vec<_>>(), ["brightness", "spread", "graticule", "targets", "skin-line"]);
     }
 
     #[test]

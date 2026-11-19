@@ -179,6 +179,9 @@ _Avoid_: Intensity, heat
 The one piece of shader code the waveforms and the vectorscope share: the phosphor response, the soft spread step and the plot, grid and trace greys. The trace brightness and soft spread settings change every scope through it.
 _Avoid_: Common shader, shader utils
 
+**Graticule brightness**:
+The slider on every trace display (the waveforms, the vectorscope, the CIE plot) for how bright the grid, rings, targets and scale lines are, 20 % to 300 %, default 100 %. Drawing only, never in a tag, and the trace, clipping marks and measured shapes are never touched.
+
 **Soft spread**:
 A blur of the waveform trace, a Slider in the Panel's settings from 0 to 3 device pixels (default 1; 0 is off). Drawing only: it never changes what is measured.
 _Avoid_: Glow, blur, smoothing

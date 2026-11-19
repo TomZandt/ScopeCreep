@@ -468,7 +468,7 @@ fn the_menu_offers_trace_brightness_targets_and_the_skin_tone_line_with_sensible
     let keys: Vec<_> = defs.iter().map(|d| (d.key, d.choices.iter().map(|c| c.value).collect::<Vec<_>>())).collect();
     assert!(defs[0].amount.is_some() && defs[1].amount.is_some(), "brightness and spread are sliders");
     assert!(defs[0].amount.is_some() && defs[1].amount.is_some(), "brightness and spread are sliders");
-    assert_eq!(keys, [("brightness", vec![]), ("spread", vec![]), ("targets", vec!["75", "100"]), ("skin-line", vec!["on", "off"]), ("plots", vec!["both", "100", "200"]), ("tonal", vec!["all", "shadows", "mids", "highlights"]), ("mono", vec!["off", "on"])]);
+    assert_eq!(keys, [("brightness", vec![]), ("spread", vec![]), ("graticule", vec![]), ("targets", vec!["75", "100"]), ("skin-line", vec!["on", "off"]), ("plots", vec!["both", "100", "200"]), ("tonal", vec!["all", "shadows", "mids", "highlights"]), ("mono", vec!["off", "on"])]);
 }
 
 #[test]
@@ -734,4 +734,30 @@ fn brightness_and_spread_are_sliders_whose_old_list_values_and_defaults_draw_as_
     assert_eq!(draw("brightness", "250").1, label);
     assert_eq!(draw("spread", "2.5").1, label);
     assert!(draw("spread", "3").0 != draw("spread", "1").0);
+}
+
+#[test]
+fn graticule_brightness_scales_the_grid_and_skin_line_and_never_the_label() {
+    let at = |value: Option<&str>| {
+        let mut b = Bench::new("graticule");
+        if let Some(value) = value {
+            b.choose(V, "graticule", value);
+        }
+        let (image, square, _) = black_frame_and_render(&mut b);
+        let [mx, my] = square.centre();
+        let r = square.ring_radius();
+        // On the horizontal axis (the grid) and along the skin-tone line.
+        let axis = brightest_near(&image, 2000, [mx + r * 0.8, my]);
+        let angle = SKIN_TONE_LINE_DEGREES.to_radians();
+        let skin = brightest_near(&image, 2000, [mx + r * 0.7 * angle.cos() as f32, my - r * 0.7 * angle.sin() as f32]);
+        (axis, skin, b.label(V), image)
+    };
+    let (axis, skin, label, normal) = at(None);
+    assert!(at(Some("100")).3 == normal, "the default draws as today");
+    let (dim_axis, dim_skin, dim_label, _) = at(Some("20"));
+    let (bright_axis, bright_skin, bright_label, _) = at(Some("300"));
+    assert!(dim_axis < axis && axis < bright_axis, "grid {dim_axis} < {axis} < {bright_axis}");
+    assert!(dim_skin < skin && skin < bright_skin, "skin line {dim_skin} < {skin} < {bright_skin}");
+    assert!(dim_axis >= 9 && dim_skin >= 9, "never darker than the plot: {dim_axis} {dim_skin}");
+    assert_eq!((dim_label.as_str(), bright_label.as_str()), (label.as_str(), label.as_str()), "drawing only: the label does not change");
 }
