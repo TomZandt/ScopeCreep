@@ -126,14 +126,22 @@ struct State {
 pub struct ArriFalseColour {
     stage: PictureStage,
     state: Arc<Mutex<State>>,
+    zoom: crate::zoom::PanelZoom,
 }
 
 impl ArriFalseColour {
     pub fn new(device: &wgpu::Device, queue: &wgpu::Queue, target: wgpu::TextureFormat) -> ArriFalseColour {
         let stage = PictureStage::new::<[f32; 4]>(device, queue, target, false, Rule { label: "arri false colour", wgsl: rule(), has_legend: true });
-        let display = ArriFalseColour { stage, state: Arc::new(Mutex::new(State { legend: true, grey: true, weights: crate::measurement::REC709_LUMA, label: String::new() })) };
+        let display = ArriFalseColour { stage, zoom: Default::default(), state: Arc::new(Mutex::new(State { legend: true, grey: true, weights: crate::measurement::REC709_LUMA, label: String::new() })) };
         display.configure(&DisplayContext::default());
         display
+    }
+}
+
+impl ArriFalseColour {
+    /// The height the legend takes under the picture in a Panel of content `area`: what zoom keeps free.
+    fn strip(&self, area: [f32; 4], scale: f32) -> f32 {
+        BAR.layout(self.state.lock().unwrap().legend, area, scale, false).map_or(0.0, |l| l.legend.strip)
     }
 }
 
@@ -170,6 +178,18 @@ impl Display for ArriFalseColour {
         &TOOLBAR
     }
 
+    fn pointer(&self, area: [f32; 4], scale: f32, event: crate::display::Pointer) -> crate::display::PointerResult {
+        self.zoom.pointer(area, self.stage.size(), self.strip(area, scale), event).unwrap_or_default()
+    }
+
+    fn zoom(&self, area: [f32; 4], scale: f32) -> Option<crate::zoom::Readout> {
+        self.zoom.readout(area, self.stage.size(), self.strip(area, scale))
+    }
+
+    fn set_zoom(&self, area: [f32; 4], scale: f32, percent: f32) {
+        self.zoom.set_percent(percent, area, self.stage.size(), self.strip(area, scale));
+    }
+
     fn label(&self) -> String {
         self.state.lock().unwrap().label.clone()
     }
@@ -177,7 +197,7 @@ impl Display for ArriFalseColour {
     fn draw(&self, pass: &mut wgpu::RenderPass<'_>, area: [f32; 4], surface: [f32; 2], scale: f32) {
         let state = self.state.lock().unwrap();
         let w = state.weights;
-        self.stage.draw(pass, area, surface, &[w[0] as f32, w[1] as f32, w[2] as f32, state.grey as u32 as f32], BAR.layout(state.legend, area, scale, false).map(|l| l.legend));
+        self.stage.draw_zoomed(pass, area, surface, &[w[0] as f32, w[1] as f32, w[2] as f32, state.grey as u32 as f32], BAR.layout(state.legend, area, scale, false).map(|l| l.legend), &self.zoom.model());
     }
 
     /// The ruler's tick numbers and the marks under the bar, where they fit.

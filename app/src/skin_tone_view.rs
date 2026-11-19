@@ -87,13 +87,14 @@ impl Default for Config {
 #[derive(Clone)]
 pub struct SkinTone {
     stage: PictureStage,
+    zoom: crate::zoom::PanelZoom,
     config: Arc<Mutex<Config>>,
 }
 
 impl SkinTone {
     pub fn new(device: &wgpu::Device, queue: &wgpu::Queue, target: wgpu::TextureFormat, _filterable: bool) -> SkinTone {
         let stage = PictureStage::new::<[f32; 8]>(device, queue, target, false, Rule { label: "skin tone", wgsl: RULE.into(), has_legend: false });
-        SkinTone { stage, config: Arc::new(Mutex::new(Config::default())) }
+        SkinTone { stage, zoom: Default::default(), config: Arc::new(Mutex::new(Config::default())) }
     }
 }
 
@@ -126,6 +127,18 @@ impl Display for SkinTone {
         &TOOLBAR
     }
 
+    fn pointer(&self, area: [f32; 4], _scale: f32, event: crate::display::Pointer) -> crate::display::PointerResult {
+        self.zoom.pointer(area, self.stage.size(), 0.0, event).unwrap_or_default()
+    }
+
+    fn zoom(&self, area: [f32; 4], _scale: f32) -> Option<crate::zoom::Readout> {
+        self.zoom.readout(area, self.stage.size(), 0.0)
+    }
+
+    fn set_zoom(&self, area: [f32; 4], _scale: f32, percent: f32) {
+        self.zoom.set_percent(percent, area, self.stage.size(), 0.0);
+    }
+
     /// States only what is proven (ADR 0007): the bands in degrees from the line, and that the line's angle is
     /// measured in Resolve 21.2 (#60).
     fn label(&self) -> String {
@@ -146,6 +159,6 @@ impl Display for SkinTone {
     fn draw(&self, pass: &mut wgpu::RenderPass<'_>, area: [f32; 4], surface: [f32; 2], _scale: f32) {
         let config = self.config.lock().unwrap().clone();
         let [r, g, b] = config.weights;
-        self.stage.draw(pass, area, surface, &[r, g, b, 0.0, config.tolerance, SKIN_TONE_LINE_DEGREES as f32, config.bw as u32 as f32, 0.0], None);
+        self.stage.draw_zoomed(pass, area, surface, &[r, g, b, 0.0, config.tolerance, SKIN_TONE_LINE_DEGREES as f32, config.bw as u32 as f32, 0.0], None, &self.zoom.model());
     }
 }

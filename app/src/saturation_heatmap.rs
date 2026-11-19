@@ -80,14 +80,23 @@ struct State {
 pub struct SaturationHeatmap {
     stage: PictureStage,
     state: Arc<Mutex<State>>,
+    zoom: crate::zoom::PanelZoom,
 }
 
 impl SaturationHeatmap {
     pub fn new(device: &wgpu::Device, queue: &wgpu::Queue, target: wgpu::TextureFormat) -> SaturationHeatmap {
         let stage = PictureStage::new::<[f32; 4]>(device, queue, target, false, Rule { label: "saturation heatmap", wgsl: rule(), has_legend: true });
-        let display = SaturationHeatmap { stage, state: Arc::new(Mutex::new(State { legend: true, scale: 75.0, weights: crate::measurement::REC709_LUMA, label: String::new() })) };
+        let display = SaturationHeatmap { stage, zoom: Default::default(), state: Arc::new(Mutex::new(State { legend: true, scale: 75.0, weights: crate::measurement::REC709_LUMA, label: String::new() })) };
         display.configure(&DisplayContext::default());
         display
+    }
+}
+
+impl SaturationHeatmap {
+    /// The height the legend takes under the picture in a Panel of content `area`: what zoom keeps free.
+    fn strip(&self, area: [f32; 4], scale: f32) -> f32 {
+        let state = self.state.lock().unwrap();
+        bar(state.scale).layout(state.legend, area, scale, false).map_or(0.0, |l| l.legend.strip)
     }
 }
 
@@ -119,6 +128,18 @@ impl Display for SaturationHeatmap {
         &SETTINGS
     }
 
+    fn pointer(&self, area: [f32; 4], scale: f32, event: crate::display::Pointer) -> crate::display::PointerResult {
+        self.zoom.pointer(area, self.stage.size(), self.strip(area, scale), event).unwrap_or_default()
+    }
+
+    fn zoom(&self, area: [f32; 4], scale: f32) -> Option<crate::zoom::Readout> {
+        self.zoom.readout(area, self.stage.size(), self.strip(area, scale))
+    }
+
+    fn set_zoom(&self, area: [f32; 4], scale: f32, percent: f32) {
+        self.zoom.set_percent(percent, area, self.stage.size(), self.strip(area, scale));
+    }
+
     fn label(&self) -> String {
         self.state.lock().unwrap().label.clone()
     }
@@ -127,7 +148,7 @@ impl Display for SaturationHeatmap {
         let state = self.state.lock().unwrap();
         let gain = (100.0 / (state.scale * RING)) as f32;
         let w = state.weights;
-        self.stage.draw(pass, area, surface, &[w[0] as f32, w[1] as f32, w[2] as f32, gain], bar(state.scale).layout(state.legend, area, scale, false).map(|l| l.legend));
+        self.stage.draw_zoomed(pass, area, surface, &[w[0] as f32, w[1] as f32, w[2] as f32, gain], bar(state.scale).layout(state.legend, area, scale, false).map(|l| l.legend), &self.zoom.model());
     }
 
     /// The ruler's tick numbers, from 0 % to the scale's top.

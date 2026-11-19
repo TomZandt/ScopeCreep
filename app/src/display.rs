@@ -133,12 +133,12 @@ pub trait Display: Send + Sync {
     }
     /// What the zoom chip on the title bar says for a picture Panel whose content is `area` (spec #163): `None`
     /// for a display that does not zoom (every Scope), and before a frame has arrived.
-    fn zoom(&self, _area: [f32; 4]) -> Option<crate::zoom::Readout> {
+    fn zoom(&self, _area: [f32; 4], _scale: f32) -> Option<crate::zoom::Readout> {
         None
     }
     /// Set the zoom from the chip's slider, in percent of source pixels (see [`crate::zoom::ZoomModel::set_percent`]).
     /// Zoom is not a setting and is never saved. Nothing by default.
-    fn set_zoom(&self, _area: [f32; 4], _percent: f32) {}
+    fn set_zoom(&self, _area: [f32; 4], _scale: f32, _percent: f32) {}
     /// The quiet label: what the display shows, and how far it can be trusted (ADR 0007).
     fn label(&self) -> String;
     /// Draw into `area` (left, top, width, height in pixels of a `surface`-sized target) at `scale` device pixels
@@ -290,19 +290,19 @@ impl DisplaySet {
 
     /// The chips on the title bar of the display in Panel `index`, given everyone's choices: a picture Panel
     /// whose content is `area` starts with its zoom chip.
-    pub fn toolbar(&self, index: usize, settings: &PanelSettings, area: [f32; 4]) -> Toolbar {
+    pub fn toolbar(&self, index: usize, settings: &PanelSettings, area: [f32; 4], scale: f32) -> Toolbar {
         let own = self.settings_of(index, settings);
-        Toolbar::new(self.displays[index].toolbar_defs_for(&own), &own).with_zoom(self.displays[index].zoom(area).as_ref())
+        Toolbar::new(self.displays[index].toolbar_defs_for(&own), &own).with_zoom(self.displays[index].zoom(area, scale).as_ref())
     }
 
     /// What the zoom chip of the display in Panel `index` says, with its content in `area`.
-    pub fn zoom(&self, index: usize, area: [f32; 4]) -> Option<crate::zoom::Readout> {
-        self.displays[index].zoom(area)
+    pub fn zoom(&self, index: usize, area: [f32; 4], scale: f32) -> Option<crate::zoom::Readout> {
+        self.displays[index].zoom(area, scale)
     }
 
     /// Set the zoom of the display in Panel `index` from the chip's slider.
-    pub fn set_zoom(&self, index: usize, area: [f32; 4], percent: f32) {
-        self.displays[index].set_zoom(area, percent);
+    pub fn set_zoom(&self, index: usize, area: [f32; 4], scale: f32, percent: f32) {
+        self.displays[index].set_zoom(area, scale, percent);
     }
 
     /// The settings the display in Panel `index` is using, given everyone's choices.
@@ -327,6 +327,12 @@ impl DisplaySet {
     /// The pointer over the display in Panel `index`.
     pub fn pointer(&self, index: usize, area: [f32; 4], scale: f32, event: Pointer) -> PointerResult {
         self.displays[index].pointer(area, scale, event)
+    }
+
+    /// Whether the display in Panel `index`, with its content in `area`, wants the scroll wheel: it has state to move
+    /// (a Loupe) or it zooms.
+    pub fn takes_wheel(&self, index: usize, area: [f32; 4], scale: f32) -> bool {
+        self.takes_pointer(index) || self.zoom(index, area, scale).is_some()
     }
 
     /// Whether the display in Panel `index` wants the pointer (it has state to move).

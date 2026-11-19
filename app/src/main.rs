@@ -444,15 +444,15 @@ impl AppWindow {
     /// Open Panel `panel`'s zoom popover at `at`: one slider from Fit to 400 %.
     fn open_zoom_popover(&mut self, panel: usize, at: [f32; 2]) {
         let Some(area) = self.contents.get(panel).copied() else { return };
-        self.menu = self.displays.zoom(panel, area).map(|readout| (Menu::zoom(panel, &readout), at));
+        self.menu = self.displays.zoom(panel, area, self.scale).map(|readout| (Menu::zoom(panel, &readout), at));
     }
 
     /// Zoom Panel `panel` from the popover's slider (snapped above 100 %, which the slider then shows). Zoom is
     /// display state: it is never put in the settings or saved.
     fn set_zoom(&mut self, panel: usize, percent: f32) {
         let Some(area) = self.contents.get(panel).copied() else { return };
-        self.displays.set_zoom(panel, area, percent);
-        let shown = self.displays.zoom(panel, area).map(|r| r.percent);
+        self.displays.set_zoom(panel, area, self.scale, percent);
+        let shown = self.displays.zoom(panel, area, self.scale).map(|r| r.percent);
         if let (Some((menu, _)), Some(shown)) = (self.menu.as_mut(), shown) {
             menu.show_value(scopecreep::zoom::ZOOM_KEY, shown);
         }
@@ -736,7 +736,7 @@ impl AppWindow {
         if self.menu.is_some() {
             return;
         }
-        let panel = self.contents.iter().position(|c| Menu::contains(*c, self.cursor)).filter(|p| self.displays.takes_pointer(*p));
+        let panel = self.contents.iter().position(|c| Menu::contains(*c, self.cursor)).filter(|p| self.displays.takes_wheel(*p, self.contents[*p], self.scale));
         if let Some(panel) = panel {
             self.display_pointer(panel, Pointer::Wheel { at: self.cursor, lines });
         }
@@ -872,7 +872,7 @@ impl AppWindow {
         for (i, cell) in cells.iter().enumerate() {
             let title = texts.titles.get(i).cloned().unwrap_or_default();
             let panel = PanelLayout::new(*cell, scale);
-            let mut toolbar = self.displays.toolbar(i, &settings_now, panel.content);
+            let mut toolbar = self.displays.toolbar(i, &settings_now, panel.content, scale);
             let has_popover = !self.displays.popover_defs(i).is_empty();
             toolbar.fit_to(panel.title[2], has_popover, scale);
             let (l, tags, all_shown) = window_text::lay_out_toolbar_title(&title, &toolbar.chips, has_popover, panel.title, scale);

@@ -48,7 +48,7 @@ impl Bench {
     }
 
     fn chip(&self) -> String {
-        self.set.toolbar(0, &self.settings, AREA).chips[0].text.clone()
+        self.set.toolbar(0, &self.settings, AREA, 1.0).chips[0].text.clone()
     }
 }
 
@@ -139,13 +139,13 @@ fn zoomed_in_the_panel_is_full_and_nothing_is_drawn_outside_it() {
 #[test]
 fn the_clean_picture_shows_a_zoom_chip_that_reads_fit_by_default() {
     let b = Bench::new("clean-zoom-chip");
-    let toolbar = b.set.toolbar(0, &b.settings, AREA);
+    let toolbar = b.set.toolbar(0, &b.settings, AREA, 1.0);
     assert_eq!(toolbar.chips[0].text, "Fit 75 %");
     assert!(!toolbar.on[0], "not lit at Fit");
     assert_eq!(toolbar.click(0), Some((scopecreep::zoom::ZOOM_KEY, "")), "a click asks for the slider");
     assert_eq!(toolbar.chips.len(), 6, "the chip, then the channel and Loupe chips");
     wheel_to(&b, "200 %");
-    let zoomed = b.set.toolbar(0, &b.settings, AREA);
+    let zoomed = b.set.toolbar(0, &b.settings, AREA, 1.0);
     assert!(zoomed.on[0], "lit while zoomed in");
 }
 
@@ -154,19 +154,19 @@ fn a_scope_has_no_zoom_chip() {
     let rig = Rig::new("clean-zoom-scope");
     let (set, _) = DisplaySet::standard_with_handles(&rig.device, &rig.queue, TARGET, false);
     let waveform = (0..set.len()).find(|i| set.name(*i) == "Luma waveform").unwrap();
-    assert!(set.zoom(waveform, AREA).is_none());
+    assert!(set.zoom(waveform, AREA, 1.0).is_none());
 }
 
 #[test]
 fn the_popover_slider_runs_fit_to_400_and_sets_the_zoom_snapping_above_100() {
     let b = Bench::new("clean-zoom-slider");
-    let readout = b.set.zoom(0, AREA).unwrap();
+    let readout = b.set.zoom(0, AREA, 1.0).unwrap();
     let menu = Menu::zoom(0, &readout);
     let MenuRow::Slider { amount, value, .. } = &menu.rows[1] else { panic!("{:?}", menu.rows) };
     assert_eq!((amount.min, amount.max, *value), (75.0, 400.0, readout.percent));
     for (set, shows) in [(60.0, "60 %"), (100.0, "100 %"), (240.0, "200 %"), (260.0, "300 %"), (400.0, "400 %")] {
         let set = if set < 75.0 { 75.0 } else { set };
-        b.set.set_zoom(0, AREA, set);
+        b.set.set_zoom(0, AREA, 1.0, set);
         let shown = b.chip();
         if set == 75.0 {
             assert_eq!(shown, "Fit 75 %", "the bottom of the slider is Fit ({shows})");
@@ -174,9 +174,9 @@ fn the_popover_slider_runs_fit_to_400_and_sets_the_zoom_snapping_above_100() {
             assert_eq!(shown, shows, "slider at {set}");
         }
     }
-    b.set.set_zoom(0, AREA, 0.0);
+    b.set.set_zoom(0, AREA, 1.0, 0.0);
     assert_eq!(b.chip(), "Fit 75 %");
-    let mut shown = Menu::zoom(0, &b.set.zoom(0, AREA).unwrap());
+    let mut shown = Menu::zoom(0, &b.set.zoom(0, AREA, 1.0).unwrap());
     shown.show_value(scopecreep::zoom::ZOOM_KEY, 200.0);
     assert!(matches!(shown.rows[1], MenuRow::Slider { value: 200.0, .. }));
 }
@@ -187,13 +187,13 @@ fn the_chip_stays_on_a_small_panel_and_shortens_to_its_number() {
     let title = panel_title(NAME, &DisplayContext::default(), String::new());
     for scale in [1.0f32, 2.0] {
         let small = scopecreep::panel_grid::PanelLayout::new([0.0, 0.0, 190.0 * scale, 200.0 * scale], scale).title;
-        let mut toolbar = b.set.toolbar(0, &b.settings, AREA);
+        let mut toolbar = b.set.toolbar(0, &b.settings, AREA, 1.0);
         toolbar.fit_to(small[2], true, scale);
         assert_eq!(toolbar.chips[0].text, "75 %", "the word Fit goes first when there is no room");
         let (l, _, _) = window_text::lay_out_toolbar_title(&title, &toolbar.chips, true, small, scale);
         let chip = l.chips[0];
         assert!(chip[0] >= small[0] && chip[0] + chip[2] <= small[0] + small[2] + 0.01, "{chip:?} stays inside {small:?}");
-        let mut roomy = b.set.toolbar(0, &b.settings, AREA);
+        let mut roomy = b.set.toolbar(0, &b.settings, AREA, 1.0);
         roomy.fit_to(400.0 * scale, true, scale);
         assert_eq!(roomy.chips[0].text, "Fit 75 %", "with room it says Fit");
     }
@@ -205,7 +205,7 @@ fn the_chip_stays_on_a_small_panel_and_shortens_to_its_number() {
 fn zoom_is_not_saved_and_the_next_session_opens_at_fit() {
     let mut b = Bench::new("clean-zoom-unsaved");
     wheel_to(&b, "300 %");
-    b.set.set_zoom(0, AREA, 200.0);
+    b.set.set_zoom(0, AREA, 1.0, 200.0);
     b.settings.set(NAME, "channel", "luma");
     let text = b.settings.to_text();
     assert!(!text.contains("zoom") && !text.contains("200") && !text.contains("300"), "nothing about zoom is saved: {text}");

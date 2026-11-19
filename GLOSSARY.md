@@ -120,7 +120,7 @@ The one part of the code every Picture View draws through. It places the frame i
 _Avoid_: Renderer, canvas
 
 **Zoom**:
-How much of a picture Panel's frame is shown, in percent of source pixels: 100 % is one picture pixel to one device pixel. It runs from Fit to 400 %, free below 100 % and in whole steps (200, 300, 400 %) above, so every picture pixel is an exact square. The scroll wheel zooms toward the pointer and the zoom chip on the title bar says it and opens a slider. It is not a setting: it is not saved and every session starts at Fit (ADR 0035). On the clean picture so far.
+How much of a picture Panel's frame is shown, in percent of source pixels: 100 % is one picture pixel to one device pixel. It runs from Fit to 400 %, free below 100 % and in whole steps (200, 300, 400 %) above, so every picture pixel is an exact square. The scroll wheel zooms toward the pointer and the zoom chip on the title bar says it and opens a slider. It is not a setting: it is not saved and every session starts at Fit (ADR 0035). On every picture Panel in the Window, each on its own until Link (#168).
 _Avoid_: Magnify (that is the Loupe), scale
 
 **Pan**:

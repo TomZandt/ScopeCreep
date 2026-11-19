@@ -10,7 +10,7 @@ use crate::loupe::{self, Loupe};
 use crate::output_conversion::Plan;
 use crate::picture_stage::{PictureStage, Rule};
 use crate::settings::SettingDef;
-use crate::zoom::{Readout, ZoomModel};
+use crate::zoom::{PanelZoom, Readout};
 use crate::toolbar::{CHANNEL_DEF, CHANNEL_SETTING, CHANNEL_TOOLBAR, LOUPE_DEF, LOUPE_TOOLBAR, ToolbarDef, channel_of};
 use std::sync::{Arc, Mutex};
 
@@ -55,9 +55,7 @@ pub struct PictureView {
     label_tail: Arc<Mutex<String>>,
     look: Arc<Mutex<Look>>,
     /// How much of the picture the Panel shows (spec #163): not a setting, so never saved; every session starts at Fit.
-    zoom: Arc<Mutex<ZoomModel>>,
-    /// Where the pointer was at the last step of a middle-drag (pan), while one is going.
-    pan_from: Arc<Mutex<Option<[f32; 2]>>>,
+    zoom: PanelZoom,
 }
 
 impl PictureView {
@@ -65,7 +63,7 @@ impl PictureView {
     pub fn new(device: &wgpu::Device, queue: &wgpu::Queue, target: wgpu::TextureFormat, filterable: bool) -> PictureView {
         let stage = PictureStage::new::<[f32; 4]>(device, queue, target, filterable, Rule { label: "picture view", wgsl: RULE.into(), has_legend: false });
         let loupe = Loupe::new::<[f32; 4]>(device, queue, target, RULE);
-        let view = PictureView { stage, loupe, label_tail: Arc::new(Mutex::new(String::new())), zoom: Arc::new(Mutex::new(ZoomModel::default())), pan_from: Arc::new(Mutex::new(None)), look: Arc::new(Mutex::new(Look { weights: crate::measurement::REC709_LUMA.map(|v| v as f32), channel: 0.0, loupe: false })) };
+        let view = PictureView { stage, loupe, label_tail: Arc::new(Mutex::new(String::new())), zoom: PanelZoom::default(), look: Arc::new(Mutex::new(Look { weights: crate::measurement::REC709_LUMA.map(|v| v as f32), channel: 0.0, loupe: false })) };
         // Only the label's tail: the Loupe takes its remembered state from the first real `configure`.
         *view.label_tail.lock().unwrap() = Self::label_tail(&DisplayContext::default());
         view
@@ -141,38 +139,18 @@ impl Display for PictureView {
     /// zoom); every other event is the Loupe's, and with it off the Panel takes none.
     fn pointer(&self, area: [f32; 4], scale: f32, event: Pointer) -> PointerResult {
         let loupe = self.look.lock().unwrap().loupe;
-        if let Pointer::Wheel { at, lines } = event {
+        if let Pointer::Wheel { .. } = event {
             if loupe {
                 let result = self.loupe.pointer(area, scale, event);
                 if result.used {
                     return result;
                 }
             }
-            if let Some(picture) = self.frame_size() {
-                self.zoom.lock().unwrap().wheel(area, picture, 0.0, at, lines);
-                return PointerResult { used: true, remember: Vec::new() };
-            }
-            return PointerResult::default();
+            return self.zoom.pointer(area, self.frame_size(), 0.0, event).unwrap_or_default();
         }
         // The middle button pans the zoomed picture; its movement is the pan's, whatever the Loupe is doing.
-        match event {
-            Pointer::MiddleDown(at) => {
-                *self.pan_from.lock().unwrap() = Some(at);
-                return PointerResult { used: true, remember: Vec::new() };
-            }
-            Pointer::MiddleUp => {
-                let was = self.pan_from.lock().unwrap().take();
-                return PointerResult { used: was.is_some(), remember: Vec::new() };
-            }
-            Pointer::Move(at) => {
-                let mut from = self.pan_from.lock().unwrap();
-                if let (Some(last), Some(picture)) = (*from, self.frame_size()) {
-                    *from = Some(at);
-                    self.zoom.lock().unwrap().pan(area, picture, 0.0, [at[0] - last[0], at[1] - last[1]]);
-                    return PointerResult { used: true, remember: Vec::new() };
-                }
-            }
-            _ => {}
+        if let Some(result) = self.zoom.pointer(area, self.frame_size(), 0.0, event) {
+            return result;
         }
         if !loupe {
             return PointerResult::default();
@@ -180,14 +158,12 @@ impl Display for PictureView {
         self.loupe.pointer(area, scale, event)
     }
 
-    fn zoom(&self, area: [f32; 4]) -> Option<Readout> {
-        self.zoom.lock().unwrap().readout(area, self.frame_size()?, 0.0)
+    fn zoom(&self, area: [f32; 4], _scale: f32) -> Option<Readout> {
+        self.zoom.readout(area, self.frame_size(), 0.0)
     }
 
-    fn set_zoom(&self, area: [f32; 4], percent: f32) {
-        if let Some(picture) = self.frame_size() {
-            self.zoom.lock().unwrap().set_percent(percent, area, picture, 0.0);
-        }
+    fn set_zoom(&self, area: [f32; 4], _scale: f32, percent: f32) {
+        self.zoom.set_percent(percent, area, self.frame_size(), 0.0);
     }
 
     fn label(&self) -> String {
@@ -198,7 +174,7 @@ impl Display for PictureView {
     fn draw(&self, pass: &mut wgpu::RenderPass<'_>, area: [f32; 4], surface: [f32; 2], scale: f32) {
         let look = *self.look.lock().unwrap();
         let values = [look.weights[0], look.weights[1], look.weights[2], look.channel];
-        self.stage.draw_zoomed(pass, area, surface, &values, None, &self.zoom.lock().unwrap());
+        self.stage.draw_zoomed(pass, area, surface, &values, None, &self.zoom.model());
         if look.loupe && area[2] >= 1.0 && area[3] >= 1.0 {
             if let Some(shown) = self.stage.shown() {
                 self.loupe.draw(pass, &shown, area, surface, scale, &values);

@@ -6,7 +6,9 @@
 //! step across 100 % lands on it); above 100 % it is whole steps (200, 300, 400 %), so every picture pixel is an
 //! exact square. A frame that is already past 100 % at Fit starts at Fit and zooms on in whole steps; when Fit is
 //! 400 % or more there is nothing beyond it.
+use crate::display::{Pointer, PointerResult};
 use crate::picture_stage::{Placement, place};
+use std::sync::{Arc, Mutex};
 
 /// The top of the zoom range, in percent of source pixels.
 pub const MAX_PERCENT: f32 = 400.0;
@@ -237,5 +239,60 @@ impl ZoomModel {
         let percent = self.percent(area, picture, strip)?;
         let text = if self.at_fit(fit) { format!("Fit {} %", fit.round() as u32) } else { format!("{} %", percent.round() as u32) };
         Some(Readout { text, percent, fit, max: Self::top(fit) })
+    }
+}
+
+/// A picture Panel's zoom as a display holds it (#167): the [`ZoomModel`] and a middle-drag in progress, with the
+/// wheel, middle-button and slider handling every picture Panel shares. Cheap to clone (shared state).
+#[derive(Clone, Default)]
+pub struct PanelZoom {
+    model: Arc<Mutex<ZoomModel>>,
+    /// Where the pointer was at the last step of a middle-drag, while one is going.
+    pan_from: Arc<Mutex<Option<[f32; 2]>>>,
+}
+
+impl PanelZoom {
+    /// The model, for drawing through [`crate::picture_stage::PictureStage::draw_zoomed`].
+    pub fn model(&self) -> ZoomModel {
+        *self.model.lock().unwrap()
+    }
+
+    /// The wheel (zooms toward the pointer) and the middle button (pans) over a Panel of content `area` showing a
+    /// `picture` (`None` before a frame has arrived) with `strip` kept free under it. `None` for any other event
+    /// (the display's own), or when there is no picture.
+    pub fn pointer(&self, area: [f32; 4], picture: Option<[u32; 2]>, strip: f32, event: Pointer) -> Option<PointerResult> {
+        let used = PointerResult { used: true, remember: Vec::new() };
+        match event {
+            Pointer::Wheel { at, lines } => {
+                let picture = picture?;
+                self.model.lock().unwrap().wheel(area, picture, strip, at, lines);
+                Some(used)
+            }
+            Pointer::MiddleDown(at) => {
+                *self.pan_from.lock().unwrap() = Some(at);
+                Some(used)
+            }
+            Pointer::MiddleUp => Some(PointerResult { used: self.pan_from.lock().unwrap().take().is_some(), remember: Vec::new() }),
+            Pointer::Move(at) => {
+                let mut from = self.pan_from.lock().unwrap();
+                let (last, picture) = (from.as_ref().copied()?, picture?);
+                *from = Some(at);
+                self.model.lock().unwrap().pan(area, picture, strip, [at[0] - last[0], at[1] - last[1]]);
+                Some(used)
+            }
+            _ => None,
+        }
+    }
+
+    /// What the zoom chip says (see [`ZoomModel::readout`]); `None` before a frame has arrived.
+    pub fn readout(&self, area: [f32; 4], picture: Option<[u32; 2]>, strip: f32) -> Option<Readout> {
+        self.model.lock().unwrap().readout(area, picture?, strip)
+    }
+
+    /// Set the zoom from the chip's slider (see [`ZoomModel::set_percent`]).
+    pub fn set_percent(&self, percent: f32, area: [f32; 4], picture: Option<[u32; 2]>, strip: f32) {
+        if let Some(picture) = picture {
+            self.model.lock().unwrap().set_percent(percent, area, picture, strip);
+        }
     }
 }
