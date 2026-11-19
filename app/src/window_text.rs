@@ -72,6 +72,17 @@ pub fn conversion_tags(context: &DisplayContext) -> Vec<String> {
     }
 }
 
+/// The clean picture's channel as a tag (#160): its name when it is not colour, nothing in colour.
+fn channel_tag(context: &DisplayContext) -> Option<String> {
+    match context.settings.get(crate::toolbar::CHANNEL_SETTING).map(String::as_str) {
+        Some("luma") => Some("Luma".into()),
+        Some("red") => Some("Red".into()),
+        Some("green") => Some("Green".into()),
+        Some("blue") => Some("Blue".into()),
+        _ => None,
+    }
+}
+
 /// The B/W tag (#118): "B/W" when the unpainted picture is grey on a Panel that defaults to colour, "colour" when it
 /// is in colour on one that defaults to grey. Defaults are not repeated.
 pub(crate) fn bw_tag(context: &DisplayContext, default_grey: bool) -> Option<String> {
@@ -117,7 +128,7 @@ fn waveform_tags(context: &DisplayContext) -> Vec<String> {
 pub fn panel_title(display_name: &str, context: &DisplayContext, full: String) -> PanelTitle {
     let setting = |key: &str| context.settings.get(key).map(String::as_str);
     let (name, tags): (String, Vec<String>) = match display_name {
-        "Clean picture" => ("Clean picture".into(), bw_tag(context, false).into_iter().chain(conversion_tags(context)).collect()),
+        "Clean picture" => ("Clean picture".into(), channel_tag(context).into_iter().chain(conversion_tags(context)).collect()),
         crate::waveform::NAME => {
             // The channels drawn, when not just Luma.
             let channels = crate::waveform::Channels::from_setting(setting(crate::waveform::CHANNELS_SETTING));

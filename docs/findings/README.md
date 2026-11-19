@@ -58,6 +58,7 @@ What we learned by testing, kept in the repo so it isn't lost when an issue thre
 | [107](107-shared-gpu-test-bench.md) | Refactor: does one shared GPU test bench replace the copied setup with the tests unchanged? |
 | [108](108-measurement-module.md) | Refactor: do Measured Space and luma weights live in a measurement module of their own, with the seam tests unchanged? |
 | [116](116-panel-toolbar.md) | Does the Channel view's Y R G B toolbar switch, remember, shrink on small Panels and show the right tags (pure seam)? |
+| [160](160-clean-picture-channel-chips.md) | Do Y R G B chips on the clean picture switch it between colour and one channel as grey, and does a saved B/W carry over? |
 | [118](118-bw-toggle.md) | Does the B/W toggle switch the unpainted picture between Luma grey and colour without changing what a Panel paints? |
 | [126](126-stops-mode-chips.md) | Is the Stops False Colour mode one click on the title bar, remembered, with B/W only in Grey +1? |
 | [104](104-viewer-gate-follows-scrubbing.md) | Does the viewer gate show the picture while the playhead is dragged, and the stop frame at once, without showing cache fills (replay of the recorded scrub)? |

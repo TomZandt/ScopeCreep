@@ -21,6 +21,26 @@ pub static BW_TOOLBAR: [ToolbarDef; 1] = [ToolbarDef {
     chips: &[ToolbarChip { value: "on", text: "B/W", tooltip: "Unpainted picture in black and white (Luma grey)", channel: None }],
 }];
 
+/// The clean picture's channel (#160): colour (off), or one of Y R G B as grey, one or none lit. Colour is the
+/// first choice, so the default.
+pub const CHANNEL_SETTING: &str = "channel";
+pub const CHANNEL_DEF: SettingDef = SettingDef {
+    key: CHANNEL_SETTING,
+    label: "Channel",
+    amount: None,
+    choices: &[Choice { value: TOGGLE_OFF, text: "Colour" }, Choice { value: "luma", text: "Luma (Y)" }, Choice { value: "red", text: "Red" }, Choice { value: "green", text: "Green" }, Choice { value: "blue", text: "Blue" }],
+};
+pub static CHANNEL_TOOLBAR: [ToolbarDef; 1] = [ToolbarDef {
+    key: CHANNEL_SETTING,
+    mode: ChipMode::OneOrNone,
+    chips: &[
+        ToolbarChip { value: "luma", text: "Y", tooltip: "Luma (Y)", channel: Some(Channel::Y) },
+        ToolbarChip { value: "red", text: "R", tooltip: "Red", channel: Some(Channel::R) },
+        ToolbarChip { value: "green", text: "G", tooltip: "Green", channel: Some(Channel::G) },
+        ToolbarChip { value: "blue", text: "B", tooltip: "Blue", channel: Some(Channel::B) },
+    ],
+}];
+
 /// One chip: the setting's choice it selects, the letter on it, what hovering it says, and the colour it takes
 /// when on (neutral accent when `None`).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -72,8 +92,8 @@ impl Toolbar {
                 toolbar.tooltips.push(chip.tooltip.to_string());
                 toolbar.picks.push((def.key, chip.value.to_string()));
             }
-            if def.mode == ChipMode::Toggle {
-                // A click on a toggle that is on turns it off.
+            if matches!(def.mode, ChipMode::Toggle | ChipMode::OneOrNone) {
+                // A click on a toggle (or a one-or-none chip) that is on turns it off.
                 for i in first..toolbar.on.len() {
                     if toolbar.on[i] {
                         toolbar.picks[i].1 = TOGGLE_OFF.to_string();

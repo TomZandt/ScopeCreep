@@ -95,10 +95,10 @@ A part of the chrome every surface shares: chip, segmented control, slider with 
 _Avoid_: Widget, control (for the whole set)
 
 **Chip**:
-A small toggle on a title bar: a letter or short word, grey when off, the accent (or its channel's colour for R, G, B, Y) when on.
+A small toggle on a title bar: a letter or short word, grey when off, the accent (or its channel's colour for R, G, B, Y) when on. A row of chips behaves in one of four ways: single (one always on), multiple (any combination, at least one on), toggle (free to be off) or one or none (at most one on; clicking the lit one turns it off).
 
 **Toolbar**:
-The settings a display marks to show as chips on its Panel's title bar (the Channel view's Y R G B, one at a time; the luma waveform's Y R G B, any combination with at least one on). The popover holds the settings that are not on the toolbar.
+The settings a display marks to show as chips on its Panel's title bar (the Channel view's Y R G B, one at a time; the luma waveform's Y R G B, any combination with at least one on; the clean picture's Y R G B, one or none, none being colour, the default, with the channel named as a tag when lit). The popover holds the settings that are not on the toolbar.
 
 **Legend strip**:
 The colour scale of a display, always horizontal: under the picture, full width, read left to right.
@@ -198,7 +198,7 @@ _Avoid_: Scope (for false colour), filter, LUT view
 A Picture View that shows the Output picture in Luma grey and pixels whose red, green and blue are nearly equal (within a tolerance, a share of the full signal range, 3 % by default) in green, for checking that whites and greys are balanced.
 _Avoid_: White balance check, neutral finder
 **Black and white**:
-The Picture View that shows the Output picture as greys equal to Luma, with the same weights as the waveform (including its luma weights setting), so a grey on screen lines up with its trace. Not in the Window: the clean picture's B/W toggle does its job (code and tests kept).
+The Picture View that shows the Output picture as greys equal to Luma, with the same weights as the waveform (including its luma weights setting), so a grey on screen lines up with its trace. Not in the Window: the clean picture's Y chip does its job (code and tests kept).
 _Avoid_: Greyscale, desaturated view, monochrome
 
 **Colour Waveform**:

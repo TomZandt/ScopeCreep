@@ -38,3 +38,7 @@ A setting is either a list of choices or an **amount**: a number with a range, a
 ## Note, 2026-11-19: which settings are amounts
 
 Amounts now are: trace brightness (waveforms 20 to 300 %, Vectorscope and CIE plot 20 to 400 %, because their gain scale is wider and the old Brighter was four times), soft spread (0 to 3 pixels, waveforms and Vectorscope), graticule brightness (20 to 300 %, every trace display), the Skin Tone and Highlight Neutrals tolerances, the gamut/legal warning's blue (0 to 50 %) and red (50 to 100 %) thresholds, and the saturation heatmap's scale (25 to 200 %). All use the one amount model above, so every default draws as the old default did and every old list value maps to the number it produced. Draw-only amounts (brightness, spread, graticule) never appear in a tag or label; amounts that change what is shown (tolerance, thresholds, scale) are named in the label or tag.
+
+## Note, 2026-11-19: the one-or-none chip mode (#160)
+
+A fourth chip mode, one or none: at most one chip on, clicking the lit chip turns it off, clicking another switches to it. The clean picture's Y R G B use it: its stored value is the chip's value, or "off" for none, which is colour and the default. It replaces the clean picture's B/W setting; a saved clean picture B/W "on" reads as the Luma channel and "off" as colour (the older value maps to what it produced). ARRI, Stops and Skin Tone keep their B/W toggle.

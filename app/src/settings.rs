@@ -171,6 +171,8 @@ impl PanelSettings {
     /// Settings from [`PanelSettings::to_text`]. Lines that are not a setting are ignored.
     pub fn from_text(text: &str) -> PanelSettings {
         let mut settings = PanelSettings::default();
+        // The clean picture's B/W toggle became its channel (#160): "on" was Luma, "off" was colour.
+        let mut legacy_luma = false;
         for line in text.lines() {
             let mut parts = line.split('\t');
             if let (Some(panel), Some(key), Some(value), None) = (parts.next(), parts.next(), parts.next(), parts.next()) {
@@ -181,6 +183,10 @@ impl PanelSettings {
                     "Vectorscope 200 %" => continue,
                     other => other,
                 };
+                if (panel, key) == ("Clean picture", "bw") {
+                    legacy_luma |= value == "on";
+                    continue;
+                }
                 if !panel.is_empty() && !key.is_empty() && !value.is_empty() {
                     match key.strip_prefix(STATE_PREFIX) {
                         Some(key) => {
@@ -190,6 +196,9 @@ impl PanelSettings {
                     }
                 }
             }
+        }
+        if legacy_luma && !settings.panels.get("Clean picture").is_some_and(|p| p.contains_key("channel")) {
+            settings.set("Clean picture", "channel", "luma");
         }
         settings
     }

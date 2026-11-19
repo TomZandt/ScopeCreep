@@ -104,6 +104,13 @@ fn multiple_choice_chips_combine_but_never_all_go_off() {
 }
 
 #[test]
+fn one_or_none_chips_switch_turn_off_on_a_second_click_and_start_with_none() {
+    assert_eq!(clicked(ChipMode::OneOrNone, &[false, false, false, false], 2), [false, false, true, false], "none to one");
+    assert_eq!(clicked(ChipMode::OneOrNone, &[false, false, true, false], 3), [false, false, false, true], "one to another");
+    assert_eq!(clicked(ChipMode::OneOrNone, &[false, false, true, false], 2), [false, false, false, false], "the lit one turns off");
+}
+
+#[test]
 fn a_toggle_flips_and_may_be_off() {
     assert_eq!(clicked(ChipMode::Toggle, &[false], 0), [true]);
     assert_eq!(clicked(ChipMode::Toggle, &[true], 0), [false]);

@@ -149,7 +149,7 @@ fn bw_state(name: &str, defs: &[scopecreep::settings::SettingDef], toolbar: &[sc
 #[test]
 fn the_clean_picture_and_skin_tone_start_in_colour_and_arri_and_stops_start_grey() {
     let (chips, on) = bw_state("Clean picture", &picture_view::SETTINGS, &picture_view::TOOLBAR, &[]);
-    assert_eq!((chips, on), (vec!["B/W".to_string()], vec![false]));
+    assert_eq!((chips, on), (["Y", "R", "G", "B"].map(String::from).to_vec(), vec![false; 4]));
     assert_eq!(bw_state("Skin tone", &skin_tone_view::SETTINGS, &skin_tone_view::TOOLBAR, &[]).1, [false]);
     assert_eq!(bw_state("ARRI False Colour", &arri_false_colour::SETTINGS, &arri_false_colour::TOOLBAR, &[]).1, [true]);
     // Stops' toolbar is the mode chips then B/W: Zones (default), Grey +1, B/W.
@@ -157,20 +157,39 @@ fn the_clean_picture_and_skin_tone_start_in_colour_and_arri_and_stops_start_grey
 }
 
 #[test]
-fn a_click_flips_the_toggle_each_way_and_it_is_remembered_per_panel() {
+fn the_clean_picture_channel_chips_switch_turn_off_on_a_second_click_and_are_remembered() {
     let mut s = PanelSettings::default();
     let name = "Clean picture";
-    let click = |s: &mut PanelSettings| {
+    let click = |s: &mut PanelSettings, i: usize| {
         let t = Toolbar::new(&picture_view::TOOLBAR, &s.resolve(name, &picture_view::SETTINGS));
-        let (k, v) = t.click(0).unwrap();
+        let (k, v) = t.click(i).unwrap();
         s.set(name, k, v);
     };
-    click(&mut s);
+    let on = |s: &PanelSettings| Toolbar::new(&picture_view::TOOLBAR, &s.resolve(name, &picture_view::SETTINGS)).on;
+    click(&mut s, 3);
     let back = PanelSettings::from_text(&s.to_text());
-    assert_eq!(Toolbar::new(&picture_view::TOOLBAR, &back.resolve(name, &picture_view::SETTINGS)).on, [true]);
+    assert_eq!(on(&back), [false, false, false, true]);
     assert_eq!(Toolbar::new(&skin_tone_view::TOOLBAR, &back.resolve("Skin tone", &skin_tone_view::SETTINGS)).on, [false], "another Panel is unaffected");
-    click(&mut s);
-    assert_eq!(Toolbar::new(&picture_view::TOOLBAR, &s.resolve(name, &picture_view::SETTINGS)).on, [false], "a second click turns it off");
+    click(&mut s, 1);
+    assert_eq!(on(&s), [false, true, false, false], "straight to another channel");
+    click(&mut s, 1);
+    assert_eq!(on(&s), [false; 4], "a second click is colour again");
+}
+
+#[test]
+fn the_clean_picture_chips_stay_on_a_small_panel() {
+    let toolbar = Toolbar::new(&picture_view::TOOLBAR, &PanelSettings::default().resolve("Clean picture", &picture_view::SETTINGS));
+    let settings: Settings = [("channel".to_string(), "blue".to_string())].into();
+    let title = panel_title("Clean picture", &DisplayContext { settings, ..DisplayContext::default() }, String::new());
+    for scale in [1.0, 2.0] {
+        let small = PanelLayout::new([0.0, 0.0, 130.0 * scale, 200.0 * scale], scale).title;
+        let (l, _, all) = window_text::lay_out_toolbar_title(&title, &toolbar.chips, false, small, scale);
+        assert_eq!(l.chips.len(), 4);
+        assert!(!all, "the tag goes to the hover");
+        for chip in &l.chips {
+            assert!(chip[0] >= small[0] && chip[0] + chip[2] <= small[0] + small[2] + 0.01, "{chip:?} stays inside {small:?}");
+        }
+    }
 }
 
 #[test]
@@ -205,7 +224,7 @@ fn stops_shows_bw_only_in_grey_and_plus_one_and_the_heatmap_has_none() {
 }
 
 #[test]
-fn bw_is_a_chip_not_a_popover_row() {
+fn the_channel_is_a_chip_not_a_popover_row() {
     let left = popover_defs(&picture_view::SETTINGS, &picture_view::TOOLBAR);
     assert!(left.is_empty(), "the clean picture has no popover");
     assert_eq!(popover_defs(&stops_false_colour::SETTINGS, &stops_false_colour::TOOLBAR).iter().map(|d| d.key).collect::<Vec<_>>(), ["legend"]);
@@ -217,8 +236,13 @@ fn the_tags_say_b_w_or_colour_when_the_toggle_is_not_at_its_default() {
         let settings: Settings = [("bw".to_string(), v.to_string()), ("mode".to_string(), "grey-plus-one".to_string())].into();
         panel_title(name, &DisplayContext { settings, ..DisplayContext::default() }, String::new()).tags
     };
-    assert!(tags("Clean picture", "on").contains(&"B/W".to_string()));
-    assert!(!tags("Clean picture", "off").contains(&"B/W".to_string()));
+    let channel_tags = |v: &str| {
+        let settings: Settings = [("channel".to_string(), v.to_string())].into();
+        panel_title("Clean picture", &DisplayContext { settings, ..DisplayContext::default() }, String::new()).tags
+    };
+    assert!(channel_tags("blue").contains(&"Blue".to_string()));
+    assert!(channel_tags("luma").contains(&"Luma".to_string()));
+    assert!(!channel_tags("off").iter().any(|t| matches!(t.as_str(), "Luma" | "Red" | "Green" | "Blue" | "colour")), "colour is the default and is not tagged");
     assert!(tags("Skin tone", "on").contains(&"B/W".to_string()));
     assert!(tags("ARRI False Colour", "off").contains(&"colour".to_string()));
     assert!(!tags("ARRI False Colour", "on").iter().any(|t| t == "B/W" || t == "colour"));

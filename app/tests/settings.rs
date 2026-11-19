@@ -213,3 +213,18 @@ fn the_slider_and_its_number_are_drawn_at_the_scale_and_inside_the_menu() {
         }
     }
 }
+
+#[test]
+fn a_saved_clean_picture_b_w_reads_as_luma_or_colour_and_other_panels_keep_theirs() {
+    use scopecreep::{arri_false_colour, picture_view, stops_false_colour};
+    let saved = PanelSettings::from_text("Clean picture\tbw\ton\nARRI False Colour\tbw\toff\nStops False Colour\tbw\ton\n");
+    assert_eq!(saved.resolve("Clean picture", &picture_view::SETTINGS)["channel"], "luma");
+    assert_eq!(saved.resolve("ARRI False Colour", &arri_false_colour::SETTINGS)["bw"], "off");
+    assert_eq!(saved.resolve("Stops False Colour", &stops_false_colour::SETTINGS)["bw"], "on");
+    let off = PanelSettings::from_text("Clean picture\tbw\toff\n");
+    assert_eq!(off.resolve("Clean picture", &picture_view::SETTINGS)["channel"], "off");
+    let chosen = PanelSettings::from_text("Clean picture\tbw\ton\nClean picture\tchannel\tred\n");
+    assert_eq!(chosen.resolve("Clean picture", &picture_view::SETTINGS)["channel"], "red", "a chosen channel wins");
+    let stale = PanelSettings::from_text("Clean picture\tchannel\tpurple\n");
+    assert_eq!(stale.resolve("Clean picture", &picture_view::SETTINGS)["channel"], "off", "no longer offered falls back to colour");
+}

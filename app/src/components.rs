@@ -141,6 +141,8 @@ pub enum ChipMode {
     Multiple,
     /// Each chip on its own, free to be off (B/W).
     Toggle,
+    /// At most one on; none is allowed, and clicking the one that is on turns it off (the clean picture's channel).
+    OneOrNone,
 }
 
 /// What a row of chips is after a click on chip `index`.
@@ -153,6 +155,10 @@ pub fn clicked(mode: ChipMode, on: &[bool], index: usize) -> Vec<bool> {
             if let Some(v) = next.get_mut(index) {
                 *v = !*v || !others;
             }
+        }
+        ChipMode::OneOrNone => {
+            let was_on = on.get(index).copied().unwrap_or(false);
+            next.iter_mut().enumerate().for_each(|(i, v)| *v = i == index && !was_on);
         }
         ChipMode::Toggle => {
             if let Some(v) = next.get_mut(index) {

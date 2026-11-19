@@ -8,6 +8,8 @@ The format follows [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/
 
 ### Changed
 
+- Clean picture: Y R G B chips on its title bar replace the B/W chip. None lit is colour, the default; click a chip to see that channel as grey, click it again for colour, click another to switch. Y is Luma grey with the waveform's weights, exactly what B/W showed; mattes stay black. The title tags the channel when it is not colour and the choice is remembered per Panel. A saved B/W "on" opens as Y, "off" as colour. ARRI False Colour, Stops False Colour and Skin Tone keep their B/W chip (#160, ADR 0013).
+
 - Vectorscope: the soft spread slider moves in steps of 0.25 pixel, as on the waveforms (it was 0.1), and shows two decimals; a saved value reads as before.
 
 - Legends: ARRI False Colour's legend is a proportional 0 to 100 % scale bar under the picture instead of six equal swatches. Tick numbers run along its top (every 5 % where they fit, thinning to 10, 20, 25 or 50 % on a narrower Panel), each band sits at its true position and width, the gaps are the same greys the picture draws there, and short marks under it name "near black clip", "18 % grey" and "near white clip" (and the clip ends where there is room), dropped rather than overlapped. The saturation heatmap's legend is the same scale bar from 0 % to its scale's top. The legend can still be turned off; labels and the ADR 0010 wording are unchanged (#122).

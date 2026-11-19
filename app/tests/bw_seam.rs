@@ -59,6 +59,11 @@ impl Bench {
         self.rig.step(&mut self.feed);
     }
 
+    fn channel(&mut self, panel: &str, value: &str) {
+        self.settings.lock().unwrap().set(panel, "channel", value);
+        self.rig.step(&mut self.feed);
+    }
+
     /// The middle pixel of `panel`.
     fn shown(&self, panel: &str) -> [u8; 3] {
         let index = self.set.names().iter().position(|n| *n == panel).unwrap();
@@ -73,17 +78,36 @@ fn is_grey(p: [u8; 3]) -> bool {
 }
 
 #[test]
-fn the_clean_picture_is_in_colour_until_b_w_and_then_its_luma_grey() {
+fn the_clean_picture_is_in_colour_until_a_channel_and_each_channel_is_grey() {
     let mut b = Bench::new("bw-clean");
     b.play(COLOURFUL);
     let colour = b.shown(CLEAN);
     assert!(colour[0] > colour[2] + 40, "{colour:?}");
-    b.bw(CLEAN, true);
-    let grey = b.shown(CLEAN);
-    let luma = (0.2126 * 0.6 + 0.7152 * 0.4 + 0.0722 * 0.3) * 255.0;
-    assert!(is_grey(grey) && (grey[0] as f32 - luma).abs() <= 2.0, "{grey:?} vs {luma}");
-    b.bw(CLEAN, false);
+    for (channel, expect) in [("luma", 0.2126 * 0.6 + 0.7152 * 0.4 + 0.0722 * 0.3), ("red", 0.6), ("green", 0.4), ("blue", 0.3)] {
+        b.channel(CLEAN, channel);
+        let grey = b.shown(CLEAN);
+        assert!(is_grey(grey) && (grey[0] as f32 - expect * 255.0).abs() <= 2.0, "{channel}: {grey:?} vs {expect}");
+    }
+    b.channel(CLEAN, "off");
     assert_eq!(b.shown(CLEAN), colour, "and back");
+}
+
+#[test]
+fn mattes_stay_black_on_every_channel() {
+    let mut b = Bench::new("bw-mattes");
+    // Resolve plays the bottom row first: the first 3 rows are the bottom of the picture.
+    let pixels: Vec<f32> = (0..W * H).flat_map(|i| if i / W < 3 { [0.0, 0.0, 0.0, 1.0] } else { [0.6, 0.4, 0.3, 1.0] }).collect();
+    let feed = &mut b.feed;
+    b.rig.play(W, H, &pixels, |rig| {
+        rig.step(feed);
+    });
+    for channel in ["off", "luma", "red", "green", "blue"] {
+        b.channel(CLEAN, channel);
+        let index = b.set.names().iter().position(|n| *n == CLEAN).unwrap();
+        let image = b.rig.render(W, H, |pass| b.set.draw(pass, index, [0.0, 0.0, W as f32, H as f32], [W as f32, H as f32], 1.0));
+        let rows_black = ((H as usize - 2) * W as usize..(H * W) as usize).all(|i| image[i * 4..i * 4 + 3] == [0, 0, 0]);
+        assert!(rows_black, "{channel}: matte is black");
+    }
 }
 
 #[test]

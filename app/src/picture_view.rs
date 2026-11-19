@@ -9,28 +9,35 @@ use crate::gpu_frame::GpuFrame;
 use crate::output_conversion::Plan;
 use crate::picture_stage::{PictureStage, Rule};
 use crate::settings::SettingDef;
-use crate::toolbar::{BW_DEFAULT_COLOUR, BW_SETTING, BW_TOOLBAR, ToolbarDef};
+use crate::toolbar::{CHANNEL_DEF, CHANNEL_SETTING, CHANNEL_TOOLBAR, ToolbarDef};
 use std::sync::{Arc, Mutex};
 
 /// The colour rule: the frame as it is.
-/// With the B/W toggle on (`values.weights.w` > 0.5) its Luma, by the weights the waveform uses (ADR 0004).
+/// With a channel chosen (`values.weights.w`: 1 Luma by the weights the waveform uses (ADR 0004), 2 red, 3 green,
+/// 4 blue) that channel as grey.
 const RULE: &str = r#"
-struct Values { weights: vec4<f32> };   // luma weights for R, G, B; w: 1 for black and white
+struct Values { weights: vec4<f32> };   // luma weights for R, G, B; w: 0 colour, 1 Luma, 2 R, 3 G, 4 B
 fn colour(uv: vec2<f32>) -> vec3<f32> {
     let rgb = sample_picture(uv);
-    return select(rgb, vec3<f32>(dot(rgb, values.weights.xyz)), values.weights.w > 0.5);
+    let c = values.weights.w;
+    if c < 0.5 { return rgb; }
+    if c < 1.5 { return vec3<f32>(dot(rgb, values.weights.xyz)); }
+    if c < 2.5 { return vec3<f32>(rgb.r); }
+    if c < 3.5 { return vec3<f32>(rgb.g); }
+    return vec3<f32>(rgb.b);
 }
 "#;
 
-/// B/W is a chip on the title bar, off by default.
-pub static SETTINGS: [SettingDef; 1] = [BW_DEFAULT_COLOUR];
-pub static TOOLBAR: [ToolbarDef; 1] = BW_TOOLBAR;
+/// The channel is Y R G B chips on the title bar, none lit (colour) by default.
+pub static SETTINGS: [SettingDef; 1] = [CHANNEL_DEF];
+pub static TOOLBAR: [ToolbarDef; 1] = CHANNEL_TOOLBAR;
 
 /// What the last [`DisplayContext`] set for drawing.
 #[derive(Clone, Copy)]
 struct Look {
     weights: [f32; 3],
-    bw: bool,
+    /// 0 colour, 1 Luma, 2 red, 3 green, 4 blue: what the rule reads.
+    channel: f32,
 }
 
 /// The Picture View's GPU state. Cheap to clone: the Feed thread uploads frames through one clone while the
@@ -47,7 +54,7 @@ impl PictureView {
     /// `filterable`: the device can smooth 32-bit float textures (else the picture is drawn nearest-neighbour).
     pub fn new(device: &wgpu::Device, queue: &wgpu::Queue, target: wgpu::TextureFormat, filterable: bool) -> PictureView {
         let stage = PictureStage::new::<[f32; 4]>(device, queue, target, filterable, Rule { label: "picture view", wgsl: RULE.into(), has_legend: false });
-        let view = PictureView { stage, label_tail: Arc::new(Mutex::new(String::new())), look: Arc::new(Mutex::new(Look { weights: crate::measurement::REC709_LUMA.map(|v| v as f32), bw: false })) };
+        let view = PictureView { stage, label_tail: Arc::new(Mutex::new(String::new())), look: Arc::new(Mutex::new(Look { weights: crate::measurement::REC709_LUMA.map(|v| v as f32), channel: 0.0 })) };
         view.configure(&DisplayContext::default());
         view
     }
@@ -96,7 +103,14 @@ impl Display for PictureView {
     fn configure(&self, context: &DisplayContext) {
         *self.label_tail.lock().unwrap() = Self::label_tail(context);
         let [r, g, b] = crate::output_conversion::measurement(context.colour_setup.clone(), context.luma).weights();
-        *self.look.lock().unwrap() = Look { weights: [r as f32, g as f32, b as f32], bw: context.settings.get(BW_SETTING).map(String::as_str) == Some("on") };
+        *self.look.lock().unwrap() = Look { weights: [r as f32, g as f32, b as f32], channel: match context.settings.get(CHANNEL_SETTING).map(String::as_str) {
+            Some("luma") => 1.0,
+            Some("red") => 2.0,
+            Some("green") => 3.0,
+            Some("blue") => 4.0,
+            _ => 0.0,
+        },
+        };
     }
 
     fn setting_defs(&self) -> &'static [SettingDef] {
@@ -114,6 +128,6 @@ impl Display for PictureView {
     /// Draw the picture, scaled to fit inside `area` with its shape kept.
     fn draw(&self, pass: &mut wgpu::RenderPass<'_>, area: [f32; 4], surface: [f32; 2], _scale: f32) {
         let look = *self.look.lock().unwrap();
-        self.stage.draw(pass, area, surface, &[look.weights[0], look.weights[1], look.weights[2], look.bw as u32 as f32], None);
+        self.stage.draw(pass, area, surface, &[look.weights[0], look.weights[1], look.weights[2], look.channel], None);
     }
 }
