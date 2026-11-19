@@ -14,7 +14,7 @@ use crate::colour_setup::Provenance;
 use crate::display::{Display, DisplayContext};
 use crate::gpu_frame::GpuFrame;
 use crate::picture_stage::{PictureStage, Rule};
-use crate::settings::{Choice, SettingDef};
+use crate::settings::{Amount, Choice, SettingDef};
 use crate::measurement::Measurement;
 use std::sync::{Arc, Mutex};
 
@@ -56,29 +56,18 @@ const LOW_SETTING: &str = "low";
 const HIGH_SETTING: &str = "high";
 const R103_SETTING: &str = "r103";
 
+/// Where the fade to blue starts, in % of the range. The range stops at 50 % and the red threshold's starts there,
+/// so blue can never be set above red. The lists earlier versions saved ("5", "10", "15", "20") are the numbers
+/// they name.
+pub const BLUE_AMOUNT: Amount = Amount { min: 0.0, max: 50.0, step: 1.0, default: 10.0, unit: " %", decimals: 0, legacy: &[] };
+
+/// Where the fade to red starts, in % of the range (see [`BLUE_AMOUNT`]; earlier lists "80" to "95" are the numbers
+/// they name).
+pub const RED_AMOUNT: Amount = Amount { min: 50.0, max: 100.0, step: 1.0, default: 90.0, unit: " %", decimals: 0, legacy: &[] };
+
 static SETTINGS: [SettingDef; 3] = [
-    SettingDef {
-        key: LOW_SETTING,
-        label: "Blue starts at",
-        amount: None,
-        choices: &[
-            Choice { value: "10", text: "10 %" },
-            Choice { value: "5", text: "5 %" },
-            Choice { value: "15", text: "15 %" },
-            Choice { value: "20", text: "20 %" },
-        ],
-    },
-    SettingDef {
-        key: HIGH_SETTING,
-        label: "Red starts at",
-        amount: None,
-        choices: &[
-            Choice { value: "90", text: "90 %" },
-            Choice { value: "95", text: "95 %" },
-            Choice { value: "85", text: "85 %" },
-            Choice { value: "80", text: "80 %" },
-        ],
-    },
+    SettingDef { key: LOW_SETTING, label: "Blue starts at", amount: Some(BLUE_AMOUNT), choices: &[] },
+    SettingDef { key: HIGH_SETTING, label: "Red starts at", amount: Some(RED_AMOUNT), choices: &[] },
     SettingDef {
         key: R103_SETTING,
         label: "EBU R103 tolerance (-5 % to 105 %)",
@@ -107,10 +96,10 @@ impl Default for Warning {
 
 impl Warning {
     pub fn from_context(context: &DisplayContext) -> Warning {
-        let percent = |key: &str, default: f32| context.settings.get(key).and_then(|v| v.parse::<f32>().ok()).map_or(default, |v| v / 100.0);
+        let percent = |amount: Amount, key: &str| amount.read(context.settings.get(key).map(String::as_str)) / 100.0;
         Warning {
-            low: percent(LOW_SETTING, 0.10),
-            high: percent(HIGH_SETTING, 0.90),
+            low: percent(BLUE_AMOUNT, LOW_SETTING),
+            high: percent(RED_AMOUNT, HIGH_SETTING),
             r103: context.settings.get(R103_SETTING).is_some_and(|v| v == "on"),
             measurement: crate::output_conversion::measurement(context.colour_setup.clone(), context.luma),
         }

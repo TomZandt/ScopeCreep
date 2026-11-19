@@ -16,6 +16,8 @@ The format follows [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/
 
 ### Added
 
+- Gamut/legal warning: the blue and red thresholds are sliders in its menu instead of lists, with the number and % beside each: blue starts at 0 to 50 % (default 10 %), red at 50 to 100 % (default 90 %), so blue can never be set above red. The defaults draw exactly as before, the label names both values and the codes they give for the project's Levels, a 5, 15, 20, 80, 85 or 95 saved by an earlier version keeps its number, and the values are remembered per Panel. EBU R103 tolerance stays on or off (#89).
+
 - Vectorscope: a Tonal range chip (All, Shadows, Mids, Highlights) plots only the pixels whose Luma is below 30 %, from 30 % to below 70 %, or 70 % and above (Resolve's own Low and High boundaries). Clipping on the ring counts only the plotted pixels. Remembered per Panel; the tag names the range when it is not All (#124).
 
 - Luma waveform: trace brightness is a slider in its popover instead of Dimmer, Normal and Brighter. Drag it (the menu stays open and the trace follows with Resolve stopped) to any value from 20 % to 300 % in steps of 5, with the number and its unit beside it; the default, 100 %, draws exactly as Normal did, and a row under the slider puts it back. The value is remembered per Panel, and a Dimmer, Normal or Brighter saved by an earlier version becomes 48, 100 or 240 %. Brightness is still a drawing choice, so it is not in the label or the tags (#84, ADR 0013).

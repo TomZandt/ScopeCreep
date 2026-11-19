@@ -189,9 +189,24 @@ fn before_the_colour_setup_is_known_the_label_says_what_is_assumed() {
 fn the_menu_offers_two_thresholds_and_the_r103_tolerance_with_the_ticket_defaults_first() {
     let b = Bench::new("menu", VIDEO);
     let defs = b.set.setting_defs(0);
-    let first = |i: usize| defs[i].choices[0].value;
     assert_eq!(defs.iter().map(|d| d.key).collect::<Vec<_>>(), ["low", "high", "r103"]);
-    assert_eq!((first(0), first(1), first(2)), ("10", "90", "off"));
+    let (blue, red) = (defs[0].amount.unwrap(), defs[1].amount.unwrap());
+    assert_eq!((blue.default, red.default, defs[2].choices[0].value), (10.0, 90.0, "off"));
+    assert_eq!((blue.text(blue.default), red.text(red.default)), ("10 %".to_string(), "90 %".to_string()));
+    // Blue can never be set above red: the two ranges do not overlap, wherever a slider is dragged.
+    assert!(blue.at_fraction(1.0) <= red.at_fraction(0.0));
+    // Lists an earlier version saved still mean the number they named; anything else is the default or clamped.
+    assert_eq!((blue.read(Some("5")), blue.read(Some("20")), red.read(Some("95")), red.read(Some("85"))), (5.0, 20.0, 95.0, 85.0));
+    assert_eq!((blue.read(Some("80")), red.read(Some("10")), blue.read(Some("x")), red.read(None)), (50.0, 50.0, 10.0, 90.0));
+}
+
+#[test]
+fn a_blue_threshold_past_the_red_one_is_clamped_below_it_and_the_label_names_the_values_and_codes() {
+    let mut b = Bench::new("clamp", VIDEO);
+    b.choose("low", "70");
+    b.choose("high", "20");
+    let label = b.label();
+    assert!(label.contains("blue below 50 % (code 502)") && label.contains("red above 50 % (code 502)"), "{label}");
 }
 
 /// The ColorChecker in DaVinci Wide Gamut / Intermediate, converted to Rec.709 Gamma 2.4 by the app, drawn by the
