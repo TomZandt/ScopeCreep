@@ -8,6 +8,8 @@ The format follows [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/
 
 ### Changed
 
+- The Channel view is out of the Window now the clean picture's Y R G B chips and Loupe do its job: the Window shows 7 Panels, and the default layout gives ARRI False Colour three columns and Stops False Colour two, the Saturation heatmap three and Skin tone two, every cell used. A saved layout that names the Channel view still recalls. Its code, tests and saved settings are kept (#162, ADR 0034).
+
 - Clean picture: Y R G B chips on its title bar replace the B/W chip. None lit is colour, the default; click a chip to see that channel as grey, click it again for colour, click another to switch. Y is Luma grey with the waveform's weights, exactly what B/W showed; mattes stay black. The title tags the channel when it is not colour and the choice is remembered per Panel. A saved B/W "on" opens as Y, "off" as colour. ARRI False Colour, Stops False Colour and Skin Tone keep their B/W chip (#160, ADR 0013).
 
 - Clean picture: a Loupe chip on its title bar, off by default. On, the Loupe works as on the Channel view: drag it anywhere in the Panel, scroll over it to zoom 100 to 800 % in exact whole-pixel blocks, and it magnifies whatever the chips show (colour or one channel). Its size (small, medium, large) is in the popover; on/off, position, zoom and size are remembered per Panel, and "Loupe N %" is a tag while it is on. With it off the clean picture takes no pointer or wheel events (#161).

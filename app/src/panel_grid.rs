@@ -67,18 +67,18 @@ impl Place {
 
 /// The default layout, in whole numbers: columns and rows (as weights), then each Panel by display name at
 /// `(column, row, columns, rows)`. 5 × 4: the clean picture 3 × 2 at the top left, the luma waveform and the
-/// Vectorscope (two cells wide) to its right, the Channel view (2 × 2) and the other Picture Views below, every cell used.
+/// Vectorscope (two cells wide) to its right, then two rows of Picture Views below (ARRI False Colour three wide
+/// with Stops False Colour, Skin tone with the Saturation heatmap three wide), every cell used.
 const DEFAULT_COLUMNS: [u32; 5] = [1, 1, 1, 1, 1];
 const DEFAULT_ROWS: [u32; 4] = [14, 14, 11, 11];
-const DEFAULT_PLACES: [(&str, [usize; 4]); 8] = [
+const DEFAULT_PLACES: [(&str, [usize; 4]); 7] = [
     ("Clean picture", [0, 0, 3, 2]),
     ("Luma waveform", [3, 0, 2, 1]),
     ("Vectorscope", [3, 1, 2, 1]),
-    ("Channel view", [0, 2, 2, 2]),
-    ("ARRI False Colour", [2, 2, 3, 1]),
-    ("Saturation heatmap", [2, 3, 1, 1]),
-    ("Skin tone", [3, 3, 1, 1]),
-    ("Stops False Colour", [4, 3, 1, 1]),
+    ("ARRI False Colour", [0, 2, 3, 1]),
+    ("Stops False Colour", [3, 2, 2, 1]),
+    ("Saturation heatmap", [0, 3, 3, 1]),
+    ("Skin tone", [3, 3, 2, 1]),
 ];
 
 /// The layout: column and row weights (each adding up to 1), and each Panel's place, in display order.

@@ -75,12 +75,12 @@ fn middle(rect: [f32; 4]) -> (f32, f32) {
 }
 
 #[test]
-fn the_window_shows_eight_panels_without_the_gamut_warning_highlight_neutrals_cie_plot_black_and_white_and_colour_waveform() {
+fn the_window_shows_seven_panels_without_the_gamut_warning_highlight_neutrals_cie_plot_black_and_white_colour_waveform_and_channel_view() {
     let b = Bench::new("order");
     let names = b.set.names();
-    assert_eq!(names.len(), 8, "{names:?}");
-    assert_eq!(names[..3], ["Clean picture", "Luma waveform", "Channel view"]);
-    for gone in ["Gamut/legal warning", "Highlight neutrals", "CIE chromaticity", "Black and white", "Colour waveform"] {
+    assert_eq!(names.len(), 7, "{names:?}");
+    assert_eq!(names[..3], ["Clean picture", "Luma waveform", "ARRI False Colour"]);
+    for gone in ["Gamut/legal warning", "Highlight neutrals", "CIE chromaticity", "Black and white", "Colour waveform", "Channel view"] {
         assert!(!names.contains(&gone), "{gone} is out of the Window: {names:?}");
     }
 }
@@ -91,6 +91,7 @@ fn settings_of_panels_out_of_the_window_stay_in_the_saved_text() {
     saved.set("Gamut/legal warning", "limits", "ebu");
     saved.set("CIE chromaticity", "plot", "x");
     saved.set("Colour waveform", "brightness", "50");
+    saved.set("Channel view", "channel", "red");
     let text = saved.to_text();
     let reloaded = PanelSettings::from_text(&text);
     assert_eq!(reloaded.to_text(), text);

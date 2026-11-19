@@ -3,8 +3,11 @@
 //! the label, and what the Loupe reports it drew. Needs a GPU.
 mod common;
 use common::{Rig, TARGET, solid};
-use scopecreep::display::{ChannelViewDrawn, DisplayContext, DisplaySet, Pointer, ScopeHandles};
+use scopecreep::channel_view::ChannelView;
+use scopecreep::display::{ChannelViewDrawn, DisplayContext, DisplaySet, Pointer};
+use scopecreep::picture_view::PictureView;
 use scopecreep::settings::PanelSettings;
+use std::sync::Arc;
 
 const W: u32 = 800;
 const H: u32 = 600;
@@ -14,16 +17,20 @@ const AREA: [f32; 4] = [20.0, 20.0, 600.0, 400.0];
 struct Bench {
     rig: Rig,
     set: DisplaySet,
-    scopes: ScopeHandles,
+    channel_view: Arc<ChannelView>,
     index: usize,
 }
 
 impl Bench {
     fn new(name: &str) -> Bench {
         let rig = Rig::new(name);
-        let (set, scopes) = DisplaySet::standard_with_handles(&rig.device, &rig.queue, TARGET, false);
+        // The Channel view is out of the Window (#162) but kept and tested: the displays it needs, built here.
+        let mut set = DisplaySet::default();
+        set.register(Arc::new(PictureView::new(&rig.device, &rig.queue, TARGET, false)));
+        let channel_view = Arc::new(ChannelView::new(&rig.device, &rig.queue, TARGET, false));
+        set.register(channel_view.clone());
         let index = set.names().iter().position(|n| *n == "Channel view").expect("the Channel view is registered");
-        Bench { rig, set, scopes, index }
+        Bench { rig, set, channel_view, index }
     }
 
     fn play(&mut self, width: u32, height: u32, pixels: &[f32]) {
@@ -36,7 +43,7 @@ impl Bench {
     }
 
     fn drawn(&self) -> ChannelViewDrawn {
-        self.scopes.channel_view.drawn().expect("the Channel view reports what it drew")
+        self.channel_view.drawn().expect("the Channel view reports what it drew")
     }
 
     /// Draw the Channel view into [`AREA`] of a W x H target and read it back (RGBA8, rows top first).

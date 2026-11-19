@@ -98,7 +98,7 @@ _Avoid_: Widget, control (for the whole set)
 A small toggle on a title bar: a letter or short word, grey when off, the accent (or its channel's colour for R, G, B, Y) when on. A row of chips behaves in one of four ways: single (one always on), multiple (any combination, at least one on), toggle (free to be off) or one or none (at most one on; clicking the lit one turns it off).
 
 **Toolbar**:
-The settings a display marks to show as chips on its Panel's title bar (the Channel view's Y R G B, one at a time; the luma waveform's Y R G B, any combination with at least one on; the clean picture's Y R G B, one or none, none being colour, the default, with the channel named as a tag when lit). The popover holds the settings that are not on the toolbar.
+The settings a display marks to show as chips on its Panel's title bar (the Channel view's Y R G B, one at a time (out of the Window); the luma waveform's Y R G B, any combination with at least one on; the clean picture's Y R G B, one or none, none being colour, the default, with the channel named as a tag when lit). The popover holds the settings that are not on the toolbar.
 
 **Legend strip**:
 The colour scale of a display, always horizontal: under the picture, full width, read left to right.
@@ -108,7 +108,7 @@ _Avoid_: Vertical legend
 The legend strip of ARRI False Colour and the saturation heatmap: a bar proportional to a range (0 to 100 % of Output Luma, or 0 to the heatmap's scale), tick numbers along its top and marks under it at the meaningful points. Ticks thin out and marks drop out on a small Panel; text never overlaps.
 
 **Panel**:
-One area of the Window that shows one Scope or Picture View. Every display in the Window has its own Panel, so everything can be seen at once (8 Panels; the gamut/legal warning, Highlight Neutrals, CIE plot, Black and white and Colour Waveform are out of the Window but their code and saved settings are kept); the Panels sit in an ordered grid whose borders the user can drag.
+One area of the Window that shows one Scope or Picture View. Every display in the Window has its own Panel, so everything can be seen at once (7 Panels; the gamut/legal warning, Highlight Neutrals, CIE plot, Black and white, Colour Waveform and Channel view are out of the Window but their code and saved settings are kept); the Panels sit in an ordered grid whose borders the user can drag.
 _Avoid_: Pane, view, tile, window (for one display)
 
 **Display**:
@@ -124,7 +124,7 @@ A black bar around the picture: whole rows at the top and bottom, or whole colum
 _Avoid_: Letterbox (that is one kind of matte), border
 
 **Panel grid**:
-The columns and rows the Panels sit in, each Panel at a cell with a span of columns and rows, every cell used. By default the clean picture spans 3 × 2 at the top left. Column and row sizes are weights, so border positions the user dragged stay valid at any window size. Each Panel has a thin border and a title bar with its label at its top.
+The columns and rows the Panels sit in, each Panel at a cell with a span of columns and rows, every cell used. By default the clean picture spans 3 × 2 at the top left, the luma waveform and the Vectorscope (two columns wide) beside it, and the four other Picture Views fill two rows below (ARRI False Colour 3 wide with Stops False Colour, the Saturation heatmap 3 wide with Skin tone), so all 7 Panels use every cell. Column and row sizes are weights, so border positions the user dragged stay valid at any window size. Each Panel has a thin border and a title bar with its label at its top.
 _Avoid_: Layout for the grid (a Layout is a saved arrangement of it), dock
 
 **Layout** (named):
@@ -240,10 +240,10 @@ Stops False Colour's chart mode: a black and white picture where pixels within a
 The Feed's frame as Resolve sends it, before Output Conversion. Stops False Colour measures this one; every other display sees the Output picture.
 
 **Loupe**:
-A movable square on a Picture View that shows the picture under it magnified, so single pixels (and noise) can be seen. Its zoom is of source pixels, in device pixels of the screen: at 200 % each picture pixel is 2 × 2 device pixels, whatever the Panel's size. It is one shared piece any Picture View can use; it is built from the Panel's colour rule, so it shows what the Panel shows. It is on the Channel view, and on the clean picture as a toolbar chip (off by default): the clean picture's Loupe magnifies whatever its chips show (colour or one channel), is dragged anywhere in the Panel, zooms 100 to 800 % with the scroll wheel, takes its size (small, medium, large) from the popover, and is remembered per Panel. While it is on, "Loupe N %" is a tag; while it is off the clean picture takes no pointer or wheel events.
+A movable square on a Picture View that shows the picture under it magnified, so single pixels (and noise) can be seen. Its zoom is of source pixels, in device pixels of the screen: at 200 % each picture pixel is 2 × 2 device pixels, whatever the Panel's size. It is one shared piece any Picture View can use; it is built from the Panel's colour rule, so it shows what the Panel shows. It is on the clean picture (and on the Channel view, which is out of the Window) as a toolbar chip (off by default): the clean picture's Loupe magnifies whatever its chips show (colour or one channel), is dragged anywhere in the Panel, zooms 100 to 800 % with the scroll wheel, takes its size (small, medium, large) from the popover, and is remembered per Panel. While it is on, "Loupe N %" is a tag; while it is off the clean picture takes no pointer or wheel events.
 
 **Channel view**:
-The Panel showing one channel of the Output picture (blue by default, or red, green or Luma) as grey, with the Loupe on top, for inspecting noise.
+The Panel showing one channel of the Output picture (blue by default, or red, green or Luma) as grey, with the Loupe on top, for inspecting noise. Out of the Window since #162 (the clean picture's Y R G B chips and Loupe do its job, ADR 0034); its code, tests and saved settings are kept.
 _Avoid_: PiP, magnifier, zoom window
 
 **ColorChecker frame**:

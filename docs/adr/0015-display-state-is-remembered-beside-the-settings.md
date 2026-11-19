@@ -19,3 +19,7 @@
 
 - A later display with its own hand-moved aid (a movable marker, say) adds state keys and handles `Display::pointer`; the window and the file need no change.
 - State written by a later version that a display no longer reads stays in the file, harmlessly.
+
+## Note, 2026-11-19 (#162)
+
+The Loupe's state (on, position, zoom, size) is now also the clean picture's, kept under its own display name (ADR 0034). The Channel view that first used it is out of the Window; its saved state stays in the file.

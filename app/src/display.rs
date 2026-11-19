@@ -146,19 +146,19 @@ pub struct InWindow {
     pub cie_plot: bool,
     pub black_and_white: bool,
     pub colour_waveform: bool,
+    pub channel_view: bool,
 }
 
 /// What the Window shows (ticket #95: the first three displays below are out of it for now; #118: the clean picture's
 /// B/W toggle does the black and white Panel's job; #145: the Colour Waveform is out, Colorise on the luma waveform
-/// does its job).
-pub const IN_WINDOW: InWindow = InWindow { gamut_legal_warning: false, highlight_neutrals: false, cie_plot: false, black_and_white: false, colour_waveform: false };
+/// does its job; #162: the Channel view is out, the clean picture's Y R G B chips and Loupe do its job).
+pub const IN_WINDOW: InWindow = InWindow { gamut_legal_warning: false, highlight_neutrals: false, cie_plot: false, black_and_white: false, colour_waveform: false, channel_view: false };
 
 /// The Scopes of [`DisplaySet::standard`] kept with their own types, so a test reads their counts through typed
 /// methods (no untyped read-back on [`Display`]).
 pub struct ScopeHandles {
     pub luma_waveform: Waveform,
     pub vectorscope: Arc<crate::vectorscope::Vectorscope>,
-    pub channel_view: Arc<crate::channel_view::ChannelView>,
 }
 
 /// Every display, in Panel order (the order of the grid, left to right then down).
@@ -186,8 +186,9 @@ impl DisplaySet {
         if IN_WINDOW.highlight_neutrals {
             set.register(Arc::new(crate::highlight_neutrals::HighlightNeutrals::new(device, queue, target, filterable)));
         }
-        let channel_view = Arc::new(crate::channel_view::ChannelView::new(device, queue, target, filterable));
-        set.register(channel_view.clone());
+        if IN_WINDOW.channel_view {
+            set.register(Arc::new(crate::channel_view::ChannelView::new(device, queue, target, filterable)));
+        }
         set.register(Arc::new(crate::arri_false_colour::ArriFalseColour::new(device, queue, target)));
         if IN_WINDOW.black_and_white {
             set.register(Arc::new(crate::black_and_white::BlackAndWhite::new(device, queue, target, filterable)));
@@ -203,7 +204,7 @@ impl DisplaySet {
         if IN_WINDOW.colour_waveform {
             set.register(Arc::new(Waveform::new_colour(device, queue, target, &luma_waveform)));
         }
-        (set, ScopeHandles { luma_waveform, vectorscope, channel_view })
+        (set, ScopeHandles { luma_waveform, vectorscope })
     }
 
     /// Add a display after the others.

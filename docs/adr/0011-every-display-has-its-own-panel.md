@@ -22,3 +22,7 @@ Most scope apps give a few slots and a picker for what each slot shows. scopecre
 ## Update 2026-11-18 (#92): the vectorscope is one Panel
 
 The vectorscope at 100 % and at 200 % is one Panel, not two. They are one scope at two zooms, and as two Panels each had its own label, menu and measurement, so the colourist set up and read two things that must always agree. The Panel shows both plots side by side (100 % left, 200 % right), is two grid cells wide so each plot keeps its size, and has one label, one right-click menu and one measurement per frame. The example in the third decision no longer holds; the luma waveform and the colour-tinted waveform still get separate Panels. Settings saved under "Vectorscope 100 %" carry over to the "Vectorscope" Panel; those saved under "Vectorscope 200 %" are ignored.
+
+## Note, 2026-11-19 (#162)
+
+The Channel view is out of the Window (ADR 0034): the clean picture's Y R G B chips and Loupe do its job, so the Window shows 7 Panels. Its module, tests and saved settings are kept.

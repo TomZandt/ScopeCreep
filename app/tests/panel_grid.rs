@@ -7,11 +7,10 @@ use scopecreep::panel_grid::{Border, PanelGrid, PanelLayout, Press, min_panel_si
 const AREA: [f32; 4] = [12.0, 12.0, 1256.0, 716.0];
 const GAP: f32 = 12.0;
 
-/// The 8 displays the Window shows, in Panel order.
-const NAMES: [&str; 8] = [
+/// The 7 displays the Window shows, in Panel order.
+const NAMES: [&str; 7] = [
     "Clean picture",
     "Luma waveform",
-    "Channel view",
     "ARRI False Colour",
     "Vectorscope",
     "Saturation heatmap",
@@ -80,7 +79,7 @@ fn the_default_layout_has_the_scopes_beside_the_picture_and_the_views_below() {
         assert!(c[0] >= picture[0] + picture[2], "{name} is right of the picture: {c:?}");
         assert!(c[1] < picture[1] + picture[3], "{name} is beside the picture: {c:?}");
     }
-    for name in ["Channel view", "ARRI False Colour", "Saturation heatmap", "Skin tone", "Stops False Colour"] {
+    for name in ["ARRI False Colour", "Saturation heatmap", "Skin tone", "Stops False Colour"] {
         let c = cell_of(&grid, name);
         assert!(c[1] >= picture[1] + picture[3], "{name} is below the picture: {c:?}");
     }
@@ -94,9 +93,10 @@ fn the_default_layout_uses_every_cell() {
 #[test]
 fn a_panel_spans_several_columns_and_rows() {
     let grid = default_grid();
-    let one = cell_of(&grid, "Skin tone");
     let hero = cell_of(&grid, "Clean picture");
     let luma = cell_of(&grid, "Luma waveform");
+    // One column's width and one row's height, from the two-column luma waveform and the cell below the hero.
+    let one = [0.0, 0.0, (luma[2] - GAP) / 2.0, cell_of(&grid, "ARRI False Colour")[3]];
     assert!((hero[2] - (3.0 * one[2] + 2.0 * GAP)).abs() < 0.01, "three columns and the gaps between: {hero:?} {one:?}");
     assert!(hero[3] > one[3] * 1.5, "two rows");
     assert!((luma[2] - (2.0 * one[2] + GAP)).abs() < 0.01, "two columns wide");
@@ -154,7 +154,7 @@ fn dragging_a_row_border_resizes_the_rows_above_and_below() {
     grid.drag(border, [x, y - 50.0], AREA, GAP, min_panel_size(1.0));
     let after = grid.cells(AREA, GAP);
     assert!((after[0][3] - (before[0][3] - 50.0)).abs() < 0.5);
-    assert!((after[2][3] - (before[2][3] + 50.0)).abs() < 0.5, "the Channel view below grows");
+    assert!((after[2][3] - (before[2][3] + 50.0)).abs() < 0.5, "ARRI False Colour below grows");
     assert_fills(&grid);
 }
 
@@ -246,11 +246,11 @@ fn a_panel_missing_from_a_saved_layout_takes_the_first_free_cell_or_a_new_row() 
     // Saved without the heatmap: it takes the free cell. A display added too has none left, so it gets a new row.
     let mut names: Vec<&str> = NAMES.to_vec();
     names.push("New display");
-    let text = default_grid().to_text(&NAMES).replace("panel 2 3 1 1 Saturation heatmap\n", "");
-    let grid = PanelGrid::from_text(&names, &text);
-    let heatmap = grid.places()[5];
+    let text = "layout 1\ncolumns 0.2 0.2 0.2 0.2 0.2\nrows 0.28 0.28 0.22 0.22\npanel 0 0 3 2 Clean picture\npanel 3 0 2 1 Luma waveform\npanel 3 1 2 1 Vectorscope\npanel 0 2 5 1 ARRI False Colour\npanel 0 3 2 1 Skin tone\npanel 3 3 2 1 Stops False Colour\n";
+    let grid = PanelGrid::from_text(&names, text);
+    let heatmap = grid.places()[4];
     assert_eq!((heatmap.column, heatmap.row, heatmap.columns, heatmap.rows), (2, 3, 1, 1), "the free cell");
-    let new = grid.places()[8];
+    let new = grid.places()[7];
     assert_eq!((new.column, new.row, new.columns), (0, 4, 5), "a new row of its own");
     assert_eq!(grid.size(), (5, 5));
     assert_fills(&grid);
@@ -258,11 +258,11 @@ fn a_panel_missing_from_a_saved_layout_takes_the_first_free_cell_or_a_new_row() 
 
 #[test]
 fn a_layout_that_merely_lost_a_panel_still_recalls_with_the_hole_closed() {
-    // Saved with 8 Panels, recalled by a build without the Channel view: its cell is taken up by a neighbour.
+    // Saved with 7 Panels, recalled by a build without Skin tone: its cell is taken up by a neighbour.
     let text = default_grid().to_text(&NAMES);
-    let names: Vec<&str> = NAMES.iter().copied().filter(|n| *n != "Channel view").collect();
+    let names: Vec<&str> = NAMES.iter().copied().filter(|n| *n != "Skin tone").collect();
     let grid = PanelGrid::from_text(&names, &text);
-    assert_eq!(grid.places().len(), 7);
+    assert_eq!(grid.places().len(), 6);
     assert_ne!(grid, PanelGrid::default_for(&names), "the saved layout is recalled, not the default");
     assert_fills(&grid);
     // The Panels that were not next to the hole stay where they were.
@@ -323,10 +323,11 @@ fn a_panel_smaller_than_its_title_bar_still_gives_the_display_a_pixel() {
 #[test]
 fn the_vectorscope_is_two_cells_wide_and_borders_do_not_run_through_it() {
     let grid = default_grid();
-    let one = cell_of(&grid, "Skin tone");
     let scope = cell_of(&grid, "Vectorscope");
     let luma = cell_of(&grid, "Luma waveform");
-    assert!((scope[2] - (2.0 * one[2] + GAP)).abs() < 0.01, "two columns wide: {scope:?}");
+    let hero = cell_of(&grid, "Clean picture");
+    let one = (hero[2] - 2.0 * GAP) / 3.0;
+    assert!((scope[2] - (2.0 * one + GAP)).abs() < 0.01, "two columns wide: {scope:?}");
     assert_eq!(scope[2], luma[2], "as wide as the luma waveform above it");
     assert_eq!(grid.border_at(AREA, GAP, [scope[0] + scope[2] / 2.0 - 0.0, scope[1] + 50.0], 4.0), None, "no border through its middle");
     assert_fills(&grid);
@@ -339,10 +340,10 @@ fn a_layout_saved_with_the_colour_waveform_still_recalls_without_it() {
     let nine = "layout 1\ncolumns 0.2 0.2 0.2 0.2 0.2\nrows 0.28 0.28 0.22 0.22\npanel 0 0 3 2 Clean picture\npanel 3 0 2 1 Luma waveform\npanel 3 1 2 1 Vectorscope\npanel 0 2 2 2 Colour waveform\npanel 2 2 1 1 Channel view\npanel 3 2 2 1 ARRI False Colour\npanel 2 3 1 1 Saturation heatmap\npanel 3 3 1 1 Skin tone\npanel 4 3 1 1 Stops False Colour\n";
     let grid = PanelGrid::from_text(&NAMES, nine);
     assert_ne!(grid, default_grid(), "the saved layout is recalled, not the default");
-    assert_eq!(grid.places().len(), 8);
+    assert_eq!(grid.places().len(), 7);
     assert_fills(&grid);
     let clean = grid.places()[0];
-    assert_eq!((clean.column, clean.row, clean.columns, clean.rows), (0, 0, 3, 2));
+    assert_eq!((clean.column, clean.row, clean.columns), (0, 0, 3), "the Panels that stay keep their corner");
 }
 
 #[test]
@@ -379,7 +380,7 @@ fn swapping_a_panel_with_itself_changes_nothing() {
 #[test]
 fn a_swap_is_remembered_between_sessions() {
     let mut grid = default_grid();
-    grid.swap(0, 7);
+    grid.swap(0, 6);
     let back = PanelGrid::from_text(&NAMES, &grid.to_text(&NAMES));
     assert_eq!(back, grid);
     assert_ne!(back, default_grid());
@@ -402,8 +403,8 @@ fn a_press_on_a_display_starts_nothing() {
 #[test]
 fn a_press_in_a_gap_starts_a_border_drag_not_a_panel_drag() {
     let grid = default_grid();
-    let c = cell_of(&grid, "ARRI False Colour");
-    let level = c[1] + 10.0; // the height of ARRI False Colour's title bar
+    let c = cell_of(&grid, "Stops False Colour");
+    let level = c[1] + 10.0; // the height of Stops False Colour's title bar
     assert!(matches!(grid.press_at(AREA, GAP, [c[0] - GAP / 2.0, level], 3.0, 1.0), Some(Press::Border(Border::Column { .. }))));
     assert!(matches!(grid.press_at(AREA, GAP, [c[0] + 20.0, level], 3.0, 1.0), Some(Press::Panel(_))));
 }
@@ -416,4 +417,17 @@ fn the_panel_under_a_point_is_found_for_a_drop() {
     assert_eq!(grid.panel_at(AREA, GAP, [c[0] + c[2] / 2.0, c[1] + c[3] / 2.0]), Some(stops));
     assert_eq!(grid.panel_at(AREA, GAP, [c[0] - GAP / 2.0, c[1] + 5.0]), None, "a gap is no Panel");
     assert_eq!(grid.panel_at(AREA, GAP, [0.0, 0.0]), None, "outside the area");
+}
+
+#[test]
+fn a_layout_saved_with_the_channel_view_still_recalls_without_it() {
+    // Saved while the Window had 8 Panels (the Channel view 2 x 2 at the bottom left, #145): the others stay where
+    // they were, and the Channel view's cells are closed up by a neighbour (the #98 rule).
+    let eight = "layout 1\ncolumns 0.2 0.2 0.2 0.2 0.2\nrows 0.28 0.28 0.22 0.22\npanel 0 0 3 2 Clean picture\npanel 3 0 2 1 Luma waveform\npanel 3 1 2 1 Vectorscope\npanel 0 2 2 2 Channel view\npanel 2 2 3 1 ARRI False Colour\npanel 2 3 1 1 Saturation heatmap\npanel 3 3 1 1 Skin tone\npanel 4 3 1 1 Stops False Colour\n";
+    let grid = PanelGrid::from_text(&NAMES, eight);
+    assert_ne!(grid, default_grid(), "the saved layout is recalled, not the default");
+    assert_eq!(grid.places().len(), 7);
+    assert_fills(&grid);
+    let clean = grid.places()[0];
+    assert_eq!((clean.column, clean.row, clean.columns, clean.rows), (0, 0, 3, 2));
 }

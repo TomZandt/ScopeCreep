@@ -2,7 +2,7 @@
 
 Real-time, professional-grade video scopes for DaVinci Resolve, on their own screen.
 
-scopecreep takes the picture Resolve is playing (the **Feed**) and shows it next to **Scopes** (luma waveform with Colorise, vectorscopes) and **Picture Views** (clean picture, channel view with a Loupe, black and white, false colour, skin tone, saturation) in a separate app. The goals:
+scopecreep takes the picture Resolve is playing (the **Feed**) and shows it next to **Scopes** (luma waveform with Colorise, vectorscopes) and **Picture Views** (clean picture with channel chips and a Loupe, false colour, skin tone, saturation) in a separate app. The goals:
 
 - **Accurate.** Every pixel is measured at full resolution in 32-bit float, in the project's actual colour space. Anything that isn't exact is labelled as approximated.
 - **Invisible.** Turning scopecreep on must not change Resolve's playback frame rate.
@@ -27,7 +27,7 @@ Pre-alpha. Nothing to install yet.
 |---|---|---|
 | Feed protocol | `feed/PROTOCOL.md`, `feed/include/scopecreep_feed.h`, `feed/` crate | The shared-memory ring between Sender and app: spec, C header (Sender), Rust reader and synthetic writer (app, tests) |
 | Sender | `sender/` | C++ OFX plugin, Resolve's CUDA render path, async pinned copy into the Feed |
-| App | `app/` | Rust + wgpu: one window with a layout of 8 Panels (Scopes and Picture Views, the clean picture as the hero, one Vectorscope Panel showing 100 % and 200 % side by side), all showing the latest Feed frame (GPU, every pixel, full resolution). The gamut/legal warning, Highlight Neutrals, the CIE plot, the Black and white Panel and the Colour Waveform are built and tested but not in the Window (#95, #118, #145) |
+| App | `app/` | Rust + wgpu: one window with a layout of 7 Panels (Scopes and Picture Views, the clean picture as the hero, one Vectorscope Panel showing 100 % and 200 % side by side), all showing the latest Feed frame (GPU, every pixel, full resolution). The gamut/legal warning, Highlight Neutrals, the CIE plot, the Black and white Panel, the Colour Waveform and the Channel view are built and tested but not in the Window (#95, #118, #145, #162) |
 
 ```sh
 cargo test                       # Feed protocol (Rust and C against each other) and the app, driven at the Feed seam (waveform tests need a GPU)
@@ -105,6 +105,7 @@ DaVinci Resolve                                 scopecreep app (Rust + wgpu)
   - [0031](docs/adr/0031-the-gate-follows-a-drag-and-judges-fills-per-render.md): the gate follows a drag, and judges a cache fill by the time per render
   - [0032](docs/adr/0032-colorise-is-one-chip-on-the-luma-waveform.md): Colorise is one chip on the luma waveform, and the Colour Waveform leaves the Window
   - [0033](docs/adr/0033-waveform-scale-units-rename-positions-only.md): Waveform scale units rename positions; nits are for PQ and HLG and say what they assume
+  - [0034](docs/adr/0034-the-clean-picture-carries-the-channel-and-the-loupe.md): The clean picture carries the channel and the Loupe, and the Channel view leaves the Window
 - [docs/findings/](docs/findings/): what testing showed, one file per ticket.
 - [docs/research/](docs/research/): what public sources say, with dates and links.
 

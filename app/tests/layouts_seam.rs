@@ -4,10 +4,9 @@ use scopecreep::layouts::{Action, Click, Layouts, Rename, SLOTS, Shortcut, actio
 use scopecreep::panel_grid::{Border, PanelGrid};
 use scopecreep::settings::MenuRow;
 
-const NAMES: [&str; 8] = [
+const NAMES: [&str; 7] = [
     "Clean picture",
     "Luma waveform",
-    "Channel view",
     "ARRI False Colour",
     "Vectorscope",
     "Saturation heatmap",
@@ -154,7 +153,7 @@ fn a_panel_missing_from_a_layout_is_placed_in_the_first_free_cell() {
     let mut more = NAMES.to_vec();
     more.push("New display");
     let grid = layouts.recall(0, &more).unwrap();
-    let new = grid.places()[8];
+    let new = grid.places()[7];
     assert_eq!((new.column, new.row, new.columns, new.rows), (0, 4, 5, 1));
     assert_eq!(grid.size(), (5, 5));
 }
@@ -253,7 +252,7 @@ fn default_layout_is_the_default_grid_for_the_displays() {
 fn a_layout_saved_with_the_colour_waveform_still_recalls_and_the_other_panels_keep_their_places() {
     // The 9-Panel Window as it was before the Colour Waveform left it (#145), saved to the layouts file and read back.
     let mut before = NAMES.to_vec();
-    before.push("Colour waveform");
+    before.push("Channel view");
     let mut grid = PanelGrid::default_for(&before);
     grid.swap(0, 1);
     let mut layouts = Layouts::default();
