@@ -43,31 +43,61 @@ pub struct BarLayout {
 }
 
 fn number(v: f64) -> String {
-    if (v - v.round()).abs() < 1e-9 { format!("{}", v.round() as i64) } else { format!("{v}") }
+    if (v - v.round()).abs() < 1e-9 {
+        format!("{}", v.round() as i64)
+    } else {
+        format!("{v}")
+    }
 }
 
 impl ScaleBar<'_> {
     /// The strip's height in a Panel at `scale`: tick numbers, the bar and, when there are marks, their line.
     pub fn strip(&self, scale: f32) -> f32 {
-        let marks = if self.marks.is_empty() { 0.0 } else { GAP + LINE };
+        let marks = if self.marks.is_empty() {
+            0.0
+        } else {
+            GAP + LINE
+        };
         (LINE + BAR + GAP + marks) * scale
     }
 
     /// The layout in a Panel of `area` (left, top, width, height) at `scale`, or `None` when `on` is false or the
     /// Panel is too short to spare the strip. `with_text` false keeps the strip but drops its text (no picture yet).
-    pub fn layout(&self, on: bool, area: [f32; 4], scale: f32, with_text: bool) -> Option<BarLayout> {
+    pub fn layout(
+        &self,
+        on: bool,
+        area: [f32; 4],
+        scale: f32,
+        with_text: bool,
+    ) -> Option<BarLayout> {
         if !on || area[3] < BAR_MIN_HEIGHT * scale {
             return None;
         }
         let strip = self.strip(scale);
-        let legend = Legend { strip, bar_offset: LINE * scale, bar: BAR * scale };
+        let legend = Legend {
+            strip,
+            bar_offset: LINE * scale,
+            bar: BAR * scale,
+        };
         let top = area[1] + area[3] - strip;
         let (ticks, marks) = if with_text {
-            (self.ticks(area[0], area[2], top + LINE * scale / 2.0, scale), self.marks(area[0], area[2], top + (LINE + BAR + GAP) * scale + LINE * scale / 2.0, scale))
+            (
+                self.ticks(area[0], area[2], top + LINE * scale / 2.0, scale),
+                self.marks(
+                    area[0],
+                    area[2],
+                    top + (LINE + BAR + GAP) * scale + LINE * scale / 2.0,
+                    scale,
+                ),
+            )
         } else {
             (Vec::new(), Vec::new())
         };
-        Some(BarLayout { legend, ticks, marks })
+        Some(BarLayout {
+            legend,
+            ticks,
+            marks,
+        })
     }
 
     fn x(&self, left: f32, width: f32, v: f64) -> f32 {
@@ -88,7 +118,14 @@ impl ScaleBar<'_> {
         if text_width(&end) + text_width(&start) + char_width > width {
             return Vec::new();
         }
-        let make = |l: f32, w: f32, text: String| ScaleText { text, left: l, top: y, width: w, right_aligned: false, centred: true };
+        let make = |l: f32, w: f32, text: String| ScaleText {
+            text,
+            left: l,
+            top: y,
+            width: w,
+            right_aligned: false,
+            centred: true,
+        };
         let end_width = text_width(&end);
         let end_left = left + width - end_width;
         for step in self.steps {
@@ -104,15 +141,25 @@ impl ScaleBar<'_> {
                 texts.insert(0, (left, text_width(&start), start.clone()));
             }
             // A multiple of the step too near the end gives way to the end itself.
-            while texts.len() > 1 && texts.last().is_some_and(|(l, w, _)| l + w + char_width > end_left) {
+            while texts.len() > 1
+                && texts
+                    .last()
+                    .is_some_and(|(l, w, _)| l + w + char_width > end_left)
+            {
                 texts.pop();
             }
             texts.push((end_left, end_width, end.clone()));
-            if texts.windows(2).all(|p| p[0].0 + p[0].1 + char_width <= p[1].0) {
+            if texts
+                .windows(2)
+                .all(|p| p[0].0 + p[0].1 + char_width <= p[1].0)
+            {
                 return texts.into_iter().map(|(l, w, t)| make(l, w, t)).collect();
             }
         }
-        vec![make(left, text_width(&start), start), make(end_left, end_width, end)]
+        vec![
+            make(left, text_width(&start), start),
+            make(end_left, end_width, end),
+        ]
     }
 
     /// The marks that fit, most important first and each kept when it clears the ones kept before it, left to right.
@@ -126,10 +173,20 @@ impl ScaleBar<'_> {
             }
             let at = (self.x(left, width, m.from) + self.x(left, width, m.to)) / 2.0;
             let x0 = Self::inside(left, width, at, w);
-            if kept.iter().any(|k| x0 < k.left + k.width + char_width && x0 + w + char_width > k.left) {
+            if kept
+                .iter()
+                .any(|k| x0 < k.left + k.width + char_width && x0 + w + char_width > k.left)
+            {
                 continue;
             }
-            kept.push(ScaleText { text: m.text.to_string(), left: x0, top: y, width: w, right_aligned: false, centred: true });
+            kept.push(ScaleText {
+                text: m.text.to_string(),
+                left: x0,
+                top: y,
+                width: w,
+                right_aligned: false,
+                centred: true,
+            });
         }
         kept.sort_by(|a, b| a.left.total_cmp(&b.left));
         kept

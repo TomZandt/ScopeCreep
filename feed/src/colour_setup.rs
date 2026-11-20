@@ -1,7 +1,7 @@
 //! The Colour Setup block of a Feed slot (protocol 1.1, feed/PROTOCOL.md): a provenance and a few lines of
 //! `key=value` text. This crate only carries the block; what the keys mean is the app's business.
-use crate::layout::{S_COLOUR_SETUP, S_COLOUR_SETUP_BYTES, S_COLOUR_SETUP_PROVENANCE};
 use crate::layout::{COLOUR_SETUP_CAPACITY, Mapping};
+use crate::layout::{S_COLOUR_SETUP, S_COLOUR_SETUP_BYTES, S_COLOUR_SETUP_PROVENANCE};
 
 /// Where a Colour Setup came from.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -45,23 +45,35 @@ fn cut(text: &str) -> usize {
     if text.len() <= COLOUR_SETUP_CAPACITY {
         return text.len();
     }
-    text.as_bytes()[..COLOUR_SETUP_CAPACITY].iter().rposition(|&b| b == b'\n').map_or(0, |i| i + 1)
+    text.as_bytes()[..COLOUR_SETUP_CAPACITY]
+        .iter()
+        .rposition(|&b| b == b'\n')
+        .map_or(0, |i| i + 1)
 }
 
 impl SentColourSetup {
     pub fn new(provenance: Provenance, text: impl Into<String>) -> SentColourSetup {
-        SentColourSetup { provenance, text: text.into() }
+        SentColourSetup {
+            provenance,
+            text: text.into(),
+        }
     }
 
     /// The `key=value` lines in order, trimmed, as borrowed pairs. Lines without `=` and lines with an empty key
     /// are skipped.
     fn pairs(&self) -> impl Iterator<Item = (&str, &str)> {
-        self.text.lines().filter_map(|line| line.split_once('=')).map(|(k, v)| (k.trim(), v.trim())).filter(|(k, _)| !k.is_empty())
+        self.text
+            .lines()
+            .filter_map(|line| line.split_once('='))
+            .map(|(k, v)| (k.trim(), v.trim()))
+            .filter(|(k, _)| !k.is_empty())
     }
 
     /// The `key=value` lines in order, trimmed. Lines without `=` are skipped.
     pub fn entries(&self) -> Vec<(String, String)> {
-        self.pairs().map(|(k, v)| (k.to_string(), v.to_string())).collect()
+        self.pairs()
+            .map(|(k, v)| (k.to_string(), v.to_string()))
+            .collect()
     }
 
     /// The value of `key`, if the block has it.

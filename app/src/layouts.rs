@@ -30,7 +30,11 @@ pub fn shortcut(digit: u8, ctrl: bool, shift: bool, alt: bool) -> Option<Shortcu
         return None;
     }
     let slot = digit as usize - 1;
-    Some(if shift { Shortcut::Save(slot) } else { Shortcut::Recall(slot) })
+    Some(if shift {
+        Shortcut::Save(slot)
+    } else {
+        Shortcut::Recall(slot)
+    })
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -47,7 +51,12 @@ pub struct Layouts {
 
 /// A name the user typed, made safe to keep: no control characters, at most [`NAME_LENGTH`] characters, trimmed.
 fn clean(name: &str) -> String {
-    name.chars().filter(|c| !c.is_control()).take(NAME_LENGTH).collect::<String>().trim().to_string()
+    name.chars()
+        .filter(|c| !c.is_control())
+        .take(NAME_LENGTH)
+        .collect::<String>()
+        .trim()
+        .to_string()
 }
 
 fn default_name(slot: usize) -> String {
@@ -60,8 +69,13 @@ impl Layouts {
         if slot >= SLOTS {
             return;
         }
-        let name = self.slots[slot].as_ref().map_or_else(|| default_name(slot), |s| s.name.clone());
-        self.slots[slot] = Some(Slot { name, grid: grid.to_text(names) });
+        let name = self.slots[slot]
+            .as_ref()
+            .map_or_else(|| default_name(slot), |s| s.name.clone());
+        self.slots[slot] = Some(Slot {
+            name,
+            grid: grid.to_text(names),
+        });
     }
 
     /// The arrangement saved in `slot` for the displays called `names`; `None` when the slot is empty.
@@ -119,8 +133,12 @@ impl Layouts {
             if let Some(rest) = line.strip_prefix("slot ") {
                 finish(&mut current, &mut layouts);
                 let mut parts = rest.splitn(2, ' ');
-                let number = parts.next().and_then(|n| n.parse::<usize>().ok()).filter(|n| (1..=SLOTS).contains(n));
-                current = number.map(|n| (n - 1, parts.next().unwrap_or("").to_string(), String::new()));
+                let number = parts
+                    .next()
+                    .and_then(|n| n.parse::<usize>().ok())
+                    .filter(|n| (1..=SLOTS).contains(n));
+                current =
+                    number.map(|n| (n - 1, parts.next().unwrap_or("").to_string(), String::new()));
             } else if let Some((_, _, grid)) = current.as_mut() {
                 *grid += line;
                 *grid += "\n";
@@ -141,7 +159,10 @@ pub struct Rename {
 impl Rename {
     /// Start renaming `slot`, from its current name; `None` for an empty slot (there is nothing to name yet).
     pub fn start(layouts: &Layouts, slot: usize) -> Option<Rename> {
-        layouts.name(slot).map(|name| Rename { slot, text: name.to_string() })
+        layouts.name(slot).map(|name| Rename {
+            slot,
+            text: name.to_string(),
+        })
     }
 
     /// Typed text: control characters are ignored and the name stops at [`NAME_LENGTH`] characters.
@@ -193,7 +214,11 @@ pub fn action(layouts: &Layouts, value: &str, click: Click) -> Option<Action> {
     if value == "default" {
         return (click == Click::Plain).then_some(Action::Default);
     }
-    let slot = value.parse::<usize>().ok().filter(|n| (1..=SLOTS).contains(n))? - 1;
+    let slot = value
+        .parse::<usize>()
+        .ok()
+        .filter(|n| (1..=SLOTS).contains(n))?
+        - 1;
     let filled = layouts.name(slot).is_some();
     match click {
         Click::Plain if filled => Some(Action::Recall(slot)),
@@ -206,8 +231,16 @@ pub fn action(layouts: &Layouts, value: &str, click: Click) -> Option<Action> {
 /// the one being renamed shows what is typed), and a line saying how to use it. It is the same [`Menu`] the
 /// settings use, so it is drawn and hit-tested the same way.
 pub fn menu(layouts: &Layouts, renaming: Option<&Rename>) -> Menu {
-    let choice = |i: usize, text: String| MenuRow::Choice { key: KEY, value: VALUES[i], text, on: false };
-    let mut rows = vec![MenuRow::Heading("Layouts".to_string()), choice(0, "Default layout".to_string())];
+    let choice = |i: usize, text: String| MenuRow::Choice {
+        key: KEY,
+        value: VALUES[i],
+        text,
+        on: false,
+    };
+    let mut rows = vec![
+        MenuRow::Heading("Layouts".to_string()),
+        choice(0, "Default layout".to_string()),
+    ];
     for slot in 0..SLOTS {
         let text = match renaming.filter(|r| r.slot == slot) {
             Some(r) => format!("{}  {}|", slot + 1, r.text),
@@ -215,6 +248,11 @@ pub fn menu(layouts: &Layouts, renaming: Option<&Rename>) -> Menu {
         };
         rows.push(choice(slot + 1, text));
     }
-    rows.push(MenuRow::Heading("Shift-click saves, right-click renames".to_string()));
-    Menu { panel: usize::MAX, rows }
+    rows.push(MenuRow::Heading(
+        "Shift-click saves, right-click renames".to_string(),
+    ));
+    Menu {
+        panel: usize::MAX,
+        rows,
+    }
 }

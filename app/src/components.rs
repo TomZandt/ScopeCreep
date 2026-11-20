@@ -7,7 +7,7 @@
 //! The drawing is renderer-neutral: the app turns the prims into flat rectangles and glyphon text
 //! (`main.rs`), and the showcase example (`examples/style_showcase.rs`) draws every component in every state to
 //! an image.
-use crate::settings::{Menu, MenuRow, MENU_ROW};
+use crate::settings::{MENU_ROW, Menu, MenuRow};
 use crate::style::{self, Rgb};
 
 /// A piece of the drawing.
@@ -17,7 +17,13 @@ pub enum Prim {
     Rect { rect: [f32; 4], colour: [f32; 4] },
     /// Text in `face` and `colour`, set inside `rect` (left, top, width, height): aligned across it and centred
     /// down it, clipped to it.
-    Text { text: String, rect: [f32; 4], face: Face, colour: [u8; 3], align: Align },
+    Text {
+        text: String,
+        rect: [f32; 4],
+        face: Face,
+        colour: [u8; 3],
+        align: Align,
+    },
 }
 
 /// The type scale's faces.
@@ -60,21 +66,44 @@ pub enum State {
 pub const STATES: [State; 4] = [State::Normal, State::Hover, State::Pressed, State::Disabled];
 
 pub fn contains(rect: [f32; 4], point: [f32; 2]) -> bool {
-    point[0] >= rect[0] && point[0] < rect[0] + rect[2] && point[1] >= rect[1] && point[1] < rect[1] + rect[3]
+    point[0] >= rect[0]
+        && point[0] < rect[0] + rect[2]
+        && point[1] >= rect[1]
+        && point[1] < rect[1] + rect[3]
 }
 
 pub fn rect(rect: [f32; 4], colour: Rgb) -> Prim {
-    Prim::Rect { rect, colour: style::rgba(colour) }
+    Prim::Rect {
+        rect,
+        colour: style::rgba(colour),
+    }
 }
 
 pub fn text(text: &str, rect: [f32; 4], face: Face, colour: [u8; 3], align: Align) -> Prim {
-    Prim::Text { text: text.to_string(), rect, face, colour, align }
+    Prim::Text {
+        text: text.to_string(),
+        rect,
+        face,
+        colour,
+        align,
+    }
 }
 
 /// A fill with a border drawn round it, outside it (the border's weight is `LINE_WEIGHT`).
 fn framed(area: [f32; 4], border: Rgb, fill: Rgb, scale: f32) -> [Prim; 2] {
     let w = style::LINE_WEIGHT * scale;
-    [rect([area[0] - w, area[1] - w, area[2] + 2.0 * w, area[3] + 2.0 * w], border), rect(area, fill)]
+    [
+        rect(
+            [
+                area[0] - w,
+                area[1] - w,
+                area[2] + 2.0 * w,
+                area[3] + 2.0 * w,
+            ],
+            border,
+        ),
+        rect(area, fill),
+    ]
 }
 
 /// Room a line of `text` takes in the pure layout (the real width is only known once shaped).
@@ -149,7 +178,10 @@ pub enum ChipMode {
 pub fn clicked(mode: ChipMode, on: &[bool], index: usize) -> Vec<bool> {
     let mut next = on.to_vec();
     match mode {
-        ChipMode::Single => next.iter_mut().enumerate().for_each(|(i, v)| *v = i == index),
+        ChipMode::Single => next
+            .iter_mut()
+            .enumerate()
+            .for_each(|(i, v)| *v = i == index),
         ChipMode::Multiple => {
             let others = on.iter().enumerate().any(|(i, v)| *v && i != index);
             if let Some(v) = next.get_mut(index) {
@@ -158,7 +190,9 @@ pub fn clicked(mode: ChipMode, on: &[bool], index: usize) -> Vec<bool> {
         }
         ChipMode::OneOrNone => {
             let was_on = on.get(index).copied().unwrap_or(false);
-            next.iter_mut().enumerate().for_each(|(i, v)| *v = i == index && !was_on);
+            next.iter_mut()
+                .enumerate()
+                .for_each(|(i, v)| *v = i == index && !was_on);
         }
         ChipMode::Toggle => {
             if let Some(v) = next.get_mut(index) {
@@ -178,17 +212,26 @@ pub struct Chip {
 
 impl Chip {
     pub fn new(text: &str) -> Chip {
-        Chip { text: text.to_string(), channel: None }
+        Chip {
+            text: text.to_string(),
+            channel: None,
+        }
     }
 
     pub fn channel(text: &str, channel: Channel) -> Chip {
-        Chip { text: text.to_string(), channel: Some(channel) }
+        Chip {
+            text: text.to_string(),
+            channel: Some(channel),
+        }
     }
 
     /// Width and height.
     pub fn size(&self, scale: f32) -> [f32; 2] {
         let wide = 2.0 * style::SPACE_CHIP_PAD * scale + text_width(&self.text, scale);
-        [wide.max(style::SPACE_CHIP_MIN_WIDTH * scale), style::SPACE_CHIP_HEIGHT * scale]
+        [
+            wide.max(style::SPACE_CHIP_MIN_WIDTH * scale),
+            style::SPACE_CHIP_HEIGHT * scale,
+        ]
     }
 
     /// Where the chip is with its top left at `at`: also its hit area.
@@ -200,7 +243,10 @@ impl Chip {
     pub fn draw(&self, at: [f32; 2], on: bool, state: State, scale: f32) -> Vec<Prim> {
         let area = self.rect(at, scale);
         let colour = self.channel.map_or(style::ACCENT, Channel::colour);
-        vec![rect(area, fill(state, on, colour)), text(&self.text, area, Face::Label, ink(state, on), Align::Centre)]
+        vec![
+            rect(area, fill(state, on, colour)),
+            text(&self.text, area, Face::Label, ink(state, on), Align::Centre),
+        ]
     }
 }
 
@@ -219,7 +265,8 @@ pub fn chip_row(chips: &[Chip], at: [f32; 2], scale: f32) -> Vec<[f32; 4]> {
 
 /// The width of a row of chips.
 pub fn chip_row_width(chips: &[Chip], scale: f32) -> f32 {
-    chips.iter().map(|c| c.size(scale)[0]).sum::<f32>() + chips.len().saturating_sub(1) as f32 * style::SPACE_CHIP_GAP * scale
+    chips.iter().map(|c| c.size(scale)[0]).sum::<f32>()
+        + chips.len().saturating_sub(1) as f32 * style::SPACE_CHIP_GAP * scale
 }
 
 // ---- Segmented control ----
@@ -232,7 +279,9 @@ pub struct Segmented {
 
 impl Segmented {
     pub fn new(labels: &[&str]) -> Segmented {
-        Segmented { labels: labels.iter().map(|l| l.to_string()).collect() }
+        Segmented {
+            labels: labels.iter().map(|l| l.to_string()).collect(),
+        }
     }
 
     /// Each segment, left to right from `at`, a hairline apart: also the hit areas.
@@ -242,7 +291,8 @@ impl Segmented {
         self.labels
             .iter()
             .map(|label| {
-                let w = (2.0 * style::SPACE_SEGMENT_PAD * scale + text_width(label, scale)).max(style::SPACE_CHIP_MIN_WIDTH * scale);
+                let w = (2.0 * style::SPACE_SEGMENT_PAD * scale + text_width(label, scale))
+                    .max(style::SPACE_CHIP_MIN_WIDTH * scale);
                 let r = [left, at[1], w, style::SPACE_SEGMENT_HEIGHT * scale];
                 left += w + gap;
                 r
@@ -253,25 +303,51 @@ impl Segmented {
     /// Width and height of the whole control.
     pub fn size(&self, scale: f32) -> [f32; 2] {
         let rects = self.rects([0.0, 0.0], scale);
-        [rects.last().map_or(0.0, |r| r[0] + r[2]), style::SPACE_SEGMENT_HEIGHT * scale]
+        [
+            rects.last().map_or(0.0, |r| r[0] + r[2]),
+            style::SPACE_SEGMENT_HEIGHT * scale,
+        ]
     }
 
     /// The segment under `point`.
     pub fn hit(&self, at: [f32; 2], point: [f32; 2], scale: f32) -> Option<usize> {
-        self.rects(at, scale).iter().position(|r| contains(*r, point))
+        self.rects(at, scale)
+            .iter()
+            .position(|r| contains(*r, point))
     }
 
     /// `selected` is the one chosen; segment `hot` is in `state` (hover or pressed), the rest are normal. A
     /// disabled control has every segment disabled.
-    pub fn draw(&self, at: [f32; 2], selected: usize, hot: usize, state: State, scale: f32) -> Vec<Prim> {
+    pub fn draw(
+        &self,
+        at: [f32; 2],
+        selected: usize,
+        hot: usize,
+        state: State,
+        scale: f32,
+    ) -> Vec<Prim> {
         let rects = self.rects(at, scale);
         let mut prims = Vec::new();
         if let (Some(first), Some(last)) = (rects.first(), rects.last()) {
             let w = style::LINE_WEIGHT * scale;
-            prims.push(rect([first[0] - w, first[1] - w, last[0] + last[2] - first[0] + 2.0 * w, first[3] + 2.0 * w], style::LINE_BORDER));
+            prims.push(rect(
+                [
+                    first[0] - w,
+                    first[1] - w,
+                    last[0] + last[2] - first[0] + 2.0 * w,
+                    first[3] + 2.0 * w,
+                ],
+                style::LINE_BORDER,
+            ));
         }
         for (i, (r, label)) in rects.iter().zip(&self.labels).enumerate() {
-            let own = if state == State::Disabled { State::Disabled } else if i == hot { state } else { State::Normal };
+            let own = if state == State::Disabled {
+                State::Disabled
+            } else if i == hot {
+                state
+            } else {
+                State::Normal
+            };
             let on = i == selected;
             prims.push(rect(*r, fill(own, on, style::ACCENT)));
             prims.push(text(label, *r, Face::Label, ink(own, on), Align::Centre));
@@ -305,18 +381,37 @@ pub struct Slider {
 
 impl Slider {
     pub fn layout(&self, at: [f32; 2], scale: f32) -> SliderLayout {
-        let (height, track_w, thick) = (style::SPACE_SLIDER_HEIGHT * scale, style::SPACE_SLIDER_TRACK * scale, style::SPACE_SLIDER_TRACK_THICKNESS * scale);
+        let (height, track_w, thick) = (
+            style::SPACE_SLIDER_HEIGHT * scale,
+            style::SPACE_SLIDER_TRACK * scale,
+            style::SPACE_SLIDER_TRACK_THICKNESS * scale,
+        );
         let thumb = style::SPACE_SLIDER_THUMB * scale;
         // The thumb overhangs the track by half its width at either end, so the track starts that far in.
-        let track = [at[0] + thumb / 2.0, at[1] + (height - thick) / 2.0, track_w, thick];
+        let track = [
+            at[0] + thumb / 2.0,
+            at[1] + (height - thick) / 2.0,
+            track_w,
+            thick,
+        ];
         let value = self.value.clamp(0.0, 1.0);
         let x = track[0] + value * track_w;
-        let number = [track[0] + track_w + thumb / 2.0 + style::SPACE_CHIP_GAP * scale, at[1], style::SPACE_SLIDER_NUMBER * scale, height];
+        let number = [
+            track[0] + track_w + thumb / 2.0 + style::SPACE_CHIP_GAP * scale,
+            at[1],
+            style::SPACE_SLIDER_NUMBER * scale,
+            height,
+        ];
         SliderLayout {
             row: [at[0], at[1], number[0] + number[2] - at[0], height],
             track,
             filled: [track[0], track[1], x - track[0], thick],
-            thumb: [x - thumb / 2.0, at[1] + (height - thumb) / 2.0, thumb, thumb],
+            thumb: [
+                x - thumb / 2.0,
+                at[1] + (height - thumb) / 2.0,
+                thumb,
+                thumb,
+            ],
             number,
         }
     }
@@ -325,7 +420,12 @@ impl Slider {
     pub fn grab(&self, at: [f32; 2], scale: f32) -> [f32; 4] {
         let l = self.layout(at, scale);
         let overhang = style::SPACE_SLIDER_THUMB * scale / 2.0;
-        [l.track[0] - overhang, l.row[1], l.track[2] + 2.0 * overhang, l.row[3]]
+        [
+            l.track[0] - overhang,
+            l.row[1],
+            l.track[2] + 2.0 * overhang,
+            l.row[3],
+        ]
     }
 
     /// The value (0 to 1) a pointer at `x` means.
@@ -345,9 +445,26 @@ impl Slider {
         };
         vec![
             rect(l.track, style::SURFACE_CONTROL),
-            rect(l.filled, if disabled { style::STATE_PRESSED } else { style::ACCENT }),
+            rect(
+                l.filled,
+                if disabled {
+                    style::STATE_PRESSED
+                } else {
+                    style::ACCENT
+                },
+            ),
             rect(l.thumb, thumb),
-            text(&self.number, l.number, Face::Label, if disabled { style::TEXT_DISABLED } else { style::TEXT_PRIMARY }, Align::Right),
+            text(
+                &self.number,
+                l.number,
+                Face::Label,
+                if disabled {
+                    style::TEXT_DISABLED
+                } else {
+                    style::TEXT_PRIMARY
+                },
+                Align::Right,
+            ),
         ]
     }
 }
@@ -365,29 +482,67 @@ pub fn popover(menu: &Menu, area: [f32; 4], cursor: [f32; 2], scale: f32) -> Vec
         match row {
             MenuRow::Heading(label) => {
                 let left = area[0] + style::SPACE_MENU_HEADING_LEFT * scale;
-                prims.push(text(label, [left, top, text_width, row_rect[3]], Face::Label, style::TEXT_SECONDARY, Align::Left));
+                prims.push(text(
+                    label,
+                    [left, top, text_width, row_rect[3]],
+                    Face::Label,
+                    style::TEXT_SECONDARY,
+                    Align::Left,
+                ));
             }
             MenuRow::Slider { amount, value, .. } => {
-                let state = if contains(row_rect, cursor) { State::Hover } else { State::Normal };
-                prims.extend(Slider { value: amount.fraction(*value), number: amount.text(*value) }.draw(Menu::slider_origin(area, i, scale), state, scale));
+                let state = if contains(row_rect, cursor) {
+                    State::Hover
+                } else {
+                    State::Normal
+                };
+                prims.extend(
+                    Slider {
+                        value: amount.fraction(*value),
+                        number: amount.text(*value),
+                    }
+                    .draw(Menu::slider_origin(area, i, scale), state, scale),
+                );
             }
             MenuRow::Reset { text: label, .. } => {
                 if contains(row_rect, cursor) {
                     prims.push(rect(row_rect, style::STATE_HOVER));
                 }
                 let left = area[0] + style::SPACE_MENU_TEXT_LEFT * scale;
-                prims.push(text(label, [left, top, text_width, row_rect[3]], Face::Label, style::TEXT_SECONDARY, Align::Left));
+                prims.push(text(
+                    label,
+                    [left, top, text_width, row_rect[3]],
+                    Face::Label,
+                    style::TEXT_SECONDARY,
+                    Align::Left,
+                ));
             }
-            MenuRow::Choice { text: label, on, .. } => {
+            MenuRow::Choice {
+                text: label, on, ..
+            } => {
                 if contains(row_rect, cursor) {
                     prims.push(rect(row_rect, style::STATE_HOVER));
                 }
                 if *on {
                     let side = style::SPACE_MENU_MARK * scale;
-                    prims.push(rect([area[0] + style::SPACE_MENU_MARK_LEFT * scale, top + (row_rect[3] - side) / 2.0, side, side], style::STATE_ON));
+                    prims.push(rect(
+                        [
+                            area[0] + style::SPACE_MENU_MARK_LEFT * scale,
+                            top + (row_rect[3] - side) / 2.0,
+                            side,
+                            side,
+                        ],
+                        style::STATE_ON,
+                    ));
                 }
                 let left = area[0] + style::SPACE_MENU_TEXT_LEFT * scale;
-                prims.push(text(label, [left, top, text_width, row_rect[3]], Face::Label, style::TEXT_PRIMARY, Align::Left));
+                prims.push(text(
+                    label,
+                    [left, top, text_width, row_rect[3]],
+                    Face::Label,
+                    style::TEXT_PRIMARY,
+                    Align::Left,
+                ));
             }
         }
     }
@@ -404,7 +559,9 @@ pub struct Tooltip {
 
 impl Tooltip {
     pub fn new(text: &str) -> Tooltip {
-        Tooltip { text: text.to_string() }
+        Tooltip {
+            text: text.to_string(),
+        }
     }
 
     /// The lines of its text (`\n` breaks a line).
@@ -415,8 +572,14 @@ impl Tooltip {
     pub fn size(&self, scale: f32) -> [f32; 2] {
         let (size, line) = Face::Label.metrics();
         let lines = self.lines();
-        let widest = lines.iter().map(|l| text_width(l, scale)).fold(0.0, f32::max);
-        [widest + 2.0 * style::SPACE_TOOLTIP_PAD * scale, (size * line * lines.len() as f32 + 2.0 * style::SPACE_TOOLTIP_PAD) * scale]
+        let widest = lines
+            .iter()
+            .map(|l| text_width(l, scale))
+            .fold(0.0, f32::max);
+        [
+            widest + 2.0 * style::SPACE_TOOLTIP_PAD * scale,
+            (size * line * lines.len() as f32 + 2.0 * style::SPACE_TOOLTIP_PAD) * scale,
+        ]
     }
 
     /// Where it goes for something at `anchor`: centred under it, above it when there is no room below, and
@@ -425,16 +588,29 @@ impl Tooltip {
         let [w, h] = self.size(scale);
         let gap = style::SPACE_TOOLTIP_GAP * scale;
         let below = anchor[1] + anchor[3] + gap;
-        let top = if below + h <= window[1] { below } else { (anchor[1] - gap - h).max(0.0) };
-        let left = (anchor[0] + (anchor[2] - w) / 2.0).min(window[0] - w).max(0.0);
+        let top = if below + h <= window[1] {
+            below
+        } else {
+            (anchor[1] - gap - h).max(0.0)
+        };
+        let left = (anchor[0] + (anchor[2] - w) / 2.0)
+            .min(window[0] - w)
+            .max(0.0);
         [left, top, w, h]
     }
 
     pub fn draw(&self, area: [f32; 4], scale: f32) -> Vec<Prim> {
-        let mut prims: Vec<Prim> = framed(area, style::LINE_BORDER, style::SURFACE_MENU, scale).into();
+        let mut prims: Vec<Prim> =
+            framed(area, style::LINE_BORDER, style::SURFACE_MENU, scale).into();
         let lines = self.lines();
         if lines.len() == 1 {
-            prims.push(text(&self.text, area, Face::Label, style::TEXT_PRIMARY, Align::Centre));
+            prims.push(text(
+                &self.text,
+                area,
+                Face::Label,
+                style::TEXT_PRIMARY,
+                Align::Centre,
+            ));
             return prims;
         }
         // Several lines, each left-aligned inside the padding.
@@ -442,7 +618,18 @@ impl Tooltip {
         let (size, line) = Face::Label.metrics();
         let row = size * line * scale;
         for (i, l) in lines.iter().enumerate() {
-            prims.push(text(l, [area[0] + pad, area[1] + pad + row * i as f32, area[2] - 2.0 * pad, row], Face::Label, style::TEXT_PRIMARY, Align::Left));
+            prims.push(text(
+                l,
+                [
+                    area[0] + pad,
+                    area[1] + pad + row * i as f32,
+                    area[2] - 2.0 * pad,
+                    row,
+                ],
+                Face::Label,
+                style::TEXT_PRIMARY,
+                Align::Left,
+            ));
         }
         prims
     }
@@ -504,7 +691,14 @@ impl TitleBar {
             right -= style::SPACE_CHIP_GAP * scale;
         }
         let chips_left = (right - chips_width).max(bar[0] + pad);
-        let chips = chip_row(&self.chips, [chips_left, bar[1] + (bar[3] - style::SPACE_CHIP_HEIGHT * scale) / 2.0], scale);
+        let chips = chip_row(
+            &self.chips,
+            [
+                chips_left,
+                bar[1] + (bar[3] - style::SPACE_CHIP_HEIGHT * scale) / 2.0,
+            ],
+            scale,
+        );
         let room = (chips_left - gap - (bar[0] + pad)).max(0.0);
         let name_width = text_width(&self.name, scale);
         let name_cut = name_width > room;
@@ -512,17 +706,49 @@ impl TitleBar {
         let tags_width = text_width(&self.tags, scale);
         let fits = !name_cut && !self.tags.is_empty() && room - name_width - gap >= tags_width;
         let tags = fits.then(|| [name[0] + name[2] + gap, bar[1], tags_width, bar[3]]);
-        TitleLayout { bar, name, tags, chips, settings, tags_in_tooltip: !self.tags.is_empty() && !fits, name_cut }
+        TitleLayout {
+            bar,
+            name,
+            tags,
+            chips,
+            settings,
+            tags_in_tooltip: !self.tags.is_empty() && !fits,
+            name_cut,
+        }
     }
 
     /// `chips` are `(on, state)` per chip; `settings` the button's state.
-    pub fn draw(&self, area: [f32; 4], chips: &[(bool, State)], settings: State, scale: f32) -> Vec<Prim> {
+    pub fn draw(
+        &self,
+        area: [f32; 4],
+        chips: &[(bool, State)],
+        settings: State,
+        scale: f32,
+    ) -> Vec<Prim> {
         let l = self.layout(area, scale);
         let line = style::LINE_WEIGHT * scale;
-        let mut prims = vec![rect(l.bar, style::SURFACE_PANEL), rect([l.bar[0], l.bar[1] + l.bar[3] - line, l.bar[2], line], style::LINE_BORDER)];
-        prims.push(text(&self.name, l.name, Face::Label, style::TEXT_PRIMARY, Align::Left));
+        let mut prims = vec![
+            rect(l.bar, style::SURFACE_PANEL),
+            rect(
+                [l.bar[0], l.bar[1] + l.bar[3] - line, l.bar[2], line],
+                style::LINE_BORDER,
+            ),
+        ];
+        prims.push(text(
+            &self.name,
+            l.name,
+            Face::Label,
+            style::TEXT_PRIMARY,
+            Align::Left,
+        ));
         if let Some(tags) = l.tags {
-            prims.push(text(&self.tags, tags, Face::Scale, style::TEXT_MUTED, Align::Left));
+            prims.push(text(
+                &self.tags,
+                tags,
+                Face::Scale,
+                style::TEXT_MUTED,
+                Align::Left,
+            ));
         }
         for ((chip, r), (on, state)) in self.chips.iter().zip(&l.chips).zip(chips) {
             prims.extend(chip.draw([r[0], r[1]], *on, *state, scale));
@@ -541,11 +767,18 @@ pub fn settings_button(area: [f32; 4], state: State, scale: f32) -> Vec<Prim> {
         prims.push(rect(area, fill(state, false, style::ACCENT)));
     }
     let dot = 2.0 * style::LINE_WEIGHT * scale;
-    let colour = if state == State::Disabled { style::TEXT_DISABLED } else { style::TEXT_PRIMARY };
+    let colour = if state == State::Disabled {
+        style::TEXT_DISABLED
+    } else {
+        style::TEXT_PRIMARY
+    };
     let step = 2.0 * dot;
     for i in 0..3 {
         let x = area[0] + area[2] / 2.0 + (i as f32 - 1.0) * step - dot / 2.0;
-        prims.push(rect([x, area[1] + (area[3] - dot) / 2.0, dot, dot], style::rgb(colour)));
+        prims.push(rect(
+            [x, area[1] + (area[3] - dot) / 2.0, dot, dot],
+            style::rgb(colour),
+        ));
     }
     prims
 }
@@ -562,15 +795,24 @@ pub enum BarKind {
 
 impl BarKind {
     pub fn height(self, scale: f32) -> f32 {
-        scale * match self {
-            BarKind::Top => style::SPACE_TOP_BAR,
-            BarKind::Status => style::SPACE_STATUS_ROW,
-        }
+        scale
+            * match self {
+                BarKind::Top => style::SPACE_TOP_BAR,
+                BarKind::Status => style::SPACE_STATUS_ROW,
+            }
     }
 }
 
 /// A bar across `width` at (`left`, `top`): `start` at its left, `end` at its right.
-pub fn bar(kind: BarKind, left: f32, top: f32, width: f32, start: &str, end: &str, scale: f32) -> Vec<Prim> {
+pub fn bar(
+    kind: BarKind,
+    left: f32,
+    top: f32,
+    width: f32,
+    start: &str,
+    end: &str,
+    scale: f32,
+) -> Vec<Prim> {
     let h = kind.height(scale);
     let area = [left, top, width, h];
     let line = style::LINE_WEIGHT * scale;
@@ -583,8 +825,20 @@ pub fn bar(kind: BarKind, left: f32, top: f32, width: f32, start: &str, end: &st
     vec![
         rect(area, fill_colour),
         rect([left, line_top, width, line], style::LINE_BORDER),
-        text(start, [left + pad, top, half, h], Face::Label, ink, Align::Left),
-        text(end, [left + pad + half, top, half, h], Face::Label, style::TEXT_SECONDARY, Align::Right),
+        text(
+            start,
+            [left + pad, top, half, h],
+            Face::Label,
+            ink,
+            Align::Left,
+        ),
+        text(
+            end,
+            [left + pad + half, top, half, h],
+            Face::Label,
+            style::TEXT_SECONDARY,
+            Align::Right,
+        ),
     ]
 }
 
@@ -629,7 +883,11 @@ impl LegendStrip {
             let fits = text_width(&item.label, scale) <= cell;
             labels.push(fits.then(|| [x, top + bar_h, cell, strip[3] - bar_h]));
         }
-        LegendLayout { strip, bars, labels }
+        LegendLayout {
+            strip,
+            bars,
+            labels,
+        }
     }
 
     pub fn draw(&self, left: f32, top: f32, width: f32, scale: f32) -> Vec<Prim> {
@@ -638,7 +896,13 @@ impl LegendStrip {
         for ((item, bar), label) in self.items.iter().zip(&l.bars).zip(&l.labels) {
             prims.push(rect(*bar, item.colour));
             if let Some(label_rect) = label {
-                prims.push(text(&item.label, *label_rect, Face::Scale, style::TEXT_MUTED, Align::Centre));
+                prims.push(text(
+                    &item.label,
+                    *label_rect,
+                    Face::Scale,
+                    style::TEXT_MUTED,
+                    Align::Centre,
+                ));
             }
         }
         prims

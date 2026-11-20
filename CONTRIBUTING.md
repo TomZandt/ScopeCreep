@@ -76,7 +76,7 @@ Finish every item, unprompted. Work is not done while any item is open.
 ### A ticket
 
 1. **Tests green:** `cargo test --workspace` (plain `cargo test` skips the accuracy crate), `make -C sender test`, and `cd harness && python3 -m unittest discover -s tests`.
-2. **Records written:** what testing showed in `docs/findings/<ticket>-*.md` with a row in its README; every decision that is hard to reverse, surprising or a real trade-off as an ADR in `docs/adr/`, listed in `README.md` under Documentation; new terms in `GLOSSARY.md`; a line under `## [Unreleased]` in `CHANGELOG.md` for anything a user can see.
+2. **Records written** (ADR list, findings index and changelog are checked by `scripts/check-done.sh`): what testing showed in `docs/findings/<ticket>-*.md` with a row in its README; every decision that is hard to reverse, surprising or a real trade-off as an ADR in `docs/adr/`, listed in `README.md` under Documentation; new terms in `GLOSSARY.md`; a line under `## [Unreleased]` in `CHANGELOG.md` for anything a user can see.
 3. **Loose ends filed:** anything unverified is a GitHub issue (`ready-for-human` when it needs a person at Resolve), linked from the findings.
 4. **Merged and closed:** squash-merged with one Conventional Commit, pushed, the issue closed with a comment pointing at the commit and findings.
 5. **Clean:** the ticket's branches (local and on GitHub) and worktrees deleted; Resolve left on the project that was open, with no scratch projects.

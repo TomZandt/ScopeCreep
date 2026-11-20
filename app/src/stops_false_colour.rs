@@ -20,15 +20,15 @@
 //! sixth of a stop of grey, pink within a sixth of a stop of one stop over: the ColorChecker routine). The legend
 //! is a horizontal bar of swatches under the picture, with the stop numbers under them and captions over them.
 use crate::colour_setup::{OutputSpace, TimelineSpace};
-use crate::output_conversion::Plan;
+use crate::components::ChipMode;
 use crate::display::{Display, DisplayContext, ScaleText};
 use crate::gpu_frame::GpuFrame;
+use crate::output_conversion::Plan;
 use crate::picture_stage::{Legend, PictureStage, Rule};
 use crate::settings::{Choice, SettingDef, Settings};
-use crate::components::ChipMode;
 use crate::toolbar::{BW_DEFAULT_GREY, BW_SETTING, BW_TOOLBAR, ToolbarChip, ToolbarDef};
 use scopecreep_accuracy::colorchecker::luma_weights_adapted_to_d65;
-use scopecreep_accuracy::colour::{AP1, DWG, P3_D65, REC2020, REC709};
+use scopecreep_accuracy::colour::{AP1, DWG, P3_D65, REC709, REC2020};
 use std::sync::{Arc, Mutex};
 
 /// The display's name, which its settings are kept under.
@@ -41,10 +41,14 @@ pub const MIDDLE_GREY: f64 = 0.18;
 
 /// The edges between the 17 zones, in stops from middle grey: the midpoints between neighbouring stop marks.
 /// Black is below the first and white above the last.
-pub const ZONE_EDGES: [f32; 16] = [-6.5, -5.5, -4.5, -3.5, -2.5, -1.5, -0.75, -0.25, 0.25, 0.75, 1.5, 2.5, 3.5, 4.5, 5.5, 6.5];
+pub const ZONE_EDGES: [f32; 16] = [
+    -6.5, -5.5, -4.5, -3.5, -2.5, -1.5, -0.75, -0.25, 0.25, 0.75, 1.5, 2.5, 3.5, 4.5, 5.5, 6.5,
+];
 
 /// The stop marks the 15 named zones go by, from the darkest (zone 1; zone 0 is black, zone 16 white).
-pub const ZONE_NAMES: [&str; 15] = ["-6", "-5", "-4", "-3", "-2", "-1", "-1/2", "18 %", "+1/2", "+1", "+2", "+3", "+4", "+5", "+6"];
+pub const ZONE_NAMES: [&str; 15] = [
+    "-6", "-5", "-4", "-3", "-2", "-1", "-1/2", "18 %", "+1/2", "+1", "+2", "+3", "+4", "+5", "+6",
+];
 
 /// The colour of each zone, from black (more than 6 1/2 stops under) to white (more than 6 1/2 over). Cool for
 /// under, plain grey for middle grey, warm for over; every zone its own colour. scopecreep's own scale (ADR 0010).
@@ -144,9 +148,32 @@ pub static SETTINGS: [SettingDef; 3] = [
         key: MODE_SETTING,
         label: "Mode",
         amount: None,
-        choices: &[Choice { value: "zones", text: "Full zones" }, Choice { value: "grey-plus-one", text: "Grey and +1 stop" }],
+        choices: &[
+            Choice {
+                value: "zones",
+                text: "Full zones",
+            },
+            Choice {
+                value: "grey-plus-one",
+                text: "Grey and +1 stop",
+            },
+        ],
     },
-    SettingDef { key: LEGEND_SETTING, label: "Legend", amount: None, choices: &[Choice { value: "on", text: "Legend on" }, Choice { value: "off", text: "Legend off" }] },
+    SettingDef {
+        key: LEGEND_SETTING,
+        label: "Legend",
+        amount: None,
+        choices: &[
+            Choice {
+                value: "on",
+                text: "Legend on",
+            },
+            Choice {
+                value: "off",
+                text: "Legend off",
+            },
+        ],
+    },
     BW_DEFAULT_GREY,
 ];
 
@@ -157,8 +184,18 @@ pub static TOOLBAR: [ToolbarDef; 2] = [
         key: MODE_SETTING,
         mode: ChipMode::Single,
         chips: &[
-            ToolbarChip { value: "zones", text: "Zones", tooltip: "Full zones: every pixel painted by its stop", channel: None },
-            ToolbarChip { value: "grey-plus-one", text: "Grey +1", tooltip: "Grey and +1 stop: 18 % grey green, one stop over pink", channel: None },
+            ToolbarChip {
+                value: "zones",
+                text: "Zones",
+                tooltip: "Full zones: every pixel painted by its stop",
+                channel: None,
+            },
+            ToolbarChip {
+                value: "grey-plus-one",
+                text: "Grey +1",
+                tooltip: "Grey and +1 stop: 18 % grey green, one stop over pink",
+                channel: None,
+            },
         ],
     },
     BW_TOOLBAR[0],
@@ -184,7 +221,11 @@ pub struct StopsMap {
 impl StopsMap {
     /// The stops of the pixel at `x` across and `y` down from the top of the picture.
     pub fn at(&self, x: u32, y: u32) -> f32 {
-        let row = if self.bottom_up { self.height - 1 - y } else { y };
+        let row = if self.bottom_up {
+            self.height - 1 - y
+        } else {
+            y
+        };
         self.stops[(row * self.width + x) as usize]
     }
 }
@@ -219,7 +260,11 @@ struct Geometry {
 impl Geometry {
     fn new(area: [f32; 4], scale: f32, mode: Mode, legend_on: bool) -> Geometry {
         let [left, top, width, height] = area;
-        let swatches = if mode == Mode::Zones { ZONE_COLOURS.len() } else { 2 };
+        let swatches = if mode == Mode::Zones {
+            ZONE_COLOURS.len()
+        } else {
+            2
+        };
         let (swatch, line, gap) = (SWATCH_ROW * scale, TEXT_LINE * scale, GAP * scale);
         let full = 2.0 * line + swatch + 2.0 * gap;
         let (strip, texts) = if !legend_on {
@@ -232,9 +277,25 @@ impl Geometry {
             (0.0, false)
         };
         let bottom = top + height;
-        let swatch_top = if texts { bottom - strip + line + gap } else { bottom - strip };
-        let legend = (strip > 0.0).then_some(Legend { strip, bar_offset: swatch_top - (bottom - strip), bar: swatch });
-        Geometry { legend, bar_left: left, bar_width: if strip > 0.0 { width } else { 0.0 }, swatches, caption_y: bottom - strip + line / 2.0, number_y: swatch_top + swatch + gap + line / 2.0, texts }
+        let swatch_top = if texts {
+            bottom - strip + line + gap
+        } else {
+            bottom - strip
+        };
+        let legend = (strip > 0.0).then_some(Legend {
+            strip,
+            bar_offset: swatch_top - (bottom - strip),
+            bar: swatch,
+        });
+        Geometry {
+            legend,
+            bar_left: left,
+            bar_width: if strip > 0.0 { width } else { 0.0 },
+            swatches,
+            caption_y: bottom - strip + line / 2.0,
+            number_y: swatch_top + swatch + gap + line / 2.0,
+            texts,
+        }
     }
 
     /// The captions and numbers of the legend: each number centred under its own swatch, captions over the zones
@@ -248,9 +309,20 @@ impl Geometry {
         let cell = width / self.swatches as f32;
         let char_width = CHAR_WIDTH * scale;
         let text_width = |text: &str| text.chars().count() as f32 * char_width;
-        let under = |text: &str, i: usize| ScaleText { text: text.to_string(), left: left + i as f32 * cell, top: self.number_y, width: cell, right_aligned: false, centred: true };
+        let under = |text: &str, i: usize| ScaleText {
+            text: text.to_string(),
+            left: left + i as f32 * cell,
+            top: self.number_y,
+            width: cell,
+            right_aligned: false,
+            centred: true,
+        };
         if mode == Mode::GreyAndPlusOne {
-            return if text_width("18 % grey") + 2.0 * char_width <= cell { vec![under("18 % grey", 0), under("+1", 1)] } else { Vec::new() };
+            return if text_width("18 % grey") + 2.0 * char_width <= cell {
+                vec![under("18 % grey", 0), under("+1", 1)]
+            } else {
+                Vec::new()
+            };
         }
         let mut texts = Vec::new();
         // Zone 8 is middle grey: the numbers of every second zone from it are the ones that stay.
@@ -275,7 +347,11 @@ impl Geometry {
             ("Underexposed", left, -1),
             ("Overexposed", left + width, 1),
             ("Dark skin", left + (DARK_SKIN_ZONE as f32 + 0.5) * cell, 0),
-            ("Light skin", left + (LIGHT_SKIN_ZONE as f32 + 0.5) * cell, 0),
+            (
+                "Light skin",
+                left + (LIGHT_SKIN_ZONE as f32 + 0.5) * cell,
+                0,
+            ),
         ];
         let mut kept: Vec<(f32, f32)> = Vec::new();
         for (text, at, side) in wanted {
@@ -285,11 +361,23 @@ impl Geometry {
                 1 => at - w,
                 _ => at - w / 2.0,
             };
-            if x0 < left - 0.5 || x0 + w > left + width + 0.5 || kept.iter().any(|(a, b)| x0 < b + char_width && x0 + w > a - char_width) {
+            if x0 < left - 0.5
+                || x0 + w > left + width + 0.5
+                || kept
+                    .iter()
+                    .any(|(a, b)| x0 < b + char_width && x0 + w > a - char_width)
+            {
                 continue;
             }
             kept.push((x0, x0 + w));
-            texts.push(ScaleText { text: text.to_string(), left: x0, top: self.caption_y, width: w, right_aligned: false, centred: true });
+            texts.push(ScaleText {
+                text: text.to_string(),
+                left: x0,
+                top: self.caption_y,
+                width: w,
+                right_aligned: false,
+                centred: true,
+            });
         }
         texts
     }
@@ -301,8 +389,16 @@ fn wgsl_vec3(c: [f32; 3]) -> String {
 
 /// The decoding and the zones, shared by drawing and by the read-back.
 fn common_shader() -> String {
-    let edges = ZONE_EDGES.iter().map(|e| format!("{e:.3}")).collect::<Vec<_>>().join(", ");
-    let colours = ZONE_COLOURS.iter().map(|c| wgsl_vec3(*c)).collect::<Vec<_>>().join(", ");
+    let edges = ZONE_EDGES
+        .iter()
+        .map(|e| format!("{e:.3}"))
+        .collect::<Vec<_>>()
+        .join(", ");
+    let colours = ZONE_COLOURS
+        .iter()
+        .map(|c| wgsl_vec3(*c))
+        .collect::<Vec<_>>()
+        .join(", ");
     format!(
         r#"
 struct Values {{
@@ -421,18 +517,34 @@ enum Basis {
     Timeline(Curve),
     /// The Output picture, decoded through a display curve: the Timeline Colour Space is not known or not one this
     /// view decodes. `note` says which curve and why, for the label.
-    Output { curve: Curve, weights: [f64; 3], note: String },
+    Output {
+        curve: Curve,
+        weights: [f64; 3],
+        note: String,
+    },
     /// Nothing can be measured. The Panel says so in `lines`; `why` is for the label.
     Unreadable { lines: Vec<String>, why: String },
 }
 
 /// The curve, primaries and name of an Output Colour Space this view can decode as display light.
 fn output_curve(space: &OutputSpace) -> Option<(Curve, [f64; 3], &'static str)> {
-    let rec709 = (Curve::Gamma24, luma_weights_adapted_to_d65(&REC709), "gamma 2.4");
+    let rec709 = (
+        Curve::Gamma24,
+        luma_weights_adapted_to_d65(&REC709),
+        "gamma 2.4",
+    );
     Some(match space {
         OutputSpace::Rec709Gamma24 | OutputSpace::Rec709Bt1886 | OutputSpace::Srgb => rec709,
-        OutputSpace::P3D65 | OutputSpace::P3Dci => (Curve::Gamma26, luma_weights_adapted_to_d65(&P3_D65), "gamma 2.6"),
-        OutputSpace::Rec2020Gamma24 => (Curve::Gamma24, luma_weights_adapted_to_d65(&REC2020), "gamma 2.4"),
+        OutputSpace::P3D65 | OutputSpace::P3Dci => (
+            Curve::Gamma26,
+            luma_weights_adapted_to_d65(&P3_D65),
+            "gamma 2.6",
+        ),
+        OutputSpace::Rec2020Gamma24 => (
+            Curve::Gamma24,
+            luma_weights_adapted_to_d65(&REC2020),
+            "gamma 2.4",
+        ),
         OutputSpace::Other(name) if name.starts_with("Rec.709") => rec709,
         _ => return None,
     })
@@ -486,7 +598,11 @@ pub fn reading_tags(context: &DisplayContext) -> Vec<String> {
         Basis::Timeline(_) => {}
         Basis::Output { .. } => {
             tags.push("approximated".into());
-            if context.colour_setup.as_ref().is_none_or(|c| crate::output_conversion::Plan::for_setup(Some(&c.setup)).method().is_none()) {
+            if context.colour_setup.as_ref().is_none_or(|c| {
+                crate::output_conversion::Plan::for_setup(Some(&c.setup))
+                    .method()
+                    .is_none()
+            }) {
                 tags.push("assumed".into());
                 tags.push("unconverted".into());
             }
@@ -518,8 +634,13 @@ impl State {
     /// The frame, curve and luma weights to measure with, `None` when nothing can be measured.
     fn source(&self, config: &Config) -> Option<(GpuFrame, Curve, [f64; 3])> {
         match &config.basis {
-            Basis::Timeline(curve) => self.timeline.clone().map(|f| (f, *curve, curve.luma_weights())),
-            Basis::Output { curve, weights, .. } => self.output.clone().map(|f| (f, *curve, *weights)),
+            Basis::Timeline(curve) => self
+                .timeline
+                .clone()
+                .map(|f| (f, *curve, curve.luma_weights())),
+            Basis::Output { curve, weights, .. } => {
+                self.output.clone().map(|f| (f, *curve, *weights))
+            }
             Basis::Unreadable { .. } => None,
         }
     }
@@ -540,9 +661,26 @@ pub struct StopsFalseColour {
 }
 
 impl StopsFalseColour {
-    pub fn new(device: &wgpu::Device, queue: &wgpu::Queue, target: wgpu::TextureFormat) -> StopsFalseColour {
-        let stage = PictureStage::new::<[u32; VALUES_WORDS]>(device, queue, target, false, Rule { label: "stops false colour", wgsl: draw_shader(), has_legend: true });
-        let module = device.create_shader_module(wgpu::ShaderModuleDescriptor { label: Some("stops false colour measure"), source: wgpu::ShaderSource::Wgsl(measure_shader().into()) });
+    pub fn new(
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+        target: wgpu::TextureFormat,
+    ) -> StopsFalseColour {
+        let stage = PictureStage::new::<[u32; VALUES_WORDS]>(
+            device,
+            queue,
+            target,
+            false,
+            Rule {
+                label: "stops false colour",
+                wgsl: draw_shader(),
+                has_legend: true,
+            },
+        );
+        let module = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+            label: Some("stops false colour measure"),
+            source: wgpu::ShaderSource::Wgsl(measure_shader().into()),
+        });
         let measure = device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
             label: Some("stops false colour measure"),
             layout: None,
@@ -551,7 +689,12 @@ impl StopsFalseColour {
             compilation_options: Default::default(),
             cache: None,
         });
-        let params = device.create_buffer(&wgpu::BufferDescriptor { label: Some("stops false colour params"), size: (VALUES_WORDS * 4) as u64, usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST, mapped_at_creation: false });
+        let params = device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("stops false colour params"),
+            size: (VALUES_WORDS * 4) as u64,
+            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
         let view = StopsFalseColour {
             device: device.clone(),
             queue: queue.clone(),
@@ -559,8 +702,18 @@ impl StopsFalseColour {
             zoom: Default::default(),
             measure,
             params,
-            config: Arc::new(Mutex::new(Config { basis: Basis::for_setup(None), mode: Mode::Zones, legend: true, grey: true, colour_label: String::new(), timeline: String::new() })),
-            state: Arc::new(Mutex::new(State { timeline: None, output: None })),
+            config: Arc::new(Mutex::new(Config {
+                basis: Basis::for_setup(None),
+                mode: Mode::Zones,
+                legend: true,
+                grey: true,
+                colour_label: String::new(),
+                timeline: String::new(),
+            })),
+            state: Arc::new(Mutex::new(State {
+                timeline: None,
+                output: None,
+            })),
         };
         view.configure(&DisplayContext::default());
         view
@@ -568,7 +721,14 @@ impl StopsFalseColour {
 
     /// The values the shaders read, for `frame` decoded with `curve` and `weights`; `swatches` in the legend, and
     /// `background` fills the Panel with the neutral background instead of a picture.
-    fn values(config: &Config, frame: &GpuFrame, curve: Curve, weights: [f64; 3], swatches: usize, background: bool) -> [u32; VALUES_WORDS] {
+    fn values(
+        config: &Config,
+        frame: &GpuFrame,
+        curve: Curve,
+        weights: [f64; 3],
+        swatches: usize,
+        background: bool,
+    ) -> [u32; VALUES_WORDS] {
         let f = |v: f32| v.to_bits();
         [
             f(weights[0] as f32),
@@ -592,11 +752,19 @@ impl StopsFalseColour {
         let state = self.state.lock().unwrap();
         let config = self.config.lock().unwrap();
         let (frame, curve, weights) = state.source(&config)?;
-        self.queue.write_buffer(&self.params, 0, bytemuck::cast_slice(&Self::values(&config, &frame, curve, weights, 0, false)));
+        self.queue.write_buffer(
+            &self.params,
+            0,
+            bytemuck::cast_slice(&Self::values(&config, &frame, curve, weights, 0, false)),
+        );
         let (width, height) = (frame.width, frame.height);
         let out = self.device.create_texture(&wgpu::TextureDescriptor {
             label: Some("stops map"),
-            size: wgpu::Extent3d { width, height, depth_or_array_layers: 1 },
+            size: wgpu::Extent3d {
+                width,
+                height,
+                depth_or_array_layers: 1,
+            },
             mip_level_count: 1,
             sample_count: 1,
             dimension: wgpu::TextureDimension::D2,
@@ -608,13 +776,31 @@ impl StopsFalseColour {
             label: Some("stops measure"),
             layout: &self.measure.get_bind_group_layout(0),
             entries: &[
-                wgpu::BindGroupEntry { binding: 0, resource: self.params.as_entire_binding() },
-                wgpu::BindGroupEntry { binding: 1, resource: wgpu::BindingResource::TextureView(&frame.texture.create_view(&Default::default())) },
-                wgpu::BindGroupEntry { binding: 2, resource: wgpu::BindingResource::TextureView(&out.create_view(&Default::default())) },
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: self.params.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: wgpu::BindingResource::TextureView(
+                        &frame.texture.create_view(&Default::default()),
+                    ),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 2,
+                    resource: wgpu::BindingResource::TextureView(
+                        &out.create_view(&Default::default()),
+                    ),
+                },
             ],
         });
         let row = (width * 4).next_multiple_of(wgpu::COPY_BYTES_PER_ROW_ALIGNMENT);
-        let readback = self.device.create_buffer(&wgpu::BufferDescriptor { label: Some("stops readback"), size: (row * height) as u64, usage: wgpu::BufferUsages::MAP_READ | wgpu::BufferUsages::COPY_DST, mapped_at_creation: false });
+        let readback = self.device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("stops readback"),
+            size: (row * height) as u64,
+            usage: wgpu::BufferUsages::MAP_READ | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
         let mut encoder = self.device.create_command_encoder(&Default::default());
         {
             let mut pass = encoder.begin_compute_pass(&Default::default());
@@ -624,15 +810,40 @@ impl StopsFalseColour {
         }
         encoder.copy_texture_to_buffer(
             out.as_image_copy(),
-            wgpu::TexelCopyBufferInfo { buffer: &readback, layout: wgpu::TexelCopyBufferLayout { offset: 0, bytes_per_row: Some(row), rows_per_image: None } },
-            wgpu::Extent3d { width, height, depth_or_array_layers: 1 },
+            wgpu::TexelCopyBufferInfo {
+                buffer: &readback,
+                layout: wgpu::TexelCopyBufferLayout {
+                    offset: 0,
+                    bytes_per_row: Some(row),
+                    rows_per_image: None,
+                },
+            },
+            wgpu::Extent3d {
+                width,
+                height,
+                depth_or_array_layers: 1,
+            },
         );
         self.queue.submit([encoder.finish()]);
         readback.map_async(wgpu::MapMode::Read, .., |_| {});
-        self.device.poll(wgpu::PollType::wait_indefinitely()).expect("the GPU finishes");
+        self.device
+            .poll(wgpu::PollType::wait_indefinitely())
+            .expect("the GPU finishes");
         let mapped = readback.get_mapped_range(..).expect("mapped");
-        let stops = (0..height as usize).flat_map(|y| bytemuck::cast_slice::<u8, f32>(&mapped[y * row as usize..y * row as usize + width as usize * 4]).to_vec()).collect();
-        Some(StopsMap { width, height, bottom_up: frame.bottom_up, stops })
+        let stops = (0..height as usize)
+            .flat_map(|y| {
+                bytemuck::cast_slice::<u8, f32>(
+                    &mapped[y * row as usize..y * row as usize + width as usize * 4],
+                )
+                .to_vec()
+            })
+            .collect();
+        Some(StopsMap {
+            width,
+            height,
+            bottom_up: frame.bottom_up,
+            stops,
+        })
     }
 }
 
@@ -643,14 +854,21 @@ impl crate::zoom::PictureZoom for StopsFalseColour {
 
     /// The size of the picture on screen, when there is one to zoom (not while a message fills the Panel).
     fn picture_size(&self) -> Option<[u32; 2]> {
-        let measurable = self.state.lock().unwrap().source(&self.config.lock().unwrap()).is_some();
+        let measurable = self
+            .state
+            .lock()
+            .unwrap()
+            .source(&self.config.lock().unwrap())
+            .is_some();
         if measurable { self.stage.size() } else { None }
     }
 
     /// The height the legend takes under the picture: what zoom keeps free.
     fn strip(&self, area: [f32; 4], scale: f32) -> f32 {
         let config = self.config.lock().unwrap();
-        Geometry::new(area, scale, config.mode, config.legend).legend.map_or(0.0, |l| l.strip)
+        Geometry::new(area, scale, config.mode, config.legend)
+            .legend
+            .map_or(0.0, |l| l.strip)
     }
 }
 
@@ -671,9 +889,18 @@ impl Display for StopsFalseColour {
     fn configure(&self, context: &DisplayContext) {
         let mut config = self.config.lock().unwrap();
         config.basis = Basis::for_setup(context.colour_setup.as_ref());
-        config.timeline = context.colour_setup.as_ref().map(|c| c.setup.timeline.clone()).unwrap_or_default();
+        config.timeline = context
+            .colour_setup
+            .as_ref()
+            .map(|c| c.setup.timeline.clone())
+            .unwrap_or_default();
         config.colour_label = context.colour_label.clone();
-        config.mode = if context.settings.get(MODE_SETTING).map(String::as_str) == Some("grey-plus-one") { Mode::GreyAndPlusOne } else { Mode::Zones };
+        config.mode =
+            if context.settings.get(MODE_SETTING).map(String::as_str) == Some("grey-plus-one") {
+                Mode::GreyAndPlusOne
+            } else {
+                Mode::Zones
+            };
         config.grey = context.settings.get(BW_SETTING).is_none_or(|v| v == "on");
         config.legend = context.settings.get(LEGEND_SETTING).map(String::as_str) != Some("off");
     }
@@ -694,11 +921,23 @@ impl Display for StopsFalseColour {
     /// picture through a display curve (approximated), or the reason nothing is measured.
     fn label(&self) -> String {
         let config = self.config.lock().unwrap();
-        let mode = if config.mode == Mode::Zones { "full zones" } else { "grey and +1 stop" };
+        let mode = if config.mode == Mode::Zones {
+            "full zones"
+        } else {
+            "grey and +1 stop"
+        };
         let basis = match &config.basis {
-            Basis::Timeline(curve) if curve.approximated() => format!("stops from 18 % grey, approximated: {} is a display curve, inverted, not scene light", config.timeline),
-            Basis::Timeline(_) => format!("stops from 18 % grey, scene light decoded from {}", config.timeline),
-            Basis::Output { note, .. } => format!("stops from 18 % grey, approximated: display-referred, {note}"),
+            Basis::Timeline(curve) if curve.approximated() => format!(
+                "stops from 18 % grey, approximated: {} is a display curve, inverted, not scene light",
+                config.timeline
+            ),
+            Basis::Timeline(_) => format!(
+                "stops from 18 % grey, scene light decoded from {}",
+                config.timeline
+            ),
+            Basis::Output { note, .. } => {
+                format!("stops from 18 % grey, approximated: display-referred, {note}")
+            }
             Basis::Unreadable { why, .. } => why.clone(),
         };
         format!("{NAME}  ·  {mode}  ·  {basis}  ·  {}", config.colour_label)
@@ -713,18 +952,37 @@ impl Display for StopsFalseColour {
         // The message's background needs some frame to bind; with none there is no picture at all.
         let (frame, curve, weights, background) = match state.source(&config) {
             Some((frame, curve, weights)) => (frame, curve, weights, false),
-            None => match (&config.basis, state.timeline.clone().or_else(|| state.output.clone())) {
-                (Basis::Unreadable { .. }, Some(frame)) => (frame, Curve::Gamma24, [1.0 / 3.0; 3], true),
+            None => match (
+                &config.basis,
+                state.timeline.clone().or_else(|| state.output.clone()),
+            ) {
+                (Basis::Unreadable { .. }, Some(frame)) => {
+                    (frame, Curve::Gamma24, [1.0 / 3.0; 3], true)
+                }
                 _ => return,
             },
         };
         self.stage.show_now(&frame);
         let geometry = Geometry::new(area, scale, config.mode, config.legend);
-        let values = Self::values(&config, &frame, curve, weights, geometry.swatches, background);
+        let values = Self::values(
+            &config,
+            &frame,
+            curve,
+            weights,
+            geometry.swatches,
+            background,
+        );
         if background {
             self.stage.fill(pass, area, surface, &values);
         } else {
-            self.stage.draw_zoomed(pass, area, surface, &values, geometry.legend, &self.zoom.model());
+            self.stage.draw_zoomed(
+                pass,
+                area,
+                surface,
+                &values,
+                geometry.legend,
+                &self.zoom.model(),
+            );
         }
     }
 
@@ -744,7 +1002,18 @@ impl Display for StopsFalseColour {
             let line = TEXT_LINE * scale;
             let middle = area[1] + area[3] / 2.0;
             let first = middle - line * (lines.len() as f32 - 1.0) / 2.0;
-            return lines.iter().enumerate().map(|(i, text)| ScaleText { text: text.clone(), left: area[0], top: first + i as f32 * line, width: area[2], right_aligned: false, centred: true }).collect();
+            return lines
+                .iter()
+                .enumerate()
+                .map(|(i, text)| ScaleText {
+                    text: text.clone(),
+                    left: area[0],
+                    top: first + i as f32 * line,
+                    width: area[2],
+                    right_aligned: false,
+                    centred: true,
+                })
+                .collect();
         }
         if !config.legend {
             return Vec::new();

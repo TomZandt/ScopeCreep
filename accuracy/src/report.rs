@@ -109,10 +109,26 @@ mod tests {
 
     #[test]
     fn an_exact_label_needs_an_exact_measurement_and_less_may_always_be_claimed() {
-        assert_eq!(Claim::from_label("Clean picture  ·  1920 × 1080  ·  … (from project)  ·  Output Conversion exact"), Claim::Exact);
-        assert_eq!(Claim::from_label("…  ·  Output Conversion exact for ACES 2.0"), Claim::Exact);
-        assert_eq!(Claim::from_label("…  ·  Output Conversion approximated: DaVinci tone mapping not applied (unpublished)"), Claim::Approximated);
-        assert_eq!(Claim::from_label("…  ·  as sent, no Output Conversion"), Claim::None);
+        assert_eq!(
+            Claim::from_label(
+                "Clean picture  ·  1920 × 1080  ·  … (from project)  ·  Output Conversion exact"
+            ),
+            Claim::Exact
+        );
+        assert_eq!(
+            Claim::from_label("…  ·  Output Conversion exact for ACES 2.0"),
+            Claim::Exact
+        );
+        assert_eq!(
+            Claim::from_label(
+                "…  ·  Output Conversion approximated: DaVinci tone mapping not applied (unpublished)"
+            ),
+            Claim::Approximated
+        );
+        assert_eq!(
+            Claim::from_label("…  ·  as sent, no Output Conversion"),
+            Claim::None
+        );
         assert!(claim_holds(Claim::Exact, Verdict::Exact));
         assert!(claim_holds(Claim::Exact, Verdict::ExactToeNoise));
         assert!(!claim_holds(Claim::Exact, Verdict::Approximated));

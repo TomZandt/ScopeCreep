@@ -8,8 +8,10 @@ A personal commercial product for professional colourists and editors, not emplo
 cargo test --workspace                          # all Rust tests; plain `cargo test` skips the accuracy crate; seam tests need the GPU
 make -C sender test                             # the Sender against a fake CUDA host (GPU, no Resolve)
 cd harness && python3 -m unittest discover -s tests
+cargo fmt && cargo clippy --workspace --all-targets -- -D warnings   # CI runs both; the pre-commit hook runs fmt --check
+scripts/check-done.sh                           # the mechanical Definition-of-done items
 cargo run -p scopecreep-feed --bin feed-synth   # a moving test card into the Feed, no Resolve needed
-git config core.hooksPath .githooks             # once per clone (commit-msg hook)
+git config core.hooksPath .githooks             # once per clone (commit-msg and pre-commit hooks)
 ```
 
 ## Layout
@@ -51,9 +53,12 @@ Anything learned by testing is copied into `docs/findings/` when its ticket clos
 
 ## Definition of done
 
-Before reporting a ticket or a release finished, complete every item of "Definition of done" in `CONTRIBUTING.md` (tests, findings, ADRs, changelog, issues, GitHub release, cleanup), without being asked. After an implement-spec run, the spec-level records are yours too: the spec issues (progress comment, close when done), the README ADR list, the findings index and the glossary. After app changes, reinstall the launcher copy (`cargo build --release -p scopecreep && install -Dm755 target/release/scopecreep ~/.local/bin/scopecreep`).
+Before reporting a ticket, a spec run or a release finished, run `scripts/check-done.sh` (ADR list, findings index, changelog, launcher copy: it prints what is open and fixes nothing), then complete every item of "Definition of done" in `CONTRIBUTING.md`, without being asked. After an implement-spec run, the spec-level records are yours too: the spec issues (progress comment, close when done) and the glossary. To fix a stale launcher: `cargo build --release -p scopecreep && install -Dm755 target/release/scopecreep ~/.local/bin/scopecreep`.
 
 ## Keeping the repo clean
 
 Follow "Keeping the repo clean" in `CONTRIBUTING.md`: work to do lives only in GitHub issues; ticket branches are squash-merged with one Conventional Commit; merged branches and worktrees are deleted; no generated data in git; `main` is always releasable. `scripts/check-commits.sh` checks commit messages (also run by the `commit-msg` hook and CI).
 
+## Review
+
+The reviewer reads `CODING_STANDARDS.md` (judgement calls only; mechanical rules are checks).

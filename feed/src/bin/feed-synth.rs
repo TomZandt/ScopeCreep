@@ -8,11 +8,14 @@
 //! the first time an app is listening. `--instances 2` plays two Sender instances rendering every frame in step
 //! (two Senders on one timeline). Started while another feed-synth (or Resolve) owns the Feed, it joins as a
 //! guest, as a second Resolve would: its renders are registered but no frames are sent.
-use scopecreep_feed::{FeedWriter, FrameMeta, SenderIdentity, WriteError, default_path, now_ns, synthetic};
+use scopecreep_feed::{
+    FeedWriter, FrameMeta, SenderIdentity, WriteError, default_path, now_ns, synthetic,
+};
 use std::time::{Duration, Instant};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let (mut width, mut height, mut fps, mut frames, mut path) = (1920u32, 1080u32, 24.0f64, u64::MAX, default_path());
+    let (mut width, mut height, mut fps, mut frames, mut path) =
+        (1920u32, 1080u32, 24.0f64, u64::MAX, default_path());
     let mut instances = 1u32;
     let mut identity = SenderIdentity::default();
     let mut args = std::env::args().skip(1);
@@ -29,7 +32,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             "--path" => path = value()?.into(),
             "--instances" => instances = value()?.parse::<u32>()?.max(1),
             "--host" => identity.host = value()?,
-            _ => return Err(format!("unknown argument {arg}; see the top of feed-synth.rs").into()),
+            _ => {
+                return Err(format!("unknown argument {arg}; see the top of feed-synth.rs").into());
+            }
         }
     }
     let slot_bytes = width as usize * height as usize * 16;
@@ -37,8 +42,15 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     for i in 1..=instances {
         writer.register(i, fps);
     }
-    let role = if writer.is_guest() { "guest in another Sender's Feed: registering renders, sending nothing" } else { "waiting for an app" };
-    println!("synthetic Sender on {}: {width}x{height} at {fps} fps, {instances} instance(s) ({role})", path.display());
+    let role = if writer.is_guest() {
+        "guest in another Sender's Feed: registering renders, sending nothing"
+    } else {
+        "waiting for an app"
+    };
+    println!(
+        "synthetic Sender on {}: {width}x{height} at {fps} fps, {instances} instance(s) ({role})",
+        path.display()
+    );
     let start = Instant::now();
     let (mut frame, mut written, mut idle) = (0u64, 0u64, 0u64);
     let mut had_reader = false;
@@ -56,17 +68,36 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         let render_ns = now_ns();
         let present = writer.reader_present(render_ns);
         if present != had_reader {
-            println!("{}", if present { "app attached: sending frames" } else { "app gone: doing nothing" });
+            println!(
+                "{}",
+                if present {
+                    "app attached: sending frames"
+                } else {
+                    "app gone: doing nothing"
+                }
+            );
             had_reader = present;
         }
         for instance in 1..=instances {
-            let meta = FrameMeta { width, height, frame_time: 86400.0 + frame as f64, frame_rate: fps, render_ns: now_ns(), sender_instance: instance };
+            let meta = FrameMeta {
+                width,
+                height,
+                frame_time: 86400.0 + frame as f64,
+                frame_rate: fps,
+                render_ns: now_ns(),
+                sender_instance: instance,
+            };
             if !present {
                 writer.note_render(instance, meta.frame_time, meta.render_ns);
                 idle += 1;
                 continue;
             }
-            synthetic::move_test_card_marker(&mut card, width, height, frame + 7 * (instance as u64 - 1));
+            synthetic::move_test_card_marker(
+                &mut card,
+                width,
+                height,
+                frame + 7 * (instance as u64 - 1),
+            );
             match writer.write_frame(&meta, &card) {
                 Ok(_) => written += 1,
                 Err(WriteError::TooLarge) => writer.replace(4, slot_bytes)?, // first frame: make the ring

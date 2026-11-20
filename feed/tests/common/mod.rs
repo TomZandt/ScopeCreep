@@ -31,7 +31,11 @@ pub fn forge_header_u64(path: &std::path::Path, offset: u64, value: u64) {
 }
 
 pub fn temp_feed(name: &str) -> TempFeed {
-    let p = PathBuf::from(format!("/dev/shm/scfeed-test-{}-{}", std::process::id(), name));
+    let p = PathBuf::from(format!(
+        "/dev/shm/scfeed-test-{}-{}",
+        std::process::id(),
+        name
+    ));
     let _ = std::fs::remove_file(&p);
     TempFeed(p)
 }

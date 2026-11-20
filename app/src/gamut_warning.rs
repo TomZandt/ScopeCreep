@@ -13,9 +13,9 @@
 use crate::colour_setup::Provenance;
 use crate::display::{Display, DisplayContext};
 use crate::gpu_frame::GpuFrame;
+use crate::measurement::Measurement;
 use crate::picture_stage::{PictureStage, Rule};
 use crate::settings::{Amount, Choice, SettingDef};
-use crate::measurement::Measurement;
 use std::sync::{Arc, Mutex};
 
 /// EBU R103: signals up to -5 % and 105 % are tolerated.
@@ -59,20 +59,55 @@ const R103_SETTING: &str = "r103";
 /// Where the fade to blue starts, in % of the range. The range stops at 50 % and the red threshold's starts there,
 /// so blue can never be set above red. The lists earlier versions saved ("5", "10", "15", "20") are the numbers
 /// they name.
-pub const BLUE_AMOUNT: Amount = Amount { min: 0.0, max: 50.0, step: 1.0, default: 10.0, unit: " %", decimals: 0, legacy: &[] };
+pub const BLUE_AMOUNT: Amount = Amount {
+    min: 0.0,
+    max: 50.0,
+    step: 1.0,
+    default: 10.0,
+    unit: " %",
+    decimals: 0,
+    legacy: &[],
+};
 
 /// Where the fade to red starts, in % of the range (see [`BLUE_AMOUNT`]; earlier lists "80" to "95" are the numbers
 /// they name).
-pub const RED_AMOUNT: Amount = Amount { min: 50.0, max: 100.0, step: 1.0, default: 90.0, unit: " %", decimals: 0, legacy: &[] };
+pub const RED_AMOUNT: Amount = Amount {
+    min: 50.0,
+    max: 100.0,
+    step: 1.0,
+    default: 90.0,
+    unit: " %",
+    decimals: 0,
+    legacy: &[],
+};
 
 static SETTINGS: [SettingDef; 3] = [
-    SettingDef { key: LOW_SETTING, label: "Blue starts at", amount: Some(BLUE_AMOUNT), choices: &[] },
-    SettingDef { key: HIGH_SETTING, label: "Red starts at", amount: Some(RED_AMOUNT), choices: &[] },
+    SettingDef {
+        key: LOW_SETTING,
+        label: "Blue starts at",
+        amount: Some(BLUE_AMOUNT),
+        choices: &[],
+    },
+    SettingDef {
+        key: HIGH_SETTING,
+        label: "Red starts at",
+        amount: Some(RED_AMOUNT),
+        choices: &[],
+    },
     SettingDef {
         key: R103_SETTING,
         label: "EBU R103 tolerance (-5 % to 105 %)",
         amount: None,
-        choices: &[Choice { value: "off", text: "Off" }, Choice { value: "on", text: "On" }],
+        choices: &[
+            Choice {
+                value: "off",
+                text: "Off",
+            },
+            Choice {
+                value: "on",
+                text: "On",
+            },
+        ],
     },
 ];
 
@@ -90,18 +125,31 @@ pub struct Warning {
 
 impl Default for Warning {
     fn default() -> Warning {
-        Warning { low: 0.10, high: 0.90, r103: false, measurement: Measurement::default() }
+        Warning {
+            low: 0.10,
+            high: 0.90,
+            r103: false,
+            measurement: Measurement::default(),
+        }
     }
 }
 
 impl Warning {
     pub fn from_context(context: &DisplayContext) -> Warning {
-        let percent = |amount: Amount, key: &str| amount.read(context.settings.get(key).map(String::as_str)) / 100.0;
+        let percent = |amount: Amount, key: &str| {
+            amount.read(context.settings.get(key).map(String::as_str)) / 100.0
+        };
         Warning {
             low: percent(BLUE_AMOUNT, LOW_SETTING),
             high: percent(RED_AMOUNT, HIGH_SETTING),
-            r103: context.settings.get(R103_SETTING).is_some_and(|v| v == "on"),
-            measurement: crate::output_conversion::measurement(context.colour_setup.clone(), context.luma),
+            r103: context
+                .settings
+                .get(R103_SETTING)
+                .is_some_and(|v| v == "on"),
+            measurement: crate::output_conversion::measurement(
+                context.colour_setup.clone(),
+                context.luma,
+            ),
         }
     }
 
@@ -130,10 +178,18 @@ impl Warning {
             Some(Provenance::Project) => range.to_string(),
             Some(Provenance::Manual) => format!("{range} set manually"),
         };
-        let space = if m.assumed { format!("{} assumed, judged as sent, unconverted", m.space.name()) } else { m.space.name().to_string() };
+        let space = if m.assumed {
+            format!("{} assumed, judged as sent, unconverted", m.space.name())
+        } else {
+            m.space.name().to_string()
+        };
         let percent = |f: f32| format!("{:.0} %", f * 100.0);
         let tolerance = if self.r103 {
-            format!("EBU R103 tolerance on ({} to {})", percent(self.lower_limit()), percent(self.upper_limit()))
+            format!(
+                "EBU R103 tolerance on ({} to {})",
+                percent(self.lower_limit()),
+                percent(self.upper_limit())
+            )
         } else {
             "no tolerance".to_string()
         };
@@ -155,9 +211,26 @@ pub struct GamutWarning {
 }
 
 impl GamutWarning {
-    pub fn new(device: &wgpu::Device, queue: &wgpu::Queue, target: wgpu::TextureFormat) -> GamutWarning {
-        let stage = PictureStage::new::<[f32; 8]>(device, queue, target, false, Rule { label: "gamut warning", wgsl: RULE.into(), has_legend: false });
-        GamutWarning { stage, warning: Arc::new(Mutex::new(Warning::default())) }
+    pub fn new(
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+        target: wgpu::TextureFormat,
+    ) -> GamutWarning {
+        let stage = PictureStage::new::<[f32; 8]>(
+            device,
+            queue,
+            target,
+            false,
+            Rule {
+                label: "gamut warning",
+                wgsl: RULE.into(),
+                has_legend: false,
+            },
+        );
+        GamutWarning {
+            stage,
+            warning: Arc::new(Mutex::new(Warning::default())),
+        }
     }
 }
 
@@ -183,9 +256,30 @@ impl Display for GamutWarning {
     }
 
     /// Draw the picture's warning, scaled to fit inside `area` with the frame's shape kept.
-    fn draw(&self, pass: &mut wgpu::RenderPass<'_>, area: [f32; 4], surface: [f32; 2], _scale: f32) {
+    fn draw(
+        &self,
+        pass: &mut wgpu::RenderPass<'_>,
+        area: [f32; 4],
+        surface: [f32; 2],
+        _scale: f32,
+    ) {
         let warning = *self.warning.lock().unwrap();
         let [r, g, b] = warning.measurement.weights();
-        self.stage.draw(pass, area, surface, &[warning.low, warning.lower_limit(), warning.high, warning.upper_limit(), r as f32, g as f32, b as f32, 0.0], None);
+        self.stage.draw(
+            pass,
+            area,
+            surface,
+            &[
+                warning.low,
+                warning.lower_limit(),
+                warning.high,
+                warning.upper_limit(),
+                r as f32,
+                g as f32,
+                b as f32,
+                0.0,
+            ],
+            None,
+        );
     }
 }

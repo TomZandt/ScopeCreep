@@ -27,8 +27,17 @@ impl Bench {
     fn new(name: &str) -> Bench {
         let rig = Rig::new(name);
         let mut set = DisplaySet::default();
-        set.register(Arc::new(PictureView::new(&rig.device, &rig.queue, TARGET, false)));
-        let mut bench = Bench { rig, set, settings: PanelSettings::default() };
+        set.register(Arc::new(PictureView::new(
+            &rig.device,
+            &rig.queue,
+            TARGET,
+            false,
+        )));
+        let mut bench = Bench {
+            rig,
+            set,
+            settings: PanelSettings::default(),
+        };
         let frame = busy(FRAME[0], FRAME[1]);
         bench.play(FRAME[0], FRAME[1], &frame);
         bench
@@ -36,19 +45,27 @@ impl Bench {
 
     fn play(&mut self, width: u32, height: u32, pixels: &[f32]) {
         let set = &self.set;
-        self.rig.play(width, height, pixels, |rig| rig.poll(|encoder, frame| set.on_frame(encoder, frame)));
+        self.rig.play(width, height, pixels, |rig| {
+            rig.poll(|encoder, frame| set.on_frame(encoder, frame))
+        });
     }
 
     fn wheel(&self, at: [f32; 2], lines: f32) -> bool {
-        self.set.pointer(0, AREA, 1.0, Pointer::Wheel { at, lines }).used
+        self.set
+            .pointer(0, AREA, 1.0, Pointer::Wheel { at, lines })
+            .used
     }
 
     fn render(&self) -> Vec<u8> {
-        self.rig.render(W, H, |pass| self.set.draw(pass, 0, AREA, [W as f32, H as f32], 1.0))
+        self.rig.render(W, H, |pass| {
+            self.set.draw(pass, 0, AREA, [W as f32, H as f32], 1.0)
+        })
     }
 
     fn chip(&self) -> String {
-        self.set.toolbar(0, &self.settings, AREA, 1.0).chips[0].text.clone()
+        self.set.toolbar(0, &self.settings, AREA, 1.0).chips[0]
+            .text
+            .clone()
     }
 }
 
@@ -60,7 +77,9 @@ fn px(image: &[u8], x: u32, y: u32) -> [u8; 3] {
 /// A frame whose neighbouring pixels all differ.
 fn busy(width: u32, height: u32) -> Vec<f32> {
     let code = |x: u32, y: u32| (((3 * x + 5 * y) % 200) + 20) as f32 / 255.0;
-    (0..height).flat_map(|y| (0..width).flat_map(move |x| [code(x, y), code(x, y), code(x, y), 1.0])).collect()
+    (0..height)
+        .flat_map(|y| (0..width).flat_map(move |x| [code(x, y), code(x, y), code(x, y), 1.0]))
+        .collect()
 }
 
 /// Lengths of the runs of equal values, less the first and last (which the Panel's edge cuts short).
@@ -98,7 +117,10 @@ fn wheel_to(b: &Bench, text: &str) {
 fn the_wheel_over_the_panel_zooms_from_fit_and_the_picture_changes() {
     let b = Bench::new("clean-zoom-wheel");
     let fit = b.render();
-    assert!(b.wheel(middle(), 1.0), "the Panel takes the wheel, with the Loupe off");
+    assert!(
+        b.wheel(middle(), 1.0),
+        "the Panel takes the wheel, with the Loupe off"
+    );
     assert_ne!(b.render(), fit, "the picture is drawn bigger");
     assert_eq!(b.chip(), "94 %");
     assert!(b.wheel(middle(), -1.0));
@@ -109,13 +131,24 @@ fn the_wheel_over_the_panel_zooms_from_fit_and_the_picture_changes() {
 #[test]
 fn zoomed_in_every_picture_pixel_is_an_exact_square_and_the_wheel_stops_at_800() {
     let b = Bench::new("clean-zoom-squares");
-    for (text, k) in [("100 %", 1usize), ("200 %", 2), ("300 %", 3), ("400 %", 4), ("800 %", 8)] {
+    for (text, k) in [
+        ("100 %", 1usize),
+        ("200 %", 2),
+        ("300 %", 3),
+        ("400 %", 4),
+        ("800 %", 8),
+    ] {
         wheel_to(&b, text);
         let image = b.render();
         let y = (AREA[1] + AREA[3] / 2.0) as u32;
-        let row: Vec<u8> = (AREA[0] as u32..(AREA[0] + AREA[2]) as u32).map(|x| px(&image, x, y)[0]).collect();
+        let row: Vec<u8> = (AREA[0] as u32..(AREA[0] + AREA[2]) as u32)
+            .map(|x| px(&image, x, y)[0])
+            .collect();
         let r = runs(&row);
-        assert!(r.len() > 20 && r.iter().all(|n| *n == k), "{text}: runs {r:?}");
+        assert!(
+            r.len() > 20 && r.iter().all(|n| *n == k),
+            "{text}: runs {r:?}"
+        );
     }
     for _ in 0..5 {
         b.wheel(middle(), 1.0);
@@ -128,8 +161,18 @@ fn zoomed_in_the_panel_is_full_and_nothing_is_drawn_outside_it() {
     let b = Bench::new("clean-zoom-clip");
     wheel_to(&b, "200 %");
     let image = b.render();
-    assert!(px(&image, 25, 25) != [0, 0, 0] && px(&image, 615, 415) != [0, 0, 0], "the picture fills the Panel's corners");
-    for (x, y) in [(10, 300), (625, 300), (300, 10), (300, 425), (5, 5), (700, 500)] {
+    assert!(
+        px(&image, 25, 25) != [0, 0, 0] && px(&image, 615, 415) != [0, 0, 0],
+        "the picture fills the Panel's corners"
+    );
+    for (x, y) in [
+        (10, 300),
+        (625, 300),
+        (300, 10),
+        (300, 425),
+        (5, 5),
+        (700, 500),
+    ] {
         assert_eq!(px(&image, x, y), [0, 0, 0], "outside the Panel at {x}, {y}");
     }
 }
@@ -142,8 +185,16 @@ fn the_clean_picture_shows_a_zoom_chip_that_reads_fit_by_default() {
     let toolbar = b.set.toolbar(0, &b.settings, AREA, 1.0);
     assert_eq!(toolbar.chips[0].text, "Fit 75 %");
     assert!(!toolbar.on[0], "not lit at Fit");
-    assert_eq!(toolbar.click(0), Some((scopecreep::zoom::ZOOM_KEY, "")), "a click asks for Fit");
-    assert_eq!(toolbar.chips.len(), 7, "the zoom and link chips, then the channel and Loupe chips");
+    assert_eq!(
+        toolbar.click(0),
+        Some((scopecreep::zoom::ZOOM_KEY, "")),
+        "a click asks for Fit"
+    );
+    assert_eq!(
+        toolbar.chips.len(),
+        7,
+        "the zoom and link chips, then the channel and Loupe chips"
+    );
     wheel_to(&b, "200 %");
     let zoomed = b.set.toolbar(0, &b.settings, AREA, 1.0);
     assert!(zoomed.on[0], "lit while zoomed in");
@@ -153,7 +204,9 @@ fn the_clean_picture_shows_a_zoom_chip_that_reads_fit_by_default() {
 fn a_scope_has_no_zoom_chip() {
     let rig = Rig::new("clean-zoom-scope");
     let (set, _) = DisplaySet::standard_with_handles(&rig.device, &rig.queue, TARGET, false);
-    let waveform = (0..set.len()).find(|i| set.name(*i) == "Luma waveform").unwrap();
+    let waveform = (0..set.len())
+        .find(|i| set.name(*i) == "Luma waveform")
+        .unwrap();
     assert!(set.zoom(waveform, AREA, 1.0).is_none());
 }
 
@@ -173,13 +226,24 @@ fn the_chip_stays_on_a_small_panel_and_shortens_to_its_number() {
     let b = Bench::new("clean-zoom-small");
     let title = panel_title(NAME, &DisplayContext::default(), String::new());
     for scale in [1.0f32, 2.0] {
-        let small = scopecreep::panel_grid::PanelLayout::new([0.0, 0.0, 190.0 * scale, 200.0 * scale], scale).title;
+        let small = scopecreep::panel_grid::PanelLayout::new(
+            [0.0, 0.0, 190.0 * scale, 200.0 * scale],
+            scale,
+        )
+        .title;
         let mut toolbar = b.set.toolbar(0, &b.settings, AREA, 1.0);
         toolbar.fit_to(small[2], true, scale);
-        assert_eq!(toolbar.chips[0].text, "75 %", "the word Fit goes first when there is no room");
-        let (l, _, _) = window_text::lay_out_toolbar_title(&title, &toolbar.chips, true, small, scale);
+        assert_eq!(
+            toolbar.chips[0].text, "75 %",
+            "the word Fit goes first when there is no room"
+        );
+        let (l, _, _) =
+            window_text::lay_out_toolbar_title(&title, &toolbar.chips, true, small, scale);
         let chip = l.chips[0];
-        assert!(chip[0] >= small[0] && chip[0] + chip[2] <= small[0] + small[2] + 0.01, "{chip:?} stays inside {small:?}");
+        assert!(
+            chip[0] >= small[0] && chip[0] + chip[2] <= small[0] + small[2] + 0.01,
+            "{chip:?} stays inside {small:?}"
+        );
         let mut roomy = b.set.toolbar(0, &b.settings, AREA, 1.0);
         roomy.fit_to(400.0 * scale, true, scale);
         assert_eq!(roomy.chips[0].text, "Fit 75 %", "with room it says Fit");
@@ -195,7 +259,10 @@ fn zoom_is_not_saved_and_the_next_session_opens_at_fit() {
     b.set.set_zoom(0, AREA, 1.0, 200.0);
     b.settings.set(NAME, "channel", "luma");
     let text = b.settings.to_text();
-    assert!(!text.contains("zoom") && !text.contains("200") && !text.contains("300"), "nothing about zoom is saved: {text}");
+    assert!(
+        !text.contains("zoom") && !text.contains("200") && !text.contains("300"),
+        "nothing about zoom is saved: {text}"
+    );
     assert_eq!(PanelSettings::from_text(&text), b.settings);
     // The rig holds the GPU, so the session ends before the next one starts.
     drop(b);
@@ -213,7 +280,17 @@ impl Bench {
 
 /// A frame split down the middle: dark on the left, bright on the right.
 fn split(width: u32, height: u32) -> Vec<f32> {
-    (0..height).flat_map(|_| (0..width).flat_map(move |x| if x < width / 2 { [0.1, 0.1, 0.1, 1.0] } else { [0.9, 0.9, 0.9, 1.0] })).collect()
+    (0..height)
+        .flat_map(|_| {
+            (0..width).flat_map(move |x| {
+                if x < width / 2 {
+                    [0.1, 0.1, 0.1, 1.0]
+                } else {
+                    [0.9, 0.9, 0.9, 1.0]
+                }
+            })
+        })
+        .collect()
 }
 
 #[test]
@@ -225,7 +302,10 @@ fn a_middle_drag_over_the_zoomed_picture_moves_what_is_drawn() {
     let first = b.render();
     // Zoomed on the middle of the frame: the split sits at the middle of the Panel.
     let (left, right) = (px(&first, 100, y)[0], px(&first, 540, y)[0]);
-    assert!(left < 80 && right > 200, "dark left of the split, bright right of it: {left} {right}");
+    assert!(
+        left < 80 && right > 200,
+        "dark left of the split, bright right of it: {left} {right}"
+    );
     // Drag 200 px to the left: the picture follows the pointer, so the split moves left by 200 px.
     let from = middle();
     assert!(b.pointer(Pointer::MiddleDown(from)));
@@ -234,8 +314,14 @@ fn a_middle_drag_over_the_zoomed_picture_moves_what_is_drawn() {
     assert!(b.pointer(Pointer::MiddleUp));
     let panned = b.render();
     assert_ne!(panned, first);
-    assert!(px(&panned, 300, y)[0] > 200 && px(&panned, 100, y)[0] < 80, "the split moved with the pointer");
-    assert!(px(&panned, 110, y)[0] < 80 && px(&panned, 130, y)[0] > 200, "split at about x = 120");
+    assert!(
+        px(&panned, 300, y)[0] > 200 && px(&panned, 100, y)[0] < 80,
+        "the split moved with the pointer"
+    );
+    assert!(
+        px(&panned, 110, y)[0] < 80 && px(&panned, 130, y)[0] > 200,
+        "split at about x = 120"
+    );
     // Letting go ends the drag.
     assert!(!b.pointer(Pointer::Move([from[0] + 100.0, from[1]])));
     assert_eq!(b.render(), panned);
@@ -249,7 +335,13 @@ fn a_middle_drag_at_fit_moves_nothing_and_the_left_button_and_right_click_are_as
     b.pointer(Pointer::Move([middle()[0] - 90.0, middle()[1]]));
     b.pointer(Pointer::MiddleUp);
     assert_eq!(b.render(), fit);
-    assert!(!b.pointer(Pointer::Down(middle())), "the left button is not the Panel's with the Loupe off");
+    assert!(
+        !b.pointer(Pointer::Down(middle())),
+        "the left button is not the Panel's with the Loupe off"
+    );
     assert!(!b.pointer(Pointer::Up));
-    assert!(!b.pointer(Pointer::Move(middle())), "no drag going: a move is nobody's");
+    assert!(
+        !b.pointer(Pointer::Move(middle())),
+        "no drag going: a move is nobody's"
+    );
 }

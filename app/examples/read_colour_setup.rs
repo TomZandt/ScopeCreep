@@ -22,10 +22,20 @@ fn main() {
         }
         std::thread::sleep(Duration::from_millis(2));
     };
-    let read_ms = answer.iter().find(|(k, _)| k == "read_ms").map_or("?", |(_, v)| v.as_str()).to_string();
+    let read_ms = answer
+        .iter()
+        .find(|(k, _)| k == "read_ms")
+        .map_or("?", |(_, v)| v.as_str())
+        .to_string();
     match Outcome::from_answer(&answer) {
         Outcome::Read(r) => {
-            let label = r.colour_setup.map(|setup| KnownColourSetup { setup, provenance: Provenance::Project }.label());
+            let label = r.colour_setup.map(|setup| {
+                KnownColourSetup {
+                    setup,
+                    provenance: Provenance::Project,
+                }
+                .label()
+            });
             println!(
                 "project={} timeline={} product={} studio={} read_ms={} total_ms={:.0}\nlabel={}",
                 r.project,

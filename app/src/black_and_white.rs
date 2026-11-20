@@ -6,8 +6,8 @@
 //! surface is not sRGB-encoded, so it goes to the screen as it is, like the clean picture's values.
 use crate::display::{Display, DisplayContext};
 use crate::gpu_frame::GpuFrame;
-use crate::picture_stage::{PictureStage, Rule};
 use crate::measurement::Measurement;
+use crate::picture_stage::{PictureStage, Rule};
 use std::sync::{Arc, Mutex};
 
 /// The colour rule: Luma, the weights being the values.
@@ -28,9 +28,27 @@ pub struct BlackAndWhite {
 
 impl BlackAndWhite {
     /// `filterable`: the device can smooth 32-bit float textures (else the picture is drawn nearest-neighbour).
-    pub fn new(device: &wgpu::Device, queue: &wgpu::Queue, target: wgpu::TextureFormat, filterable: bool) -> BlackAndWhite {
-        let stage = PictureStage::new::<[f32; 4]>(device, queue, target, filterable, Rule { label: "black and white", wgsl: RULE.into(), has_legend: false });
-        BlackAndWhite { stage, measurement: Arc::new(Mutex::new(Measurement::default())) }
+    pub fn new(
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+        target: wgpu::TextureFormat,
+        filterable: bool,
+    ) -> BlackAndWhite {
+        let stage = PictureStage::new::<[f32; 4]>(
+            device,
+            queue,
+            target,
+            filterable,
+            Rule {
+                label: "black and white",
+                wgsl: RULE.into(),
+                has_legend: false,
+            },
+        );
+        BlackAndWhite {
+            stage,
+            measurement: Arc::new(Mutex::new(Measurement::default())),
+        }
     }
 }
 
@@ -45,19 +63,35 @@ impl Display for BlackAndWhite {
 
     /// The weights are the waveform's: the same Colour Setup and the same luma weights choice.
     fn configure(&self, context: &DisplayContext) {
-        *self.measurement.lock().unwrap() = crate::output_conversion::measurement(context.colour_setup.clone(), context.luma);
+        *self.measurement.lock().unwrap() =
+            crate::output_conversion::measurement(context.colour_setup.clone(), context.luma);
     }
 
     fn label(&self) -> String {
         match self.stage.has_picture() {
-            true => format!("Black and white  ·  Luma  ·  {}", self.measurement.lock().unwrap().weights_label()),
+            true => format!(
+                "Black and white  ·  Luma  ·  {}",
+                self.measurement.lock().unwrap().weights_label()
+            ),
             false => "Black and white".to_string(),
         }
     }
 
     /// Draw the picture in grey, scaled to fit inside `area` with its shape kept.
-    fn draw(&self, pass: &mut wgpu::RenderPass<'_>, area: [f32; 4], surface: [f32; 2], _scale: f32) {
+    fn draw(
+        &self,
+        pass: &mut wgpu::RenderPass<'_>,
+        area: [f32; 4],
+        surface: [f32; 2],
+        _scale: f32,
+    ) {
         let [r, g, b] = self.measurement.lock().unwrap().weights();
-        self.stage.draw(pass, area, surface, &[r as f32, g as f32, b as f32, 0.0], None);
+        self.stage.draw(
+            pass,
+            area,
+            surface,
+            &[r as f32, g as f32, b as f32, 0.0],
+            None,
+        );
     }
 }

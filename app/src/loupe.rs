@@ -31,13 +31,20 @@ pub const STATE_KEYS: &[&str] = &[X_KEY, Y_KEY, ZOOM_KEY];
 
 /// The remembered zoom in `settings`, in whole 100 % steps within the limits: the default when absent or not sensible.
 pub fn zoom(settings: &Settings) -> u32 {
-    let remembered = settings.get(ZOOM_KEY).and_then(|v| v.parse::<u32>().ok()).filter(|z| (MIN_ZOOM..=MAX_ZOOM).contains(z));
-    remembered.map_or(DEFAULT_ZOOM, |z| (z + ZOOM_STEP / 2) / ZOOM_STEP * ZOOM_STEP)
+    let remembered = settings
+        .get(ZOOM_KEY)
+        .and_then(|v| v.parse::<u32>().ok())
+        .filter(|z| (MIN_ZOOM..=MAX_ZOOM).contains(z));
+    remembered.map_or(DEFAULT_ZOOM, |z| {
+        (z + ZOOM_STEP / 2) / ZOOM_STEP * ZOOM_STEP
+    })
 }
 
 /// Whether the Loupe is switched on in `settings` (the clean picture's chip).
 pub fn is_on(settings: &Settings) -> bool {
-    settings.get(crate::toolbar::LOUPE_SETTING).is_some_and(|v| v == "on")
+    settings
+        .get(crate::toolbar::LOUPE_SETTING)
+        .is_some_and(|v| v == "on")
 }
 
 /// The Panel title tag while the Loupe is on ("Loupe 200 %"), nothing while it is off.
@@ -50,7 +57,20 @@ pub const SIZE_SETTING: SettingDef = SettingDef {
     key: "size",
     label: "Loupe size",
     amount: None,
-    choices: &[Choice { value: "medium", text: "Medium" }, Choice { value: "small", text: "Small" }, Choice { value: "large", text: "Large" }],
+    choices: &[
+        Choice {
+            value: "medium",
+            text: "Medium",
+        },
+        Choice {
+            value: "small",
+            text: "Small",
+        },
+        Choice {
+            value: "large",
+            text: "Large",
+        },
+    ],
 };
 
 /// The Loupe's side, in logical pixels (never more than the Panel).
@@ -94,14 +114,29 @@ struct LoupeState {
 
 impl LoupeState {
     fn new() -> LoupeState {
-        LoupeState { x: 0.5, y: 0.5, zoom: DEFAULT_ZOOM, size: LoupeSize::Medium, grab: None, wheel: 0.0 }
+        LoupeState {
+            x: 0.5,
+            y: 0.5,
+            zoom: DEFAULT_ZOOM,
+            size: LoupeSize::Medium,
+            grab: None,
+            wheel: 0.0,
+        }
     }
 
     /// The square in `area` (left, top, width, height) at `scale`: whole device pixels, wholly inside the area.
     fn rect(&self, area: [f32; 4], scale: f32) -> [f32; 4] {
-        let side = (self.size.logical() * scale).min(area[2]).min(area[3]).floor().max(1.0);
-        let left = (area[0] + self.x * area[2] - side / 2.0).clamp(area[0], (area[0] + area[2] - side).max(area[0])).round();
-        let top = (area[1] + self.y * area[3] - side / 2.0).clamp(area[1], (area[1] + area[3] - side).max(area[1])).round();
+        let side = (self.size.logical() * scale)
+            .min(area[2])
+            .min(area[3])
+            .floor()
+            .max(1.0);
+        let left = (area[0] + self.x * area[2] - side / 2.0)
+            .clamp(area[0], (area[0] + area[2] - side).max(area[0]))
+            .round();
+        let top = (area[1] + self.y * area[3] - side / 2.0)
+            .clamp(area[1], (area[1] + area[3] - side).max(area[1]))
+            .round();
         [left, top, side, side]
     }
 
@@ -123,12 +158,20 @@ impl LoupeState {
     }
 
     fn position_state(&self) -> Vec<(&'static str, String)> {
-        vec![(X_KEY, format!("{:.5}", self.x)), (Y_KEY, format!("{:.5}", self.y))]
+        vec![
+            (X_KEY, format!("{:.5}", self.x)),
+            (Y_KEY, format!("{:.5}", self.y)),
+        ]
     }
 
     /// Take remembered state, leaving anything that is not sensible at its default.
     fn load(&mut self, state: &Settings) {
-        let fraction = |key: &str| state.get(key).and_then(|v| v.parse::<f32>().ok()).filter(|v| (0.0..=1.0).contains(v));
+        let fraction = |key: &str| {
+            state
+                .get(key)
+                .and_then(|v| v.parse::<f32>().ok())
+                .filter(|v| (0.0..=1.0).contains(v))
+        };
         if let (Some(x), Some(y)) = (fraction(X_KEY), fraction(Y_KEY)) {
             (self.x, self.y) = (x, y);
         }
@@ -209,13 +252,25 @@ pub struct Loupe {
 impl Loupe {
     /// `rule` is the Panel's colour rule (the `wgsl` it gave the stage, with its `Values` struct and `colour`
     /// function); `V` is the plain-data form of `Values`.
-    pub fn new<V: Pod>(device: &wgpu::Device, queue: &wgpu::Queue, target: wgpu::TextureFormat, rule: &str) -> Loupe {
+    pub fn new<V: Pod>(
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+        target: wgpu::TextureFormat,
+        rule: &str,
+    ) -> Loupe {
         let values_size = size_of::<V>();
-        let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor { label: Some("loupe"), source: wgpu::ShaderSource::Wgsl(format!("{rule}{LOUPE_SHADER}").into()) });
+        let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+            label: Some("loupe"),
+            source: wgpu::ShaderSource::Wgsl(format!("{rule}{LOUPE_SHADER}").into()),
+        });
         let uniform = |binding| wgpu::BindGroupLayoutEntry {
             binding,
             visibility: wgpu::ShaderStages::VERTEX_FRAGMENT,
-            ty: wgpu::BindingType::Buffer { ty: wgpu::BufferBindingType::Uniform, has_dynamic_offset: false, min_binding_size: None },
+            ty: wgpu::BindingType::Buffer {
+                ty: wgpu::BufferBindingType::Uniform,
+                has_dynamic_offset: false,
+                min_binding_size: None,
+            },
             count: None,
         };
         let layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
@@ -225,25 +280,53 @@ impl Loupe {
                 wgpu::BindGroupLayoutEntry {
                     binding: 1,
                     visibility: wgpu::ShaderStages::FRAGMENT,
-                    ty: wgpu::BindingType::Texture { sample_type: wgpu::TextureSampleType::Float { filterable: false }, view_dimension: wgpu::TextureViewDimension::D2, multisampled: false },
+                    ty: wgpu::BindingType::Texture {
+                        sample_type: wgpu::TextureSampleType::Float { filterable: false },
+                        view_dimension: wgpu::TextureViewDimension::D2,
+                        multisampled: false,
+                    },
                     count: None,
                 },
                 uniform(2),
             ],
         });
-        let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor { label: Some("loupe"), bind_group_layouts: &[Some(&layout)], immediate_size: 0 });
+        let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+            label: Some("loupe"),
+            bind_group_layouts: &[Some(&layout)],
+            immediate_size: 0,
+        });
         let pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
             label: Some("loupe"),
             layout: Some(&pipeline_layout),
-            vertex: wgpu::VertexState { module: &shader, entry_point: Some("vs"), buffers: &[], compilation_options: Default::default() },
-            primitive: wgpu::PrimitiveState { topology: wgpu::PrimitiveTopology::TriangleStrip, ..Default::default() },
+            vertex: wgpu::VertexState {
+                module: &shader,
+                entry_point: Some("vs"),
+                buffers: &[],
+                compilation_options: Default::default(),
+            },
+            primitive: wgpu::PrimitiveState {
+                topology: wgpu::PrimitiveTopology::TriangleStrip,
+                ..Default::default()
+            },
             depth_stencil: None,
             multisample: wgpu::MultisampleState::default(),
-            fragment: Some(wgpu::FragmentState { module: &shader, entry_point: Some("fs"), targets: &[Some(target.into())], compilation_options: Default::default() }),
+            fragment: Some(wgpu::FragmentState {
+                module: &shader,
+                entry_point: Some("fs"),
+                targets: &[Some(target.into())],
+                compilation_options: Default::default(),
+            }),
             multiview_mask: None,
             cache: None,
         });
-        let buffer = |label, size: u64| device.create_buffer(&wgpu::BufferDescriptor { label: Some(label), size, usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST, mapped_at_creation: false });
+        let buffer = |label, size: u64| {
+            device.create_buffer(&wgpu::BufferDescriptor {
+                label: Some(label),
+                size,
+                usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+                mapped_at_creation: false,
+            })
+        };
         Loupe {
             device: device.clone(),
             queue: queue.clone(),
@@ -253,7 +336,11 @@ impl Loupe {
             values: buffer("loupe values", values_size as u64),
             values_size,
             bound: Arc::new(Mutex::new(None)),
-            inner: Arc::new(Mutex::new(Inner { state: LoupeState::new(), loaded: false, area: None })),
+            inner: Arc::new(Mutex::new(Inner {
+                state: LoupeState::new(),
+                loaded: false,
+                area: None,
+            })),
         }
     }
 
@@ -276,20 +363,40 @@ impl Loupe {
     pub fn drawn(&self) -> Option<LoupeDrawn> {
         let inner = self.inner.lock().unwrap();
         let (area, scale) = inner.area?;
-        Some(LoupeDrawn { loupe: inner.state.rect(area, scale), zoom: inner.state.zoom })
+        Some(LoupeDrawn {
+            loupe: inner.state.rect(area, scale),
+            zoom: inner.state.zoom,
+        })
     }
 
     /// Draw the Loupe on top of the picture the stage just drew in `area` (left, top, width, height, device pixels)
     /// on a `surface` of that size, with the same `values` the stage drew with.
-    pub fn draw<V: Pod>(&self, pass: &mut wgpu::RenderPass<'_>, shown: &Shown, area: [f32; 4], surface: [f32; 2], scale: f32, values: &V) {
-        assert_eq!(size_of::<V>(), self.values_size, "the values are the size the Loupe was made for");
+    pub fn draw<V: Pod>(
+        &self,
+        pass: &mut wgpu::RenderPass<'_>,
+        shown: &Shown,
+        area: [f32; 4],
+        surface: [f32; 2],
+        scale: f32,
+        values: &V,
+    ) {
+        assert_eq!(
+            size_of::<V>(),
+            self.values_size,
+            "the values are the size the Loupe was made for"
+        );
         let mut inner = self.inner.lock().unwrap();
         inner.area = Some((area, scale));
-        let Some(p) = place(area, shown.size, 0.0) else { return };
+        let Some(p) = place(area, shown.size, 0.0) else {
+            return;
+        };
         let rect = inner.state.rect(area, scale);
         let middle = LoupeState::middle(rect);
         let (mx, my) = (middle[0].round(), middle[1].round());
-        let source = [((mx - p.x) / p.w * shown.size[0] as f32).floor(), ((my - p.y) / p.h * shown.size[1] as f32).floor()];
+        let source = [
+            ((mx - p.x) / p.w * shown.size[0] as f32).floor(),
+            ((my - p.y) / p.h * shown.size[1] as f32).floor(),
+        ];
         let clip = |px: f32, size: f32| px / size * 2.0 - 1.0;
         let params: [f32; 16] = [
             clip(rect[0], surface[0]),
@@ -309,17 +416,30 @@ impl Loupe {
             if shown.bottom_up { 1.0 } else { 0.0 },
             0.0,
         ];
-        self.queue.write_buffer(&self.params, 0, bytemuck::cast_slice(&params));
-        self.queue.write_buffer(&self.values, 0, bytemuck::bytes_of(values));
+        self.queue
+            .write_buffer(&self.params, 0, bytemuck::cast_slice(&params));
+        self.queue
+            .write_buffer(&self.values, 0, bytemuck::bytes_of(values));
         let mut bound = self.bound.lock().unwrap();
         if bound.as_ref().is_none_or(|(id, _)| *id != shown.texture_id) {
             let group = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
                 label: Some("loupe"),
                 layout: &self.layout,
                 entries: &[
-                    wgpu::BindGroupEntry { binding: 0, resource: self.params.as_entire_binding() },
-                    wgpu::BindGroupEntry { binding: 1, resource: wgpu::BindingResource::TextureView(&shown.texture.create_view(&Default::default())) },
-                    wgpu::BindGroupEntry { binding: 2, resource: self.values.as_entire_binding() },
+                    wgpu::BindGroupEntry {
+                        binding: 0,
+                        resource: self.params.as_entire_binding(),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 1,
+                        resource: wgpu::BindingResource::TextureView(
+                            &shown.texture.create_view(&Default::default()),
+                        ),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 2,
+                        resource: self.values.as_entire_binding(),
+                    },
                 ],
             });
             *bound = Some((shown.texture_id, group));
@@ -339,28 +459,45 @@ impl Loupe {
             Pointer::Down(p) if LoupeState::contains(rect, p) => {
                 let m = LoupeState::middle(rect);
                 state.grab = Some([p[0] - m[0], p[1] - m[1]]);
-                PointerResult { used: true, remember: Vec::new() }
+                PointerResult {
+                    used: true,
+                    remember: Vec::new(),
+                }
             }
             Pointer::Move(p) => match state.grab {
                 Some(g) => {
                     state.centre_at([p[0] - g[0], p[1] - g[1]], area, scale);
-                    PointerResult { used: true, remember: state.position_state() }
+                    PointerResult {
+                        used: true,
+                        remember: state.position_state(),
+                    }
                 }
                 None => PointerResult::default(),
             },
             Pointer::Up => match state.grab.take() {
-                Some(_) => PointerResult { used: true, remember: state.position_state() },
+                Some(_) => PointerResult {
+                    used: true,
+                    remember: state.position_state(),
+                },
                 None => PointerResult::default(),
             },
             Pointer::Wheel { at, lines } if LoupeState::contains(rect, at) => {
                 state.wheel += lines;
                 let steps = state.wheel.trunc();
                 state.wheel -= steps;
-                let zoom = (state.zoom as i32 + steps as i32 * ZOOM_STEP as i32).clamp(MIN_ZOOM as i32, MAX_ZOOM as i32) as u32;
+                let zoom = (state.zoom as i32 + steps as i32 * ZOOM_STEP as i32)
+                    .clamp(MIN_ZOOM as i32, MAX_ZOOM as i32) as u32;
                 // Nothing to remember when the zoom did not change (a part of a notch, or already at its limit).
                 let changed = zoom != state.zoom;
                 state.zoom = zoom;
-                PointerResult { used: true, remember: if changed { vec![(ZOOM_KEY, zoom.to_string())] } else { Vec::new() } }
+                PointerResult {
+                    used: true,
+                    remember: if changed {
+                        vec![(ZOOM_KEY, zoom.to_string())]
+                    } else {
+                        Vec::new()
+                    },
+                }
             }
             _ => PointerResult::default(),
         }
@@ -372,16 +509,31 @@ mod tests {
     use super::*;
 
     fn with(pairs: &[(&str, &str)]) -> Settings {
-        pairs.iter().map(|(k, v)| (k.to_string(), v.to_string())).collect()
+        pairs
+            .iter()
+            .map(|(k, v)| (k.to_string(), v.to_string()))
+            .collect()
     }
 
     #[test]
     fn the_tag_is_there_only_while_the_loupe_is_on_and_shows_a_sensible_zoom() {
         assert_eq!(tag(&with(&[])), None);
         assert_eq!(tag(&with(&[("loupe", "off"), (ZOOM_KEY, "400")])), None);
-        assert_eq!(tag(&with(&[("loupe", "on")])).as_deref(), Some("Loupe 200 %"));
-        assert_eq!(tag(&with(&[("loupe", "on"), (ZOOM_KEY, "500")])).as_deref(), Some("Loupe 500 %"));
-        assert_eq!(tag(&with(&[("loupe", "on"), (ZOOM_KEY, "rubbish")])).as_deref(), Some("Loupe 200 %"));
-        assert_eq!(tag(&with(&[("loupe", "on"), (ZOOM_KEY, "5000")])).as_deref(), Some("Loupe 200 %"));
+        assert_eq!(
+            tag(&with(&[("loupe", "on")])).as_deref(),
+            Some("Loupe 200 %")
+        );
+        assert_eq!(
+            tag(&with(&[("loupe", "on"), (ZOOM_KEY, "500")])).as_deref(),
+            Some("Loupe 500 %")
+        );
+        assert_eq!(
+            tag(&with(&[("loupe", "on"), (ZOOM_KEY, "rubbish")])).as_deref(),
+            Some("Loupe 200 %")
+        );
+        assert_eq!(
+            tag(&with(&[("loupe", "on"), (ZOOM_KEY, "5000")])).as_deref(),
+            Some("Loupe 200 %")
+        );
     }
 }

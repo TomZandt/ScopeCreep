@@ -67,13 +67,24 @@ fn the_helper_reads_the_project_and_the_app_understands_it() {
     let mut h = helper(&[]);
     h.request();
     let answer = wait_answer(&mut h, Duration::from_secs(10)).expect("the helper answers");
-    let Outcome::Read(reading) = Outcome::from_answer(&answer) else { panic!("not read: {answer:?}") };
+    let Outcome::Read(reading) = Outcome::from_answer(&answer) else {
+        panic!("not read: {answer:?}")
+    };
     assert_eq!(reading.project, "scopecreep-test-acescct-rec709");
     assert_eq!(reading.timeline.as_deref(), Some("Timeline 1"));
-    assert_eq!((reading.product.as_str(), reading.studio), ("DaVinci Resolve Studio 21.2.0.6", true));
+    assert_eq!(
+        (reading.product.as_str(), reading.studio),
+        ("DaVinci Resolve Studio 21.2.0.6", true)
+    );
     let setup = reading.colour_setup.expect("a Colour Setup");
-    assert_eq!((setup.timeline.as_str(), setup.output.as_str()), ("ACEScct", "Rec.709 BT.1886"));
-    assert!(!answer.iter().any(|(k, _)| k == "setting.unrelatedKey"), "only Colour Setup keys are passed on");
+    assert_eq!(
+        (setup.timeline.as_str(), setup.output.as_str()),
+        ("ACEScct", "Rec.709 BT.1886")
+    );
+    assert!(
+        !answer.iter().any(|(k, _)| k == "setting.unrelatedKey"),
+        "only Colour Setup keys are passed on"
+    );
     // A second read goes to the same process.
     h.request();
     assert!(wait_answer(&mut h, Duration::from_secs(10)).is_some());
@@ -101,13 +112,25 @@ fn nothing_is_asked_of_resolve_until_a_read_is_requested() {
 fn a_stuck_helper_is_killed_when_abandoned_and_a_fresh_one_starts_on_the_next_request() {
     let mut h = helper(&[("FAKE_RESOLVE_HANG", "1")]);
     h.request();
-    assert!(wait_answer(&mut h, Duration::from_millis(1500)).is_none(), "the read hangs");
+    assert!(
+        wait_answer(&mut h, Duration::from_millis(1500)).is_none(),
+        "the read hangs"
+    );
     let pid = h.running_pid().expect("a helper is running");
     let t = Instant::now();
     h.abandon();
-    assert!(t.elapsed() < Duration::from_millis(500), "abandoning does not wait for the stuck call");
+    assert!(
+        t.elapsed() < Duration::from_millis(500),
+        "abandoning does not wait for the stuck call"
+    );
     assert_eq!(h.running_pid(), None);
-    assert!(!std::path::Path::new(&format!("/proc/{pid}")).exists() || std::fs::read_to_string(format!("/proc/{pid}/stat")).unwrap_or_default().contains(") Z"), "the stuck helper is gone");
+    assert!(
+        !std::path::Path::new(&format!("/proc/{pid}")).exists()
+            || std::fs::read_to_string(format!("/proc/{pid}/stat"))
+                .unwrap_or_default()
+                .contains(") Z"),
+        "the stuck helper is gone"
+    );
     h.request();
     assert!(h.running_pid().is_some_and(|p| p != pid), "a fresh helper");
 }
@@ -125,7 +148,10 @@ fn the_helper_inherits_no_open_files_but_its_pipes() {
     h.request();
     std::thread::sleep(Duration::from_millis(500));
     let pid = h.running_pid().unwrap();
-    let open: Vec<PathBuf> = std::fs::read_dir(format!("/proc/{pid}/fd")).unwrap().filter_map(|e| std::fs::read_link(e.ok()?.path()).ok()).collect();
+    let open: Vec<PathBuf> = std::fs::read_dir(format!("/proc/{pid}/fd"))
+        .unwrap()
+        .filter_map(|e| std::fs::read_link(e.ok()?.path()).ok())
+        .collect();
     assert!(!open.contains(&marker), "the helper holds {open:?}");
     h.abandon();
 }

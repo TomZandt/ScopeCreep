@@ -38,11 +38,17 @@ fn run() -> Result<(), String> {
             "--out" => out = Some(value()?.into()),
             "--project" => project = Some(value()?),
             "--feed" => feed = value()?.into(),
-            "--timeout" => timeout = Duration::from_secs_f64(value()?.parse().map_err(|_| "--timeout is seconds")?),
+            "--timeout" => {
+                timeout =
+                    Duration::from_secs_f64(value()?.parse().map_err(|_| "--timeout is seconds")?)
+            }
             "--frame" => {
                 let v = value()?;
                 let (clip, time) = v.split_once('=').ok_or("--frame is <clip>=<frame time>")?;
-                wanted.push((clip.to_string(), time.parse().map_err(|_| format!("bad frame time in {v}"))?));
+                wanted.push((
+                    clip.to_string(),
+                    time.parse().map_err(|_| format!("bad frame time in {v}"))?,
+                ));
             }
             _ => return Err(format!("unknown argument {arg}")),
         }
@@ -51,9 +57,13 @@ fn run() -> Result<(), String> {
     let project = project.ok_or("--project is required")?;
     std::fs::create_dir_all(&out).map_err(|e| format!("{}: {e}", out.display()))?;
 
-    let instance = wgpu::Instance::new(wgpu::InstanceDescriptor::new_without_display_handle_from_env());
-    let adapter = pollster::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions { power_preference: wgpu::PowerPreference::HighPerformance, ..Default::default() }))
-        .map_err(|e| format!("no GPU: {e}"))?;
+    let instance =
+        wgpu::Instance::new(wgpu::InstanceDescriptor::new_without_display_handle_from_env());
+    let adapter = pollster::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions {
+        power_preference: wgpu::PowerPreference::HighPerformance,
+        ..Default::default()
+    }))
+    .map_err(|e| format!("no GPU: {e}"))?;
     let (device, queue) = pollster::block_on(adapter.request_device(&wgpu::DeviceDescriptor {
         label: Some("capture_converted"),
         memory_hints: wgpu::MemoryHints::MemoryUsage,
@@ -87,20 +97,47 @@ fn run() -> Result<(), String> {
         conversion.follow(setup.as_ref(), uploader.frame(), |_, _| {});
         std::thread::sleep(Duration::from_millis(1));
 
-        let Some(picture) = &status.picture else { continue };
+        let Some(picture) = &status.picture else {
+            continue;
+        };
         if !seen.contains(&picture.frame_time) {
             seen.push(picture.frame_time);
         }
-        let read = status.project_state == ProjectState::Read && status.project.as_ref().is_some_and(|p| p.project == project);
-        let Some(i) = wanted.iter().position(|(_, t)| (t - picture.frame_time).abs() < 1e-6) else { continue };
-        let (Some(frame), true) = (uploader.frame(), read) else { continue };
-        let label = scopecreep::picture_view::PictureView::label_for(Some([picture.width, picture.height]), &status.display_context());
+        let read = status.project_state == ProjectState::Read
+            && status
+                .project
+                .as_ref()
+                .is_some_and(|p| p.project == project);
+        let Some(i) = wanted
+            .iter()
+            .position(|(_, t)| (t - picture.frame_time).abs() < 1e-6)
+        else {
+            continue;
+        };
+        let (Some(frame), true) = (uploader.frame(), read) else {
+            continue;
+        };
+        let label = scopecreep::picture_view::PictureView::label_for(
+            Some([picture.width, picture.height]),
+            &status.display_context(),
+        );
         let rgb = conversion.read_shown(frame);
         let (clip, _) = wanted.remove(i);
         let path = out.join(format!("{clip}.exr"));
-        write_exr(&path, &Image { width: frame.width as usize, height: frame.height as usize, rgb })?;
-        std::fs::write(out.join(format!("{clip}.label")), format!("{label}\n")).map_err(|e| e.to_string())?;
-        println!("captured {clip} t={} {}x{}: {label}", picture.frame_time, frame.width, frame.height);
+        write_exr(
+            &path,
+            &Image {
+                width: frame.width as usize,
+                height: frame.height as usize,
+                rgb,
+            },
+        )?;
+        std::fs::write(out.join(format!("{clip}.label")), format!("{label}\n"))
+            .map_err(|e| e.to_string())?;
+        println!(
+            "captured {clip} t={} {}x{}: {label}",
+            picture.frame_time, frame.width, frame.height
+        );
     }
     Ok(())
 }

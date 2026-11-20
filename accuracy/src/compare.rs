@@ -50,7 +50,11 @@ pub struct Stats {
 
 impl Stats {
     pub fn mean_abs(&self) -> f64 {
-        if self.samples == 0 { 0.0 } else { self.sum_abs / self.samples as f64 }
+        if self.samples == 0 {
+            0.0
+        } else {
+            self.sum_abs / self.samples as f64
+        }
     }
     pub fn max_codes_10bit(&self) -> f64 {
         self.max_abs * CODES_10BIT
@@ -67,7 +71,9 @@ impl Stats {
         self.over_half_code_10bit += o.over_half_code_10bit;
         self.failing += o.failing;
         self.max_ref_over_tolerance = self.max_ref_over_tolerance.max(o.max_ref_over_tolerance);
-        self.max_linear_over_tolerance = self.max_linear_over_tolerance.max(o.max_linear_over_tolerance);
+        self.max_linear_over_tolerance = self
+            .max_linear_over_tolerance
+            .max(o.max_linear_over_tolerance);
         self.max_linear = self.max_linear.max(o.max_linear);
         if o.max_abs > self.max_abs || o.max_abs.is_nan() {
             self.max_abs = o.max_abs;
@@ -91,8 +97,17 @@ pub fn compare_converted(pipeline: &Pipeline, converted: &Image, reference: &Ima
     compare_float_with(pipeline, |v| v, converted, reference)
 }
 
-fn compare_float_with(pipeline: &Pipeline, apply: impl Fn([f64; 3]) -> [f64; 3] + Sync, input: &Image, reference: &Image) -> Stats {
-    assert_eq!((input.width, input.height), (reference.width, reference.height), "size mismatch");
+fn compare_float_with(
+    pipeline: &Pipeline,
+    apply: impl Fn([f64; 3]) -> [f64; 3] + Sync,
+    input: &Image,
+    reference: &Image,
+) -> Stats {
+    assert_eq!(
+        (input.width, input.height),
+        (reference.width, reference.height),
+        "size mismatch"
+    );
     let w = input.width;
     (0..input.height)
         .into_par_iter()
@@ -103,7 +118,11 @@ fn compare_float_with(pipeline: &Pipeline, apply: impl Fn([f64; 3]) -> [f64; 3] 
                 let r = reference.rgb[y * w + x];
                 let o = apply([i[0] as f64, i[1] as f64, i[2] as f64]);
                 for c in 0..3 {
-                    let err = if o[c].is_nan() || r[c].is_nan() { f64::INFINITY } else { (o[c] - r[c] as f64).abs() };
+                    let err = if o[c].is_nan() || r[c].is_nan() {
+                        f64::INFINITY
+                    } else {
+                        (o[c] - r[c] as f64).abs()
+                    };
                     s.samples += 1;
                     s.sum_abs += if err.is_finite() { err } else { 0.0 };
                     if code(o[c], CODES_10BIT) != code(r[c] as f64, CODES_10BIT) {
@@ -112,7 +131,9 @@ fn compare_float_with(pipeline: &Pipeline, apply: impl Fn([f64; 3]) -> [f64; 3] 
                     if !(err <= TOLERANCE_FLOAT) {
                         s.over_tolerance += 1;
                         s.max_ref_over_tolerance = s.max_ref_over_tolerance.max(r[c] as f64);
-                        s.max_linear_over_tolerance = s.max_linear_over_tolerance.max((pipeline.decode(o[c]) - pipeline.decode(r[c] as f64)).abs());
+                        s.max_linear_over_tolerance = s
+                            .max_linear_over_tolerance
+                            .max((pipeline.decode(o[c]) - pipeline.decode(r[c] as f64)).abs());
                     }
                     if !(err <= HALF_CODE_10BIT) {
                         s.over_half_code_10bit += 1;
@@ -126,7 +147,15 @@ fn compare_float_with(pipeline: &Pipeline, apply: impl Fn([f64; 3]) -> [f64; 3] 
                     }
                     if err > s.max_abs {
                         s.max_abs = err;
-                        s.worst = Worst { x, y, channel: c, input: i, ours: o, reference: r, err };
+                        s.worst = Worst {
+                            x,
+                            y,
+                            channel: c,
+                            input: i,
+                            ours: o,
+                            reference: r,
+                            err,
+                        };
                     }
                 }
             }
@@ -141,7 +170,11 @@ fn compare_float_with(pipeline: &Pipeline, apply: impl Fn([f64; 3]) -> [f64; 3] 
 /// Our conversion, clamped and quantised to 16 bits, against Resolve's 16-bit TIFF.
 /// `max_abs` here is in 16-bit codes / 65535, so it is directly comparable with the float errors.
 pub fn compare_tiff16(pipeline: &Pipeline, input: &Image, reference: &Image) -> Stats {
-    assert_eq!((input.width, input.height), (reference.width, reference.height), "size mismatch");
+    assert_eq!(
+        (input.width, input.height),
+        (reference.width, reference.height),
+        "size mismatch"
+    );
     let w = input.width;
     (0..input.height)
         .into_par_iter()
@@ -165,7 +198,15 @@ pub fn compare_tiff16(pipeline: &Pipeline, input: &Image, reference: &Image) -> 
                     }
                     if err > s.max_abs {
                         s.max_abs = err;
-                        s.worst = Worst { x, y, channel: c, input: i, ours: o, reference: r, err };
+                        s.worst = Worst {
+                            x,
+                            y,
+                            channel: c,
+                            input: i,
+                            ours: o,
+                            reference: r,
+                            err,
+                        };
                     }
                 }
             }
@@ -182,7 +223,11 @@ mod tests {
     use super::*;
 
     fn img(px: Vec<[f32; 3]>) -> Image {
-        Image { width: px.len(), height: 1, rgb: px }
+        Image {
+            width: px.len(),
+            height: 1,
+            rgb: px,
+        }
     }
 
     #[test]

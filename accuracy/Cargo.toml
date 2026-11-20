@@ -3,6 +3,9 @@ name = "scopecreep-accuracy"
 version = "0.3.0"
 edition = "2024"
 
+[lints]
+workspace = true
+
 [dependencies]
 exr = "1.74.3"
 rayon = "1.12.0"

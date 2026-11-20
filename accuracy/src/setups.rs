@@ -48,7 +48,9 @@ pub const SETUPS: &[Setup] = &[
         key: "dwg-pq-tmon",
         title: "Colour Managed, DWG/DI -> Rec.2100 PQ, DaVinci tone mapping on",
         pipeline: Pipeline::dwg_rec2100_pq,
-        approximation_reason: Some("DaVinci tone mapping is unpublished, so there is no published maths to apply"),
+        approximation_reason: Some(
+            "DaVinci tone mapping is unpublished, so there is no published maths to apply",
+        ),
         untested_reason: Some(
             "the setting reads back as DaVinci, but Resolve's render is identical to tone mapping off (tried DaVinci and \
              Luminance Mapping, working luminance 1000/4000, PQ and SDR output); so this proves nothing about tone mapping",

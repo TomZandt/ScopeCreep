@@ -19,7 +19,12 @@ const H: u32 = 300;
 /// The Panel's content: 320 x 240 at (20, 20).
 const AREA: [f32; 4] = [20.0, 20.0, 320.0, 240.0];
 const SETUP: &str = "timeline=Rec.709 Gamma 2.4\noutput=Rec.709 Gamma 2.4\n";
-const NAMES: [&str; 4] = ["ARRI False Colour", "Stops False Colour", "Skin Tone", "Saturation heatmap"];
+const NAMES: [&str; 4] = [
+    "ARRI False Colour",
+    "Stops False Colour",
+    "Skin Tone",
+    "Saturation heatmap",
+];
 /// 640 x 360 in 320 x 240 is Fit 50 % (less the legend strip, where there is one).
 const FRAME: [u32; 2] = [640, 360];
 
@@ -30,7 +35,12 @@ struct Bench {
     settings: PanelSettings,
 }
 
-fn poll(rig: &mut Rig, conversion: &mut OutputConversion, set: &DisplaySet, settings: &PanelSettings) {
+fn poll(
+    rig: &mut Rig,
+    conversion: &mut OutputConversion,
+    set: &DisplaySet,
+    settings: &PanelSettings,
+) {
     rig.poll(|encoder, gpu_frame| {
         let shown = conversion.convert(encoder, gpu_frame);
         set.on_frame(encoder, shown);
@@ -43,24 +53,48 @@ impl Bench {
     fn new(name: &str, legend: &str) -> Bench {
         let mut rig = Rig::with_colour_setup(name, Some(SETUP));
         let mut set = DisplaySet::default();
-        set.register(Arc::new(ArriFalseColour::new(&rig.device, &rig.queue, TARGET)));
-        set.register(Arc::new(StopsFalseColour::new(&rig.device, &rig.queue, TARGET)));
-        set.register(Arc::new(SkinTone::new(&rig.device, &rig.queue, TARGET, false)));
-        set.register(Arc::new(SaturationHeatmap::new(&rig.device, &rig.queue, TARGET)));
+        set.register(Arc::new(ArriFalseColour::new(
+            &rig.device,
+            &rig.queue,
+            TARGET,
+        )));
+        set.register(Arc::new(StopsFalseColour::new(
+            &rig.device,
+            &rig.queue,
+            TARGET,
+        )));
+        set.register(Arc::new(SkinTone::new(
+            &rig.device,
+            &rig.queue,
+            TARGET,
+            false,
+        )));
+        set.register(Arc::new(SaturationHeatmap::new(
+            &rig.device,
+            &rig.queue,
+            TARGET,
+        )));
         let mut conversion = OutputConversion::new(&rig.device, &rig.queue);
         let mut settings = PanelSettings::default();
         for name in NAMES {
             settings.set(name, "legend", legend);
         }
         poll(&mut rig, &mut conversion, &set, &settings);
-        let mut bench = Bench { rig, conversion, set, settings };
+        let mut bench = Bench {
+            rig,
+            conversion,
+            set,
+            settings,
+        };
         bench.play(&stripes());
         bench
     }
 
     fn play(&mut self, pixels: &[f32]) {
         let (conversion, set, settings) = (&mut self.conversion, &self.set, &self.settings);
-        self.rig.play(FRAME[0], FRAME[1], pixels, |rig| poll(rig, conversion, set, settings));
+        self.rig.play(FRAME[0], FRAME[1], pixels, |rig| {
+            poll(rig, conversion, set, settings)
+        });
         // Panels that take their frame at draw time hold it from the first draw.
         for i in 0..NAMES.len() {
             self.render(i);
@@ -68,15 +102,29 @@ impl Bench {
     }
 
     fn render(&self, index: usize) -> Vec<u8> {
-        self.rig.render(W, H, |pass| self.set.draw(pass, index, AREA, [W as f32, H as f32], 1.0))
+        self.rig.render(W, H, |pass| {
+            self.set.draw(pass, index, AREA, [W as f32, H as f32], 1.0)
+        })
     }
 
     fn wheel(&self, index: usize, lines: f32) -> bool {
-        self.set.pointer(index, AREA, 1.0, Pointer::Wheel { at: middle(), lines }).used
+        self.set
+            .pointer(
+                index,
+                AREA,
+                1.0,
+                Pointer::Wheel {
+                    at: middle(),
+                    lines,
+                },
+            )
+            .used
     }
 
     fn chip(&self, index: usize) -> String {
-        self.set.toolbar(index, &self.settings, AREA, 1.0).chips[0].text.clone()
+        self.set.toolbar(index, &self.settings, AREA, 1.0).chips[0]
+            .text
+            .clone()
     }
 
     fn wheel_to(&self, index: usize, text: &str) {
@@ -86,7 +134,11 @@ impl Bench {
             }
             self.wheel(index, 1.0);
         }
-        panic!("{}: never reached {text}: at {}", NAMES[index], self.chip(index));
+        panic!(
+            "{}: never reached {text}: at {}",
+            NAMES[index],
+            self.chip(index)
+        );
     }
 }
 
@@ -101,7 +153,17 @@ fn px(image: &[u8], x: u32, y: u32) -> [u8; 3] {
 
 /// A frame (bottom row first) whose neighbouring columns differ in luma, saturation and hue: dull grey, then saturated orange.
 fn stripes() -> Vec<f32> {
-    (0..FRAME[1]).flat_map(|_| (0..FRAME[0]).flat_map(|x| if x % 2 == 0 { [0.3, 0.3, 0.3, 1.0] } else { [0.9, 0.5, 0.2, 1.0] })).collect()
+    (0..FRAME[1])
+        .flat_map(|_| {
+            (0..FRAME[0]).flat_map(|x| {
+                if x % 2 == 0 {
+                    [0.3, 0.3, 0.3, 1.0]
+                } else {
+                    [0.9, 0.5, 0.2, 1.0]
+                }
+            })
+        })
+        .collect()
 }
 
 /// Lengths of the runs of equal values, less the first and last (which the Panel's edge cuts short).
@@ -121,19 +183,28 @@ fn runs(values: &[[u8; 3]]) -> Vec<usize> {
 }
 
 fn row(image: &[u8], y: u32) -> Vec<[u8; 3]> {
-    (AREA[0] as u32..(AREA[0] + AREA[2]) as u32).map(|x| px(image, x, y)).collect()
+    (AREA[0] as u32..(AREA[0] + AREA[2]) as u32)
+        .map(|x| px(image, x, y))
+        .collect()
 }
 
 #[test]
 fn every_picture_panel_zooms_in_exact_squares_with_the_wheel() {
     let b = Bench::new("panels-zoom-squares", "off");
     for (i, name) in NAMES.iter().enumerate() {
-        assert_eq!(b.chip(i), "Fit 50 %", "{name}: the chip reads Fit by default");
+        assert_eq!(
+            b.chip(i),
+            "Fit 50 %",
+            "{name}: the chip reads Fit by default"
+        );
         let fit = b.render(i);
         for (text, k) in [("100 %", 1usize), ("200 %", 2), ("400 %", 4)] {
             b.wheel_to(i, text);
             let r = runs(&row(&b.render(i), (AREA[1] + AREA[3] / 2.0) as u32));
-            assert!(r.len() > 20 && r.iter().all(|n| *n == k), "{name} at {text}: runs {r:?}");
+            assert!(
+                r.len() > 20 && r.iter().all(|n| *n == k),
+                "{name} at {text}: runs {r:?}"
+            );
         }
         for _ in 0..30 {
             b.wheel(i, -1.0);
@@ -163,7 +234,10 @@ fn a_middle_drag_pans_each_picture_panel() {
         let from = middle();
         let pointer = |e| b.set.pointer(i, AREA, 1.0, e).used;
         assert!(pointer(Pointer::MiddleDown(from)), "{name}");
-        assert!(pointer(Pointer::Move([from[0] - 41.0, from[1] - 10.0])), "{name}");
+        assert!(
+            pointer(Pointer::Move([from[0] - 41.0, from[1] - 10.0])),
+            "{name}"
+        );
         assert!(pointer(Pointer::MiddleUp), "{name}");
         assert_ne!(b.render(i), first, "{name}: the picture moved");
     }
@@ -173,7 +247,17 @@ fn a_middle_drag_pans_each_picture_panel() {
 fn zoomed_the_mattes_stay_black_and_nothing_is_drawn_outside_the_panel() {
     let mut b = Bench::new("panels-zoom-mattes", "off");
     // Black bars across the top and bottom 45 rows of the frame (bottom row first).
-    let barred: Vec<f32> = (0..FRAME[1]).flat_map(|y| (0..FRAME[0]).flat_map(move |_| if !(45..315).contains(&y) { [0.0, 0.0, 0.0, 1.0] } else { [0.9, 0.5, 0.2, 1.0] })).collect();
+    let barred: Vec<f32> = (0..FRAME[1])
+        .flat_map(|y| {
+            (0..FRAME[0]).flat_map(move |_| {
+                if !(45..315).contains(&y) {
+                    [0.0, 0.0, 0.0, 1.0]
+                } else {
+                    [0.9, 0.5, 0.2, 1.0]
+                }
+            })
+        })
+        .collect();
     b.play(&barred);
     for (i, name) in NAMES.iter().enumerate() {
         b.wheel_to(i, "100 %");
@@ -187,9 +271,24 @@ fn zoomed_the_mattes_stay_black_and_nothing_is_drawn_outside_the_panel() {
         // Held at the top edge: the frame's first 45 rows (bar) fill the top 45 px of the Panel.
         assert_eq!(px(&image, 100, 25), [0, 0, 0], "{name}: the bar is black");
         assert_eq!(px(&image, 100, 60), [0, 0, 0], "{name}: still the bar");
-        assert_ne!(px(&image, 100, 140), [0, 0, 0], "{name}: the picture is not");
-        for (x, y) in [(10, 150), (345, 150), (150, 10), (150, 265), (2, 2), (390, 290)] {
-            assert_eq!(px(&image, x, y), [0, 0, 0], "{name}: outside the Panel at {x}, {y}");
+        assert_ne!(
+            px(&image, 100, 140),
+            [0, 0, 0],
+            "{name}: the picture is not"
+        );
+        for (x, y) in [
+            (10, 150),
+            (345, 150),
+            (150, 10),
+            (150, 265),
+            (2, 2),
+            (390, 290),
+        ] {
+            assert_eq!(
+                px(&image, x, y),
+                [0, 0, 0],
+                "{name}: outside the Panel at {x}, {y}"
+            );
         }
     }
 }
@@ -198,35 +297,73 @@ fn zoomed_the_mattes_stay_black_and_nothing_is_drawn_outside_the_panel() {
 fn zoomed_the_legend_strip_is_unchanged() {
     let b = Bench::new("panels-zoom-legend", "on");
     // The strip under each picture: the bar's tick numbers, the bar and (ARRI only) the line of marks.
-    let heights = [(0usize, scopecreep::arri_false_colour::BAR.strip(1.0)), (3, scopecreep::scale_bar::ScaleBar { from: 0.0, to: 1.0, unit: "", steps: &[], marks: &[] }.strip(1.0))];
+    let heights = [
+        (0usize, scopecreep::arri_false_colour::BAR.strip(1.0)),
+        (
+            3,
+            scopecreep::scale_bar::ScaleBar {
+                from: 0.0,
+                to: 1.0,
+                unit: "",
+                steps: &[],
+                marks: &[],
+            }
+            .strip(1.0),
+        ),
+    ];
     for (i, height) in heights {
         let top = (AREA[1] + AREA[3] - height).ceil() as u32;
-        let strip = |image: &[u8]| -> Vec<[u8; 3]> { (top..(AREA[1] + AREA[3]) as u32).flat_map(|y| (20..340).map(move |x| px(image, x, y))).collect() };
+        let strip = |image: &[u8]| -> Vec<[u8; 3]> {
+            (top..(AREA[1] + AREA[3]) as u32)
+                .flat_map(|y| (20..340).map(move |x| px(image, x, y)))
+                .collect()
+        };
         let fit = strip(&b.render(i));
-        assert!(fit.iter().any(|p| *p != [0, 0, 0]), "{}: the legend bar is drawn", NAMES[i]);
+        assert!(
+            fit.iter().any(|p| *p != [0, 0, 0]),
+            "{}: the legend bar is drawn",
+            NAMES[i]
+        );
         b.wheel_to(i, "200 %");
-        assert_eq!(strip(&b.render(i)), fit, "{}: the legend strip is as at Fit", NAMES[i]);
+        assert_eq!(
+            strip(&b.render(i)),
+            fit,
+            "{}: the legend strip is as at Fit",
+            NAMES[i]
+        );
     }
 }
 
 // ---- the toolbar seam
 
 #[test]
-fn every_picture_panel_has_a_zoom_chip_before_its_own_chips_that_reads_fit_and_survives_a_small_panel() {
+fn every_picture_panel_has_a_zoom_chip_before_its_own_chips_that_reads_fit_and_survives_a_small_panel()
+ {
     let b = Bench::new("panels-zoom-chips", "off");
     for (i, name) in NAMES.iter().enumerate() {
         let toolbar = b.set.toolbar(i, &b.settings, AREA, 1.0);
         assert_eq!(toolbar.chips[0].text, "Fit 50 %", "{name}");
-        assert_eq!(toolbar.click(0), Some((scopecreep::zoom::ZOOM_KEY, "")), "{name}: a click asks for Fit");
-        assert!(toolbar.chips.len() > 1 || i == 1 || i == 3 || name == &"Skin Tone", "{name}: beside its own chips");
+        assert_eq!(
+            toolbar.click(0),
+            Some((scopecreep::zoom::ZOOM_KEY, "")),
+            "{name}: a click asks for Fit"
+        );
+        assert!(
+            toolbar.chips.len() > 1 || i == 1 || i == 3 || name == &"Skin Tone",
+            "{name}: beside its own chips"
+        );
         let title = panel_title(name, &Default::default(), String::new());
         for scale in [1.0f32, 2.0] {
             let small = PanelLayout::new([0.0, 0.0, 190.0 * scale, 200.0 * scale], scale).title;
             let mut t = b.set.toolbar(i, &b.settings, AREA, scale);
             t.fit_to(small[2], true, scale);
-            let (l, _, _) = window_text::lay_out_toolbar_title(&title, &t.chips, true, small, scale);
+            let (l, _, _) =
+                window_text::lay_out_toolbar_title(&title, &t.chips, true, small, scale);
             let chip = l.chips[0];
-            assert!(chip[0] >= small[0] && chip[0] + chip[2] <= small[0] + small[2] + 0.01, "{name}: {chip:?} stays inside {small:?}");
+            assert!(
+                chip[0] >= small[0] && chip[0] + chip[2] <= small[0] + small[2] + 0.01,
+                "{name}: {chip:?} stays inside {small:?}"
+            );
         }
     }
 }
@@ -244,6 +381,8 @@ fn clicking_the_zoom_chip_takes_each_picture_panel_back_to_fit_and_a_scope_has_n
     drop(b);
     let rig = Rig::new("panels-zoom-scope");
     let (set, _) = DisplaySet::standard_with_handles(&rig.device, &rig.queue, TARGET, false);
-    let waveform = (0..set.len()).find(|i| set.name(*i) == "Luma waveform").unwrap();
+    let waveform = (0..set.len())
+        .find(|i| set.name(*i) == "Luma waveform")
+        .unwrap();
     assert!(set.zoom(waveform, AREA, 1.0).is_none());
 }

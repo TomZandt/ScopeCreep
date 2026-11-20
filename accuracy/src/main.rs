@@ -28,7 +28,11 @@ fn main() {
     let root = data::testdata_root();
     match args.first().map(String::as_str) {
         Some("feed") => std::process::exit(feed_table(&root, args.get(1).map(String::as_str))),
-        Some("probe") => probe(&root, args.get(1).map(String::as_str).unwrap_or("chart"), args.get(2).map(String::as_str).unwrap_or("dwg-rec709")),
+        Some("probe") => probe(
+            &root,
+            args.get(1).map(String::as_str).unwrap_or("chart"),
+            args.get(2).map(String::as_str).unwrap_or("dwg-rec709"),
+        ),
         None => std::process::exit(table(&root, None)),
         Some(only) => std::process::exit(table(&root, Some(only))),
     }
@@ -53,18 +57,29 @@ fn run(root: &Path, s: &Setup) -> Result<Row, String> {
         per_clip.push((clip, f));
         tiff.merge(&compare::compare_tiff16(&pipeline, &feed, &rt));
     }
-    Ok(Row { float, tiff, per_clip })
+    Ok(Row {
+        float,
+        tiff,
+        per_clip,
+    })
 }
 
 fn verdict(s: &Setup, r: &Row) -> Verdict {
-    if s.untested_reason.is_some() { Verdict::Untested } else { report::classify(&r.float) }
+    if s.untested_reason.is_some() {
+        Verdict::Untested
+    } else {
+        report::classify(&r.float)
+    }
 }
 
 fn table(root: &Path, only: Option<&str>) -> i32 {
-    println!("scopecreep accuracy: published maths vs Resolve 21.2 Studio renders (data: {})\n", root.display());
     println!(
-        "{:<16} {:>9} {:>9} {:>10} {:>10} {:>8} {:>9}  {}",
-        "Colour Setup", "max err", "mean err", "max err", "mean err", "10-bit", "TIFF16", "verdict"
+        "scopecreep accuracy: published maths vs Resolve 21.2 Studio renders (data: {})\n",
+        root.display()
+    );
+    println!(
+        "{:<16} {:>9} {:>9} {:>10} {:>10} {:>8} {:>9}  verdict",
+        "Colour Setup", "max err", "mean err", "max err", "mean err", "10-bit", "TIFF16"
     );
     println!(
         "{:<16} {:>9} {:>9} {:>10} {:>10} {:>8} {:>9}",
@@ -122,9 +137,15 @@ fn table(root: &Path, only: Option<&str>) -> i32 {
             }
         }
     }
-    println!("\nColumns: error = |ours - Resolve| per colour channel value over all pixels of 4 frames (ramp, chart, out-of-range, natural),");
-    println!("float EXR reference; 10b = the same in 10-bit codes (x1023); '10-bit codes <>' = share of values whose 10-bit code after clamp and");
-    println!("round differs; TIFF16 max code = largest difference to Resolve's 16-bit TIFF in 16-bit codes after our clamp and round.\n");
+    println!(
+        "\nColumns: error = |ours - Resolve| per colour channel value over all pixels of 4 frames (ramp, chart, out-of-range, natural),"
+    );
+    println!(
+        "float EXR reference; 10b = the same in 10-bit codes (x1023); '10-bit codes <>' = share of values whose 10-bit code after clamp and"
+    );
+    println!(
+        "round differs; TIFF16 max code = largest difference to Resolve's 16-bit TIFF in 16-bit codes after our clamp and round.\n"
+    );
     println!("{}\n", report::tolerance_text());
     if !notes.is_empty() {
         println!("Notes:");
@@ -155,7 +176,9 @@ fn feed_row(root: &Path, s: &Setup) -> Result<(Stats, Vec<(&'static str, Stats)>
         let reference = data::read_reference_exr(root, s.key, clip)?;
         let clip_label = data::read_converted_label(root, s.key, clip)?;
         if !label.is_empty() && clip_label != label {
-            return Err(format!("the app's label changed between clips: {label:?} then {clip_label:?}"));
+            return Err(format!(
+                "the app's label changed between clips: {label:?} then {clip_label:?}"
+            ));
         }
         label = clip_label;
         let c = compare::compare_converted(&pipeline, &ours, &reference);
@@ -171,9 +194,18 @@ fn conversion_part(label: &str) -> &str {
 }
 
 fn feed_table(root: &Path, only: Option<&str>) -> i32 {
-    println!("scopecreep accuracy suite: the real Feed after the app's Output Conversion vs Resolve 21.2 Studio renders (data: {})\n", root.display());
-    println!("{:<16} {:>9} {:>10} {:>9}  {:<30} {:<40} {}", "Colour Setup", "max err", "max err", "over tol", "measured", "the app's label", "label holds");
-    println!("{:<16} {:>9} {:>10} {:>9}", "", "(float)", "(10b code)", "(share)");
+    println!(
+        "scopecreep accuracy suite: the real Feed after the app's Output Conversion vs Resolve 21.2 Studio renders (data: {})\n",
+        root.display()
+    );
+    println!(
+        "{:<16} {:>9} {:>10} {:>9}  {:<30} {:<40} label holds",
+        "Colour Setup", "max err", "max err", "over tol", "measured", "the app's label"
+    );
+    println!(
+        "{:<16} {:>9} {:>10} {:>9}",
+        "", "(float)", "(10b code)", "(share)"
+    );
     let mut status = 0;
     let mut notes = vec![];
     let mut detail = vec![];
@@ -198,7 +230,11 @@ fn feed_table(root: &Path, only: Option<&str>) -> i32 {
                     100.0 * st.over_tolerance as f64 / st.samples as f64,
                     verdict.label(),
                     conversion_part(&label),
-                    if holds { "yes" } else { "NO: the label claims more than was measured" }
+                    if holds {
+                        "yes"
+                    } else {
+                        "NO: the label claims more than was measured"
+                    }
                 );
                 if verdict == Verdict::ExactToeNoise {
                     notes.push(format!(
@@ -207,7 +243,13 @@ fn feed_table(root: &Path, only: Option<&str>) -> i32 {
                     ));
                 }
                 if verdict == Verdict::Approximated {
-                    notes.push(format!("{}: {} samples outside both tolerances (max {:.2e}); the app says: {}", s.key, st.failing, st.max_abs, conversion_part(&label)));
+                    notes.push(format!(
+                        "{}: {} samples outside both tolerances (max {:.2e}); the app says: {}",
+                        s.key,
+                        st.failing,
+                        st.max_abs,
+                        conversion_part(&label)
+                    ));
                 }
                 if only.is_some() {
                     for (clip, c) in &per_clip {
@@ -221,9 +263,15 @@ fn feed_table(root: &Path, only: Option<&str>) -> i32 {
             }
         }
     }
-    println!("\nColumns: error = |app - Resolve| per colour channel value over all pixels of 4 frames (ramp, chart, out-of-range, natural),");
-    println!("float EXR reference; 10b = the same in 10-bit codes (x1023); over tol = share of values more than the encoded tolerance away.");
-    println!("A label may claim less than was measured (approximated, or no Output Conversion), never more.\n");
+    println!(
+        "\nColumns: error = |app - Resolve| per colour channel value over all pixels of 4 frames (ramp, chart, out-of-range, natural),"
+    );
+    println!(
+        "float EXR reference; 10b = the same in 10-bit codes (x1023); over tol = share of values more than the encoded tolerance away."
+    );
+    println!(
+        "A label may claim less than was measured (approximated, or no Output Conversion), never more.\n"
+    );
     println!("{}\n", report::tolerance_text());
     if !notes.is_empty() {
         println!("Notes:");
@@ -244,19 +292,47 @@ fn feed_table(root: &Path, only: Option<&str>) -> i32 {
 fn probe(root: &Path, clip: &str, project: &str) {
     let feed = data::read_feed(root, project, clip).unwrap();
     let rf = data::read_reference_exr(root, project, clip).unwrap();
-    let setup = SETUPS.iter().find(|s| s.key == project).expect("unknown setup");
+    let setup = SETUPS
+        .iter()
+        .find(|s| s.key == project)
+        .expect("unknown setup");
     let pl = (setup.pipeline)();
     let (w, h) = (feed.width, feed.height);
     let pts: Vec<(usize, usize)> = match clip {
-        "chart" => (0..2).flat_map(|r| (0..6).map(move |c| ((c * w / 6 + (c + 1) * w / 6) / 2, (r * h / 2 + (r + 1) * h / 2) / 2))).collect(),
-        "ramp" => (0..21).map(|i| (i * w / 21 + w / 42, h * 7 / 10)).chain((0..9).map(|i| (i * (w - 1) / 8, h * 9 / 10))).collect(),
-        "outofrange" => vec![(w / 4, h / 4), (w / 2, h / 4), (3 * w / 4, h / 4), (w / 4, h / 2), (w / 2, h / 2), (3 * w / 4, h / 2), (w / 4, 3 * h / 4), (3 * w / 4, 3 * h / 4), (10, 10)],
+        "chart" => (0..2)
+            .flat_map(|r| {
+                (0..6).map(move |c| {
+                    (
+                        (c * w / 6 + (c + 1) * w / 6) / 2,
+                        (r * h / 2 + (r + 1) * h / 2) / 2,
+                    )
+                })
+            })
+            .collect(),
+        "ramp" => (0..21)
+            .map(|i| (i * w / 21 + w / 42, h * 7 / 10))
+            .chain((0..9).map(|i| (i * (w - 1) / 8, h * 9 / 10)))
+            .collect(),
+        "outofrange" => vec![
+            (w / 4, h / 4),
+            (w / 2, h / 4),
+            (3 * w / 4, h / 4),
+            (w / 4, h / 2),
+            (w / 2, h / 2),
+            (3 * w / 4, h / 2),
+            (w / 4, 3 * h / 4),
+            (3 * w / 4, 3 * h / 4),
+            (10, 10),
+        ],
         _ => vec![(100, 100), (500, 300), (1000, 800)],
     };
     for (x, y) in pts {
         let i = feed.pixel(x, y);
         let o = rf.pixel(x, y);
         let m = pl.apply([i[0] as f64, i[1] as f64, i[2] as f64]);
-        println!("({x:4},{y:4}) in {:9.5} {:9.5} {:9.5} ref {:9.5} {:9.5} {:9.5} ours {:9.5} {:9.5} {:9.5}", i[0], i[1], i[2], o[0], o[1], o[2], m[0], m[1], m[2]);
+        println!(
+            "({x:4},{y:4}) in {:9.5} {:9.5} {:9.5} ref {:9.5} {:9.5} {:9.5} ours {:9.5} {:9.5} {:9.5}",
+            i[0], i[1], i[2], o[0], o[1], o[2], m[0], m[1], m[2]
+        );
     }
 }

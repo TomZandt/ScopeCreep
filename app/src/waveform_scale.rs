@@ -50,7 +50,11 @@ impl Unit {
 
     /// The unit in use: nits fall back to codes where they are not offered (the choice is kept for when they are).
     pub fn effective(self, space: MeasuredSpace, assumed: bool) -> Unit {
-        if self == Unit::Nits && !nits_offered(space, assumed) { Unit::Codes } else { self }
+        if self == Unit::Nits && !nits_offered(space, assumed) {
+            Unit::Codes
+        } else {
+            self
+        }
     }
 
     /// What a Panel's tag says about the scale; nothing for the default 10-bit codes.
@@ -58,7 +62,9 @@ impl Unit {
         match self {
             Unit::Codes => None,
             Unit::Percent => Some("scale in %".into()),
-            Unit::Nits if space == MeasuredSpace::Rec2100Hlg => Some("scale in nits (HLG, 1000 nit display)".into()),
+            Unit::Nits if space == MeasuredSpace::Rec2100Hlg => {
+                Some("scale in nits (HLG, 1000 nit display)".into())
+            }
             Unit::Nits => Some("scale in nits".into()),
         }
     }
@@ -67,8 +73,14 @@ impl Unit {
     pub fn lines(self, levels: Levels, space: MeasuredSpace) -> Vec<u32> {
         match self {
             Unit::Codes => vec![0, 256, 512, 768, 1023],
-            Unit::Percent => [0.0, 25.0, 50.0, 75.0, 100.0].iter().map(|p| percent_code(*p, levels)).collect(),
-            Unit::Nits => nit_marks(space).iter().map(|n| nits_code(*n, levels, space)).collect(),
+            Unit::Percent => [0.0, 25.0, 50.0, 75.0, 100.0]
+                .iter()
+                .map(|p| percent_code(*p, levels))
+                .collect(),
+            Unit::Nits => nit_marks(space)
+                .iter()
+                .map(|n| nits_code(*n, levels, space))
+                .collect(),
         }
     }
 
@@ -79,11 +91,26 @@ impl Unit {
                 .scale_marks()
                 .iter()
                 .enumerate()
-                .map(|(i, c)| Mark { code: *c, text: c.to_string(), rank: if i == 1 { 2 } else { 0 } })
+                .map(|(i, c)| Mark {
+                    code: *c,
+                    text: c.to_string(),
+                    rank: if i == 1 { 2 } else { 0 },
+                })
                 .collect(),
             Unit::Percent => {
-                let percents: [u32; 3] = if levels == Levels::Video { [100, 50, 0] } else { [75, 50, 25] };
-                percents.iter().map(|p| Mark { code: percent_code(*p as f64, levels), text: p.to_string(), rank: if *p == 50 { 2 } else { 0 } }).collect()
+                let percents: [u32; 3] = if levels == Levels::Video {
+                    [100, 50, 0]
+                } else {
+                    [75, 50, 25]
+                };
+                percents
+                    .iter()
+                    .map(|p| Mark {
+                        code: percent_code(*p as f64, levels),
+                        text: p.to_string(),
+                        rank: if *p == 50 { 2 } else { 0 },
+                    })
+                    .collect()
             }
             Unit::Nits => {
                 let marks = nit_marks(space);
@@ -93,7 +120,11 @@ impl Unit {
                     .iter()
                     .enumerate()
                     .rev()
-                    .map(|(i, n)| Mark { code: nits_code(*n, levels, space), text: n.to_string(), rank: if i == 0 || i == last { 0 } else { 2 } })
+                    .map(|(i, n)| Mark {
+                        code: nits_code(*n, levels, space),
+                        text: n.to_string(),
+                        rank: if i == 0 || i == last { 0 } else { 2 },
+                    })
                     .collect()
             }
         }
@@ -121,7 +152,11 @@ impl Unit {
 
 /// The nit values the scale names, from black up to the top of the light scale (white).
 fn nit_marks(space: MeasuredSpace) -> &'static [u32] {
-    if space == MeasuredSpace::Rec2100Hlg { &[0, 10, 100, 1000] } else { &[0, 10, 100, 1000, 10000] }
+    if space == MeasuredSpace::Rec2100Hlg {
+        &[0, 10, 100, 1000]
+    } else {
+        &[0, 10, 100, 1000, 10000]
+    }
 }
 
 /// Where a percent of the Levels' range lands on the 10-bit scale.
@@ -138,25 +173,39 @@ pub fn percent_of(code: f64, levels: Levels) -> f64 {
 
 fn percent_text(percent: f64) -> String {
     let rounded = (percent * 10.0).round() / 10.0;
-    if rounded.fract() == 0.0 { format!("{rounded:.0}") } else { format!("{rounded:.1}") }
+    if rounded.fract() == 0.0 {
+        format!("{rounded:.0}")
+    } else {
+        format!("{rounded:.1}")
+    }
 }
 
 /// The light, in nits, a signal (0 black to 1 white of the Levels) stands for: PQ's EOTF, or HLG's display light
 /// for a neutral on a 1000 nit display (BT.2100, system gamma 1.2).
 pub fn nits_of_signal(signal: f64, space: MeasuredSpace) -> f64 {
     let signal = signal.clamp(0.0, 1.0);
-    if space == MeasuredSpace::Rec2100Hlg { 1000.0 * hlg_scene(signal).powf(1.2) } else { transfer::pq_decode(signal) }
+    if space == MeasuredSpace::Rec2100Hlg {
+        1000.0 * hlg_scene(signal).powf(1.2)
+    } else {
+        transfer::pq_decode(signal)
+    }
 }
 
 /// The signal of `nits`: the inverse of [`nits_of_signal`].
 pub fn signal_of_nits(nits: f64, space: MeasuredSpace) -> f64 {
-    if space == MeasuredSpace::Rec2100Hlg { hlg_oetf((nits / 1000.0).max(0.0).powf(1.0 / 1.2)) } else { transfer::pq_encode(nits) }
+    if space == MeasuredSpace::Rec2100Hlg {
+        hlg_oetf((nits / 1000.0).max(0.0).powf(1.0 / 1.2))
+    } else {
+        transfer::pq_encode(nits)
+    }
 }
 
 /// The 10-bit code a nit value sits at.
 pub fn nits_code(nits: u32, levels: Levels, space: MeasuredSpace) -> u32 {
     let (black, white) = levels.black_and_white();
-    (black as f64 + signal_of_nits(nits as f64, space) * (white - black) as f64).round().clamp(0.0, 1023.0) as u32
+    (black as f64 + signal_of_nits(nits as f64, space) * (white - black) as f64)
+        .round()
+        .clamp(0.0, 1023.0) as u32
 }
 
 /// The nits at a 10-bit code (a code beyond white is clamped to white's light).
@@ -170,10 +219,18 @@ const HLG_C: f64 = 0.55991073;
 
 /// BT.2100 HLG OETF: scene light (0 to 1) to signal.
 fn hlg_oetf(e: f64) -> f64 {
-    if e <= 1.0 / 12.0 { (3.0 * e).sqrt() } else { HLG_A * (12.0 * e - HLG_B).ln() + HLG_C }
+    if e <= 1.0 / 12.0 {
+        (3.0 * e).sqrt()
+    } else {
+        HLG_A * (12.0 * e - HLG_B).ln() + HLG_C
+    }
 }
 
 /// The inverse: signal to scene light.
 fn hlg_scene(signal: f64) -> f64 {
-    if signal <= 0.5 { signal * signal / 3.0 } else { (((signal - HLG_C) / HLG_A).exp() + HLG_B) / 12.0 }
+    if signal <= 0.5 {
+        signal * signal / 3.0
+    } else {
+        (((signal - HLG_C) / HLG_A).exp() + HLG_B) / 12.0
+    }
 }

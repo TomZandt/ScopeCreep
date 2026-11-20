@@ -122,8 +122,17 @@ struct Run {
 impl Run {
     /// Does a frame follow on from this run?
     fn continues(&self, t: &Timing) -> bool {
-        let step = (t.frame_time - self.last_time) * if self.direction == 0.0 { 1.0 } else { self.direction };
-        let step = if self.direction == 0.0 { step.abs() } else { step };
+        let step = (t.frame_time - self.last_time)
+            * if self.direction == 0.0 {
+                1.0
+            } else {
+                self.direction
+            };
+        let step = if self.direction == 0.0 {
+            step.abs()
+        } else {
+            step
+        };
         t.sender_instance == self.instance
             && (1.0..=3.0).contains(&step)
             && t.render_ns >= self.last_ns
@@ -157,12 +166,17 @@ impl Run {
     /// frames under a few milliseconds apart) even where its average pace drops to real time; playback does not.
     fn is_steady(&self) -> bool {
         let (frames, elapsed) = self.recent_pace();
-        self.recent.len() == WINDOW && elapsed >= frames * 0.9 * self.period as f64 && self.one_at_a_time()
+        self.recent.len() == WINDOW
+            && elapsed >= frames * 0.9 * self.period as f64
+            && self.one_at_a_time()
     }
 
     /// No two of the recent frames came less than a quarter period apart.
     fn one_at_a_time(&self) -> bool {
-        self.recent.iter().zip(self.recent.iter().skip(1)).all(|(a, b)| b.1.saturating_sub(a.1) >= self.period / 4)
+        self.recent
+            .iter()
+            .zip(self.recent.iter().skip(1))
+            .all(|(a, b)| b.1.saturating_sub(a.1) >= self.period / 4)
     }
 
     fn push(&mut self, frame_time: f64, render_ns: u64) {
@@ -189,7 +203,12 @@ pub struct ViewerGate<T> {
 
 impl<T> Default for ViewerGate<T> {
     fn default() -> Self {
-        ViewerGate { run: None, held: None, last_fill_ns: None, counts: GateCounts::default() }
+        ViewerGate {
+            run: None,
+            held: None,
+            last_fill_ns: None,
+            counts: GateCounts::default(),
+        }
     }
 }
 
@@ -234,7 +253,8 @@ impl<T> ViewerGate<T> {
                 // Every frame of the run so far (none of them shown, as it was still being verified) was the fill.
                 if run.state == State::Verifying {
                     self.held = None;
-                    self.counts.cache_renders_ignored += (run.last_time - run.first_time).abs() as u64;
+                    self.counts.cache_renders_ignored +=
+                        (run.last_time - run.first_time).abs() as u64;
                 }
                 run.state = State::Fill;
             }
@@ -266,7 +286,9 @@ impl<T> ViewerGate<T> {
 
         self.end_run(show);
         let period = period_ns(timing.frame_rate);
-        let fragment = self.last_fill_ns.is_some_and(|f| timing.render_ns.saturating_sub(f) <= FRAGMENT_GAP_NS);
+        let fragment = self
+            .last_fill_ns
+            .is_some_and(|f| timing.render_ns.saturating_sub(f) <= FRAGMENT_GAP_NS);
         self.run = Some(Run {
             instance: timing.sender_instance,
             period,
@@ -285,7 +307,11 @@ impl<T> ViewerGate<T> {
 
     /// Time has passed (`now_ns`, the same clock as `render_ns`): a run with nothing new for a while is over.
     pub fn tick(&mut self, now_ns: u64, show: &mut Vec<T>) {
-        if self.held.is_some() && self.run.as_ref().is_some_and(|r| r.state == State::Verifying && now_ns >= r.last_ns + hold_ns(r.period)) {
+        if self.held.is_some()
+            && self.run.as_ref().is_some_and(|r| {
+                r.state == State::Verifying && now_ns >= r.last_ns + hold_ns(r.period)
+            })
+        {
             // The run paused without being a cache fill: the user stepped or scrubbed. Show where it got to. The
             // run is still watched: if it carries on it is held and judged again.
             self.release_or_drop_fragment(show);
@@ -301,7 +327,11 @@ impl<T> ViewerGate<T> {
 
     /// A frame that does not follow on has arrived: the current run is over.
     fn end_run(&mut self, show: &mut Vec<T>) {
-        if self.run.as_ref().is_some_and(|r| r.state == State::Verifying) {
+        if self
+            .run
+            .as_ref()
+            .is_some_and(|r| r.state == State::Verifying)
+        {
             self.release_or_drop_fragment(show); // a run the user made, cut short: show where it got to
         }
         self.run = None;
@@ -649,7 +679,12 @@ mod tests {
                 shown.extend(out.drain(..).map(|s| (s, now)));
             }
             now = now.max(e.read_ns);
-            let t = Timing { sender_instance: e.instance, frame_time: e.time, frame_rate: e.rate, render_ns: e.render_ns };
+            let t = Timing {
+                sender_instance: e.instance,
+                frame_time: e.time,
+                frame_rate: e.rate,
+                render_ns: e.render_ns,
+            };
             gate.offer(t, e.seq, now, &mut out);
             gate.tick(now, &mut out);
             shown.extend(out.drain(..).map(|s| (s, now)));
@@ -667,12 +702,18 @@ mod tests {
     fn latency_ms(evs: &[Ev], shown: &[(u64, u64)], i: usize) -> u64 {
         shown
             .iter()
-            .find(|(seq, at)| *at >= evs[i].read_ns && evs.iter().position(|e| e.seq == *seq).unwrap() >= i)
+            .find(|(seq, at)| {
+                *at >= evs[i].read_ns && evs.iter().position(|e| e.seq == *seq).unwrap() >= i
+            })
             .map_or(u64::MAX, |(_, at)| (at - evs[i].read_ns) / 1_000_000)
     }
 
     fn render_gap_ms(evs: &[Ev], i: usize) -> u64 {
-        if i == 0 { 0 } else { (evs[i].render_ns - evs[i - 1].render_ns) / 1_000_000 }
+        if i == 0 {
+            0
+        } else {
+            (evs[i].render_ns - evs[i - 1].render_ns) / 1_000_000
+        }
     }
 
     #[test]
@@ -684,11 +725,22 @@ mod tests {
         // periods: a run is followed from its fifth render on (a fill is judged by then), and a lone frame is
         // held for a period at most. The only frames that wait longer are the stretches rendered 12 ms apart or
         // faster, which the gate judges to be cache fills and keeps hidden.
-        let late: Vec<usize> = (0..evs.len()).filter(|&i| latency_ms(&evs, &shown, i) > 4 * period_ms).collect();
-        let unexplained: Vec<usize> = late.iter().copied().filter(|&i| render_gap_ms(&evs, i) > 12 && render_gap_ms(&evs, i + 1) > 12).collect();
+        let late: Vec<usize> = (0..evs.len())
+            .filter(|&i| latency_ms(&evs, &shown, i) > 4 * period_ms)
+            .collect();
+        let unexplained: Vec<usize> = late
+            .iter()
+            .copied()
+            .filter(|&i| render_gap_ms(&evs, i) > 12 && render_gap_ms(&evs, i + 1) > 12)
+            .collect();
         assert!(unexplained.len() <= 3, "frames shown late: {unexplained:?}");
         // And the drag is mostly on screen: the old gate showed 1 frame in 3 of the whole recording.
-        assert!(shown.len() * 10 >= evs.len() * 7, "{} of {} frames shown", shown.len(), evs.len());
+        assert!(
+            shown.len() * 10 >= evs.len() * 7,
+            "{} of {} frames shown",
+            shown.len(),
+            evs.len()
+        );
     }
 
     #[test]
@@ -696,8 +748,16 @@ mod tests {
         let evs = parse(EXCERPT);
         let shown = replay(&evs);
         // The drag stops at the last frame before the one-second pause.
-        let stop = (1..evs.len()).filter(|&i| render_gap_ms(&evs, i) > 900).map(|i| i - 1).next_back().unwrap();
-        let (seq, at) = shown.iter().find(|(seq, _)| *seq >= evs[stop].seq).copied().unwrap();
+        let stop = (1..evs.len())
+            .filter(|&i| render_gap_ms(&evs, i) > 900)
+            .map(|i| i - 1)
+            .next_back()
+            .unwrap();
+        let (seq, at) = shown
+            .iter()
+            .find(|(seq, _)| *seq >= evs[stop].seq)
+            .copied()
+            .unwrap();
         assert_eq!(seq, evs[stop].seq, "the stop frame itself is shown");
         let wait = (at - evs[stop].read_ns) / 1_000_000;
         assert!(wait <= 25, "shown {wait} ms after it arrived");
@@ -708,7 +768,14 @@ mod tests {
         (0..count)
             .map(|k| {
                 let ns = 1_000_000_000_000 + k as u64 * every_ms * 1_000_000;
-                Ev { seq: first as u64 + k as u64, instance: 1, time: first + k as f64 * step, rate, render_ns: ns, read_ns: ns + 1_000_000 }
+                Ev {
+                    seq: first as u64 + k as u64,
+                    instance: 1,
+                    time: first + k as f64 * step,
+                    rate,
+                    render_ns: ns,
+                    read_ns: ns + 1_000_000,
+                }
             })
             .collect()
     }

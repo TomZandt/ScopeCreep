@@ -6,14 +6,14 @@
 //! from the shader. Needs a GPU.
 mod common;
 use common::{Rig, TARGET};
-use scopecreep::project::{Answer, ProjectReader};
-use scopecreep::output_conversion::{self, OutputConversion};
 use scopecreep::measurement::LumaWeights;
+use scopecreep::output_conversion::{self, OutputConversion};
+use scopecreep::project::{Answer, ProjectReader};
 use scopecreep::waveform::{Waveform, WaveformCounts};
 use scopecreep_accuracy::aces2::AcesOutputTransform;
+use scopecreep_accuracy::colour::REC2020;
 use scopecreep_accuracy::compare::{TOLERANCE_FLOAT, TOLERANCE_LINEAR};
 use scopecreep_accuracy::pipeline::{Encoding, Pipeline};
-use scopecreep_accuracy::colour::REC2020;
 use scopecreep_accuracy::transfer;
 
 /// A stand-in Resolve and Sender (the synthetic writer), the app's Feed monitor, and the app's GPU side of the
@@ -32,8 +32,13 @@ fn poll(rig: &mut Rig, conversion: &mut OutputConversion, waveform: &Waveform) {
         waveform.measure(encoder, shown);
     });
     let setup = rig.monitor.status().colour_setup().map(|c| c.setup);
-    waveform.set_measurement(output_conversion::measurement(rig.monitor.status().colour_setup(), LumaWeights::FromPrimaries));
-    conversion.follow(setup.as_ref(), rig.uploader.frame(), |encoder, shown| waveform.measure(encoder, shown));
+    waveform.set_measurement(output_conversion::measurement(
+        rig.monitor.status().colour_setup(),
+        LumaWeights::FromPrimaries,
+    ));
+    conversion.follow(setup.as_ref(), rig.uploader.frame(), |encoder, shown| {
+        waveform.measure(encoder, shown)
+    });
 }
 
 impl Bench {
@@ -45,16 +50,35 @@ impl Bench {
     /// No manual Colour Setup on the Sender; the project, read by script once Resolve stops, has `settings`
     /// (Resolve's own setting keys, as the scripting helper reports them).
     fn with_project(name: &str, settings: &[(&str, &str)]) -> Bench {
-        let mut answer: Answer = vec![("result".into(), "ok".into()), ("project".into(), "scopecreep-test".into()), ("studio".into(), "1".into())];
-        answer.extend(settings.iter().map(|(k, v)| (format!("setting.{k}"), v.to_string())));
+        let mut answer: Answer = vec![
+            ("result".into(), "ok".into()),
+            ("project".into(), "scopecreep-test".into()),
+            ("studio".into(), "1".into()),
+        ];
+        answer.extend(
+            settings
+                .iter()
+                .map(|(k, v)| (format!("setting.{k}"), v.to_string())),
+        );
         Bench::make(name, None, Some(Box::new(Helper(answer))))
     }
 
-    fn make(name: &str, colour_setup: Option<&str>, project: Option<Box<dyn ProjectReader>>) -> Bench {
+    fn make(
+        name: &str,
+        colour_setup: Option<&str>,
+        project: Option<Box<dyn ProjectReader>>,
+    ) -> Bench {
         let mut rig = Rig::build(name, 1024 * 64 * 16, colour_setup, project);
-        let (mut conversion, waveform) = (OutputConversion::new(&rig.device, &rig.queue), Waveform::new(&rig.device, &rig.queue, TARGET));
+        let (mut conversion, waveform) = (
+            OutputConversion::new(&rig.device, &rig.queue),
+            Waveform::new(&rig.device, &rig.queue, TARGET),
+        );
         poll(&mut rig, &mut conversion, &waveform);
-        Bench { rig, conversion, waveform }
+        Bench {
+            rig,
+            conversion,
+            waveform,
+        }
     }
 
     /// Resolve stays stopped for `ms` milliseconds.
@@ -75,17 +99,23 @@ impl Bench {
             }
         }
         let (conversion, waveform) = (&mut self.conversion, &self.waveform);
-        self.rig.play(width, height, &pixels, |rig| poll(rig, conversion, waveform));
+        self.rig.play(width, height, &pixels, |rig| {
+            poll(rig, conversion, waveform)
+        });
     }
 
     /// The picture the Picture View shows and the waveform measures, top row first, RGB.
     fn shown(&self) -> Vec<[f32; 3]> {
-        self.conversion.read_shown(self.rig.uploader.frame().expect("a frame was shown"))
+        self.conversion
+            .read_shown(self.rig.uploader.frame().expect("a frame was shown"))
     }
 
     fn label(&self) -> String {
         let status = self.rig.monitor.status();
-        scopecreep::picture_view::PictureView::label_for(status.picture.as_ref().map(|p| [p.width, p.height]), &status.display_context())
+        scopecreep::picture_view::PictureView::label_for(
+            status.picture.as_ref().map(|p| [p.width, p.height]),
+            &status.display_context(),
+        )
     }
 
     fn counts(&self) -> WaveformCounts {
@@ -104,7 +134,8 @@ impl ProjectReader for Helper {
     fn abandon(&mut self) {}
 }
 
-const DWG_REC709: &str = "timeline=DaVinci WG/Intermediate\noutput=Rec.709 Gamma 2.4\nlevels=video\n";
+const DWG_REC709: &str =
+    "timeline=DaVinci WG/Intermediate\noutput=Rec.709 Gamma 2.4\nlevels=video\n";
 
 // ------------------------------------------------------------------ labels
 
@@ -125,8 +156,15 @@ fn a_colour_setup_set_by_hand_does_not_claim_to_be_exact() {
 /// Timeline code values that exercise a transform: a grey ramp from below 0 to above 1, and every mix of a few
 /// levels per channel (saturated colours, out-of-range channels).
 fn test_values() -> Vec<[f32; 3]> {
-    let mut v: Vec<[f32; 3]> = (0..=260).map(|i| { let x = -0.15 + i as f32 * 0.005; [x, x, x] }).collect();
-    let levels = [-0.05f32, 0.0, 0.02, 0.1, 0.25, 0.4, 0.55, 0.7, 0.85, 1.0, 1.2];
+    let mut v: Vec<[f32; 3]> = (0..=260)
+        .map(|i| {
+            let x = -0.15 + i as f32 * 0.005;
+            [x, x, x]
+        })
+        .collect();
+    let levels = [
+        -0.05f32, 0.0, 0.02, 0.1, 0.25, 0.4, 0.55, 0.7, 0.85, 1.0, 1.2,
+    ];
     for r in levels {
         for g in levels {
             for b in levels {
@@ -142,7 +180,12 @@ fn test_values() -> Vec<[f32; 3]> {
 fn assert_converted_like(b: &mut Bench, reference: &Pipeline, values: &[[f32; 3]]) {
     let width = 64u32;
     let height = values.len().div_ceil(64) as u32;
-    let at = |x: u32, y: u32| values.get((y * width + x) as usize).copied().unwrap_or([0.0; 3]);
+    let at = |x: u32, y: u32| {
+        values
+            .get((y * width + x) as usize)
+            .copied()
+            .unwrap_or([0.0; 3])
+    };
     b.play(width, height, at);
     let shown = b.shown();
     let mut worst = (0.0f64, [0f32; 3], [0f32; 3], [0f64; 3]);
@@ -164,7 +207,11 @@ fn assert_converted_like(b: &mut Bench, reference: &Pipeline, values: &[[f32; 3]
             }
         }
     }
-    assert_eq!(failing, 0, "{failing} channel values outside the tolerance; worst {:.3e}: in {:?} ours {:?} reference {:?}", worst.0, worst.1, worst.2, worst.3);
+    assert_eq!(
+        failing, 0,
+        "{failing} channel values outside the tolerance; worst {:.3e}: in {:?} ours {:?} reference {:?}",
+        worst.0, worst.1, worst.2, worst.3
+    );
 }
 
 #[test]
@@ -175,20 +222,33 @@ fn dwg_to_rec709_gamma_24_matches_the_published_maths() {
 
 #[test]
 fn dwg_to_p3_d65_matches_the_published_maths_at_gamma_26() {
-    let mut b = Bench::new("dwg-p3d65", "timeline=DaVinci WG/Intermediate\noutput=P3-D65\n");
+    let mut b = Bench::new(
+        "dwg-p3d65",
+        "timeline=DaVinci WG/Intermediate\noutput=P3-D65\n",
+    );
     assert_converted_like(&mut b, &Pipeline::dwg_p3d65(), &test_values());
 }
 
 #[test]
 fn dwg_to_rec2100_pq_matches_the_published_maths() {
-    let mut b = Bench::new("dwg-pq", "timeline=DaVinci WG/Intermediate\noutput=Rec.2100 ST2084\n");
+    let mut b = Bench::new(
+        "dwg-pq",
+        "timeline=DaVinci WG/Intermediate\noutput=Rec.2100 ST2084\n",
+    );
     assert_converted_like(&mut b, &Pipeline::dwg_rec2100_pq(), &test_values());
 }
 
 /// ACEScct code values: from below 0 linear to far above white (1.3 is about 222 x 18% grey).
 fn acescct_values() -> Vec<[f32; 3]> {
-    let mut v: Vec<[f32; 3]> = (0..=260).map(|i| { let x = i as f32 * 0.005; [x, x, x] }).collect();
-    let levels = [0.0f32, 0.07, 0.15, 0.25, 0.35, 0.41, 0.5, 0.6, 0.75, 0.9, 1.1];
+    let mut v: Vec<[f32; 3]> = (0..=260)
+        .map(|i| {
+            let x = i as f32 * 0.005;
+            [x, x, x]
+        })
+        .collect();
+    let levels = [
+        0.0f32, 0.07, 0.15, 0.25, 0.35, 0.41, 0.5, 0.6, 0.75, 0.9, 1.1,
+    ];
     for &r in &levels {
         for &g in &levels {
             for &b in &levels {
@@ -201,50 +261,103 @@ fn acescct_values() -> Vec<[f32; 3]> {
 
 #[test]
 fn acescct_to_aces_2_rec709_matches_the_reference_ctl_port() {
-    let mut b = Bench::new("aces-rec709", "timeline=ACEScct\noutput=Rec.709 BT.1886\naces_version=2.0\n");
-    assert_converted_like(&mut b, &Pipeline::Aces2(Box::new(AcesOutputTransform::rec709_bt1886())), &acescct_values());
+    let mut b = Bench::new(
+        "aces-rec709",
+        "timeline=ACEScct\noutput=Rec.709 BT.1886\naces_version=2.0\n",
+    );
+    assert_converted_like(
+        &mut b,
+        &Pipeline::Aces2(Box::new(AcesOutputTransform::rec709_bt1886())),
+        &acescct_values(),
+    );
 }
 
 #[test]
 fn acescct_to_aces_2_p3_d65_matches_the_reference_ctl_port() {
-    let mut b = Bench::new("aces-p3d65", "timeline=ACEScct\noutput=P3-D65\naces_version=2.0\n");
-    assert_converted_like(&mut b, &Pipeline::Aces2(Box::new(AcesOutputTransform::p3_d65())), &acescct_values());
+    let mut b = Bench::new(
+        "aces-p3d65",
+        "timeline=ACEScct\noutput=P3-D65\naces_version=2.0\n",
+    );
+    assert_converted_like(
+        &mut b,
+        &Pipeline::Aces2(Box::new(AcesOutputTransform::p3_d65())),
+        &acescct_values(),
+    );
 }
 
 #[test]
 fn acescct_to_aces_2_rec2100_pq_1000_nit_matches_the_reference_ctl_port() {
-    let mut b = Bench::new("aces-pq", "timeline=ACEScct\noutput=Rec.2100 ST2084 (1000 nit)\naces_version=2.0\n");
-    assert_converted_like(&mut b, &Pipeline::Aces2(Box::new(AcesOutputTransform::rec2100_pq_1000())), &acescct_values());
+    let mut b = Bench::new(
+        "aces-pq",
+        "timeline=ACEScct\noutput=Rec.2100 ST2084 (1000 nit)\naces_version=2.0\n",
+    );
+    assert_converted_like(
+        &mut b,
+        &Pipeline::Aces2(Box::new(AcesOutputTransform::rec2100_pq_1000())),
+        &acescct_values(),
+    );
 }
 
 // ------------------------------------------------------------------ approximated and unsupported
 
 #[test]
 fn rec2020_gamma_24_is_converted_with_published_maths_but_labelled_approximated() {
-    let mut b = Bench::new("dwg-rec2020", "timeline=DaVinci WG/Intermediate\noutput=Rec.2020 Gamma 2.4\n");
-    assert_converted_like(&mut b, &Pipeline::dwg_to_display(REC2020, Encoding::SignedGamma(2.4)), &test_values());
-    assert!(b.label().ends_with("Output Conversion approximated: Rec.2020 Gamma 2.4 not yet measured against Resolve"), "{}", b.label());
+    let mut b = Bench::new(
+        "dwg-rec2020",
+        "timeline=DaVinci WG/Intermediate\noutput=Rec.2020 Gamma 2.4\n",
+    );
+    assert_converted_like(
+        &mut b,
+        &Pipeline::dwg_to_display(REC2020, Encoding::SignedGamma(2.4)),
+        &test_values(),
+    );
+    assert!(
+        b.label().ends_with(
+            "Output Conversion approximated: Rec.2020 Gamma 2.4 not yet measured against Resolve"
+        ),
+        "{}",
+        b.label()
+    );
 }
 
 #[test]
 fn davinci_tone_mapping_is_not_applied_and_the_label_says_so() {
-    let mut b = Bench::new("dwg-tone-mapping", "timeline=DaVinci WG/Intermediate\noutput=Rec.2100 ST2084\ntone_mapping=DaVinci\n");
+    let mut b = Bench::new(
+        "dwg-tone-mapping",
+        "timeline=DaVinci WG/Intermediate\noutput=Rec.2100 ST2084\ntone_mapping=DaVinci\n",
+    );
     assert_converted_like(&mut b, &Pipeline::dwg_rec2100_pq(), &test_values());
-    assert!(b.label().ends_with("Output Conversion approximated: DaVinci tone mapping not applied (unpublished)"), "{}", b.label());
+    assert!(
+        b.label().ends_with(
+            "Output Conversion approximated: DaVinci tone mapping not applied (unpublished)"
+        ),
+        "{}",
+        b.label()
+    );
 }
 
 #[test]
 fn gamut_mapping_is_not_applied_and_the_label_says_so() {
-    let mut b = Bench::new("dwg-gamut-mapping", "timeline=DaVinci WG/Intermediate\noutput=Rec.709 Gamma 2.4\ngamut_mapping=Saturation Compression\n");
+    let mut b = Bench::new(
+        "dwg-gamut-mapping",
+        "timeline=DaVinci WG/Intermediate\noutput=Rec.709 Gamma 2.4\ngamut_mapping=Saturation Compression\n",
+    );
     b.play(16, 9, |_, _| [0.4, 0.4, 0.4]);
     assert!(b.label().ends_with("Output Conversion approximated: Saturation Compression gamut mapping not applied (unpublished)"), "{}", b.label());
 }
 
 #[test]
 fn a_yrgb_project_is_shown_as_sent_because_resolve_converts_nothing() {
-    let mut b = Bench::new("yrgb", "timeline=Rec.709 Gamma 2.4\noutput=Rec.709 Gamma 2.4\nscience=yrgb\n");
+    let mut b = Bench::new(
+        "yrgb",
+        "timeline=Rec.709 Gamma 2.4\noutput=Rec.709 Gamma 2.4\nscience=yrgb\n",
+    );
     assert_converted_like(&mut b, &Pipeline::Identity, &test_values());
-    assert!(b.label().ends_with("Output Conversion exact"), "{}", b.label());
+    assert!(
+        b.label().ends_with("Output Conversion exact"),
+        "{}",
+        b.label()
+    );
 }
 
 /// Colour Setups with no conversion yet: the picture is shown and measured exactly as sent, and the label says
@@ -252,22 +365,59 @@ fn a_yrgb_project_is_shown_as_sent_because_resolve_converts_nothing() {
 #[test]
 fn colour_setups_without_a_conversion_are_shown_as_sent_and_say_why() {
     for (name, setup, why) in [
-        ("hlg", "timeline=DaVinci WG/Intermediate\noutput=Rec.2100 HLG\n", "output Rec.2100 HLG not yet supported"),
-        ("p3dci", "timeline=DaVinci WG/Intermediate\noutput=P3-DCI\n", "output P3-DCI not yet supported"),
-        ("aces13", "timeline=ACEScct\noutput=Rec.709 BT.1886\naces_version=1.3\n", "ACES 1.3 not yet supported"),
-        ("acescc", "timeline=ACEScc\noutput=Rec.709 BT.1886\naces_version=2.0\n", "ACEScc timelines not yet supported"),
-        ("aces-odt", "timeline=ACEScct\noutput=P3-D65 (1000 nit)\naces_version=2.0\n", "ACES output transform P3-D65 (1000 nit) not yet supported"),
+        (
+            "hlg",
+            "timeline=DaVinci WG/Intermediate\noutput=Rec.2100 HLG\n",
+            "output Rec.2100 HLG not yet supported",
+        ),
+        (
+            "p3dci",
+            "timeline=DaVinci WG/Intermediate\noutput=P3-DCI\n",
+            "output P3-DCI not yet supported",
+        ),
+        (
+            "aces13",
+            "timeline=ACEScct\noutput=Rec.709 BT.1886\naces_version=1.3\n",
+            "ACES 1.3 not yet supported",
+        ),
+        (
+            "acescc",
+            "timeline=ACEScc\noutput=Rec.709 BT.1886\naces_version=2.0\n",
+            "ACEScc timelines not yet supported",
+        ),
+        (
+            "aces-odt",
+            "timeline=ACEScct\noutput=P3-D65 (1000 nit)\naces_version=2.0\n",
+            "ACES output transform P3-D65 (1000 nit) not yet supported",
+        ),
     ] {
         let mut b = Bench::new(name, setup);
         assert_converted_like(&mut b, &Pipeline::Identity, &test_values());
-        assert!(b.label().ends_with(&format!("as sent, no Output Conversion: {why}")), "{name}: {}", b.label());
-        assert!(b.waveform.label().contains("Rec.709 assumed, measured as sent, unconverted"), "{name}: the waveform says it measures as sent: {}", b.waveform.label());
+        assert!(
+            b.label()
+                .ends_with(&format!("as sent, no Output Conversion: {why}")),
+            "{name}: {}",
+            b.label()
+        );
+        assert!(
+            b.waveform
+                .label()
+                .contains("Rec.709 assumed, measured as sent, unconverted"),
+            "{name}: the waveform says it measures as sent: {}",
+            b.waveform.label()
+        );
     }
 }
 
 #[test]
 fn an_aces_project_whose_version_is_assumed_is_exact_only_for_aces_2() {
-    let mut b = Bench::with_project("aces-assumed", &[("colorScienceMode", "acescct"), ("colorAcesODT", "Rec.709 BT.1886")]);
+    let mut b = Bench::with_project(
+        "aces-assumed",
+        &[
+            ("colorScienceMode", "acescct"),
+            ("colorAcesODT", "Rec.709 BT.1886"),
+        ],
+    );
     b.play(16, 9, |_, _| [0.4, 0.4, 0.4]);
     b.wait(1100);
     assert!(b.label().ends_with("ACEScct → Rec.709 BT.1886 (from project, assumes ACES 2.0)  ·  Output Conversion exact for ACES 2.0"), "{}", b.label());
@@ -284,29 +434,59 @@ fn code(v: f64) -> u32 {
 fn the_waveform_measures_the_converted_picture() {
     // DaVinci Intermediate 18% grey and 90% white: as sent (Timeline Colour Space) they would sit at codes 358 and 497.
     let mut b = Bench::new("waveform", DWG_REC709);
-    let (grey, white) = (transfer::di_encode(0.18) as f32, transfer::di_encode(0.9) as f32);
+    let (grey, white) = (
+        transfer::di_encode(0.18) as f32,
+        transfer::di_encode(0.9) as f32,
+    );
     b.play(8, 100, |x, _| if x < 4 { [grey; 3] } else { [white; 3] });
     let reference = Pipeline::dwg_rec709();
-    let (grey_code, white_code) = (code(reference.apply([grey as f64; 3])[1]), code(reference.apply([white as f64; 3])[1]));
+    let (grey_code, white_code) = (
+        code(reference.apply([grey as f64; 3])[1]),
+        code(reference.apply([white as f64; 3])[1]),
+    );
     // Rec.709 Gamma 2.4: 0.18 ^ (1 / 2.4) x 876 + 64 = 492.8, 0.9 ^ (1 / 2.4) x 876 + 64 = 902.4.
-    assert_eq!((grey_code, white_code), (493, 902), "Rec.709 Gamma 2.4 codes of 18% grey and 90% white");
+    assert_eq!(
+        (grey_code, white_code),
+        (493, 902),
+        "Rec.709 Gamma 2.4 codes of 18% grey and 90% white"
+    );
     let counts = b.counts();
     for x in 0..8 {
         let want = if x < 4 { grey_code } else { white_code };
-        assert_eq!(counts.at(x, want), 100, "column {x}: every pixel at code {want}");
+        assert_eq!(
+            counts.at(x, want),
+            100,
+            "column {x}: every pixel at code {want}"
+        );
     }
-    assert!(b.waveform.label().contains("Rec.709  ·"), "{}", b.waveform.label());
-    assert!(!b.waveform.label().contains("assumed"), "{}", b.waveform.label());
+    assert!(
+        b.waveform.label().contains("Rec.709  ·"),
+        "{}",
+        b.waveform.label()
+    );
+    assert!(
+        !b.waveform.label().contains("assumed"),
+        "{}",
+        b.waveform.label()
+    );
 }
 
 #[test]
 fn the_waveform_measures_an_aces_picture_after_the_output_transform() {
     // ACEScct 18% grey: through ACES 2.0 Rec.709 BT.1886 it lands at 10.013 nit of 100 (the CTL tonescale).
-    let mut b = Bench::new("waveform-aces", "timeline=ACEScct\noutput=Rec.709 BT.1886\naces_version=2.0\n");
+    let mut b = Bench::new(
+        "waveform-aces",
+        "timeline=ACEScct\noutput=Rec.709 BT.1886\naces_version=2.0\n",
+    );
     let grey = transfer::acescct_encode(0.18) as f32;
     b.play(4, 50, |_, _| [grey; 3]);
-    let want = code(Pipeline::Aces2(Box::new(AcesOutputTransform::rec709_bt1886())).apply([grey as f64; 3])[1]);
-    assert_eq!(want, 400, "ACES 2.0 puts 18% grey at 10.013 nit: 0.10013 ^ (1 / 2.4) x 876 + 64 = 399.8");
+    let want = code(
+        Pipeline::Aces2(Box::new(AcesOutputTransform::rec709_bt1886())).apply([grey as f64; 3])[1],
+    );
+    assert_eq!(
+        want, 400,
+        "ACES 2.0 puts 18% grey at 10.013 nit: 0.10013 ^ (1 / 2.4) x 876 + 64 = 399.8"
+    );
     let counts = b.counts();
     for x in 0..4 {
         assert_eq!(counts.at(x, want), 50, "column {x}");
@@ -317,15 +497,34 @@ fn the_waveform_measures_an_aces_picture_after_the_output_transform() {
 fn a_colour_setup_read_after_playback_stops_converts_the_picture_already_on_screen() {
     let mut b = Bench::with_project(
         "late-setup",
-        &[("colorScienceMode", "davinciYRGBColorManagedv2"), ("colorSpaceTimeline", "DaVinci WG/Intermediate"), ("colorSpaceOutput", "Rec.709 Gamma 2.4")],
+        &[
+            ("colorScienceMode", "davinciYRGBColorManagedv2"),
+            ("colorSpaceTimeline", "DaVinci WG/Intermediate"),
+            ("colorSpaceOutput", "Rec.709 Gamma 2.4"),
+        ],
     );
     let grey = transfer::di_encode(0.18) as f32;
     b.play(4, 10, |_, _| [grey; 3]);
-    assert!(b.label().ends_with("as sent, no Output Conversion"), "before the project is read: {}", b.label());
+    assert!(
+        b.label().ends_with("as sent, no Output Conversion"),
+        "before the project is read: {}",
+        b.label()
+    );
     assert_eq!(b.counts().at(0, code(grey as f64)), 10, "measured as sent");
     b.wait(1100); // Resolve stays stopped: the project is read, and no new frame comes
-    assert!(b.label().ends_with("Output Conversion exact"), "{}", b.label());
+    assert!(
+        b.label().ends_with("Output Conversion exact"),
+        "{}",
+        b.label()
+    );
     let want = code(Pipeline::dwg_rec709().apply([grey as f64; 3])[1]);
-    assert_eq!(b.counts().at(0, want), 10, "the same frame, measured again after conversion");
-    assert!((b.shown()[0][1] as f64 - Pipeline::dwg_rec709().apply([grey as f64; 3])[1]).abs() < 1e-4, "the Picture View shows the converted frame");
+    assert_eq!(
+        b.counts().at(0, want),
+        10,
+        "the same frame, measured again after conversion"
+    );
+    assert!(
+        (b.shown()[0][1] as f64 - Pipeline::dwg_rec709().apply([grey as f64; 3])[1]).abs() < 1e-4,
+        "the Picture View shows the converted frame"
+    );
 }

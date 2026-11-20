@@ -169,7 +169,10 @@ mod tests {
         // BT.709 luma coefficients are 0.2126 / 0.7152 / 0.0722 (4 d.p.); with the 4 d.p. white 0.3127,0.3290
         // the exact derivation gives 0.212639 / 0.715169 / 0.072192.
         let w = luma_weights(&REC709);
-        assert!(close(w[0], 0.2126, 1e-4) && close(w[1], 0.7152, 1e-4) && close(w[2], 0.0722, 1e-4), "{w:?}");
+        assert!(
+            close(w[0], 0.2126, 1e-4) && close(w[1], 0.7152, 1e-4) && close(w[2], 0.0722, 1e-4),
+            "{w:?}"
+        );
         assert!(close(w[0], 0.212639, 1e-6) && close(w[2], 0.072192, 1e-6));
     }
 
@@ -177,13 +180,19 @@ mod tests {
     fn rec2020_luma_weights_match_bt2020() {
         // BT.2020: 0.2627 0.6780 0.0593 (the standard rounds the exact 0.262700.. values)
         let w = luma_weights(&REC2020);
-        assert!(close(w[0], 0.2627, 5e-5) && close(w[1], 0.6780, 5e-5) && close(w[2], 0.0593, 5e-5), "{w:?}");
+        assert!(
+            close(w[0], 0.2627, 5e-5) && close(w[1], 0.6780, 5e-5) && close(w[2], 0.0593, 5e-5),
+            "{w:?}"
+        );
     }
 
     #[test]
     fn p3_d65_luma_weights_match_adr_0004() {
         let w = luma_weights(&P3_D65);
-        assert!(close(w[0], 0.2290, 5e-5) && close(w[1], 0.6917, 5e-5) && close(w[2], 0.0793, 5e-5), "{w:?}");
+        assert!(
+            close(w[0], 0.2290, 5e-5) && close(w[1], 0.6917, 5e-5) && close(w[2], 0.0793, 5e-5),
+            "{w:?}"
+        );
     }
 
     #[test]
@@ -197,7 +206,12 @@ mod tests {
         let m = transpose(&rgb_to_xyz(&DWG));
         for i in 0..3 {
             for j in 0..3 {
-                assert!(close(m[i][j], wp[i][j], 2e-8), "[{i}][{j}] {} vs {}", m[i][j], wp[i][j]);
+                assert!(
+                    close(m[i][j], wp[i][j], 2e-8),
+                    "[{i}][{j}] {} vs {}",
+                    m[i][j],
+                    wp[i][j]
+                );
             }
         }
         // XYZ -> DWG
@@ -230,6 +244,8 @@ mod tests {
             assert!(close(c, 1.0, 1e-12), "{w:?}");
         }
         let back = vmul(vmul([0.3, 0.6, 0.1], &m), &rgb_to_rgb(&REC709, &DWG));
-        assert!(close(back[0], 0.3, 1e-12) && close(back[1], 0.6, 1e-12) && close(back[2], 0.1, 1e-12));
+        assert!(
+            close(back[0], 0.3, 1e-12) && close(back[1], 0.6, 1e-12) && close(back[2], 0.1, 1e-12)
+        );
     }
 }

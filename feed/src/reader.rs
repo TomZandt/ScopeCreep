@@ -17,9 +17,14 @@ pub enum OpenError {
     /// The file is there but is not a Feed.
     NotAFeed,
     /// The Sender speaks another major version of the protocol.
-    VersionMismatch { found: (u32, u32), supported: (u32, u32) },
+    VersionMismatch {
+        found: (u32, u32),
+        supported: (u32, u32),
+    },
     /// Another app (process `pid`) is attached to this Feed.
-    Busy { pid: u64 },
+    Busy {
+        pid: u64,
+    },
     Io(io::Error),
 }
 
@@ -29,7 +34,11 @@ impl std::fmt::Display for OpenError {
             OpenError::NoFeed => write!(f, "no Feed"),
             OpenError::NotAFeed => write!(f, "not a Feed file"),
             OpenError::VersionMismatch { found, supported } => {
-                write!(f, "Feed version {}.{} (this app reads version {}.x)", found.0, found.1, supported.0)
+                write!(
+                    f,
+                    "Feed version {}.{} (this app reads version {}.x)",
+                    found.0, found.1, supported.0
+                )
             }
             OpenError::Busy { pid } => write!(f, "another app (process {pid}) is using the Feed"),
             OpenError::Io(e) => write!(f, "{e}"),
@@ -116,9 +125,14 @@ impl FeedReader {
         }
         let found = (header.u32(H_VERSION_MAJOR), header.u32(H_VERSION_MINOR));
         if found.0 != VERSION_MAJOR {
-            return Err(OpenError::VersionMismatch { found, supported: (VERSION_MAJOR, VERSION_MINOR) });
+            return Err(OpenError::VersionMismatch {
+                found,
+                supported: (VERSION_MAJOR, VERSION_MINOR),
+            });
         }
-        if header.u32(H_HEADER_BYTES) as usize != HEADER_BYTES || header.u32(H_SLOT_HEADER_BYTES) as usize != SLOT_HEADER_BYTES {
+        if header.u32(H_HEADER_BYTES) as usize != HEADER_BYTES
+            || header.u32(H_SLOT_HEADER_BYTES) as usize != SLOT_HEADER_BYTES
+        {
             return Err(OpenError::NotAFeed);
         }
         let bytes = file_bytes(header.slot_count(), header.slot_capacity());
@@ -128,24 +142,37 @@ impl FeedReader {
         let now = now_ns();
         let beat = header.atomic_u64(H_READER_HEARTBEAT_NS).load(Acquire);
         let other = header.atomic_u64(H_READER_PID).load(Acquire);
-        if beat != 0 && now.saturating_sub(beat) < READER_TIMEOUT_NS && other != std::process::id() as u64 {
+        if beat != 0
+            && now.saturating_sub(beat) < READER_TIMEOUT_NS
+            && other != std::process::id() as u64
+        {
             return Err(OpenError::Busy { pid: other });
         }
         drop(header);
         let map = Mapping::map(&file, bytes).map_err(OpenError::Io)?;
         for i in 0..map.slot_count() {
             // Slots left READING belong to a reader that died.
-            let _ = map.atomic_u32(map.slot(i) + S_STATE).compare_exchange(READING, FREE, AcqRel, Acquire);
+            let _ = map
+                .atomic_u32(map.slot(i) + S_STATE)
+                .compare_exchange(READING, FREE, AcqRel, Acquire);
         }
-        let reader = FeedReader { map: Arc::new(map), path, file_id: (meta.dev(), meta.ino()) };
+        let reader = FeedReader {
+            map: Arc::new(map),
+            path,
+            file_id: (meta.dev(), meta.ino()),
+        };
         reader.heartbeat(now);
         Ok(reader)
     }
 
     /// Tell the Sender the app is still here. Call at least every [`crate::HEARTBEAT_INTERVAL_NS`].
     pub fn heartbeat(&self, now_ns: u64) {
-        self.map.atomic_u64(H_READER_PID).store(std::process::id() as u64, Release);
-        self.map.atomic_u64(H_READER_HEARTBEAT_NS).store(now_ns, Release);
+        self.map
+            .atomic_u64(H_READER_PID)
+            .store(std::process::id() as u64, Release);
+        self.map
+            .atomic_u64(H_READER_HEARTBEAT_NS)
+            .store(now_ns, Release);
     }
 
     /// Has the Sender marked this Feed file as replaced (it made a ring with a new layout)? If so, open the path
@@ -236,7 +263,10 @@ impl FeedReader {
                 .filter(|&i| m.atomic_u32(m.slot(i) + S_STATE).load(Acquire) == READY)
                 .min_by_key(|&i| m.atomic_u64(m.slot(i) + S_SEQUENCE).load(Acquire))?;
             let s = m.slot(oldest);
-            if m.atomic_u32(s + S_STATE).compare_exchange(READY, READING, AcqRel, Acquire).is_err() {
+            if m.atomic_u32(s + S_STATE)
+                .compare_exchange(READY, READING, AcqRel, Acquire)
+                .is_err()
+            {
                 continue; // the Sender overwrote it between the scan and the swap: look again
             }
             let frame = Frame {
@@ -343,12 +373,16 @@ impl Frame {
     pub fn pixels(&self) -> &[f32] {
         let count = self.data_bytes as usize / 4;
         // SAFETY: the slot is READING until this Frame is dropped, so the Sender does not touch it; range checked.
-        unsafe { std::slice::from_raw_parts(self.map.floats(self.slot + SLOT_HEADER_BYTES, count), count) }
+        unsafe {
+            std::slice::from_raw_parts(self.map.floats(self.slot + SLOT_HEADER_BYTES, count), count)
+        }
     }
 }
 
 impl Drop for Frame {
     fn drop(&mut self) {
-        self.map.atomic_u32(self.slot + S_STATE).store(FREE, Release);
+        self.map
+            .atomic_u32(self.slot + S_STATE)
+            .store(FREE, Release);
     }
 }

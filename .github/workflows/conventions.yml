@@ -23,3 +23,5 @@ jobs:
           scripts/check-commits.sh "$range"
       - name: Changelog has an Unreleased section
         run: grep -q '^## \[Unreleased\]' CHANGELOG.md
+      - name: Definition-of-done records
+        run: CI=true scripts/check-done.sh

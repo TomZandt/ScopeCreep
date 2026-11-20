@@ -26,7 +26,11 @@ pub enum Pipeline {
     /// Timeline and output are the same space: nothing happens.
     Identity,
     /// DaVinci Wide Gamut / Intermediate -> display primaries -> display encoding. No tone or gamut mapping.
-    DwgToDisplay { primaries: Chromaticities, matrix: colour::M3, encoding: Encoding },
+    DwgToDisplay {
+        primaries: Chromaticities,
+        matrix: colour::M3,
+        encoding: Encoding,
+    },
     /// ACEScct -> ACES2065-1 -> ACES 2.0 Output Transform.
     Aces2(Box<AcesOutputTransform>),
 }
@@ -56,7 +60,11 @@ impl Encoding {
 
 impl Pipeline {
     pub fn dwg_to_display(primaries: Chromaticities, encoding: Encoding) -> Self {
-        Pipeline::DwgToDisplay { primaries, matrix: colour::rgb_to_rgb(&DWG, &primaries), encoding }
+        Pipeline::DwgToDisplay {
+            primaries,
+            matrix: colour::rgb_to_rgb(&DWG, &primaries),
+            encoding,
+        }
     }
     pub fn dwg_rec709() -> Self {
         Self::dwg_to_display(REC709, Encoding::SignedGamma(2.4))
@@ -65,7 +73,12 @@ impl Pipeline {
         Self::dwg_to_display(P3_D65, Encoding::SignedGamma(2.6))
     }
     pub fn dwg_rec2100_pq() -> Self {
-        Self::dwg_to_display(REC2020, Encoding::Pq { nits_per_unit: 100.0 })
+        Self::dwg_to_display(
+            REC2020,
+            Encoding::Pq {
+                nits_per_unit: 100.0,
+            },
+        )
     }
 
     /// Output code value to display-linear light (1.0 = the transform's reference white). Used to judge errors in
@@ -81,13 +94,27 @@ impl Pipeline {
     pub fn apply(&self, rgb: V3) -> V3 {
         match self {
             Pipeline::Identity => rgb,
-            Pipeline::DwgToDisplay { matrix, encoding, .. } => {
-                let lin = [transfer::di_decode(rgb[0]), transfer::di_decode(rgb[1]), transfer::di_decode(rgb[2])];
+            Pipeline::DwgToDisplay {
+                matrix, encoding, ..
+            } => {
+                let lin = [
+                    transfer::di_decode(rgb[0]),
+                    transfer::di_decode(rgb[1]),
+                    transfer::di_decode(rgb[2]),
+                ];
                 let disp = vmul(lin, matrix);
-                [encoding.encode(disp[0]), encoding.encode(disp[1]), encoding.encode(disp[2])]
+                [
+                    encoding.encode(disp[0]),
+                    encoding.encode(disp[1]),
+                    encoding.encode(disp[2]),
+                ]
             }
             Pipeline::Aces2(ot) => {
-                let lin = [transfer::acescct_decode(rgb[0]), transfer::acescct_decode(rgb[1]), transfer::acescct_decode(rgb[2])];
+                let lin = [
+                    transfer::acescct_decode(rgb[0]),
+                    transfer::acescct_decode(rgb[1]),
+                    transfer::acescct_decode(rgb[2]),
+                ];
                 // ACEScct is an AP1 encoding; the Output Transform takes ACES2065-1 (AP0).
                 let aces = vmul(lin, &colour::rgb_to_rgb(&AP1, &AP0));
                 ot.forward(aces)
@@ -154,10 +181,18 @@ mod tests {
 
     #[test]
     fn decode_inverts_encode_for_neutrals() {
-        for p in [Pipeline::dwg_rec709(), Pipeline::dwg_p3d65(), Pipeline::dwg_rec2100_pq()] {
+        for p in [
+            Pipeline::dwg_rec709(),
+            Pipeline::dwg_p3d65(),
+            Pipeline::dwg_rec2100_pq(),
+        ] {
             for l in [0.01, 0.18, 1.0, 4.0] {
                 let o = p.apply([di(l); 3]);
-                assert!(close(p.decode(o[1]), l, 1e-6 * l.max(1.0)), "{l}: {}", p.decode(o[1]));
+                assert!(
+                    close(p.decode(o[1]), l, 1e-6 * l.max(1.0)),
+                    "{l}: {}",
+                    p.decode(o[1])
+                );
             }
         }
     }

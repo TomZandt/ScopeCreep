@@ -96,16 +96,30 @@ impl Mapping {
     pub fn map(file: &File, len: usize) -> io::Result<Mapping> {
         // SAFETY: a fresh shared mapping of a file we hold open; failure is checked.
         let ptr = unsafe {
-            libc::mmap(std::ptr::null_mut(), len, libc::PROT_READ | libc::PROT_WRITE, libc::MAP_SHARED, file.as_raw_fd(), 0)
+            libc::mmap(
+                std::ptr::null_mut(),
+                len,
+                libc::PROT_READ | libc::PROT_WRITE,
+                libc::MAP_SHARED,
+                file.as_raw_fd(),
+                0,
+            )
         };
         if ptr == libc::MAP_FAILED {
             return Err(io::Error::last_os_error());
         }
-        Ok(Mapping { ptr: ptr as *mut u8, len })
+        Ok(Mapping {
+            ptr: ptr as *mut u8,
+            len,
+        })
     }
 
     fn check(&self, off: usize, size: usize) {
-        assert!(off.checked_add(size).is_some_and(|end| end <= self.len), "Feed access out of range: {off}+{size} > {}", self.len);
+        assert!(
+            off.checked_add(size).is_some_and(|end| end <= self.len),
+            "Feed access out of range: {off}+{size} > {}",
+            self.len
+        );
     }
 
     pub fn u32(&self, off: usize) -> u32 {
@@ -149,7 +163,9 @@ impl Mapping {
     pub fn text(&self, off: usize, cap: usize) -> String {
         self.check(off, cap);
         // SAFETY: in range; bytes may change under us, which can only garble the text.
-        let bytes: Vec<u8> = (0..cap).map(|i| unsafe { self.ptr.add(off + i).read_volatile() }).collect();
+        let bytes: Vec<u8> = (0..cap)
+            .map(|i| unsafe { self.ptr.add(off + i).read_volatile() })
+            .collect();
         let end = bytes.iter().position(|&b| b == 0).unwrap_or(cap);
         String::from_utf8_lossy(&bytes[..end]).into_owned()
     }
@@ -160,7 +176,11 @@ impl Mapping {
         while !text.is_char_boundary(n) {
             n -= 1;
         }
-        for (i, &b) in src[..n].iter().chain(std::iter::repeat_n(&0u8, cap - n)).enumerate() {
+        for (i, &b) in src[..n]
+            .iter()
+            .chain(std::iter::repeat_n(&0u8, cap - n))
+            .enumerate()
+        {
             // SAFETY: in range.
             unsafe { self.ptr.add(off + i).write_volatile(b) }
         }
@@ -170,7 +190,9 @@ impl Mapping {
     pub fn bytes(&self, off: usize, len: usize) -> Vec<u8> {
         self.check(off, len);
         // SAFETY: in range.
-        (0..len).map(|i| unsafe { self.ptr.add(off + i).read_volatile() }).collect()
+        (0..len)
+            .map(|i| unsafe { self.ptr.add(off + i).read_volatile() })
+            .collect()
     }
     pub fn set_bytes(&self, off: usize, src: &[u8]) {
         self.check(off, src.len());
@@ -214,7 +236,10 @@ pub fn entry(i: usize) -> usize {
 /// Is process `pid` running? (Signal 0 only checks; EPERM means it exists but belongs to someone else.)
 pub fn process_alive(pid: u64) -> bool {
     // SAFETY: signal 0 sends nothing.
-    pid != 0 && pid <= i32::MAX as u64 && (unsafe { libc::kill(pid as libc::pid_t, 0) } == 0 || io::Error::last_os_error().raw_os_error() == Some(libc::EPERM))
+    pid != 0
+        && pid <= i32::MAX as u64
+        && (unsafe { libc::kill(pid as libc::pid_t, 0) } == 0
+            || io::Error::last_os_error().raw_os_error() == Some(libc::EPERM))
 }
 
 /// Total size of a Feed file with this layout.

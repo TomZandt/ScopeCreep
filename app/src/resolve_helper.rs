@@ -35,18 +35,30 @@ pub struct ScriptHelper {
 }
 
 fn made_up(result: &str, message: String) -> Answer {
-    vec![("result".to_string(), result.to_string()), ("message".to_string(), message)]
+    vec![
+        ("result".to_string(), result.to_string()),
+        ("message".to_string(), message),
+    ]
 }
 
 impl ScriptHelper {
     /// A helper run by the Python interpreter at `program`.
     pub fn new(program: impl Into<PathBuf>) -> ScriptHelper {
-        ScriptHelper { program: program.into(), envs: Vec::new(), running: None, local: VecDeque::new() }
+        ScriptHelper {
+            program: program.into(),
+            envs: Vec::new(),
+            running: None,
+            local: VecDeque::new(),
+        }
     }
 
     /// The helper under Resolve's Python: `$SCOPECREEP_RESOLVE_PYTHON`, else [`DEFAULT_PYTHON`].
     pub fn from_env() -> ScriptHelper {
-        ScriptHelper::new(std::env::var_os(PYTHON_ENV).filter(|p| !p.is_empty()).map_or_else(|| PathBuf::from(DEFAULT_PYTHON), PathBuf::from))
+        ScriptHelper::new(
+            std::env::var_os(PYTHON_ENV)
+                .filter(|p| !p.is_empty())
+                .map_or_else(|| PathBuf::from(DEFAULT_PYTHON), PathBuf::from),
+        )
     }
 
     /// An extra environment variable for the helper process.
@@ -79,9 +91,12 @@ impl ScriptHelper {
                 Ok(())
             });
         }
-        let mut child = command
-            .spawn()
-            .map_err(|e| format!("Resolve's Python could not be started from {} ({e})", self.program.display()))?;
+        let mut child = command.spawn().map_err(|e| {
+            format!(
+                "Resolve's Python could not be started from {} ({e})",
+                self.program.display()
+            )
+        })?;
         let stdin = child.stdin.take().expect("piped");
         let stdout = child.stdout.take().expect("piped");
         let (tx, answers) = channel();
@@ -104,7 +119,11 @@ impl ScriptHelper {
                 }
             })
             .map_err(|e| format!("no thread for the scripting helper ({e})"))?;
-        self.running = Some(Running { child, stdin, answers });
+        self.running = Some(Running {
+            child,
+            stdin,
+            answers,
+        });
         Ok(())
     }
 
@@ -116,7 +135,12 @@ impl ScriptHelper {
     }
 
     fn send_read(&mut self) -> bool {
-        self.running.as_mut().is_some_and(|r| r.stdin.write_all(b"read\n").and_then(|_| r.stdin.flush()).is_ok())
+        self.running.as_mut().is_some_and(|r| {
+            r.stdin
+                .write_all(b"read\n")
+                .and_then(|_| r.stdin.flush())
+                .is_ok()
+        })
     }
 }
 
@@ -134,7 +158,10 @@ impl ProjectReader for ScriptHelper {
             }
             self.stop(); // it had exited: start a fresh one
         }
-        self.local.push_back(made_up("error", "the scripting helper would not take a request".to_string()));
+        self.local.push_back(made_up(
+            "error",
+            "the scripting helper would not take a request".to_string(),
+        ));
     }
 
     fn take_answer(&mut self) -> Option<Answer> {

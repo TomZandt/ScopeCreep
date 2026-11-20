@@ -23,9 +23,20 @@ struct Bench {
 
 impl Bench {
     fn new(name: &str) -> Bench {
-        let path = PathBuf::from(format!("/dev/shm/scopecreep-app-test-{}-{}", std::process::id(), name));
+        let path = PathBuf::from(format!(
+            "/dev/shm/scopecreep-app-test-{}-{}",
+            std::process::id(),
+            name
+        ));
         let _ = std::fs::remove_file(&path);
-        Bench { monitor: Monitor::new(&path), path, writer: None, now: now_ns(), shown: Vec::new(), fps: 24.0 }
+        Bench {
+            monitor: Monitor::new(&path),
+            path,
+            writer: None,
+            now: now_ns(),
+            shown: Vec::new(),
+            fps: 24.0,
+        }
     }
     fn with_sender(name: &str) -> Bench {
         let mut b = Bench::new(name);
@@ -38,7 +49,9 @@ impl Bench {
     }
     fn poll(&mut self) {
         let shown = &mut self.shown;
-        self.monitor.poll(self.now, &mut |f| shown.push((f.frame_time(), f.pixels()[0])));
+        self.monitor.poll(self.now, &mut |f| {
+            shown.push((f.frame_time(), f.pixels()[0]))
+        });
     }
     /// Let time pass, polling as the app does.
     fn wait(&mut self, ns: u64) {
@@ -54,8 +67,19 @@ impl Bench {
     }
     /// Sender instance `instance` renders `frame` now; its pixels all have the value `value`.
     fn render_by(&mut self, instance: u32, frame: f64, value: f32) {
-        let meta = FrameMeta { width: 16, height: 9, frame_time: frame, frame_rate: self.fps, render_ns: self.now, sender_instance: instance };
-        let _ = self.writer.as_mut().unwrap().write_frame(&meta, &synthetic::solid(16, 9, [value; 4]));
+        let meta = FrameMeta {
+            width: 16,
+            height: 9,
+            frame_time: frame,
+            frame_rate: self.fps,
+            render_ns: self.now,
+            sender_instance: instance,
+        };
+        let _ = self
+            .writer
+            .as_mut()
+            .unwrap()
+            .write_frame(&meta, &synthetic::solid(16, 9, [value; 4]));
         self.poll();
     }
     /// Values of the pictures shown, in order.
@@ -85,7 +109,10 @@ impl Bench {
     }
     fn label(&self) -> String {
         let status = self.monitor.status();
-        scopecreep::picture_view::PictureView::label_for(status.picture.as_ref().map(|p| [p.width, p.height]), &status.display_context())
+        scopecreep::picture_view::PictureView::label_for(
+            status.picture.as_ref().map(|p| [p.width, p.height]),
+            &status.display_context(),
+        )
     }
     fn notice(&self) -> String {
         self.monitor.status().notice().unwrap_or_default()
@@ -103,13 +130,22 @@ fn first_pixels_bits(path: &Path, pixels: &[f32], poll_for_ns: u64) -> (Vec<u32>
     let mut monitor = Monitor::new(path);
     let mut now = now_ns();
     monitor.poll(now, &mut |_| {});
-    let meta = FrameMeta { width: 64, height: 36, frame_time: 86400.0, frame_rate: 24.0, render_ns: now, sender_instance: 1 };
+    let meta = FrameMeta {
+        width: 64,
+        height: 36,
+        frame_time: 86400.0,
+        frame_rate: 24.0,
+        render_ns: now,
+        sender_instance: 1,
+    };
     writer.write_frame(&meta, pixels).unwrap();
     let mut got = Vec::new();
     let end = now + poll_for_ns;
     while now < end {
         now += MS;
-        monitor.poll(now, &mut |f| got = f.pixels().iter().map(|v| v.to_bits()).collect());
+        monitor.poll(now, &mut |f| {
+            got = f.pixels().iter().map(|v| v.to_bits()).collect()
+        });
     }
     (got, pixels.iter().map(|v| v.to_bits()).collect())
 }
@@ -118,10 +154,16 @@ fn first_pixels_bits(path: &Path, pixels: &[f32], poll_for_ns: u64) -> (Vec<u32>
 
 #[test]
 fn the_picture_view_shows_a_feed_frame_unmodified() {
-    let path = PathBuf::from(format!("/dev/shm/scopecreep-app-test-{}-unmodified", std::process::id()));
+    let path = PathBuf::from(format!(
+        "/dev/shm/scopecreep-app-test-{}-unmodified",
+        std::process::id()
+    ));
     let (got, want) = first_pixels_bits(&path, &synthetic::awkward_values(64, 36), 100 * MS);
     let _ = std::fs::remove_file(&path);
-    assert_eq!(got, want, "every value reaches the Picture View bit for bit: negative, over-range, denormal");
+    assert_eq!(
+        got, want,
+        "every value reaches the Picture View bit for bit: negative, over-range, denormal"
+    );
 }
 
 #[test]
@@ -129,8 +171,15 @@ fn the_label_says_what_the_picture_is() {
     let mut b = Bench::with_sender("label");
     b.render(86400.0);
     b.wait(100 * MS);
-    assert_eq!(b.label(), "Clean picture  ·  16 × 9  ·  Colour Setup unknown  ·  as sent, no Output Conversion");
-    assert_eq!(b.notice(), "", "nothing to report while the picture is live");
+    assert_eq!(
+        b.label(),
+        "Clean picture  ·  16 × 9  ·  Colour Setup unknown  ·  as sent, no Output Conversion"
+    );
+    assert_eq!(
+        b.notice(),
+        "",
+        "nothing to report while the picture is live"
+    );
 }
 
 #[test]
@@ -138,7 +187,10 @@ fn with_no_sender_the_app_says_so_and_shows_nothing() {
     let mut b = Bench::new("nosender");
     b.wait(600 * MS);
     assert_eq!(b.monitor.status().feed, FeedState::NoSender);
-    assert_eq!(b.notice(), "No Sender. Put the scopecreep Sender on the last timeline node in Resolve.");
+    assert_eq!(
+        b.notice(),
+        "No Sender. Put the scopecreep Sender on the last timeline node in Resolve."
+    );
     assert_eq!(b.label(), "Clean picture");
     assert!(b.shown.is_empty());
 }
@@ -148,7 +200,10 @@ fn a_sender_with_no_frames_is_not_an_error() {
     let mut b = Bench::with_sender("noframes");
     b.wait(3_000 * MS);
     assert_eq!(b.monitor.status().feed, FeedState::Connected);
-    assert_eq!(b.notice(), "Waiting for frames. Play or move the playhead in Resolve.");
+    assert_eq!(
+        b.notice(),
+        "Waiting for frames. Play or move the playhead in Resolve."
+    );
 }
 
 #[test]
@@ -158,7 +213,10 @@ fn when_frames_stop_the_last_picture_stays_without_complaint() {
     b.render(10.0);
     b.wait(5_000 * MS);
     assert_eq!(b.shown_frames(), [10.0]);
-    assert_eq!(b.monitor.status().picture.as_ref().unwrap().frame_time, 10.0);
+    assert_eq!(
+        b.monitor.status().picture.as_ref().unwrap().frame_time,
+        10.0
+    );
     assert_eq!(b.notice(), "");
 }
 
@@ -171,7 +229,10 @@ fn every_frame_of_playback_is_shown_in_order() {
         b.render(f as f64);
         b.wait(FRAME_24);
     }
-    assert_eq!(b.shown_frames(), (0..24).map(|f| f as f64).collect::<Vec<_>>());
+    assert_eq!(
+        b.shown_frames(),
+        (0..24).map(|f| f as f64).collect::<Vec<_>>()
+    );
     assert_eq!(b.monitor.status().viewer_frames, 24);
 }
 
@@ -218,13 +279,25 @@ fn scrubbing_ends_on_the_frame_the_playhead_stopped_at() {
     let mut b = Bench::with_sender("scrub");
     b.render(10.0);
     b.wait(1_000 * MS);
-    for (f, gap) in [(14.0, 9), (22.0, 12), (23.0, 8), (41.0, 11), (57.0, 30), (56.0, 7), (60.0, 10)] {
+    for (f, gap) in [
+        (14.0, 9),
+        (22.0, 12),
+        (23.0, 8),
+        (41.0, 11),
+        (57.0, 30),
+        (56.0, 7),
+        (60.0, 10),
+    ] {
         b.render(f);
         b.wait(gap * MS);
     }
     b.wait(1_000 * MS);
     assert_eq!(b.shown.last().unwrap().0, 60.0);
-    assert!(b.shown.len() >= 4, "the picture follows the scrub, not just its end: {:?}", b.shown_frames());
+    assert!(
+        b.shown.len() >= 4,
+        "the picture follows the scrub, not just its end: {:?}",
+        b.shown_frames()
+    );
 }
 
 #[test]
@@ -253,7 +326,11 @@ fn a_background_cache_fill_does_not_change_the_picture() {
         b.wait(12 * MS);
     }
     b.wait(2_000 * MS);
-    assert_eq!(b.shown_frames(), [10.0], "the Picture View keeps the last Viewer Frame");
+    assert_eq!(
+        b.shown_frames(),
+        [10.0],
+        "the Picture View keeps the last Viewer Frame"
+    );
     let status = b.monitor.status();
     assert_eq!(status.picture.as_ref().unwrap().frame_time, 10.0);
     assert_eq!(status.cache_renders_ignored, 96);
@@ -282,8 +359,15 @@ fn a_cache_fill_at_50_and_60_fps_does_not_change_the_picture() {
         let b = cache_fill_while_paused(&format!("fill{fps}"), fps, 12);
         assert_eq!(b.shown_frames().first(), Some(&10.0));
         let after: Vec<f64> = b.shown_frames().into_iter().skip(1).collect();
-        assert!(after.len() <= 1, "{fps} fps: at most the first render may slip through, got {after:?}");
-        assert_eq!(b.monitor.status().picture.as_ref().unwrap().frame_time, 10.0, "{fps} fps: the picture ends on the viewer frame");
+        assert!(
+            after.len() <= 1,
+            "{fps} fps: at most the first render may slip through, got {after:?}"
+        );
+        assert_eq!(
+            b.monitor.status().picture.as_ref().unwrap().frame_time,
+            10.0,
+            "{fps} fps: the picture ends on the viewer frame"
+        );
     }
 }
 
@@ -348,10 +432,36 @@ fn a_ragged_playback_start_does_not_hide_the_playback_that_follows() {
     b.render(0.0);
     b.wait(1_000 * MS);
     let start: [(f64, f64); 30] = [
-        (1.0, 191.4), (3.0, 58.2), (2.0, 21.1), (4.0, 21.2), (6.0, 7.4), (7.0, 35.1), (5.0, 59.1), (8.0, 2.3), (11.0, 7.8),
-        (10.0, 176.3), (9.0, 8.2), (12.0, 2.8), (13.0, 3.3), (14.0, 51.8), (16.0, 46.5), (15.0, 47.5), (18.0, 27.1),
-        (17.0, 23.0), (20.0, 80.5), (19.0, 29.7), (21.0, 14.0), (24.0, 3.2), (22.0, 16.9), (25.0, 2.4), (23.0, 20.9),
-        (26.0, 10.4), (27.0, 42.3), (28.0, 43.1), (29.0, 57.5), (30.0, 26.9),
+        (1.0, 191.4),
+        (3.0, 58.2),
+        (2.0, 21.1),
+        (4.0, 21.2),
+        (6.0, 7.4),
+        (7.0, 35.1),
+        (5.0, 59.1),
+        (8.0, 2.3),
+        (11.0, 7.8),
+        (10.0, 176.3),
+        (9.0, 8.2),
+        (12.0, 2.8),
+        (13.0, 3.3),
+        (14.0, 51.8),
+        (16.0, 46.5),
+        (15.0, 47.5),
+        (18.0, 27.1),
+        (17.0, 23.0),
+        (20.0, 80.5),
+        (19.0, 29.7),
+        (21.0, 14.0),
+        (24.0, 3.2),
+        (22.0, 16.9),
+        (25.0, 2.4),
+        (23.0, 20.9),
+        (26.0, 10.4),
+        (27.0, 42.3),
+        (28.0, 43.1),
+        (29.0, 57.5),
+        (30.0, 26.9),
     ];
     for (f, gap_ms) in start {
         b.wait((gap_ms * 1e6) as u64);
@@ -366,7 +476,11 @@ fn a_ragged_playback_start_does_not_hide_the_playback_that_follows() {
     let shown = b.shown_frames();
     assert_eq!(shown.last(), Some(&119.0));
     let steady: Vec<f64> = shown.iter().copied().filter(|&f| f >= 45.0).collect();
-    assert_eq!(steady, (45..120).map(|f| f as f64).collect::<Vec<_>>(), "steady playback is all shown");
+    assert_eq!(
+        steady,
+        (45..120).map(|f| f as f64).collect::<Vec<_>>(),
+        "steady playback is all shown"
+    );
 }
 
 #[test]
@@ -418,8 +532,15 @@ fn late_frames_that_arrive_bunched_during_playback_are_all_shown() {
         b.wait(500 * MS);
         assert_eq!(b.monitor.status().cache_renders_ignored, 0, "{fps} fps");
         let shown = b.shown_frames();
-        assert!(shown[0] <= 4.0, "{fps} fps: playback is confirmed within its first frames: {shown:?}");
-        assert_eq!(shown, (shown[0] as u64..200).map(|f| f as f64).collect::<Vec<_>>(), "{fps} fps: from then on every frame is shown");
+        assert!(
+            shown[0] <= 4.0,
+            "{fps} fps: playback is confirmed within its first frames: {shown:?}"
+        );
+        assert_eq!(
+            shown,
+            (shown[0] as u64..200).map(|f| f as f64).collect::<Vec<_>>(),
+            "{fps} fps: from then on every frame is shown"
+        );
     }
 }
 
@@ -435,7 +556,11 @@ fn holding_an_arrow_key_steps_the_picture_with_it() {
     }
     b.wait(500 * MS);
     assert_eq!(b.shown.last().unwrap().0, 40.0);
-    assert!(b.shown.len() >= 10, "the picture follows while the key is held: {:?}", b.shown_frames());
+    assert!(
+        b.shown.len() >= 10,
+        "the picture follows while the key is held: {:?}",
+        b.shown_frames()
+    );
 }
 
 #[test]
@@ -444,14 +569,23 @@ fn playback_at_60_fps_with_hitches_shows_every_frame() {
     b.fps = 60.0;
     let mut at = b.now;
     for f in 0..240u64 {
-        at += if f % 60 == 59 { 50_000_000 } else { 16_666_667 } + [0, 2_000_000, 0, 0, 3_500_000, 0][f as usize % 6] - 1_000_000;
+        at += if f % 60 == 59 { 50_000_000 } else { 16_666_667 }
+            + [0, 2_000_000, 0, 0, 3_500_000, 0][f as usize % 6]
+            - 1_000_000;
         b.wait(at - b.now);
         b.render(f as f64);
     }
     b.wait(500 * MS);
     let shown = b.shown_frames();
-    assert!(shown[0] <= 4.0, "playback is confirmed within its first frames: {shown:?}");
-    assert_eq!(shown, (shown[0] as u64..240).map(|f| f as f64).collect::<Vec<_>>(), "from then on every frame is shown");
+    assert!(
+        shown[0] <= 4.0,
+        "playback is confirmed within its first frames: {shown:?}"
+    );
+    assert_eq!(
+        shown,
+        (shown[0] as u64..240).map(|f| f as f64).collect::<Vec<_>>(),
+        "from then on every frame is shown"
+    );
     assert_eq!(b.monitor.status().cache_renders_ignored, 0);
 }
 
@@ -469,13 +603,19 @@ fn playback_after_a_cache_fill_is_shown_again() {
         b.render(f as f64);
         b.wait(FRAME_24);
     }
-    assert_eq!(b.shown_frames()[1..], (10..20).map(|f| f as f64).collect::<Vec<_>>()[..]);
+    assert_eq!(
+        b.shown_frames()[1..],
+        (10..20).map(|f| f as f64).collect::<Vec<_>>()[..]
+    );
 }
 
 // ------------------------------------------------------------------ playback rate
 
 fn rate(b: &Bench) -> f64 {
-    b.monitor.status().playback_rate.expect("a playback rate while playing")
+    b.monitor
+        .status()
+        .playback_rate
+        .expect("a playback rate while playing")
 }
 
 #[test]
@@ -483,7 +623,11 @@ fn steady_playback_shows_resolves_playback_rate() {
     let mut b = Bench::with_sender("rate24");
     b.play(0, 72, |_| 0);
     assert!((rate(&b) - 24.0).abs() < 0.1, "{}", rate(&b));
-    assert!(b.status_line().starts_with("24.00 fps"), "{}", b.status_line());
+    assert!(
+        b.status_line().starts_with("24.00 fps"),
+        "{}",
+        b.status_line()
+    );
 }
 
 #[test]
@@ -492,8 +636,14 @@ fn the_rate_is_within_a_tenth_of_a_frame_despite_render_jitter() {
     for fps in [23.976, 25.0, 50.0, 59.94, 60.0] {
         let mut b = Bench::with_sender(&format!("jitter{fps}"));
         b.fps = fps;
-        b.play(0, (fps * 3.0) as u64, |i| [0, 3_000_000, -2_000_000, 4_000_000, -4_000_000, 1_000_000][i as usize % 6]);
-        assert!((rate(&b) - fps).abs() < 0.1, "{fps} fps timeline measured as {}", rate(&b));
+        b.play(0, (fps * 3.0) as u64, |i| {
+            [0, 3_000_000, -2_000_000, 4_000_000, -4_000_000, 1_000_000][i as usize % 6]
+        });
+        assert!(
+            (rate(&b) - fps).abs() < 0.1,
+            "{fps} fps timeline measured as {}",
+            rate(&b)
+        );
     }
 }
 
@@ -504,8 +654,19 @@ fn frames_lost_in_the_feed_still_count_towards_the_rate() {
     let start = b.now;
     for i in 0..96u64 {
         let due = start + i * FRAME_24;
-        let meta = FrameMeta { width: 16, height: 9, frame_time: i as f64, frame_rate: 24.0, render_ns: due, sender_instance: 1 };
-        b.writer.as_mut().unwrap().write_frame(&meta, &synthetic::solid(16, 9, [0.5; 4])).unwrap();
+        let meta = FrameMeta {
+            width: 16,
+            height: 9,
+            frame_time: i as f64,
+            frame_rate: 24.0,
+            render_ns: due,
+            sender_instance: 1,
+        };
+        b.writer
+            .as_mut()
+            .unwrap()
+            .write_frame(&meta, &synthetic::solid(16, 9, [0.5; 4]))
+            .unwrap();
         b.now = due;
         if i % 8 < 3 {
             b.poll(); // for five periods in every eight the app looks away: four slots, so a frame is lost
@@ -552,8 +713,15 @@ fn renders_that_wander_in_steady_playback_do_not_interrupt_the_rate() {
     let mut b = Bench::with_sender("wander");
     let start = b.now;
     for f in 0..240u64 {
-        let jitter: i64 = match f % 37 { 11 => -30_000_000, 12 => 15_000_000, _ => 0 };
-        b.wait(((start + f * FRAME_24) as i64 + jitter) as u64 - b.now.min(((start + f * FRAME_24) as i64 + jitter) as u64));
+        let jitter: i64 = match f % 37 {
+            11 => -30_000_000,
+            12 => 15_000_000,
+            _ => 0,
+        };
+        b.wait(
+            ((start + f * FRAME_24) as i64 + jitter) as u64
+                - b.now.min(((start + f * FRAME_24) as i64 + jitter) as u64),
+        );
         b.render(f as f64);
         if f >= 72 {
             let r = rate(&b);
@@ -603,12 +771,23 @@ fn the_status_line_is_playback_and_performance_only_and_the_sender_is_its_hover(
     b.play(0, 24, |_| 0);
     let pid = std::process::id();
     let line = b.status_line();
-    for left_out in ["Sender", "process", "synthetic frame writer", "fps timeline", &pid.to_string()] {
+    for left_out in [
+        "Sender",
+        "process",
+        "synthetic frame writer",
+        "fps timeline",
+        &pid.to_string(),
+    ] {
         assert!(!line.contains(left_out), "{line} leaves out {left_out}");
     }
     assert!(line.ends_with("  ·  0 dropped"), "{line}");
     let hover = b.monitor.status().status_hover();
-    assert!(hover.contains(&format!("Sender 1 · synthetic frame writer · process {pid} · 24 fps timeline")), "{hover}");
+    assert!(
+        hover.contains(&format!(
+            "Sender 1 · synthetic frame writer · process {pid} · 24 fps timeline"
+        )),
+        "{hover}"
+    );
     assert_eq!(b.notice(), "");
 }
 
@@ -635,7 +814,10 @@ fn with_two_senders_rendering_the_same_frames_exactly_one_drives_the_feed() {
     for second_first in [false, true] {
         let b = two_senders_on_one_timeline(&format!("two{second_first}"), second_first);
         let values = b.shown_values();
-        assert!(values[2..].iter().all(|&v| v == 1.0), "only Sender 1 is shown after the first frames: {values:?}");
+        assert!(
+            values[2..].iter().all(|&v| v == 1.0),
+            "only Sender 1 is shown after the first frames: {values:?}"
+        );
         assert_eq!(b.monitor.status().driving.as_ref().unwrap().instance, 1);
     }
 }
@@ -644,14 +826,27 @@ fn with_two_senders_rendering_the_same_frames_exactly_one_drives_the_feed() {
 fn the_other_active_sender_is_flagged() {
     let b = two_senders_on_one_timeline("flagged", true);
     let status = b.monitor.status();
-    assert_eq!(status.ignored.iter().map(|s| s.instance).collect::<Vec<_>>(), [2]);
+    assert_eq!(
+        status
+            .ignored
+            .iter()
+            .map(|s| s.instance)
+            .collect::<Vec<_>>(),
+        [2]
+    );
     let pid = std::process::id();
     assert_eq!(
         b.notice(),
-        format!("Another Sender is active: Sender 2 (process {pid}). Showing Sender 1 (process {pid}) only. Keep one Sender, on the last timeline node.")
+        format!(
+            "Another Sender is active: Sender 2 (process {pid}). Showing Sender 1 (process {pid}) only. Keep one Sender, on the last timeline node."
+        )
     );
     assert!(!b.status_line().contains("Sender"), "{}", b.status_line());
-    assert!(b.monitor.status().status_hover().contains("Sender 1 · "), "{}", b.monitor.status().status_hover());
+    assert!(
+        b.monitor.status().status_hover().contains("Sender 1 · "),
+        "{}",
+        b.monitor.status().status_hover()
+    );
 }
 
 #[test]
@@ -678,7 +873,10 @@ fn switching_timelines_follows_the_new_sender_at_once() {
     b.wait(200 * MS);
     assert_eq!(b.shown.last(), Some(&(500.0, 2.0)));
     assert_eq!(b.monitor.status().driving.as_ref().unwrap().instance, 2);
-    assert!(b.monitor.status().ignored.is_empty(), "a Sender that stopped before the other started is not a conflict");
+    assert!(
+        b.monitor.status().ignored.is_empty(),
+        "a Sender that stopped before the other started is not a conflict"
+    );
     b.render_by(1, 23.0, 1.0); // and back again
     b.wait(200 * MS);
     assert_eq!(b.shown.last(), Some(&(23.0, 1.0)));
@@ -721,8 +919,20 @@ fn the_first_frame_of_a_second_sender_does_not_flash_up() {
         b.render_by(2, f as f64, 2.0);
         b.wait(FRAME_24 - 2 * MS);
     }
-    assert!(b.shown_values().iter().all(|&v| v == 1.0), "{:?}", b.shown_values());
-    assert_eq!(b.monitor.status().ignored.iter().map(|s| s.instance).collect::<Vec<_>>(), [2]);
+    assert!(
+        b.shown_values().iter().all(|&v| v == 1.0),
+        "{:?}",
+        b.shown_values()
+    );
+    assert_eq!(
+        b.monitor
+            .status()
+            .ignored
+            .iter()
+            .map(|s| s.instance)
+            .collect::<Vec<_>>(),
+        [2]
+    );
 }
 
 #[test]
@@ -735,19 +945,32 @@ fn stepping_with_two_senders_on_one_timeline_shows_the_same_sender_every_step() 
         b.render_by(1, f, 1.0);
         b.wait(1_500 * MS);
         if step >= 1 {
-            assert_eq!(b.shown.last(), Some(&(f, 1.0)), "step {step}: {:?}", b.shown);
+            assert_eq!(
+                b.shown.last(),
+                Some(&(f, 1.0)),
+                "step {step}: {:?}",
+                b.shown
+            );
             assert_eq!(b.monitor.status().ignored.len(), 1);
         }
     }
     b.wait(3_000 * MS);
-    assert!(b.monitor.status().ignored.is_empty(), "the flag fades once both have stopped for a while");
+    assert!(
+        b.monitor.status().ignored.is_empty(),
+        "the flag fades once both have stopped for a while"
+    );
 }
 
 /// Another Resolve: a real, running process whose pid a guest Sender can claim.
 struct OtherResolve(std::process::Child);
 impl OtherResolve {
     fn start() -> OtherResolve {
-        OtherResolve(std::process::Command::new("sleep").arg("30").spawn().unwrap())
+        OtherResolve(
+            std::process::Command::new("sleep")
+                .arg("30")
+                .spawn()
+                .unwrap(),
+        )
     }
     fn pid(&self) -> u64 {
         self.0.id() as u64
@@ -764,21 +987,45 @@ impl Drop for OtherResolve {
 fn a_sender_in_a_second_resolve_is_flagged_and_never_shown() {
     let mut b = Bench::with_sender("guest");
     let other = OtherResolve::start();
-    let mut guest = FeedWriter::start(&b.path, SenderIdentity { pid: other.pid(), host: "Resolve B".into() }).unwrap();
+    let mut guest = FeedWriter::start(
+        &b.path,
+        SenderIdentity {
+            pid: other.pid(),
+            host: "Resolve B".into(),
+        },
+    )
+    .unwrap();
     assert!(guest.is_guest());
     guest.register(1, 25.0);
     let start = b.now;
     for f in 0..48u64 {
         b.wait((start + f * FRAME_24).saturating_sub(b.now));
         b.render(f as f64);
-        let meta = FrameMeta { width: 16, height: 9, frame_time: 900.0 + f as f64, frame_rate: 25.0, render_ns: b.now, sender_instance: 1 };
+        let meta = FrameMeta {
+            width: 16,
+            height: 9,
+            frame_time: 900.0 + f as f64,
+            frame_rate: 25.0,
+            render_ns: b.now,
+            sender_instance: 1,
+        };
         let _ = guest.write_frame(&meta, &synthetic::solid(16, 9, [-7.0; 4]));
     }
     b.wait(300 * MS);
     let status = b.monitor.status();
-    assert!(b.shown.iter().all(|s| s.1 != -7.0), "no frame of the guest is shown");
-    assert_eq!(status.driving.as_ref().unwrap().pid, std::process::id() as u64);
-    let ignored: Vec<_> = status.ignored.iter().map(|s| (s.pid, s.instance, s.host.as_str(), s.frame_rate)).collect();
+    assert!(
+        b.shown.iter().all(|s| s.1 != -7.0),
+        "no frame of the guest is shown"
+    );
+    assert_eq!(
+        status.driving.as_ref().unwrap().pid,
+        std::process::id() as u64
+    );
+    let ignored: Vec<_> = status
+        .ignored
+        .iter()
+        .map(|s| (s.pid, s.instance, s.host.as_str(), s.frame_rate))
+        .collect();
     assert_eq!(ignored, [(other.pid(), 1, "Resolve B", 25.0)]);
     let me = std::process::id();
     assert_eq!(
@@ -796,7 +1043,14 @@ fn a_sender_in_a_second_resolve_is_flagged_and_never_shown() {
 fn a_guest_is_flagged_even_before_the_first_resolve_sends_a_frame() {
     let mut b = Bench::with_sender("guestonly");
     let other = OtherResolve::start();
-    let mut guest = FeedWriter::start(&b.path, SenderIdentity { pid: other.pid(), host: "Resolve B".into() }).unwrap();
+    let mut guest = FeedWriter::start(
+        &b.path,
+        SenderIdentity {
+            pid: other.pid(),
+            host: "Resolve B".into(),
+        },
+    )
+    .unwrap();
     guest.register(1, 25.0);
     guest.note_render(1, 5.0, b.now);
     b.wait(300 * MS);
@@ -817,12 +1071,24 @@ fn frames_the_app_was_too_slow_for_are_counted_as_dropped() {
     let mut b = Bench::with_sender("drops");
     let w = b.writer.as_mut().unwrap();
     for f in 0..10 {
-        let meta = FrameMeta { width: 16, height: 9, frame_time: f as f64, frame_rate: 24.0, render_ns: b.now + f * FRAME_24, sender_instance: 1 };
-        w.write_frame(&meta, &synthetic::solid(16, 9, [0.0; 4])).unwrap(); // the app is not polling
+        let meta = FrameMeta {
+            width: 16,
+            height: 9,
+            frame_time: f as f64,
+            frame_rate: 24.0,
+            render_ns: b.now + f * FRAME_24,
+            sender_instance: 1,
+        };
+        w.write_frame(&meta, &synthetic::solid(16, 9, [0.0; 4]))
+            .unwrap(); // the app is not polling
     }
     b.wait(100 * MS);
     assert_eq!(b.monitor.status().dropped, 6, "10 frames into 4 slots");
-    assert!(b.status_line().contains("  ·  6 dropped (app too slow)"), "{}", b.status_line());
+    assert!(
+        b.status_line().contains("  ·  6 dropped (app too slow)"),
+        "{}",
+        b.status_line()
+    );
 }
 
 #[test]
@@ -832,7 +1098,11 @@ fn frames_the_sender_could_not_take_without_waiting_are_counted_as_dropped() {
     b.writer.as_ref().unwrap().skip_frame();
     b.wait(10 * MS);
     assert_eq!(b.monitor.status().dropped, 2);
-    assert!(b.status_line().contains("  ·  2 dropped (Sender busy)"), "{}", b.status_line());
+    assert!(
+        b.status_line().contains("  ·  2 dropped (Sender busy)"),
+        "{}",
+        b.status_line()
+    );
 }
 
 #[test]
@@ -840,20 +1110,37 @@ fn both_kinds_of_drop_are_told_apart() {
     let mut b = Bench::with_sender("bothdrops");
     let w = b.writer.as_mut().unwrap();
     for f in 0..10 {
-        let meta = FrameMeta { width: 16, height: 9, frame_time: f as f64, frame_rate: 24.0, render_ns: b.now + f * FRAME_24, sender_instance: 1 };
-        w.write_frame(&meta, &synthetic::solid(16, 9, [0.0; 4])).unwrap();
+        let meta = FrameMeta {
+            width: 16,
+            height: 9,
+            frame_time: f as f64,
+            frame_rate: 24.0,
+            render_ns: b.now + f * FRAME_24,
+            sender_instance: 1,
+        };
+        w.write_frame(&meta, &synthetic::solid(16, 9, [0.0; 4]))
+            .unwrap();
     }
     w.skip_frame();
     w.skip_frame();
     b.wait(10 * MS);
-    assert!(b.status_line().contains("  ·  8 dropped (6 app too slow, 2 Sender busy)"), "{}", b.status_line());
+    assert!(
+        b.status_line()
+            .contains("  ·  8 dropped (6 app too slow, 2 Sender busy)"),
+        "{}",
+        b.status_line()
+    );
 }
 
 #[test]
 fn with_nothing_dropped_the_status_line_says_so() {
     let mut b = Bench::with_sender("nodrops");
     b.play(0, 48, |_| 0);
-    assert!(b.status_line().contains("  ·  0 dropped"), "{}", b.status_line());
+    assert!(
+        b.status_line().contains("  ·  0 dropped"),
+        "{}",
+        b.status_line()
+    );
 }
 
 #[test]
@@ -884,11 +1171,17 @@ fn drops_still_count_after_the_sender_replaces_its_feed() {
 fn the_sender_is_told_an_app_is_listening_only_while_one_is() {
     let mut b = Bench::new("listening");
     b.sender_starts(4, 4096);
-    assert!(!b.writer.as_ref().unwrap().reader_present(b.now), "no app has looked yet");
+    assert!(
+        !b.writer.as_ref().unwrap().reader_present(b.now),
+        "no app has looked yet"
+    );
     b.poll();
     assert!(b.writer.as_ref().unwrap().reader_present(b.now));
     b.wait(5_000 * MS);
-    assert!(b.writer.as_ref().unwrap().reader_present(b.now), "the app keeps its heartbeat fresh");
+    assert!(
+        b.writer.as_ref().unwrap().reader_present(b.now),
+        "the app keeps its heartbeat fresh"
+    );
     b.monitor = Monitor::new("/dev/shm/scopecreep-app-test-nowhere"); // the app quits
     assert!(!b.writer.as_ref().unwrap().reader_present(b.now));
 }
@@ -910,7 +1203,13 @@ fn a_feed_version_mismatch_is_reported_not_crashed_on() {
     let mut b = Bench::new("mismatch");
     b.writer = Some(FeedWriter::create_with_version(&b.path, 4, 4096, 2, 3).unwrap());
     b.wait(600 * MS);
-    assert_eq!(b.monitor.status().feed, FeedState::VersionMismatch { found: (2, 3), supported: (1, scopecreep_feed::VERSION_MINOR) });
+    assert_eq!(
+        b.monitor.status().feed,
+        FeedState::VersionMismatch {
+            found: (2, 3),
+            supported: (1, scopecreep_feed::VERSION_MINOR)
+        }
+    );
     assert_eq!(
         b.notice(),
         "The Sender speaks Feed version 2.3 and this app reads version 1.x. Install the Sender and the app from the same release."
@@ -935,7 +1234,10 @@ fn the_app_follows_the_sender_to_a_new_feed_file() {
     assert_eq!(b.monitor.status().feed, FeedState::Connected);
     b.sender_starts(4, 16 * 9 * 16);
     b.wait(50 * MS);
-    assert!(b.writer.as_ref().unwrap().reader_present(b.now), "the app re-attached to the new Feed");
+    assert!(
+        b.writer.as_ref().unwrap().reader_present(b.now),
+        "the app re-attached to the new Feed"
+    );
     b.render(3.0);
     b.wait(500 * MS);
     assert_eq!(b.shown_frames(), [3.0]);
@@ -944,7 +1246,10 @@ fn the_app_follows_the_sender_to_a_new_feed_file() {
 #[test]
 fn a_sender_error_is_passed_on() {
     let mut b = Bench::with_sender("error");
-    b.writer.as_ref().unwrap().set_sender_error("cudaHostRegister: out of memory");
+    b.writer
+        .as_ref()
+        .unwrap()
+        .set_sender_error("cudaHostRegister: out of memory");
     b.wait(300 * MS);
     assert_eq!(b.notice(), "Sender: cudaHostRegister: out of memory");
 }

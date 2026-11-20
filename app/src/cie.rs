@@ -13,9 +13,9 @@
 //! and the label says so (the waveform's rule, ADR 0007).
 use crate::colour_setup::{KnownColourSetup, TimelineSpace};
 use crate::gpu_frame::GpuFrame;
-use crate::settings::{Amount, Choice, SettingDef};
 use crate::measurement::{LumaWeights, MeasuredSpace};
-use scopecreep_accuracy::colour::{AP1, Chromaticities, DWG, P3_D65, REC2020, REC709, rgb_to_xyz};
+use crate::settings::{Amount, Choice, SettingDef};
+use scopecreep_accuracy::colour::{AP1, Chromaticities, DWG, P3_D65, REC709, REC2020, rgb_to_xyz};
 use scopecreep_accuracy::transfer;
 use std::sync::{Arc, Mutex};
 
@@ -30,15 +30,45 @@ const BIN_COUNT: usize = (BINS_X * BINS_Y) as usize;
 
 /// CIE 1931 2 degree standard observer, chromaticity (x, y) of the spectral colours, 380 to 700 nm every 10 nm.
 pub const SPECTRAL_LOCUS: [[f32; 2]; 33] = [
-    [0.1741, 0.0050], [0.1738, 0.0049], [0.1733, 0.0048], [0.1726, 0.0048], [0.1714, 0.0051], [0.1689, 0.0069],
-    [0.1644, 0.0109], [0.1566, 0.0177], [0.1440, 0.0297], [0.1241, 0.0578], [0.0913, 0.1327], [0.0454, 0.2950],
-    [0.0082, 0.5384], [0.0139, 0.7502], [0.0743, 0.8338], [0.1547, 0.8059], [0.2296, 0.7543], [0.3016, 0.6923],
-    [0.3731, 0.6245], [0.4441, 0.5547], [0.5125, 0.4866], [0.5752, 0.4242], [0.6270, 0.3725], [0.6658, 0.3340],
-    [0.6915, 0.3083], [0.7079, 0.2920], [0.7190, 0.2809], [0.7260, 0.2740], [0.7300, 0.2700], [0.7320, 0.2680],
-    [0.7334, 0.2666], [0.7344, 0.2656], [0.7347, 0.2653],
+    [0.1741, 0.0050],
+    [0.1738, 0.0049],
+    [0.1733, 0.0048],
+    [0.1726, 0.0048],
+    [0.1714, 0.0051],
+    [0.1689, 0.0069],
+    [0.1644, 0.0109],
+    [0.1566, 0.0177],
+    [0.1440, 0.0297],
+    [0.1241, 0.0578],
+    [0.0913, 0.1327],
+    [0.0454, 0.2950],
+    [0.0082, 0.5384],
+    [0.0139, 0.7502],
+    [0.0743, 0.8338],
+    [0.1547, 0.8059],
+    [0.2296, 0.7543],
+    [0.3016, 0.6923],
+    [0.3731, 0.6245],
+    [0.4441, 0.5547],
+    [0.5125, 0.4866],
+    [0.5752, 0.4242],
+    [0.6270, 0.3725],
+    [0.6658, 0.3340],
+    [0.6915, 0.3083],
+    [0.7079, 0.2920],
+    [0.7190, 0.2809],
+    [0.7260, 0.2740],
+    [0.7300, 0.2700],
+    [0.7320, 0.2680],
+    [0.7334, 0.2666],
+    [0.7344, 0.2656],
+    [0.7347, 0.2653],
 ];
 
-const P3_DCI: Chromaticities = Chromaticities { white: [0.314, 0.351], ..P3_D65 };
+const P3_DCI: Chromaticities = Chromaticities {
+    white: [0.314, 0.351],
+    ..P3_D65
+};
 
 /// How a Measured Space's code values are turned back into linear light.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -125,15 +155,32 @@ pub const TIMELINE_SETTING: &str = "timeline";
 
 /// The trace brightness slider, in percent of the normal look (#87). The range reaches the old Bright (4 times the
 /// gain) and Dim (a quarter), so a file saved with either still draws as it did.
-pub const BRIGHTNESS_AMOUNT: Amount = crate::scope_shader::trace_brightness_amount(400.0, &[("normal", 100.0), ("bright", 400.0), ("dim", 25.0)]);
+pub const BRIGHTNESS_AMOUNT: Amount = crate::scope_shader::trace_brightness_amount(
+    400.0,
+    &[("normal", 100.0), ("bright", 400.0), ("dim", 25.0)],
+);
 
 const SETTINGS: [SettingDef; 3] = [
-    SettingDef { key: BRIGHTNESS_SETTING, label: "Trace brightness", amount: Some(BRIGHTNESS_AMOUNT), choices: &[] },
+    SettingDef {
+        key: BRIGHTNESS_SETTING,
+        label: "Trace brightness",
+        amount: Some(BRIGHTNESS_AMOUNT),
+        choices: &[],
+    },
     SettingDef {
         key: TIMELINE_SETTING,
         label: "Timeline triangle",
         amount: None,
-        choices: &[Choice { value: "on", text: "Shown" }, Choice { value: "off", text: "Hidden" }],
+        choices: &[
+            Choice {
+                value: "on",
+                text: "Shown",
+            },
+            Choice {
+                value: "off",
+                text: "Hidden",
+            },
+        ],
     },
     SettingDef {
         key: crate::scope_shader::GRATICULE_SETTING,
@@ -152,10 +199,18 @@ impl Plot {
             assumed: m.assumed,
             encoding: output_encoding(m.space),
             timeline_name: known.as_ref().map(|k| k.setup.timeline.clone()),
-            timeline: timeline_space.as_ref().and_then(timeline_chromaticities).map(|c| corners(&c)),
+            timeline: timeline_space
+                .as_ref()
+                .and_then(timeline_chromaticities)
+                .map(|c| corners(&c)),
             show_timeline: settings.get(TIMELINE_SETTING).map(String::as_str) != Some("off"),
-            graticule: crate::scope_shader::graticule_gain(settings.get(crate::scope_shader::GRATICULE_SETTING).map(String::as_str)),
-            gain: BRIGHTNESS_AMOUNT.read(settings.get(BRIGHTNESS_SETTING).map(String::as_str)) / 100.0,
+            graticule: crate::scope_shader::graticule_gain(
+                settings
+                    .get(crate::scope_shader::GRATICULE_SETTING)
+                    .map(String::as_str),
+            ),
+            gain: BRIGHTNESS_AMOUNT.read(settings.get(BRIGHTNESS_SETTING).map(String::as_str))
+                / 100.0,
         }
     }
 
@@ -165,7 +220,11 @@ impl Plot {
 
     /// The Timeline triangle as drawn: `None` when turned off or not known.
     pub fn timeline_triangle(&self) -> Option<[[f32; 2]; 3]> {
-        if self.show_timeline { self.timeline } else { None }
+        if self.show_timeline {
+            self.timeline
+        } else {
+            None
+        }
     }
 
     /// The quiet label: both spaces by name, and how the pixels were read (ADR 0007).
@@ -196,17 +255,33 @@ pub struct PlotLayout {
 impl PlotLayout {
     pub fn new([left, top, width, height]: [f32; 4], scale: f32) -> PlotLayout {
         let margin = (6.0 * scale).round();
-        let (aw, ah) = ((width - 2.0 * margin).max(1.0), (height - 2.0 * margin).max(1.0));
+        let (aw, ah) = (
+            (width - 2.0 * margin).max(1.0),
+            (height - 2.0 * margin).max(1.0),
+        );
         let (dw, dh) = (DOMAIN[2] - DOMAIN[0], DOMAIN[3] - DOMAIN[1]);
         let per_unit = (aw / dw).min(ah / dh);
-        let (w, h) = ((dw * per_unit).floor().max(1.0), (dh * per_unit).floor().max(1.0));
-        PlotLayout { plot: [(left + (width - w) / 2.0).round(), (top + (height - h) / 2.0).round(), w, h] }
+        let (w, h) = (
+            (dw * per_unit).floor().max(1.0),
+            (dh * per_unit).floor().max(1.0),
+        );
+        PlotLayout {
+            plot: [
+                (left + (width - w) / 2.0).round(),
+                (top + (height - h) / 2.0).round(),
+                w,
+                h,
+            ],
+        }
     }
 
     /// Where xy is on screen.
     pub fn screen_of(&self, [x, y]: [f32; 2]) -> [f32; 2] {
         let [l, t, w, h] = self.plot;
-        [l + (x - DOMAIN[0]) / (DOMAIN[2] - DOMAIN[0]) * w, t + h - (y - DOMAIN[1]) / (DOMAIN[3] - DOMAIN[1]) * h]
+        [
+            l + (x - DOMAIN[0]) / (DOMAIN[2] - DOMAIN[0]) * w,
+            t + h - (y - DOMAIN[1]) / (DOMAIN[3] - DOMAIN[1]) * h,
+        ]
     }
 }
 
@@ -229,14 +304,18 @@ impl CieCounts {
     pub fn near(&self, [x, y]: [f64; 2], tolerance: f64) -> u64 {
         let range = |v: f64, lo: f32, n: u32| {
             let first = ((v - tolerance - lo as f64) / BIN as f64).floor().max(0.0) as u32;
-            let last = (((v + tolerance - lo as f64) / BIN as f64).floor() as i64).clamp(0, n as i64 - 1) as u32;
+            let last = (((v + tolerance - lo as f64) / BIN as f64).floor() as i64)
+                .clamp(0, n as i64 - 1) as u32;
             first..=last
         };
         let mut sum = 0u64;
         for by in range(y, DOMAIN[1], BINS_Y) {
             for bx in range(x, DOMAIN[0], BINS_X) {
                 // Only bins whose centre is within the tolerance.
-                let (cx, cy) = (DOMAIN[0] as f64 + (bx as f64 + 0.5) * BIN as f64, DOMAIN[1] as f64 + (by as f64 + 0.5) * BIN as f64);
+                let (cx, cy) = (
+                    DOMAIN[0] as f64 + (bx as f64 + 0.5) * BIN as f64,
+                    DOMAIN[1] as f64 + (by as f64 + 0.5) * BIN as f64,
+                );
                 if (cx - x).abs() <= tolerance && (cy - y).abs() <= tolerance {
                     sum += self.bin(bx, by) as u64;
                 }
@@ -246,7 +325,9 @@ impl CieCounts {
     }
     /// Every pixel counted.
     pub fn total(&self) -> u64 {
-        self.bins.iter().map(|&c| c as u64).sum::<u64>() + self.no_light as u64 + self.outside as u64
+        self.bins.iter().map(|&c| c as u64).sum::<u64>()
+            + self.no_light as u64
+            + self.outside as u64
     }
 }
 
@@ -478,7 +559,10 @@ pub struct CiePlot {
 
 impl CiePlot {
     pub fn new(device: &wgpu::Device, queue: &wgpu::Queue, target: wgpu::TextureFormat) -> CiePlot {
-        let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor { label: Some("cie measure"), source: wgpu::ShaderSource::Wgsl(measure_shader().into()) });
+        let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+            label: Some("cie measure"),
+            source: wgpu::ShaderSource::Wgsl(measure_shader().into()),
+        });
         let measure = device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
             label: Some("cie measure"),
             layout: None,
@@ -487,20 +571,41 @@ impl CiePlot {
             compilation_options: Default::default(),
             cache: None,
         });
-        let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor { label: Some("cie draw"), source: wgpu::ShaderSource::Wgsl(draw_shader().into()) });
+        let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+            label: Some("cie draw"),
+            source: wgpu::ShaderSource::Wgsl(draw_shader().into()),
+        });
         let draw = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
             label: Some("cie draw"),
             layout: None,
-            vertex: wgpu::VertexState { module: &shader, entry_point: Some("vs"), buffers: &[], compilation_options: Default::default() },
-            primitive: wgpu::PrimitiveState { topology: wgpu::PrimitiveTopology::TriangleStrip, ..Default::default() },
+            vertex: wgpu::VertexState {
+                module: &shader,
+                entry_point: Some("vs"),
+                buffers: &[],
+                compilation_options: Default::default(),
+            },
+            primitive: wgpu::PrimitiveState {
+                topology: wgpu::PrimitiveTopology::TriangleStrip,
+                ..Default::default()
+            },
             depth_stencil: None,
             multisample: wgpu::MultisampleState::default(),
-            fragment: Some(wgpu::FragmentState { module: &shader, entry_point: Some("fs"), targets: &[Some(target.into())], compilation_options: Default::default() }),
+            fragment: Some(wgpu::FragmentState {
+                module: &shader,
+                entry_point: Some("fs"),
+                targets: &[Some(target.into())],
+                compilation_options: Default::default(),
+            }),
             multiview_mask: None,
             cache: None,
         });
         let uniform = |label, size| {
-            device.create_buffer(&wgpu::BufferDescriptor { label: Some(label), size, usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST, mapped_at_creation: false })
+            device.create_buffer(&wgpu::BufferDescriptor {
+                label: Some(label),
+                size,
+                usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+                mapped_at_creation: false,
+            })
         };
         CiePlot {
             device: device.clone(),
@@ -514,7 +619,9 @@ impl CiePlot {
                 bins: device.create_buffer(&wgpu::BufferDescriptor {
                     label: Some("cie bins"),
                     size: (BIN_COUNT as u64 + 2) * 4,
-                    usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_SRC | wgpu::BufferUsages::COPY_DST,
+                    usage: wgpu::BufferUsages::STORAGE
+                        | wgpu::BufferUsages::COPY_SRC
+                        | wgpu::BufferUsages::COPY_DST,
                     mapped_at_creation: false,
                 }),
                 measure_bound: None,
@@ -547,21 +654,37 @@ impl CiePlot {
         self.queue.write_buffer(&self.params, 0, &params);
         let mut state = self.state.lock().unwrap();
         state.pixels = frame.width * frame.height;
-        if state.measure_bound.as_ref().is_none_or(|(id, _)| *id != frame.texture_id) {
+        if state
+            .measure_bound
+            .as_ref()
+            .is_none_or(|(id, _)| *id != frame.texture_id)
+        {
             let view = frame.texture.create_view(&Default::default());
             let bind_group = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
                 label: Some("cie measure"),
                 layout: &self.measure.get_bind_group_layout(0),
                 entries: &[
-                    wgpu::BindGroupEntry { binding: 0, resource: self.params.as_entire_binding() },
-                    wgpu::BindGroupEntry { binding: 1, resource: wgpu::BindingResource::TextureView(&view) },
-                    wgpu::BindGroupEntry { binding: 2, resource: state.bins.as_entire_binding() },
+                    wgpu::BindGroupEntry {
+                        binding: 0,
+                        resource: self.params.as_entire_binding(),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 1,
+                        resource: wgpu::BindingResource::TextureView(&view),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 2,
+                        resource: state.bins.as_entire_binding(),
+                    },
                 ],
             });
             state.measure_bound = Some((frame.texture_id, bind_group));
         }
         encoder.clear_buffer(&state.bins, 0, None);
-        let mut pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor { label: Some("cie measure"), timestamp_writes: None });
+        let mut pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
+            label: Some("cie measure"),
+            timestamp_writes: None,
+        });
         pass.set_pipeline(&self.measure);
         pass.set_bind_group(0, &state.measure_bound.as_ref().unwrap().1, &[]);
         pass.dispatch_workgroups(frame.width.div_ceil(8), frame.height.div_ceil(8), 1);
@@ -569,7 +692,13 @@ impl CiePlot {
 
     /// Draw the plot into `area` (left, top, width, height in pixels of a `surface`-sized target). Draws nothing
     /// until a frame has been measured.
-    pub fn draw(&self, pass: &mut wgpu::RenderPass<'_>, area: [f32; 4], surface: [f32; 2], scale: f32) {
+    pub fn draw(
+        &self,
+        pass: &mut wgpu::RenderPass<'_>,
+        area: [f32; 4],
+        surface: [f32; 2],
+        scale: f32,
+    ) {
         let mut state = self.state.lock().unwrap();
         if state.pixels == 0 || area[2] < 1.0 || area[3] < 1.0 {
             return;
@@ -579,8 +708,14 @@ impl CiePlot {
                 label: Some("cie draw"),
                 layout: &self.draw.get_bind_group_layout(0),
                 entries: &[
-                    wgpu::BindGroupEntry { binding: 0, resource: self.placement.as_entire_binding() },
-                    wgpu::BindGroupEntry { binding: 1, resource: state.bins.as_entire_binding() },
+                    wgpu::BindGroupEntry {
+                        binding: 0,
+                        resource: self.placement.as_entire_binding(),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 1,
+                        resource: state.bins.as_entire_binding(),
+                    },
                 ],
             }));
         }
@@ -589,13 +724,22 @@ impl CiePlot {
         let [left, top, width, height] = area;
         let clip = |px: f32, size: f32| px / size * 2.0 - 1.0;
         let mut u = [0f32; DRAW_UNIFORM_FLOATS];
-        u[..4].copy_from_slice(&[clip(left, surface[0]), -clip(top, surface[1]), clip(left + width, surface[0]), -clip(top + height, surface[1])]);
+        u[..4].copy_from_slice(&[
+            clip(left, surface[0]),
+            -clip(top, surface[1]),
+            clip(left + width, surface[0]),
+            -clip(top + height, surface[1]),
+        ]);
         u[4..8].copy_from_slice(&layout.plot);
         let timeline = plot.timeline_triangle();
         let shown = if timeline.is_some() { 1.0 } else { 0.0 };
         u[8..12].copy_from_slice(&[plot.gain, state.pixels as f32, shown, shown]);
         u[GRATICULE_AT..GRATICULE_AT + 4].copy_from_slice(&[plot.graticule, 0.0, 0.0, 0.0]);
-        let triangle = |t: [[f32; 2]; 3]| [t[0][0], t[0][1], t[1][0], t[1][1], t[2][0], t[2][1], 0.0, 0.0];
+        let triangle = |t: [[f32; 2]; 3]| {
+            [
+                t[0][0], t[0][1], t[1][0], t[1][1], t[2][0], t[2][1], 0.0, 0.0,
+            ]
+        };
         u[12..20].copy_from_slice(&triangle(plot.output_triangle()));
         if let Some(t) = timeline {
             u[20..28].copy_from_slice(&triangle(t));
@@ -603,7 +747,8 @@ impl CiePlot {
         for (i, point) in SPECTRAL_LOCUS.iter().enumerate() {
             u[32 + i * 2..34 + i * 2].copy_from_slice(point);
         }
-        self.queue.write_buffer(&self.placement, 0, bytemuck::cast_slice(&u));
+        self.queue
+            .write_buffer(&self.placement, 0, bytemuck::cast_slice(&u));
         pass.set_pipeline(&self.draw);
         pass.set_bind_group(0, state.draw_bound.as_ref().unwrap(), &[]);
         pass.draw(0..4, 0..1);
@@ -622,9 +767,16 @@ impl CiePlot {
         encoder.copy_buffer_to_buffer(&state.bins, 0, &readback, 0, None);
         self.queue.submit([encoder.finish()]);
         readback.map_async(wgpu::MapMode::Read, .., |_| {});
-        self.device.poll(wgpu::PollType::wait_indefinitely()).expect("the GPU finishes");
-        let data: Vec<u32> = bytemuck::cast_slice(&readback.get_mapped_range(..).expect("mapped")).to_vec();
-        CieCounts { bins: data[..BIN_COUNT].to_vec(), no_light: data[BIN_COUNT], outside: data[BIN_COUNT + 1] }
+        self.device
+            .poll(wgpu::PollType::wait_indefinitely())
+            .expect("the GPU finishes");
+        let data: Vec<u32> =
+            bytemuck::cast_slice(&readback.get_mapped_range(..).expect("mapped")).to_vec();
+        CieCounts {
+            bins: data[..BIN_COUNT].to_vec(),
+            no_light: data[BIN_COUNT],
+            outside: data[BIN_COUNT + 1],
+        }
     }
 }
 

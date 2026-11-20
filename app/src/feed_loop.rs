@@ -67,7 +67,11 @@ pub struct FeedLoop {
 }
 
 impl FeedLoop {
-    pub fn new(displays: DisplaySet, settings: Arc<Mutex<PanelSettings>>, conversion: OutputConversion) -> FeedLoop {
+    pub fn new(
+        displays: DisplaySet,
+        settings: Arc<Mutex<PanelSettings>>,
+        conversion: OutputConversion,
+    ) -> FeedLoop {
         let chosen = settings.lock().unwrap().clone();
         // Before any frame: every display has its settings, and measures in the default Measured Space.
         displays.configure(&DisplayContext::default(), &chosen);
@@ -101,8 +105,14 @@ impl FeedLoop {
     }
 
     /// Poll the Feed once at `now_ns` and do what that, the settings and the Colour Setup call for.
-    pub fn step(&mut self, monitor: &mut Monitor, uploader: &mut FrameUploader, now_ns: u64) -> Changed {
-        let (displays, conversion, scope_frames) = (&self.displays, &mut self.conversion, &mut self.scope_frames);
+    pub fn step(
+        &mut self,
+        monitor: &mut Monitor,
+        uploader: &mut FrameUploader,
+        now_ns: u64,
+    ) -> Changed {
+        let (displays, conversion, scope_frames) =
+            (&self.displays, &mut self.conversion, &mut self.scope_frames);
         let mut shown = false;
         monitor.poll(now_ns, &mut |frame| {
             uploader.upload(frame, |encoder, gpu_frame| {
@@ -124,8 +134,16 @@ impl FeedLoop {
             self.seen = Some(status.clone());
             labels_stale = true;
             let connected = status.feed == FeedState::Connected;
-            self.status_text = if connected { status.status_candidates() } else { Vec::new() };
-            self.status_hover = if connected { status.status_hover() } else { String::new() };
+            self.status_text = if connected {
+                status.status_candidates()
+            } else {
+                Vec::new()
+            };
+            self.status_hover = if connected {
+                status.status_hover()
+            } else {
+                String::new()
+            };
             self.top_bar = status.top_bar();
             self.notice = status.notice();
             self.has_picture = status.picture.is_some();
@@ -149,7 +167,9 @@ impl FeedLoop {
             self.chosen = self.settings.lock().unwrap().clone();
             self.displays.configure(&self.context, &self.chosen);
             let displays = &self.displays;
-            self.conversion.again(uploader.frame(), |encoder, picture| measure(displays, encoder, picture, uploader.frame()));
+            self.conversion.again(uploader.frame(), |encoder, picture| {
+                measure(displays, encoder, picture, uploader.frame())
+            });
             shown = true;
             labels_stale = true;
         }
@@ -157,7 +177,12 @@ impl FeedLoop {
         if status_changed {
             let setup = status.colour_setup().map(|c| c.setup);
             let displays = &self.displays;
-            if self.conversion.follow(setup.as_ref(), uploader.frame(), |encoder, picture| measure(displays, encoder, picture, uploader.frame())) {
+            if self
+                .conversion
+                .follow(setup.as_ref(), uploader.frame(), |encoder, picture| {
+                    measure(displays, encoder, picture, uploader.frame())
+                })
+            {
                 shown = true;
                 labels_stale = true;
             }
@@ -178,13 +203,21 @@ impl FeedLoop {
                 labels = true;
             }
         }
-        Changed { picture: shown, labels }
+        Changed {
+            picture: shown,
+            labels,
+        }
     }
 }
 
 /// Hand the frame on screen, converted, to every display, and the Timeline Colour Space frame to those that
 /// measure scene light.
-fn measure(displays: &DisplaySet, encoder: &mut wgpu::CommandEncoder, picture: &crate::gpu_frame::GpuFrame, timeline: Option<&crate::gpu_frame::GpuFrame>) {
+fn measure(
+    displays: &DisplaySet,
+    encoder: &mut wgpu::CommandEncoder,
+    picture: &crate::gpu_frame::GpuFrame,
+    timeline: Option<&crate::gpu_frame::GpuFrame>,
+) {
     displays.on_frame(encoder, picture);
     if let Some(t) = timeline {
         displays.on_timeline_frame(encoder, t);

@@ -3,12 +3,12 @@
 //!
 //! Blue is the default (the noisiest channel of most digital cameras); red and green are in the right-click
 //! menu. The Loupe on top of it is the shared one in `loupe.rs`, built from this view's colour rule.
-use crate::display::{LoupeDrawn, Display, DisplayContext, Pointer, PointerResult};
-use crate::loupe::{self, Loupe};
-use crate::gpu_frame::GpuFrame;
-use crate::picture_stage::{PictureStage, Rule};
-use crate::output_conversion::Plan;
 use crate::components::{Channel as ChipColour, ChipMode};
+use crate::display::{Display, DisplayContext, LoupeDrawn, Pointer, PointerResult};
+use crate::gpu_frame::GpuFrame;
+use crate::loupe::{self, Loupe};
+use crate::output_conversion::Plan;
+use crate::picture_stage::{PictureStage, Rule};
 use crate::settings::{Choice, SettingDef};
 use crate::toolbar::{ToolbarChip, ToolbarDef};
 use std::sync::{Arc, Mutex};
@@ -18,7 +18,24 @@ pub static SETTINGS: [SettingDef; 2] = [
         key: "channel",
         label: "Channel",
         amount: None,
-        choices: &[Choice { value: "blue", text: "Blue" }, Choice { value: "red", text: "Red" }, Choice { value: "green", text: "Green" }, Choice { value: "luma", text: "Luma" }],
+        choices: &[
+            Choice {
+                value: "blue",
+                text: "Blue",
+            },
+            Choice {
+                value: "red",
+                text: "Red",
+            },
+            Choice {
+                value: "green",
+                text: "Green",
+            },
+            Choice {
+                value: "luma",
+                text: "Luma",
+            },
+        ],
     },
     loupe::SIZE_SETTING,
 ];
@@ -29,10 +46,30 @@ pub static TOOLBAR: [ToolbarDef; 1] = [ToolbarDef {
     key: "channel",
     mode: ChipMode::Single,
     chips: &[
-        ToolbarChip { value: "luma", text: "Y", tooltip: "Luma (Y)", channel: Some(ChipColour::Y) },
-        ToolbarChip { value: "red", text: "R", tooltip: "Red", channel: Some(ChipColour::R) },
-        ToolbarChip { value: "green", text: "G", tooltip: "Green", channel: Some(ChipColour::G) },
-        ToolbarChip { value: "blue", text: "B", tooltip: "Blue", channel: Some(ChipColour::B) },
+        ToolbarChip {
+            value: "luma",
+            text: "Y",
+            tooltip: "Luma (Y)",
+            channel: Some(ChipColour::Y),
+        },
+        ToolbarChip {
+            value: "red",
+            text: "R",
+            tooltip: "Red",
+            channel: Some(ChipColour::R),
+        },
+        ToolbarChip {
+            value: "green",
+            text: "G",
+            tooltip: "Green",
+            channel: Some(ChipColour::G),
+        },
+        ToolbarChip {
+            value: "blue",
+            text: "B",
+            tooltip: "Blue",
+            channel: Some(ChipColour::B),
+        },
     ],
 }];
 
@@ -95,7 +132,10 @@ struct State {
 impl State {
     /// The values the colour rule reads, for the stage and the Loupe alike.
     fn values(&self) -> [[f32; 4]; 2] {
-        [[self.channel.index(), 0.0, 0.0, 0.0], [self.weights[0], self.weights[1], self.weights[2], 0.0]]
+        [
+            [self.channel.index(), 0.0, 0.0, 0.0],
+            [self.weights[0], self.weights[1], self.weights[2], 0.0],
+        ]
     }
 }
 
@@ -113,14 +153,33 @@ impl ChannelView {
         self.loupe.drawn()
     }
 
-    pub fn new(device: &wgpu::Device, queue: &wgpu::Queue, target: wgpu::TextureFormat, filterable: bool) -> ChannelView {
-        let stage = PictureStage::new::<[[f32; 4]; 2]>(device, queue, target, filterable, Rule { label: "channel view", wgsl: RULE.into(), has_legend: false });
+    pub fn new(
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+        target: wgpu::TextureFormat,
+        filterable: bool,
+    ) -> ChannelView {
+        let stage = PictureStage::new::<[[f32; 4]; 2]>(
+            device,
+            queue,
+            target,
+            filterable,
+            Rule {
+                label: "channel view",
+                wgsl: RULE.into(),
+                has_legend: false,
+            },
+        );
         // The Loupe is built from the same colour rule, so it shows what the Panel shows.
         let loupe = Loupe::new::<[[f32; 4]; 2]>(device, queue, target, RULE);
         ChannelView {
             stage,
             loupe,
-            state: Arc::new(Mutex::new(State { channel: Channel::Blue, weights: crate::measurement::REC709_LUMA.map(|v| v as f32), tail: String::new() })),
+            state: Arc::new(Mutex::new(State {
+                channel: Channel::Blue,
+                weights: crate::measurement::REC709_LUMA.map(|v| v as f32),
+                tail: String::new(),
+            })),
         }
     }
 }
@@ -137,7 +196,9 @@ impl Display for ChannelView {
     fn configure(&self, context: &DisplayContext) {
         let mut state = self.state.lock().unwrap();
         state.channel = Channel::from_setting(context.settings.get("channel").map(String::as_str));
-        let [wr, wg, wb] = crate::output_conversion::measurement(context.colour_setup.clone(), context.luma).weights();
+        let [wr, wg, wb] =
+            crate::output_conversion::measurement(context.colour_setup.clone(), context.luma)
+                .weights();
         state.weights = [wr as f32, wg as f32, wb as f32];
         self.loupe.configure(&context.settings);
         let conversion = Plan::for_setup(context.colour_setup.as_ref().map(|c| &c.setup));
@@ -165,13 +226,19 @@ impl Display for ChannelView {
             channel => format!("{} channel as grey", channel.name()),
         };
         match size {
-            Some([w, h]) => format!("{head}  ·  {w} × {h}  ·  Loupe {} %  ·  {}", self.loupe.zoom(), state.tail),
+            Some([w, h]) => format!(
+                "{head}  ·  {w} × {h}  ·  Loupe {} %  ·  {}",
+                self.loupe.zoom(),
+                state.tail
+            ),
             None => head,
         }
     }
 
     fn draw(&self, pass: &mut wgpu::RenderPass<'_>, area: [f32; 4], surface: [f32; 2], scale: f32) {
-        let Some(shown) = self.stage.shown() else { return };
+        let Some(shown) = self.stage.shown() else {
+            return;
+        };
         if area[2] < 1.0 || area[3] < 1.0 {
             return;
         }

@@ -53,7 +53,10 @@ impl ProjectReader for FakeHelper {
 }
 
 fn answer(lines: &[(&str, &str)]) -> Answer {
-    lines.iter().map(|(k, v)| (k.to_string(), v.to_string())).collect()
+    lines
+        .iter()
+        .map(|(k, v)| (k.to_string(), v.to_string()))
+        .collect()
 }
 
 /// The helper's answer for a project, with the settings Resolve 21.2 reported for it (#6's closing comment and
@@ -84,7 +87,10 @@ fn project_answer(project: &str, settings: &[(&str, &str)]) -> Answer {
         ("videoDataLevels", "Video"),
     ];
     for (k, v) in defaults {
-        let v = settings.iter().find(|(sk, _)| *sk == k).map_or(v, |(_, sv)| *sv);
+        let v = settings
+            .iter()
+            .find(|(sk, _)| *sk == k)
+            .map_or(v, |(_, sv)| *sv);
         a.push((format!("setting.{k}"), v.to_string()));
     }
     a
@@ -120,11 +126,22 @@ struct Bench {
 
 impl Bench {
     fn new(name: &str) -> Bench {
-        let path = PathBuf::from(format!("/dev/shm/scopecreep-colour-test-{}-{}", std::process::id(), name));
+        let path = PathBuf::from(format!(
+            "/dev/shm/scopecreep-colour-test-{}-{}",
+            std::process::id(),
+            name
+        ));
         let _ = std::fs::remove_file(&path);
         let script = Arc::new(Mutex::new(Script::default()));
         let monitor = Monitor::with_project_reader(&path, Box::new(FakeHelper(script.clone())));
-        Bench { path, writer: None, monitor, script, now: now_ns(), frame: 0.0 }
+        Bench {
+            path,
+            writer: None,
+            monitor,
+            script,
+            now: now_ns(),
+            frame: 0.0,
+        }
     }
     /// A Sender is loaded and Resolve shows one frame.
     fn with_sender(name: &str) -> Bench {
@@ -156,8 +173,19 @@ impl Bench {
     /// Resolve renders the next frame now.
     fn render(&mut self) {
         self.frame += 1.0;
-        let meta = FrameMeta { width: 16, height: 9, frame_time: self.frame, frame_rate: 24.0, render_ns: self.now, sender_instance: 1 };
-        let _ = self.writer.as_mut().unwrap().write_frame(&meta, &synthetic::solid(16, 9, [0.5; 4]));
+        let meta = FrameMeta {
+            width: 16,
+            height: 9,
+            frame_time: self.frame,
+            frame_rate: 24.0,
+            render_ns: self.now,
+            sender_instance: 1,
+        };
+        let _ = self
+            .writer
+            .as_mut()
+            .unwrap()
+            .write_frame(&meta, &synthetic::solid(16, 9, [0.5; 4]));
         self.poll();
     }
     /// Resolve plays for `seconds` at 24 fps.
@@ -171,11 +199,17 @@ impl Bench {
     }
     /// The Sender's manual override, as the Sender node would set it.
     fn set_manually(&mut self, text: Option<&str>) {
-        self.writer.as_mut().unwrap().set_colour_setup(text.map(|t| SentColourSetup::new(Provenance::Manual, t)));
+        self.writer
+            .as_mut()
+            .unwrap()
+            .set_colour_setup(text.map(|t| SentColourSetup::new(Provenance::Manual, t)));
     }
     fn label(&self) -> String {
         let status = self.monitor.status();
-        scopecreep::picture_view::PictureView::label_for(status.picture.as_ref().map(|p| [p.width, p.height]), &status.display_context())
+        scopecreep::picture_view::PictureView::label_for(
+            status.picture.as_ref().map(|p| [p.width, p.height]),
+            &status.display_context(),
+        )
     }
     fn colour_label(&self) -> Option<String> {
         self.monitor.status().colour_setup().map(|c| c.label())
@@ -195,28 +229,84 @@ impl Drop for Bench {
 fn the_project_colour_setup_is_read_once_playback_stops_and_labelled_from_project() {
     let mut b = Bench::with_sender("from-project");
     let settings = dwg("Rec.709 Gamma 2.4", "None");
-    b.helper_answers(project_answer("scopecreep-test-dwg-rec709", &settings.iter().map(|(k, v)| (*k, v.as_str())).collect::<Vec<_>>()));
+    b.helper_answers(project_answer(
+        "scopecreep-test-dwg-rec709",
+        &settings
+            .iter()
+            .map(|(k, v)| (*k, v.as_str()))
+            .collect::<Vec<_>>(),
+    ));
     b.play(5.0);
-    assert_eq!(b.requests(), 0, "Resolve is never asked by script while it plays");
-    assert!(b.label().contains("Colour Setup read when playback stops"), "{}", b.label());
+    assert_eq!(
+        b.requests(),
+        0,
+        "Resolve is never asked by script while it plays"
+    );
+    assert!(
+        b.label().contains("Colour Setup read when playback stops"),
+        "{}",
+        b.label()
+    );
     b.wait(SECOND + 100 * MS);
-    assert_eq!(b.requests(), 1, "asked once playback has been stopped for a second");
-    assert_eq!(b.colour_label().as_deref(), Some("DaVinci WG/Intermediate → Rec.709 Gamma 2.4 (from project)"));
-    assert_eq!(b.label(), "Clean picture  ·  16 × 9  ·  DaVinci WG/Intermediate → Rec.709 Gamma 2.4 (from project)  ·  Output Conversion exact");
+    assert_eq!(
+        b.requests(),
+        1,
+        "asked once playback has been stopped for a second"
+    );
+    assert_eq!(
+        b.colour_label().as_deref(),
+        Some("DaVinci WG/Intermediate → Rec.709 Gamma 2.4 (from project)")
+    );
+    assert_eq!(
+        b.label(),
+        "Clean picture  ·  16 × 9  ·  DaVinci WG/Intermediate → Rec.709 Gamma 2.4 (from project)  ·  Output Conversion exact"
+    );
 }
 
 #[test]
 fn every_harness_test_project_is_labelled_correctly() {
     type Case = (&'static str, Vec<(&'static str, String)>, &'static str);
     let cases: Vec<Case> = vec![
-        ("yrgb-rec709g24", vec![], "Rec.709 Gamma 2.4 → Rec.709 Gamma 2.4 (from project)"),
-        ("dwg-rec709", dwg("Rec.709 Gamma 2.4", "None"), "DaVinci WG/Intermediate → Rec.709 Gamma 2.4 (from project)"),
-        ("dwg-p3d65", dwg("P3-D65", "None"), "DaVinci WG/Intermediate → P3-D65 (gamma 2.6) (from project)"),
-        ("dwg-pq-tmoff", dwg("Rec.2100 ST2084", "None"), "DaVinci WG/Intermediate → Rec.2100 ST2084 (from project)"),
-        ("dwg-pq-tmon", dwg("Rec.2100 ST2084", "DaVinci"), "DaVinci WG/Intermediate → Rec.2100 ST2084, DaVinci tone mapping (from project)"),
-        ("acescct-rec709", aces("Rec.709 BT.1886"), "ACEScct → Rec.709 BT.1886 (from project, assumes ACES 2.0)"),
-        ("acescct-p3d65", aces("P3-D65"), "ACEScct → P3-D65 (gamma 2.6) (from project, assumes ACES 2.0)"),
-        ("acescct-pq", aces("Rec.2100 ST2084 (1000 nit)"), "ACEScct → Rec.2100 ST2084 (1000 nit) (from project, assumes ACES 2.0)"),
+        (
+            "yrgb-rec709g24",
+            vec![],
+            "Rec.709 Gamma 2.4 → Rec.709 Gamma 2.4 (from project)",
+        ),
+        (
+            "dwg-rec709",
+            dwg("Rec.709 Gamma 2.4", "None"),
+            "DaVinci WG/Intermediate → Rec.709 Gamma 2.4 (from project)",
+        ),
+        (
+            "dwg-p3d65",
+            dwg("P3-D65", "None"),
+            "DaVinci WG/Intermediate → P3-D65 (gamma 2.6) (from project)",
+        ),
+        (
+            "dwg-pq-tmoff",
+            dwg("Rec.2100 ST2084", "None"),
+            "DaVinci WG/Intermediate → Rec.2100 ST2084 (from project)",
+        ),
+        (
+            "dwg-pq-tmon",
+            dwg("Rec.2100 ST2084", "DaVinci"),
+            "DaVinci WG/Intermediate → Rec.2100 ST2084, DaVinci tone mapping (from project)",
+        ),
+        (
+            "acescct-rec709",
+            aces("Rec.709 BT.1886"),
+            "ACEScct → Rec.709 BT.1886 (from project, assumes ACES 2.0)",
+        ),
+        (
+            "acescct-p3d65",
+            aces("P3-D65"),
+            "ACEScct → P3-D65 (gamma 2.6) (from project, assumes ACES 2.0)",
+        ),
+        (
+            "acescct-pq",
+            aces("Rec.2100 ST2084 (1000 nit)"),
+            "ACEScct → Rec.2100 ST2084 (1000 nit) (from project, assumes ACES 2.0)",
+        ),
     ];
     for (key, settings, want) in cases {
         let mut b = Bench::with_sender(key);
@@ -227,7 +317,11 @@ fn every_harness_test_project_is_labelled_correctly() {
         assert_eq!(b.colour_label().as_deref(), Some(want), "{key}");
         let s = b.monitor.status();
         let reading = s.project.as_ref().expect("the project is known");
-        assert_eq!((reading.project.as_str(), reading.timeline.as_deref()), (project.as_str(), Some("Timeline 1")), "{key}: Sender identity");
+        assert_eq!(
+            (reading.project.as_str(), reading.timeline.as_deref()),
+            (project.as_str(), Some("Timeline 1")),
+            "{key}: Sender identity"
+        );
     }
 }
 
@@ -236,33 +330,71 @@ fn the_manual_override_wins_over_the_project_and_is_labelled_set_manually() {
     let mut b = Bench::with_sender("manual");
     b.helper_answers(project_answer("p", &[]));
     b.wait(2 * SECOND);
-    assert_eq!(b.colour_label().as_deref(), Some("Rec.709 Gamma 2.4 → Rec.709 Gamma 2.4 (from project)"));
-    b.set_manually(Some("timeline=DaVinci WG/Intermediate\noutput=Rec.2100 ST2084\nlevels=full\n"));
+    assert_eq!(
+        b.colour_label().as_deref(),
+        Some("Rec.709 Gamma 2.4 → Rec.709 Gamma 2.4 (from project)")
+    );
+    b.set_manually(Some(
+        "timeline=DaVinci WG/Intermediate\noutput=Rec.2100 ST2084\nlevels=full\n",
+    ));
     b.render(); // changing a parameter on the Sender node makes Resolve render the frame again
     b.wait(100 * MS);
-    assert_eq!(b.colour_label().as_deref(), Some("DaVinci WG/Intermediate → Rec.2100 ST2084, full levels (set manually)"));
+    assert_eq!(
+        b.colour_label().as_deref(),
+        Some("DaVinci WG/Intermediate → Rec.2100 ST2084, full levels (set manually)")
+    );
     b.wait(5 * SECOND);
-    assert_eq!(b.colour_label().as_deref(), Some("DaVinci WG/Intermediate → Rec.2100 ST2084, full levels (set manually)"), "a fresh project reading does not override it");
+    assert_eq!(
+        b.colour_label().as_deref(),
+        Some("DaVinci WG/Intermediate → Rec.2100 ST2084, full levels (set manually)"),
+        "a fresh project reading does not override it"
+    );
     b.set_manually(None);
     b.render();
     b.wait(100 * MS);
-    assert_eq!(b.colour_label().as_deref(), Some("Rec.709 Gamma 2.4 → Rec.709 Gamma 2.4 (from project)"), "turning the override off goes back to the project");
+    assert_eq!(
+        b.colour_label().as_deref(),
+        Some("Rec.709 Gamma 2.4 → Rec.709 Gamma 2.4 (from project)"),
+        "turning the override off goes back to the project"
+    );
 }
 
 #[test]
 fn the_manual_override_works_with_no_scripting_at_all() {
     // Resolve's free version: no external scripting. Monitor::new has no project reader.
-    let path = PathBuf::from(format!("/dev/shm/scopecreep-colour-test-{}-free", std::process::id()));
+    let path = PathBuf::from(format!(
+        "/dev/shm/scopecreep-colour-test-{}-free",
+        std::process::id()
+    ));
     let mut writer = FeedWriter::create(&path, 4, 16 * 9 * 16).unwrap();
     let mut monitor = Monitor::new(&path);
     let now = now_ns();
     monitor.poll(now, &mut |_| {});
-    writer.set_colour_setup(Some(SentColourSetup::new(Provenance::Manual, "timeline=ACEScct\noutput=Rec.709 BT.1886\nlevels=video\naces_version=1.3\n")));
-    let meta = FrameMeta { width: 16, height: 9, frame_time: 1.0, frame_rate: 24.0, render_ns: now, sender_instance: 1 };
-    writer.write_frame(&meta, &synthetic::solid(16, 9, [0.5; 4])).unwrap();
+    writer.set_colour_setup(Some(SentColourSetup::new(
+        Provenance::Manual,
+        "timeline=ACEScct\noutput=Rec.709 BT.1886\nlevels=video\naces_version=1.3\n",
+    )));
+    let meta = FrameMeta {
+        width: 16,
+        height: 9,
+        frame_time: 1.0,
+        frame_rate: 24.0,
+        render_ns: now,
+        sender_instance: 1,
+    };
+    writer
+        .write_frame(&meta, &synthetic::solid(16, 9, [0.5; 4]))
+        .unwrap();
     monitor.poll(now + 100 * MS, &mut |_| {});
     monitor.poll(now + 200 * MS, &mut |_| {}); // a lone frame is held for half a frame period first
-    assert_eq!(monitor.status().colour_setup().map(|c| c.label()).as_deref(), Some("ACEScct → Rec.709 BT.1886 (set manually, ACES 1.3)"));
+    assert_eq!(
+        monitor
+            .status()
+            .colour_setup()
+            .map(|c| c.label())
+            .as_deref(),
+        Some("ACEScct → Rec.709 BT.1886 (set manually, ACES 1.3)")
+    );
     let _ = std::fs::remove_file(&path);
 }
 
@@ -272,20 +404,38 @@ fn a_manual_aces_setup_with_no_version_assumes_aces_2_0() {
     b.set_manually(Some("timeline=ACEScct\noutput=P3-D65\nlevels=video\n"));
     b.render();
     b.wait(100 * MS);
-    assert_eq!(b.colour_label().as_deref(), Some("ACEScct → P3-D65 (gamma 2.6) (set manually, assumes ACES 2.0)"));
+    assert_eq!(
+        b.colour_label().as_deref(),
+        Some("ACEScct → P3-D65 (gamma 2.6) (set manually, assumes ACES 2.0)")
+    );
 }
 
 #[test]
 fn a_changed_project_setting_reaches_the_label_without_restarting_anything() {
     let mut b = Bench::with_sender("changed");
-    let out = |o: &str| project_answer("p", &dwg(o, "None").iter().map(|(k, v)| (*k, v.as_str())).collect::<Vec<_>>());
+    let out = |o: &str| {
+        project_answer(
+            "p",
+            &dwg(o, "None")
+                .iter()
+                .map(|(k, v)| (*k, v.as_str()))
+                .collect::<Vec<_>>(),
+        )
+    };
     b.helper_answers(out("Rec.709 Gamma 2.4"));
     b.wait(2 * SECOND);
-    assert_eq!(b.colour_label().as_deref(), Some("DaVinci WG/Intermediate → Rec.709 Gamma 2.4 (from project)"));
+    assert_eq!(
+        b.colour_label().as_deref(),
+        Some("DaVinci WG/Intermediate → Rec.709 Gamma 2.4 (from project)")
+    );
     // The colourist changes the Output Colour Space in Project Settings while stopped.
     b.helper_answers(out("P3-D65"));
     b.wait(3 * SECOND);
-    assert_eq!(b.colour_label().as_deref(), Some("DaVinci WG/Intermediate → P3-D65 (gamma 2.6) (from project)"), "no new frame, no restart");
+    assert_eq!(
+        b.colour_label().as_deref(),
+        Some("DaVinci WG/Intermediate → P3-D65 (gamma 2.6) (from project)"),
+        "no new frame, no restart"
+    );
 }
 
 #[test]
@@ -318,7 +468,11 @@ fn when_playback_starts_during_a_read_a_stall_in_playback_is_not_taken_for_a_sto
     b.wait(10 * MS);
     b.wait(2500 * MS); // Resolve stalls mid-playback, longer than the reread interval
     b.play(2.0);
-    assert_eq!(b.script.lock().unwrap().requests_during_playback, 0, "no read is started during playback");
+    assert_eq!(
+        b.script.lock().unwrap().requests_during_playback,
+        0,
+        "no read is started during playback"
+    );
     assert_eq!(b.requests(), 2, "no read in the stall");
     b.wait(11 * SECOND);
     assert!(b.requests() >= 3, "reads resume after a long quiet");
@@ -332,19 +486,35 @@ fn a_read_that_never_answers_is_abandoned_and_the_last_reading_kept() {
     assert!(b.colour_label().is_some());
     b.helper_hangs();
     b.wait(10 * SECOND);
-    assert!(b.script.lock().unwrap().abandoned >= 1, "a read over 5 s is given up");
-    assert_eq!(b.colour_label().as_deref(), Some("Rec.709 Gamma 2.4 → Rec.709 Gamma 2.4 (from project)"), "the last reading still stands");
+    assert!(
+        b.script.lock().unwrap().abandoned >= 1,
+        "a read over 5 s is given up"
+    );
+    assert_eq!(
+        b.colour_label().as_deref(),
+        Some("Rec.709 Gamma 2.4 → Rec.709 Gamma 2.4 (from project)"),
+        "the last reading still stands"
+    );
 }
 
 #[test]
-fn when_resolve_cannot_be_reached_by_script_the_colour_setup_is_unknown_and_the_notice_says_how_to_fix_it() {
+fn when_resolve_cannot_be_reached_by_script_the_colour_setup_is_unknown_and_the_notice_says_how_to_fix_it()
+ {
     let mut b = Bench::with_sender("unreachable");
     b.helper_answers(answer(&[("result", "unreachable"), ("message", "Resolve is not running, or Preferences > System > General > External scripting using is not set to Local (Resolve Studio only)")]));
     b.wait(2 * SECOND);
     assert_eq!(b.colour_label(), None);
     assert!(b.label().contains("Colour Setup unknown"), "{}", b.label());
-    assert!(b.notice().contains("External scripting using"), "{}", b.notice());
-    assert!(b.notice().contains("Sender node"), "the manual override is offered: {}", b.notice());
+    assert!(
+        b.notice().contains("External scripting using"),
+        "{}",
+        b.notice()
+    );
+    assert!(
+        b.notice().contains("Sender node"),
+        "the manual override is offered: {}",
+        b.notice()
+    );
 }
 
 #[test]
@@ -352,7 +522,11 @@ fn without_a_sender_resolve_is_not_asked() {
     let mut b = Bench::new("no-sender");
     b.helper_answers(project_answer("p", &[]));
     b.wait(5 * SECOND);
-    assert_eq!(b.requests(), 0, "no Sender, so nothing to label and no way to tell whether Resolve is playing");
+    assert_eq!(
+        b.requests(),
+        0,
+        "no Sender, so nothing to label and no way to tell whether Resolve is playing"
+    );
 }
 
 #[test]
@@ -362,7 +536,10 @@ fn a_project_reading_lists_studio_and_the_product() {
     b.wait(2 * SECOND);
     let s = b.monitor.status();
     let reading = s.project.as_ref().unwrap();
-    assert_eq!((reading.product.as_str(), reading.studio), ("DaVinci Resolve Studio 21.2.0.6", true));
+    assert_eq!(
+        (reading.product.as_str(), reading.studio),
+        ("DaVinci Resolve Studio 21.2.0.6", true)
+    );
 }
 
 #[test]
@@ -370,7 +547,15 @@ fn the_waveform_measures_in_the_output_colour_space_of_the_colour_setup() {
     use scopecreep::colour_setup::ColourSetup;
     use scopecreep::measurement::MeasuredSpace;
     let space = |output: &str| {
-        let setup = ColourSetup::new(None, "DaVinci WG/Intermediate".into(), output.into(), None, None, None, None);
+        let setup = ColourSetup::new(
+            None,
+            "DaVinci WG/Intermediate".into(),
+            output.into(),
+            None,
+            None,
+            None,
+            None,
+        );
         setup.measured_space()
     };
     assert_eq!(space("Rec.709 Gamma 2.4"), Some(MeasuredSpace::Rec709));
@@ -380,30 +565,56 @@ fn the_waveform_measures_in_the_output_colour_space_of_the_colour_setup() {
     assert_eq!(space("P3-DCI"), Some(MeasuredSpace::P3Dci));
     assert_eq!(space("Rec.2020 Gamma 2.4"), Some(MeasuredSpace::Rec2020));
     assert_eq!(space("Rec.2100 ST2084"), Some(MeasuredSpace::Rec2100Pq));
-    assert_eq!(space("Rec.2100 ST2084 (1000 nit)"), Some(MeasuredSpace::Rec2100Pq));
+    assert_eq!(
+        space("Rec.2100 ST2084 (1000 nit)"),
+        Some(MeasuredSpace::Rec2100Pq)
+    );
     assert_eq!(space("Rec.2100 HLG"), Some(MeasuredSpace::Rec2100Hlg));
-    assert_eq!(space("No Output Transform"), None, "unknown: the waveform keeps its labelled assumption");
+    assert_eq!(
+        space("No Output Transform"),
+        None,
+        "unknown: the waveform keeps its labelled assumption"
+    );
 }
 
 #[test]
 fn the_waveform_follows_the_project_levels_and_says_when_they_are_set_manually() {
     use scopecreep::measurement::{LumaWeights, Measurement};
-    let measuring = |b: &Bench| Measurement::for_colour_setup(b.monitor.status().colour_setup(), LumaWeights::FromPrimaries);
+    let measuring = |b: &Bench| {
+        Measurement::for_colour_setup(
+            b.monitor.status().colour_setup(),
+            LumaWeights::FromPrimaries,
+        )
+    };
     let scale_of = |m: Measurement| m.label().split("  ·  ").nth(1).unwrap().to_string();
 
     let mut b = Bench::with_sender("levels");
-    assert_eq!(scale_of(measuring(&b)), "10-bit Legal 64–940 assumed", "nothing known yet: Resolve's default, video levels");
-    b.helper_answers(project_answer("scopecreep-test-levels-full", &[("videoDataLevels", "Full")]));
+    assert_eq!(
+        scale_of(measuring(&b)),
+        "10-bit Legal 64–940 assumed",
+        "nothing known yet: Resolve's default, video levels"
+    );
+    b.helper_answers(project_answer(
+        "scopecreep-test-levels-full",
+        &[("videoDataLevels", "Full")],
+    ));
     b.wait(2 * SECOND);
     assert_eq!(scale_of(measuring(&b)), "10-bit Full 0–1023");
-    b.helper_answers(project_answer("scopecreep-test-levels-video", &[("videoDataLevels", "Video")]));
+    b.helper_answers(project_answer(
+        "scopecreep-test-levels-video",
+        &[("videoDataLevels", "Video")],
+    ));
     b.wait(3 * SECOND);
     assert_eq!(scale_of(measuring(&b)), "10-bit Legal 64–940");
-    b.set_manually(Some("timeline=Rec.709 Gamma 2.4\noutput=Rec.709 Gamma 2.4\nlevels=full\n"));
+    b.set_manually(Some(
+        "timeline=Rec.709 Gamma 2.4\noutput=Rec.709 Gamma 2.4\nlevels=full\n",
+    ));
     b.render();
     b.wait(100 * MS);
     assert_eq!(scale_of(measuring(&b)), "10-bit Full 0–1023 set manually");
-    b.set_manually(Some("timeline=Rec.709 Gamma 2.4\noutput=Rec.709 Gamma 2.4\nlevels=video\n"));
+    b.set_manually(Some(
+        "timeline=Rec.709 Gamma 2.4\noutput=Rec.709 Gamma 2.4\nlevels=video\n",
+    ));
     b.render();
     b.wait(100 * MS);
     assert_eq!(scale_of(measuring(&b)), "10-bit Legal 64–940 set manually");
@@ -412,17 +623,52 @@ fn the_waveform_follows_the_project_levels_and_says_when_they_are_set_manually()
 #[test]
 fn the_top_bar_and_the_status_line_follow_the_feed_and_the_project() {
     let mut b = Bench::with_sender("top-bar");
-    assert_eq!(b.monitor.status().top_bar(), "Colour Setup read when playback stops  ·  as sent, no Output Conversion");
+    assert_eq!(
+        b.monitor.status().top_bar(),
+        "Colour Setup read when playback stops  ·  as sent, no Output Conversion"
+    );
     let settings = dwg("Rec.709 Gamma 2.4", "None");
-    b.helper_answers(project_answer("scopecreep-test-dwg-rec709", &settings.iter().map(|(k, v)| (*k, v.as_str())).collect::<Vec<_>>()));
+    b.helper_answers(project_answer(
+        "scopecreep-test-dwg-rec709",
+        &settings
+            .iter()
+            .map(|(k, v)| (*k, v.as_str()))
+            .collect::<Vec<_>>(),
+    ));
     b.play(2.0);
     b.wait(SECOND + 100 * MS);
     let status = b.monitor.status();
-    assert!(status.top_bar().starts_with("DaVinci WG/Intermediate → Rec.709 Gamma 2.4  ·  "), "{}", status.top_bar());
-    assert!(status.top_bar().ends_with("Output Conversion exact"), "{}", status.top_bar());
+    assert!(
+        status
+            .top_bar()
+            .starts_with("DaVinci WG/Intermediate → Rec.709 Gamma 2.4  ·  "),
+        "{}",
+        status.top_bar()
+    );
+    assert!(
+        status.top_bar().ends_with("Output Conversion exact"),
+        "{}",
+        status.top_bar()
+    );
     // The feeding timeline, from the project read, is on the status line; the Colour Setup is not.
     assert_eq!(status.timeline_name().as_deref(), Some("Timeline 1"));
-    assert!(status.status_line().ends_with("  ·  Timeline 1"), "{}", status.status_line());
-    assert!(!status.status_line().contains("Rec.709"), "{}", status.status_line());
-    assert!(status.status_candidates().last().unwrap().starts_with("paused  ·  0 dropped"), "{:?}", status.status_candidates());
+    assert!(
+        status.status_line().ends_with("  ·  Timeline 1"),
+        "{}",
+        status.status_line()
+    );
+    assert!(
+        !status.status_line().contains("Rec.709"),
+        "{}",
+        status.status_line()
+    );
+    assert!(
+        status
+            .status_candidates()
+            .last()
+            .unwrap()
+            .starts_with("paused  ·  0 dropped"),
+        "{:?}",
+        status.status_candidates()
+    );
 }

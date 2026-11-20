@@ -7,9 +7,9 @@
 //! signal. Nothing is clamped first: a channel below 0 counts as the negative number it is.
 use crate::display::{Display, DisplayContext, ScaleText};
 use crate::gpu_frame::GpuFrame;
+use crate::output_conversion;
 use crate::picture_stage::{PictureStage, Rule};
 use crate::scale_bar::{BarMark, ScaleBar};
-use crate::output_conversion;
 use crate::settings::{Choice, SettingDef};
 use crate::toolbar::{BW_DEFAULT_GREY, BW_SETTING, BW_TOOLBAR, ToolbarDef};
 use std::sync::{Arc, Mutex};
@@ -27,12 +27,42 @@ pub struct Band {
 
 /// The bands third parties publish as ARRI's Rec.709 look (SmallHD, Sigma), from the darkest up.
 pub const BANDS: [Band; 6] = [
-    Band { name: "purple", from: 0.0, to: 2.5, colour: [0.55, 0.22, 0.85] },
-    Band { name: "blue", from: 2.5, to: 4.0, colour: [0.15, 0.40, 1.0] },
-    Band { name: "green", from: 38.0, to: 42.0, colour: [0.0, 0.72, 0.22] },
-    Band { name: "pink", from: 52.0, to: 56.0, colour: [1.0, 0.45, 0.72] },
-    Band { name: "yellow", from: 97.0, to: 99.0, colour: [1.0, 0.90, 0.0] },
-    Band { name: "red", from: 99.0, to: 100.0, colour: [0.95, 0.0, 0.0] },
+    Band {
+        name: "purple",
+        from: 0.0,
+        to: 2.5,
+        colour: [0.55, 0.22, 0.85],
+    },
+    Band {
+        name: "blue",
+        from: 2.5,
+        to: 4.0,
+        colour: [0.15, 0.40, 1.0],
+    },
+    Band {
+        name: "green",
+        from: 38.0,
+        to: 42.0,
+        colour: [0.0, 0.72, 0.22],
+    },
+    Band {
+        name: "pink",
+        from: 52.0,
+        to: 56.0,
+        colour: [1.0, 0.45, 0.72],
+    },
+    Band {
+        name: "yellow",
+        from: 97.0,
+        to: 99.0,
+        colour: [1.0, 0.90, 0.0],
+    },
+    Band {
+        name: "red",
+        from: 99.0,
+        to: 100.0,
+        colour: [0.95, 0.0, 0.0],
+    },
 ];
 
 /// The band a Luma (percent of the full-range signal) falls in, `None` where the picture is shown as grey. A band
@@ -40,12 +70,30 @@ pub const BANDS: [Band; 6] = [
 /// past black) and 100 % and over is the red band (clipped), because those are the pixels the view exists to flag.
 pub fn band_at(percent: f64) -> Option<&'static Band> {
     let last = BANDS.len() - 1;
-    BANDS.iter().enumerate().find(|(i, b)| (percent >= b.from || *i == 0) && (percent < b.to || *i == last)).map(|(_, b)| b)
+    BANDS
+        .iter()
+        .enumerate()
+        .find(|(i, b)| (percent >= b.from || *i == 0) && (percent < b.to || *i == last))
+        .map(|(_, b)| b)
 }
 
 /// The settings: the legend (on by default) and B/W, a chip on the title bar (grey by default, as ARRI draws it).
 pub static SETTINGS: [SettingDef; 2] = [
-    SettingDef { key: "legend", label: "Legend", amount: None, choices: &[Choice { value: "on", text: "On" }, Choice { value: "off", text: "Off" }] },
+    SettingDef {
+        key: "legend",
+        label: "Legend",
+        amount: None,
+        choices: &[
+            Choice {
+                value: "on",
+                text: "On",
+            },
+            Choice {
+                value: "off",
+                text: "Off",
+            },
+        ],
+    },
     BW_DEFAULT_GREY,
 ];
 pub static TOOLBAR: [ToolbarDef; 1] = BW_TOOLBAR;
@@ -61,8 +109,15 @@ fn band_function() -> String {
         if i < BANDS.len() - 1 {
             conditions.push(format!("p < {:?}", b.to as f32));
         }
-        let condition = if conditions.is_empty() { "true".to_string() } else { conditions.join(" && ") };
-        code += &format!("    if ({condition}) {{ return vec4<f32>({:?}, {:?}, {:?}, 1.0); }}\n", b.colour[0], b.colour[1], b.colour[2]);
+        let condition = if conditions.is_empty() {
+            "true".to_string()
+        } else {
+            conditions.join(" && ")
+        };
+        code += &format!(
+            "    if ({condition}) {{ return vec4<f32>({:?}, {:?}, {:?}, 1.0); }}\n",
+            b.colour[0], b.colour[1], b.colour[2]
+        );
     }
     code += "    return vec4<f32>(0.0);\n}\n";
     code
@@ -76,11 +131,31 @@ pub const BAR: ScaleBar<'static> = ScaleBar {
     unit: " %",
     steps: &[5.0, 10.0, 20.0, 25.0, 50.0],
     marks: &[
-        BarMark { from: 2.5, to: 5.0, text: "near black clip" },
-        BarMark { from: 38.0, to: 42.0, text: "18 % grey" },
-        BarMark { from: 97.0, to: 99.0, text: "near white clip" },
-        BarMark { from: 0.0, to: 0.0, text: "black clip" },
-        BarMark { from: 100.0, to: 100.0, text: "white clip" },
+        BarMark {
+            from: 2.5,
+            to: 5.0,
+            text: "near black clip",
+        },
+        BarMark {
+            from: 38.0,
+            to: 42.0,
+            text: "18 % grey",
+        },
+        BarMark {
+            from: 97.0,
+            to: 99.0,
+            text: "near white clip",
+        },
+        BarMark {
+            from: 0.0,
+            to: 0.0,
+            text: "black clip",
+        },
+        BarMark {
+            from: 100.0,
+            to: 100.0,
+            text: "white clip",
+        },
     ],
 };
 
@@ -130,9 +205,32 @@ pub struct ArriFalseColour {
 }
 
 impl ArriFalseColour {
-    pub fn new(device: &wgpu::Device, queue: &wgpu::Queue, target: wgpu::TextureFormat) -> ArriFalseColour {
-        let stage = PictureStage::new::<[f32; 4]>(device, queue, target, false, Rule { label: "arri false colour", wgsl: rule(), has_legend: true });
-        let display = ArriFalseColour { stage, zoom: Default::default(), state: Arc::new(Mutex::new(State { legend: true, grey: true, weights: crate::measurement::REC709_LUMA, label: String::new() })) };
+    pub fn new(
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+        target: wgpu::TextureFormat,
+    ) -> ArriFalseColour {
+        let stage = PictureStage::new::<[f32; 4]>(
+            device,
+            queue,
+            target,
+            false,
+            Rule {
+                label: "arri false colour",
+                wgsl: rule(),
+                has_legend: true,
+            },
+        );
+        let display = ArriFalseColour {
+            stage,
+            zoom: Default::default(),
+            state: Arc::new(Mutex::new(State {
+                legend: true,
+                grey: true,
+                weights: crate::measurement::REC709_LUMA,
+                label: String::new(),
+            })),
+        };
         display.configure(&DisplayContext::default());
         display
     }
@@ -149,7 +247,8 @@ impl crate::zoom::PictureZoom for ArriFalseColour {
 
     /// The height the legend takes under the picture: what zoom keeps free.
     fn strip(&self, area: [f32; 4], scale: f32) -> f32 {
-        BAR.layout(self.state.lock().unwrap().legend, area, scale, false).map_or(0.0, |l| l.legend.strip)
+        BAR.layout(self.state.lock().unwrap().legend, area, scale, false)
+            .map_or(0.0, |l| l.legend.strip)
     }
 }
 
@@ -165,9 +264,14 @@ impl Display for ArriFalseColour {
     fn configure(&self, context: &DisplayContext) {
         // The Output picture's Luma, weighted as the luma waveform weights it (ADR 0004): Rec.709 is assumed, and
         // the label says so, until the Colour Setup is known and the picture is converted.
-        let measurement = output_conversion::measurement(context.colour_setup.clone(), context.luma);
+        let measurement =
+            output_conversion::measurement(context.colour_setup.clone(), context.luma);
         let weights = measurement.weights();
-        let space = if measurement.assumed { format!("{} assumed, unconverted", measurement.space.name()) } else { measurement.space.name().to_string() };
+        let space = if measurement.assumed {
+            format!("{} assumed, unconverted", measurement.space.name())
+        } else {
+            measurement.space.name().to_string()
+        };
         let mut state = self.state.lock().unwrap();
         state.weights = weights;
         state.legend = context.settings.get("legend").is_none_or(|v| v == "on");
@@ -197,13 +301,28 @@ impl Display for ArriFalseColour {
     fn draw(&self, pass: &mut wgpu::RenderPass<'_>, area: [f32; 4], surface: [f32; 2], scale: f32) {
         let state = self.state.lock().unwrap();
         let w = state.weights;
-        self.stage.draw_zoomed(pass, area, surface, &[w[0] as f32, w[1] as f32, w[2] as f32, state.grey as u32 as f32], BAR.layout(state.legend, area, scale, false).map(|l| l.legend), &self.zoom.model());
+        self.stage.draw_zoomed(
+            pass,
+            area,
+            surface,
+            &[
+                w[0] as f32,
+                w[1] as f32,
+                w[2] as f32,
+                state.grey as u32 as f32,
+            ],
+            BAR.layout(state.legend, area, scale, false)
+                .map(|l| l.legend),
+            &self.zoom.model(),
+        );
     }
 
     /// The ruler's tick numbers and the marks under the bar, where they fit.
     fn scale_texts(&self, area: [f32; 4], scale: f32) -> Vec<ScaleText> {
         let state = self.state.lock().unwrap();
-        let Some(layout) = BAR.layout(state.legend, area, scale, self.stage.has_picture()) else { return Vec::new() };
+        let Some(layout) = BAR.layout(state.legend, area, scale, self.stage.has_picture()) else {
+            return Vec::new();
+        };
         layout.ticks.into_iter().chain(layout.marks).collect()
     }
 }

@@ -37,7 +37,13 @@ pub struct PlaybackRate {
 
 impl PlaybackRate {
     /// A Viewer Frame was shown. `lost_before` is how many frames the Feed lost just before it.
-    pub fn viewer_frame(&mut self, render_ns: u64, frame_time: f64, frame_rate: f64, lost_before: u64) {
+    pub fn viewer_frame(
+        &mut self,
+        render_ns: u64,
+        frame_time: f64,
+        frame_rate: f64,
+        lost_before: u64,
+    ) {
         if self.last_frame_time == Some(frame_time) {
             return; // a repeat render of the same frame, not a new one
         }
@@ -58,7 +64,12 @@ impl PlaybackRate {
         }
         // Keep the newest few seconds, after the run has settled.
         let keep_from = self.run_start_ns + SETTLE_NS;
-        while self.samples.len() > 1 && self.samples.front().is_some_and(|&(t, _)| render_ns - t > WINDOW_NS || t < keep_from) {
+        while self.samples.len() > 1
+            && self
+                .samples
+                .front()
+                .is_some_and(|&(t, _)| render_ns - t > WINDOW_NS || t < keep_from)
+        {
             self.samples.pop_front();
         }
     }

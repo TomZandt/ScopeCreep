@@ -66,7 +66,10 @@ impl Arbiter {
 
     /// The timeline rate the Sender last reported.
     pub fn frame_rate(&self, key: SenderKey) -> Option<f64> {
-        self.seen.iter().find(|s| s.key == key).map(|s| s.frame_rate)
+        self.seen
+            .iter()
+            .find(|s| s.key == key)
+            .map(|s| s.frame_rate)
     }
 
     /// A frame from `key`, whose render call began at `render_ns`.
@@ -80,7 +83,14 @@ impl Arbiter {
                 i
             }
             None => {
-                self.seen.push(Seen { key, prev_ns: None, last_ns: render_ns, frame_rate, in_step_until: 0, flagged_until: 0 });
+                self.seen.push(Seen {
+                    key,
+                    prev_ns: None,
+                    last_ns: render_ns,
+                    frame_rate,
+                    in_step_until: 0,
+                    flagged_until: 0,
+                });
                 self.seen.len() - 1
             }
         };
@@ -108,17 +118,28 @@ impl Arbiter {
             let group: Vec<SenderKey> = self
                 .seen
                 .iter()
-                .filter(|s| s.key == key || (s.in_step_until > render_ns && render_ns.saturating_sub(s.last_ns) <= 2 * period))
+                .filter(|s| {
+                    s.key == key
+                        || (s.in_step_until > render_ns
+                            && render_ns.saturating_sub(s.last_ns) <= 2 * period)
+                })
                 .map(|s| s.key)
                 .collect();
             let driver = *group.iter().min().unwrap();
-            for s in self.seen.iter_mut().filter(|s| group.contains(&s.key) && s.key != driver) {
+            for s in self
+                .seen
+                .iter_mut()
+                .filter(|s| group.contains(&s.key) && s.key != driver)
+            {
                 s.flagged_until = render_ns + FLAG_HOLD_NS;
             }
             driver
         } else if let Some(d) = self.driver
             && d != key
-            && self.seen.iter().any(|s| s.key == d && near(render_ns, s.last_ns))
+            && self
+                .seen
+                .iter()
+                .any(|s| s.key == d && near(render_ns, s.last_ns))
         {
             // Rendering the same moment as the driver, but not yet seen in step (a second Sender's first frame):
             // the driver keeps the Feed until the next frame settles it.
@@ -131,12 +152,20 @@ impl Arbiter {
         }
         let driver_changed = self.driver != Some(driver);
         self.driver = Some(driver);
-        Decision { drives: key == driver, driver_changed }
+        Decision {
+            drives: key == driver,
+            driver_changed,
+        }
     }
 
     /// Senders flagged at `now_ns` (rendering in step with the driver recently), lowest first.
     pub fn flagged(&self, now_ns: u64) -> Vec<SenderKey> {
-        let mut out: Vec<SenderKey> = self.seen.iter().filter(|s| s.flagged_until > now_ns && Some(s.key) != self.driver).map(|s| s.key).collect();
+        let mut out: Vec<SenderKey> = self
+            .seen
+            .iter()
+            .filter(|s| s.flagged_until > now_ns && Some(s.key) != self.driver)
+            .map(|s| s.key)
+            .collect();
         out.sort();
         out
     }

@@ -9,13 +9,13 @@
 //! One Panel shows it twice (ADR 0011, #92): the left half at 100 %, where the plot's edge is [`HALF_EXTENT`] on each
 //! axis, and the right half at 200 %, where it is half that, so the same data sits at twice the radius. The frame is
 //! measured once, into one set of bins per zoom, and one label, one menu and one set of settings serve both.
+use crate::components::ChipMode;
 use crate::display::{Display, DisplayContext};
 use crate::gpu_frame::GpuFrame;
-use crate::components::ChipMode;
-use crate::settings::{Amount, Choice, SettingDef};
-use crate::toolbar::{TOGGLE_OFF, ToolbarChip, ToolbarDef};
-use crate::skin_tone::SKIN_TONE_LINE_DEGREES;
 use crate::measurement::Measurement;
+use crate::settings::{Amount, Choice, SettingDef};
+use crate::skin_tone::SKIN_TONE_LINE_DEGREES;
+use crate::toolbar::{TOGGLE_OFF, ToolbarChip, ToolbarDef};
 use std::sync::{Arc, Mutex};
 
 /// Bins across (and down) the plot.
@@ -146,13 +146,24 @@ impl Tonal {
 /// Cb and Cr of an encoded `rgb` for luma `weights` (Wr, Wg, Wb).
 pub fn chroma(weights: [f64; 3], rgb: [f64; 3]) -> [f64; 2] {
     let y = weights[0] * rgb[0] + weights[1] * rgb[1] + weights[2] * rgb[2];
-    [(rgb[2] - y) / (2.0 * (1.0 - weights[2])), (rgb[0] - y) / (2.0 * (1.0 - weights[0]))]
+    [
+        (rgb[2] - y) / (2.0 * (1.0 - weights[2])),
+        (rgb[0] - y) / (2.0 * (1.0 - weights[0])),
+    ]
 }
 
 /// Where the six colour bars (red, yellow, green, cyan, magenta, blue) land when they are `level` (0.75 or 1.0)
 /// of full strength: their Cb/Cr for these luma weights.
 pub fn bar_targets(weights: [f64; 3], level: f64) -> [[f64; 2]; 6] {
-    [[1.0, 0.0, 0.0], [1.0, 1.0, 0.0], [0.0, 1.0, 0.0], [0.0, 1.0, 1.0], [1.0, 0.0, 1.0], [0.0, 0.0, 1.0]].map(|c| chroma(weights, c.map(|v| v * level)))
+    [
+        [1.0, 0.0, 0.0],
+        [1.0, 1.0, 0.0],
+        [0.0, 1.0, 0.0],
+        [0.0, 1.0, 1.0],
+        [1.0, 0.0, 1.0],
+        [0.0, 0.0, 1.0],
+    ]
+    .map(|c| chroma(weights, c.map(|v| v * level)))
 }
 
 /// The settings' keys.
@@ -163,7 +174,10 @@ pub const SPREAD_SETTING: &str = "spread";
 
 /// The trace brightness slider, in percent of the normal look (#86). The range reaches the old Brighter (4 times the
 /// gain) and Dimmer (a quarter), so a file saved with either still draws as it did.
-pub const BRIGHTNESS_AMOUNT: Amount = crate::scope_shader::trace_brightness_amount(400.0, &[("normal", 100.0), ("bright", 400.0), ("dim", 25.0)]);
+pub const BRIGHTNESS_AMOUNT: Amount = crate::scope_shader::trace_brightness_amount(
+    400.0,
+    &[("normal", 100.0), ("bright", 400.0), ("dim", 25.0)],
+);
 
 /// The soft spread slider (#86), shared with the waveforms: 0 is the old Off, 1 the old On.
 pub use crate::scope_shader::SPREAD_AMOUNT;
@@ -176,24 +190,115 @@ pub const MONO_SETTING: &str = "mono";
 pub const TONAL_SETTING: &str = "tonal";
 
 pub const SETTINGS: [SettingDef; 8] = [
-    SettingDef { key: BRIGHTNESS_SETTING, label: "Trace brightness", amount: Some(BRIGHTNESS_AMOUNT), choices: &[] },
-    SettingDef { key: SPREAD_SETTING, label: "Soft spread", amount: Some(SPREAD_AMOUNT), choices: &[] },
-    SettingDef { key: crate::scope_shader::GRATICULE_SETTING, label: "Graticule brightness", amount: Some(crate::scope_shader::GRATICULE_AMOUNT), choices: &[] },
-    SettingDef { key: TARGETS_SETTING, label: "Colour targets", amount: None, choices: &[Choice { value: "both", text: "75 % and 100 %" }, Choice { value: "75", text: "75 % bars" }, Choice { value: "100", text: "100 % bars" }] },
-    SettingDef { key: SKIN_LINE_SETTING, label: "Skin-tone line", amount: None, choices: &[Choice { value: "on", text: "On" }, Choice { value: "off", text: "Off" }] },
+    SettingDef {
+        key: BRIGHTNESS_SETTING,
+        label: "Trace brightness",
+        amount: Some(BRIGHTNESS_AMOUNT),
+        choices: &[],
+    },
+    SettingDef {
+        key: SPREAD_SETTING,
+        label: "Soft spread",
+        amount: Some(SPREAD_AMOUNT),
+        choices: &[],
+    },
+    SettingDef {
+        key: crate::scope_shader::GRATICULE_SETTING,
+        label: "Graticule brightness",
+        amount: Some(crate::scope_shader::GRATICULE_AMOUNT),
+        choices: &[],
+    },
+    SettingDef {
+        key: TARGETS_SETTING,
+        label: "Colour targets",
+        amount: None,
+        choices: &[
+            Choice {
+                value: "both",
+                text: "75 % and 100 %",
+            },
+            Choice {
+                value: "75",
+                text: "75 % bars",
+            },
+            Choice {
+                value: "100",
+                text: "100 % bars",
+            },
+        ],
+    },
+    SettingDef {
+        key: SKIN_LINE_SETTING,
+        label: "Skin-tone line",
+        amount: None,
+        choices: &[
+            Choice {
+                value: "on",
+                text: "On",
+            },
+            Choice {
+                value: "off",
+                text: "Off",
+            },
+        ],
+    },
     SettingDef {
         key: PLOTS_SETTING,
         label: "Plots",
         amount: None,
-        choices: &[Choice { value: "both", text: "100 % and 200 %" }, Choice { value: "100", text: "100 % only" }, Choice { value: "200", text: "200 % only" }],
+        choices: &[
+            Choice {
+                value: "both",
+                text: "100 % and 200 %",
+            },
+            Choice {
+                value: "100",
+                text: "100 % only",
+            },
+            Choice {
+                value: "200",
+                text: "200 % only",
+            },
+        ],
     },
     SettingDef {
         key: TONAL_SETTING,
         label: "Tonal range",
         amount: None,
-        choices: &[Choice { value: "all", text: "All" }, Choice { value: "shadows", text: "Shadows" }, Choice { value: "mids", text: "Mids" }, Choice { value: "highlights", text: "Highlights" }],
+        choices: &[
+            Choice {
+                value: "all",
+                text: "All",
+            },
+            Choice {
+                value: "shadows",
+                text: "Shadows",
+            },
+            Choice {
+                value: "mids",
+                text: "Mids",
+            },
+            Choice {
+                value: "highlights",
+                text: "Highlights",
+            },
+        ],
     },
-    SettingDef { key: MONO_SETTING, label: "Trace colour", amount: None, choices: &[Choice { value: TOGGLE_OFF, text: "Colour" }, Choice { value: "on", text: "Mono" }] },
+    SettingDef {
+        key: MONO_SETTING,
+        label: "Trace colour",
+        amount: None,
+        choices: &[
+            Choice {
+                value: TOGGLE_OFF,
+                text: "Colour",
+            },
+            Choice {
+                value: "on",
+                text: "Mono",
+            },
+        ],
+    },
 ];
 
 /// The chips on the title bar (#123): which plots show, one at a time, and the colour or mono trace.
@@ -202,24 +307,64 @@ pub static TOOLBAR: [ToolbarDef; 3] = [
         key: PLOTS_SETTING,
         mode: ChipMode::Single,
         chips: &[
-            ToolbarChip { value: "100", text: "100 %", tooltip: "Show only the 100 % plot", channel: None },
-            ToolbarChip { value: "200", text: "200 %", tooltip: "Show only the 200 % plot", channel: None },
-            ToolbarChip { value: "both", text: "Both", tooltip: "Show the 100 % and 200 % plots side by side", channel: None },
+            ToolbarChip {
+                value: "100",
+                text: "100 %",
+                tooltip: "Show only the 100 % plot",
+                channel: None,
+            },
+            ToolbarChip {
+                value: "200",
+                text: "200 %",
+                tooltip: "Show only the 200 % plot",
+                channel: None,
+            },
+            ToolbarChip {
+                value: "both",
+                text: "Both",
+                tooltip: "Show the 100 % and 200 % plots side by side",
+                channel: None,
+            },
         ],
     },
     ToolbarDef {
         key: MONO_SETTING,
         mode: ChipMode::Toggle,
-        chips: &[ToolbarChip { value: "on", text: "Mono", tooltip: "Trace in neutral grey instead of colour (the same counts)", channel: None }],
+        chips: &[ToolbarChip {
+            value: "on",
+            text: "Mono",
+            tooltip: "Trace in neutral grey instead of colour (the same counts)",
+            channel: None,
+        }],
     },
     ToolbarDef {
         key: TONAL_SETTING,
         mode: ChipMode::Single,
         chips: &[
-            ToolbarChip { value: "all", text: "All", tooltip: "Plot every pixel", channel: None },
-            ToolbarChip { value: "shadows", text: "Shadows", tooltip: "Plot only pixels with Luma below 30 % (Resolve's Low boundary); clipping counts only these", channel: None },
-            ToolbarChip { value: "mids", text: "Mids", tooltip: "Plot only pixels with Luma from 30 % to below 70 %; clipping counts only these", channel: None },
-            ToolbarChip { value: "highlights", text: "Highlights", tooltip: "Plot only pixels with Luma of 70 % and above (Resolve's High boundary); clipping counts only these", channel: None },
+            ToolbarChip {
+                value: "all",
+                text: "All",
+                tooltip: "Plot every pixel",
+                channel: None,
+            },
+            ToolbarChip {
+                value: "shadows",
+                text: "Shadows",
+                tooltip: "Plot only pixels with Luma below 30 % (Resolve's Low boundary); clipping counts only these",
+                channel: None,
+            },
+            ToolbarChip {
+                value: "mids",
+                text: "Mids",
+                tooltip: "Plot only pixels with Luma from 30 % to below 70 %; clipping counts only these",
+                channel: None,
+            },
+            ToolbarChip {
+                value: "highlights",
+                text: "Highlights",
+                tooltip: "Plot only pixels with Luma of 70 % and above (Resolve's High boundary); clipping counts only these",
+                channel: None,
+            },
         ],
     },
 ];
@@ -253,19 +398,38 @@ const MARGIN: f32 = 6.0;
 impl PlotSquare {
     pub fn new([left, top, width, height]: [f32; 4], scale: f32) -> PlotSquare {
         let side = (width.min(height) - 2.0 * MARGIN * scale).max(1.0).floor();
-        PlotSquare { plot: [(left + (width - side) / 2.0).floor(), (top + (height - side) / 2.0).floor(), side, side] }
+        PlotSquare {
+            plot: [
+                (left + (width - side) / 2.0).floor(),
+                (top + (height - side) / 2.0).floor(),
+                side,
+                side,
+            ],
+        }
     }
     /// The 100 % and 200 % plots joined as one scope (#174): the Panel's area is one 2:1 region, the plots are equal
     /// squares edge to edge with no gap, sized from the smaller of half the width and the height with the margin
     /// taken once, and the pair is centred as a unit.
     pub fn pair([left, top, width, height]: [f32; 4], scale: f32) -> [PlotSquare; 2] {
-        let side = ((width / 2.0).min(height) - 2.0 * MARGIN * scale).max(1.0).floor();
+        let side = ((width / 2.0).min(height) - 2.0 * MARGIN * scale)
+            .max(1.0)
+            .floor();
         let first = (left + (width - 2.0 * side) / 2.0).floor();
         let y = (top + (height - side) / 2.0).floor();
-        [PlotSquare { plot: [first, y, side, side] }, PlotSquare { plot: [first + side, y, side, side] }]
+        [
+            PlotSquare {
+                plot: [first, y, side, side],
+            },
+            PlotSquare {
+                plot: [first + side, y, side, side],
+            },
+        ]
     }
     pub fn centre(&self) -> [f32; 2] {
-        [self.plot[0] + self.plot[2] / 2.0, self.plot[1] + self.plot[3] / 2.0]
+        [
+            self.plot[0] + self.plot[2] / 2.0,
+            self.plot[1] + self.plot[3] / 2.0,
+        ]
     }
     /// Pixels from the middle to the plot's edge.
     pub fn radius(&self) -> f32 {
@@ -311,7 +475,11 @@ impl VectorscopeCounts {
     }
     /// The hue angle (degrees, 0 at +Cb, counter-clockwise) of the clipping bin with the most pixels, if any.
     pub fn clipped_peak_degrees(&self) -> Option<f64> {
-        let (best, at) = self.clipped.iter().enumerate().fold((0, 0), |(b, a), (i, &c)| if c > b { (c, i) } else { (b, a) });
+        let (best, at) =
+            self.clipped.iter().enumerate().fold(
+                (0, 0),
+                |(b, a), (i, &c)| if c > b { (c, i) } else { (b, a) },
+            );
         (best > 0).then(|| (at as f64 + 0.5) / 720.0 * 360.0 - 180.0)
     }
     /// Every pixel counted on the plot.
@@ -335,12 +503,18 @@ impl VectorscopeCounts {
     }
     /// The bin that holds `cb`, `cr`, if it is inside the plot.
     pub fn bin_of(&self, cb: f64, cr: f64) -> Option<(u32, u32)> {
-        let (u, v) = (cb / self.half_extent * 0.5 + 0.5, 0.5 - cr / self.half_extent * 0.5);
-        ((0.0..1.0).contains(&u) && (0.0..1.0).contains(&v)).then(|| ((u * BINS as f64) as u32, (v * BINS as f64) as u32))
+        let (u, v) = (
+            cb / self.half_extent * 0.5 + 0.5,
+            0.5 - cr / self.half_extent * 0.5,
+        );
+        ((0.0..1.0).contains(&u) && (0.0..1.0).contains(&v))
+            .then_some(((u * BINS as f64) as u32, (v * BINS as f64) as u32))
     }
     /// Pixels in the 3 x 3 bins around the bin that holds `cb`, `cr`.
     pub fn near(&self, cb: f64, cr: f64) -> u32 {
-        let Some((x, y)) = self.bin_of(cb, cr) else { return 0 };
+        let Some((x, y)) = self.bin_of(cb, cr) else {
+            return 0;
+        };
         let mut sum = 0;
         for yy in y.saturating_sub(1)..=(y + 1).min(BINS - 1) {
             for xx in x.saturating_sub(1)..=(x + 1).min(BINS - 1) {
@@ -594,12 +768,22 @@ pub struct Vectorscope {
 impl Vectorscope {
     /// For tests: both plots' counts, read back from the GPU.
     pub fn plots(&self) -> VectorscopePlots {
-        VectorscopePlots { x1: self.counts(Zoom::X1), x2: self.counts(Zoom::X2) }
+        VectorscopePlots {
+            x1: self.counts(Zoom::X1),
+            x2: self.counts(Zoom::X2),
+        }
     }
 
     /// `target`: the format of what [`Display::draw`] draws into.
-    pub fn new(device: &wgpu::Device, queue: &wgpu::Queue, target: wgpu::TextureFormat) -> Vectorscope {
-        let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor { label: Some("vectorscope measure"), source: wgpu::ShaderSource::Wgsl(MEASURE_SHADER.into()) });
+    pub fn new(
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+        target: wgpu::TextureFormat,
+    ) -> Vectorscope {
+        let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+            label: Some("vectorscope measure"),
+            source: wgpu::ShaderSource::Wgsl(MEASURE_SHADER.into()),
+        });
         let measure = device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
             label: Some("vectorscope measure"),
             layout: None,
@@ -608,23 +792,48 @@ impl Vectorscope {
             compilation_options: Default::default(),
             cache: None,
         });
-        let uniform = |label, size| device.create_buffer(&wgpu::BufferDescriptor { label: Some(label), size, usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST, mapped_at_creation: false });
-        let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor { label: Some("vectorscope draw"), source: wgpu::ShaderSource::Wgsl(crate::scope_shader::with_library(DRAW_SHADER).into()) });
+        let uniform = |label, size| {
+            device.create_buffer(&wgpu::BufferDescriptor {
+                label: Some(label),
+                size,
+                usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+                mapped_at_creation: false,
+            })
+        };
+        let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+            label: Some("vectorscope draw"),
+            source: wgpu::ShaderSource::Wgsl(crate::scope_shader::with_library(DRAW_SHADER).into()),
+        });
         let draw = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
             label: Some("vectorscope draw"),
             layout: None,
-            vertex: wgpu::VertexState { module: &shader, entry_point: Some("vs"), buffers: &[], compilation_options: Default::default() },
-            primitive: wgpu::PrimitiveState { topology: wgpu::PrimitiveTopology::TriangleStrip, ..Default::default() },
+            vertex: wgpu::VertexState {
+                module: &shader,
+                entry_point: Some("vs"),
+                buffers: &[],
+                compilation_options: Default::default(),
+            },
+            primitive: wgpu::PrimitiveState {
+                topology: wgpu::PrimitiveTopology::TriangleStrip,
+                ..Default::default()
+            },
             depth_stencil: None,
             multisample: wgpu::MultisampleState::default(),
-            fragment: Some(wgpu::FragmentState { module: &shader, entry_point: Some("fs"), targets: &[Some(target.into())], compilation_options: Default::default() }),
+            fragment: Some(wgpu::FragmentState {
+                module: &shader,
+                entry_point: Some("fs"),
+                targets: &[Some(target.into())],
+                compilation_options: Default::default(),
+            }),
             multiview_mask: None,
             cache: None,
         });
         let bins = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("vectorscope bins"),
             size: (2 * BINS as u64 * BINS as u64 + CLIP_BINS as u64) * 4,
-            usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_SRC | wgpu::BufferUsages::COPY_DST,
+            usage: wgpu::BufferUsages::STORAGE
+                | wgpu::BufferUsages::COPY_SRC
+                | wgpu::BufferUsages::COPY_DST,
             mapped_at_creation: false,
         });
         Vectorscope {
@@ -633,9 +842,28 @@ impl Vectorscope {
             measure,
             params: uniform("vectorscope params", PARAMS_BYTES),
             draw,
-            placement: [uniform("vectorscope placement 100 %", DRAW_UNIFORM_BYTES), uniform("vectorscope placement 200 %", DRAW_UNIFORM_BYTES)],
-            config: Arc::new(Mutex::new(Config { measurement: Measurement::default(), bars: [0.75, 1.0], skin_line: true, gain: 1.0, graticule: 1.0, spread: SPREAD_AMOUNT.default, plots: Plots::Both, mono: false, tonal: Tonal::All })),
-            state: Arc::new(Mutex::new(State { bins, pixels: 0, bound: None, draw_bound: None, measured: false })),
+            placement: [
+                uniform("vectorscope placement 100 %", DRAW_UNIFORM_BYTES),
+                uniform("vectorscope placement 200 %", DRAW_UNIFORM_BYTES),
+            ],
+            config: Arc::new(Mutex::new(Config {
+                measurement: Measurement::default(),
+                bars: [0.75, 1.0],
+                skin_line: true,
+                gain: 1.0,
+                graticule: 1.0,
+                spread: SPREAD_AMOUNT.default,
+                plots: Plots::Both,
+                mono: false,
+                tonal: Tonal::All,
+            })),
+            state: Arc::new(Mutex::new(State {
+                bins,
+                pixels: 0,
+                bound: None,
+                draw_bound: None,
+                measured: false,
+            })),
         }
     }
 
@@ -656,11 +884,18 @@ impl Vectorscope {
         encoder.copy_buffer_to_buffer(&state.bins, 0, &readback, 0, None);
         self.queue.submit([encoder.finish()]);
         readback.map_async(wgpu::MapMode::Read, .., |_| {});
-        self.device.poll(wgpu::PollType::wait_indefinitely()).expect("the GPU finishes");
-        let all: Vec<u32> = bytemuck::cast_slice(&readback.get_mapped_range(..).expect("mapped")).to_vec();
+        self.device
+            .poll(wgpu::PollType::wait_indefinitely())
+            .expect("the GPU finishes");
+        let all: Vec<u32> =
+            bytemuck::cast_slice(&readback.get_mapped_range(..).expect("mapped")).to_vec();
         let first = zoom.first_bin();
         let clipped = &all[2 * (BINS * BINS) as usize..];
-        VectorscopeCounts { half_extent: zoom.half_extent(), counts: all[first..first + (BINS * BINS) as usize].to_vec(), clipped: clipped.to_vec() }
+        VectorscopeCounts {
+            half_extent: zoom.half_extent(),
+            counts: all[first..first + (BINS * BINS) as usize].to_vec(),
+            clipped: clipped.to_vec(),
+        }
     }
 
     /// The quiet label (ADR 0007): the Measured Space and weights in use, the targets, and the skin-tone
@@ -670,23 +905,39 @@ impl Vectorscope {
         let m = config.measurement;
         let [r, g, b] = m.weights();
         let name = m.space.name();
-        let space = if m.assumed { format!("{name} assumed, measured as sent, unconverted") } else { name.to_string() };
+        let space = if m.assumed {
+            format!("{name} assumed, measured as sent, unconverted")
+        } else {
+            name.to_string()
+        };
         let shown = match config.plots {
             Plots::Both => "100 % and 200 %",
             Plots::Only(Zoom::X1) => "100 %",
             Plots::Only(Zoom::X2) => "200 %",
         };
         let percent = |level: f64| format!("{} %", (level * 100.0).round());
-        let targets = if config.bars[0] == config.bars[1] { percent(config.bars[0]) } else { format!("{} and {}", percent(config.bars[0]), percent(config.bars[1])) };
+        let targets = if config.bars[0] == config.bars[1] {
+            percent(config.bars[0])
+        } else {
+            format!(
+                "{} and {}",
+                percent(config.bars[0]),
+                percent(config.bars[1])
+            )
+        };
         let mut label = format!(
             "Vectorscope {shown}  ·  Cb/Cr  ·  {space}  ·  Y = {r:.4} R + {g:.4} G + {b:.4} B {}  ·  {targets} targets  ·  colours beyond the 100 % bars mark the ring",
             m.weights_how()
         );
         if let Some(tonal) = config.tonal.tag() {
-            label += &format!("  ·  {tonal}: Luma below 30 % (shadows), 30 % to below 70 % (mids), 70 % and up (highlights); clipping counts only these pixels");
+            label += &format!(
+                "  ·  {tonal}: Luma below 30 % (shadows), 30 % to below 70 % (mids), 70 % and up (highlights); clipping counts only these pixels"
+            );
         }
         if config.skin_line {
-            label += &format!("  ·  skin-tone line {SKIN_TONE_LINE_DEGREES}° (as Resolve 21.2 draws it)");
+            label += &format!(
+                "  ·  skin-tone line {SKIN_TONE_LINE_DEGREES}° (as Resolve 21.2 draws it)"
+            );
         }
         label
     }
@@ -700,7 +951,12 @@ impl Display for Vectorscope {
     fn on_frame(&self, encoder: &mut wgpu::CommandEncoder, frame: &GpuFrame) {
         let w = self.config().measurement.weights();
         let mut params = [0u8; PARAMS_BYTES as usize];
-        params[..16].copy_from_slice(bytemuck::cast_slice(&[w[0] as f32, w[1] as f32, w[2] as f32, 0.0]));
+        params[..16].copy_from_slice(bytemuck::cast_slice(&[
+            w[0] as f32,
+            w[1] as f32,
+            w[2] as f32,
+            0.0,
+        ]));
         params[16..24].copy_from_slice(bytemuck::cast_slice(&[frame.width, frame.height]));
         params[32..48].copy_from_slice(bytemuck::cast_slice(&[
             (1.0 / Zoom::X1.half_extent()) as f32,
@@ -708,27 +964,48 @@ impl Display for Vectorscope {
             (1.0 / (2.0 * (1.0 - w[0]))) as f32,
             (1.0 / Zoom::X2.half_extent()) as f32,
         ]));
-        params[48..64].copy_from_slice(bytemuck::cast_slice(&[self.config().tonal.code() as f32, SHADOWS_BELOW as f32, HIGHLIGHTS_FROM as f32, 0.0]));
+        params[48..64].copy_from_slice(bytemuck::cast_slice(&[
+            self.config().tonal.code() as f32,
+            SHADOWS_BELOW as f32,
+            HIGHLIGHTS_FROM as f32,
+            0.0,
+        ]));
         self.queue.write_buffer(&self.params, 0, &params);
 
         let mut state = self.state.lock().unwrap();
         state.pixels = frame.width * frame.height;
         state.measured = true;
-        if state.bound.as_ref().is_none_or(|(id, _)| *id != frame.texture_id) {
+        if state
+            .bound
+            .as_ref()
+            .is_none_or(|(id, _)| *id != frame.texture_id)
+        {
             let view = frame.texture.create_view(&Default::default());
             let bind_group = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
                 label: Some("vectorscope measure"),
                 layout: &self.measure.get_bind_group_layout(0),
                 entries: &[
-                    wgpu::BindGroupEntry { binding: 0, resource: self.params.as_entire_binding() },
-                    wgpu::BindGroupEntry { binding: 1, resource: wgpu::BindingResource::TextureView(&view) },
-                    wgpu::BindGroupEntry { binding: 2, resource: state.bins.as_entire_binding() },
+                    wgpu::BindGroupEntry {
+                        binding: 0,
+                        resource: self.params.as_entire_binding(),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 1,
+                        resource: wgpu::BindingResource::TextureView(&view),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 2,
+                        resource: state.bins.as_entire_binding(),
+                    },
                 ],
             });
             state.bound = Some((frame.texture_id, bind_group));
         }
         encoder.clear_buffer(&state.bins, 0, None);
-        let mut pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor { label: Some("vectorscope measure"), timestamp_writes: None });
+        let mut pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
+            label: Some("vectorscope measure"),
+            timestamp_writes: None,
+        });
         pass.set_pipeline(&self.measure);
         pass.set_bind_group(0, &state.bound.as_ref().unwrap().1, &[]);
         pass.dispatch_workgroups(frame.width.div_ceil(16), frame.height.div_ceil(16), 1);
@@ -737,7 +1014,10 @@ impl Display for Vectorscope {
     fn configure(&self, context: &DisplayContext) {
         let get = |key: &str| context.settings.get(key).map(String::as_str);
         *self.config.lock().unwrap() = Config {
-            measurement: crate::output_conversion::measurement(context.colour_setup.clone(), context.luma),
+            measurement: crate::output_conversion::measurement(
+                context.colour_setup.clone(),
+                context.luma,
+            ),
             bars: match get(TARGETS_SETTING) {
                 Some("75") => [0.75; 2],
                 Some("100") => [1.0; 2],
@@ -749,7 +1029,9 @@ impl Display for Vectorscope {
             mono: get(MONO_SETTING) == Some("on"),
             tonal: Tonal::from_setting(get(TONAL_SETTING)),
             gain: BRIGHTNESS_AMOUNT.read(get(BRIGHTNESS_SETTING)) / 100.0,
-            graticule: crate::scope_shader::graticule_gain(get(crate::scope_shader::GRATICULE_SETTING)),
+            graticule: crate::scope_shader::graticule_gain(get(
+                crate::scope_shader::GRATICULE_SETTING,
+            )),
         };
     }
 
@@ -777,8 +1059,14 @@ impl Display for Vectorscope {
                     label: Some("vectorscope draw"),
                     layout: &self.draw.get_bind_group_layout(0),
                     entries: &[
-                        wgpu::BindGroupEntry { binding: 0, resource: placement.as_entire_binding() },
-                        wgpu::BindGroupEntry { binding: 1, resource: state.bins.as_entire_binding() },
+                        wgpu::BindGroupEntry {
+                            binding: 0,
+                            resource: placement.as_entire_binding(),
+                        },
+                        wgpu::BindGroupEntry {
+                            binding: 1,
+                            resource: state.bins.as_entire_binding(),
+                        },
                     ],
                 })
             };
@@ -792,11 +1080,26 @@ impl Display for Vectorscope {
             let i = if zoom == Zoom::X1 { 0 } else { 1 };
             let [left, top, width, height] = square.plot;
             let mut placement = [0f32; (DRAW_UNIFORM_BYTES / 4) as usize];
-            placement[..4].copy_from_slice(&[clip(left, surface[0]), -clip(top, surface[1]), clip(left + width, surface[0]), -clip(top + height, surface[1])]);
+            placement[..4].copy_from_slice(&[
+                clip(left, surface[0]),
+                -clip(top, surface[1]),
+                clip(left + width, surface[0]),
+                -clip(top + height, surface[1]),
+            ]);
             placement[4..8].copy_from_slice(&square.plot);
-            placement[8..12].copy_from_slice(&[zoom.half_extent() as f32, config.gain, state.pixels as f32, scale]);
+            placement[8..12].copy_from_slice(&[
+                zoom.half_extent() as f32,
+                config.gain,
+                state.pixels as f32,
+                scale,
+            ]);
             let angle = SKIN_TONE_LINE_DEGREES.to_radians();
-            placement[12..16].copy_from_slice(&[if config.skin_line { 1.0 } else { 0.0 }, angle.cos() as f32, angle.sin() as f32, TARGET_HALF as f32]);
+            placement[12..16].copy_from_slice(&[
+                if config.skin_line { 1.0 } else { 0.0 },
+                angle.cos() as f32,
+                angle.sin() as f32,
+                TARGET_HALF as f32,
+            ]);
             placement[16] = (RING / HALF_EXTENT) as f32;
             placement[17] = config.spread;
             placement[18] = zoom.first_bin() as f32;
@@ -809,9 +1112,21 @@ impl Display for Vectorscope {
                 }
             }
             let w = config.measurement.weights();
-            placement[44..48].copy_from_slice(&[w[0] as f32, w[1] as f32, w[2] as f32, config.graticule]);
-            placement[48] = if !joined { 0.0 } else if zoom == Zoom::X1 { 1.0 } else { -1.0 };
-            self.queue.write_buffer(&self.placement[i], 0, bytemuck::cast_slice(&placement));
+            placement[44..48].copy_from_slice(&[
+                w[0] as f32,
+                w[1] as f32,
+                w[2] as f32,
+                config.graticule,
+            ]);
+            placement[48] = if !joined {
+                0.0
+            } else if zoom == Zoom::X1 {
+                1.0
+            } else {
+                -1.0
+            };
+            self.queue
+                .write_buffer(&self.placement[i], 0, bytemuck::cast_slice(&placement));
             pass.set_bind_group(0, &state.draw_bound.as_ref().unwrap()[i], &[]);
             pass.draw(0..4, 0..1);
         }

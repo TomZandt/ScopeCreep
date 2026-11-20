@@ -6,13 +6,12 @@
 mod common;
 use common::{Rig, TARGET};
 use scopecreep::display::DisplaySet;
-use scopecreep::gamut_warning::GamutWarning;
 use scopecreep::feed_loop::FeedLoop;
+use scopecreep::gamut_warning::GamutWarning;
 use scopecreep::output_conversion::OutputConversion;
 use scopecreep::settings::PanelSettings;
 use scopecreep_accuracy::colorchecker::{ColorChecker, TimelineSpace};
 use std::sync::{Arc, Mutex};
-
 
 /// A stand-in Resolve and Sender, the app's Feed monitor and Output Conversion, and the gamut/legal warning alone
 /// in its set.
@@ -34,13 +33,25 @@ impl Bench {
         let mut set = DisplaySet::default();
         set.register(Arc::new(GamutWarning::new(&rig.device, &rig.queue, TARGET)));
         let settings = Arc::new(Mutex::new(PanelSettings::default()));
-        let mut feed = FeedLoop::new(set.clone(), settings.clone(), OutputConversion::new(&rig.device, &rig.queue));
+        let mut feed = FeedLoop::new(
+            set.clone(),
+            settings.clone(),
+            OutputConversion::new(&rig.device, &rig.queue),
+        );
         rig.step(&mut feed);
-        Bench { rig, feed, set, settings }
+        Bench {
+            rig,
+            feed,
+            set,
+            settings,
+        }
     }
 
     fn choose(&mut self, key: &str, value: &str) {
-        self.settings.lock().unwrap().set(self.set.name(0), key, value);
+        self.settings
+            .lock()
+            .unwrap()
+            .set(self.set.name(0), key, value);
         self.rig.step(&mut self.feed);
     }
 
@@ -52,12 +63,22 @@ impl Bench {
     }
 
     fn render(&self, width: u32, height: u32) -> Vec<u8> {
-        self.rig.render(width, height, |pass| self.set.draw(pass, 0, [0.0, 0.0, width as f32, height as f32], [width as f32, height as f32], 1.0))
+        self.rig.render(width, height, |pass| {
+            self.set.draw(
+                pass,
+                0,
+                [0.0, 0.0, width as f32, height as f32],
+                [width as f32, height as f32],
+                1.0,
+            )
+        })
     }
 
     /// What one colour looks like in the Panel: a small one-colour frame, drawn and read back at its middle.
     fn shade(&mut self, rgb: [f32; 3]) -> [u8; 3] {
-        let pixels: Vec<f32> = (0..8 * 8).flat_map(|_| [rgb[0], rgb[1], rgb[2], 1.0]).collect();
+        let pixels: Vec<f32> = (0..8 * 8)
+            .flat_map(|_| [rgb[0], rgb[1], rgb[2], 1.0])
+            .collect();
         self.play(8, 8, &pixels);
         let image = self.render(8, 8);
         let i = (4 * 8 + 4) * 4;
@@ -74,12 +95,18 @@ fn grey(v: f32) -> [f32; 3] {
 }
 
 fn close(got: [u8; 3], want: [f32; 3]) -> bool {
-    got.iter().zip(want).all(|(g, w)| (*g as f32 - w * 255.0).abs() <= 1.5)
+    got.iter()
+        .zip(want)
+        .all(|(g, w)| (*g as f32 - w * 255.0).abs() <= 1.5)
 }
 
 /// Grey at `v` tinted `t` of the way to `to`: the ticket's "fades towards".
 fn tinted(v: f32, to: [f32; 3], t: f32) -> [f32; 3] {
-    [v + (to[0] - v) * t, v + (to[1] - v) * t, v + (to[2] - v) * t]
+    [
+        v + (to[0] - v) * t,
+        v + (to[1] - v) * t,
+        v + (to[2] - v) * t,
+    ]
 }
 
 const RED: [f32; 3] = [1.0, 0.0, 0.0];
@@ -89,7 +116,10 @@ fn assert_ramp_fades_to_the_limits(setup: &str) {
     let mut b = Bench::new("ramp", setup);
     // Between the limits and the thresholds: plain grey.
     assert!(close(b.shade(grey(0.5)), grey(0.5)));
-    assert!(close(b.shade(grey(0.9)), grey(0.9)), "90 % is where red starts, with no tint yet");
+    assert!(
+        close(b.shade(grey(0.9)), grey(0.9)),
+        "90 % is where red starts, with no tint yet"
+    );
     // From 90 % up to legal white: a tint that grows towards red.
     for v in [0.925_f32, 0.95, 0.975] {
         let t = (v - 0.9) / 0.1;
@@ -131,20 +161,36 @@ fn a_single_channel_past_a_limit_is_solid_whatever_the_luma_is() {
 #[test]
 fn changing_the_thresholds_moves_where_the_ramp_starts() {
     let mut b = Bench::new("thresholds", VIDEO);
-    assert!(close(b.shade(grey(0.85)), grey(0.85)), "red has not started at 85 % by default");
+    assert!(
+        close(b.shade(grey(0.85)), grey(0.85)),
+        "red has not started at 85 % by default"
+    );
     b.choose("high", "80");
     let got = b.shade(grey(0.85));
-    assert!(close(got, tinted(0.85, RED, 0.25)), "with red starting at 80 %: {got:?}");
-    assert!(close(b.shade(grey(0.15)), grey(0.15)), "blue has not started at 15 % by default");
+    assert!(
+        close(got, tinted(0.85, RED, 0.25)),
+        "with red starting at 80 %: {got:?}"
+    );
+    assert!(
+        close(b.shade(grey(0.15)), grey(0.15)),
+        "blue has not started at 15 % by default"
+    );
     b.choose("low", "20");
     let got = b.shade(grey(0.15));
-    assert!(close(got, tinted(0.15, BLUE, 0.25)), "with blue starting at 20 %: {got:?}");
+    assert!(
+        close(got, tinted(0.15, BLUE, 0.25)),
+        "with blue starting at 20 %: {got:?}"
+    );
 }
 
 #[test]
 fn with_r103_a_pixel_at_103_percent_is_not_solid_red_and_105_is_the_limit() {
     let mut b = Bench::new("r103", VIDEO);
-    assert_eq!(b.shade(grey(1.03)), [255, 0, 0], "without tolerance it is past legal white");
+    assert_eq!(
+        b.shade(grey(1.03)),
+        [255, 0, 0],
+        "without tolerance it is past legal white"
+    );
     b.choose("r103", "on");
     let got = b.shade(grey(1.03));
     assert_ne!(got, [255, 0, 0], "with R103 a pixel at 103 % is tolerated");
@@ -154,7 +200,11 @@ fn with_r103_a_pixel_at_103_percent_is_not_solid_red_and_105_is_the_limit() {
     // The low side: -3 % is tolerated, -6 % is not; a channel is judged the same way.
     assert_ne!(b.shade(grey(-0.03)), [0, 0, 255]);
     assert_eq!(b.shade(grey(-0.06)), [0, 0, 255]);
-    assert_ne!(b.shade([1.03, 0.5, 0.5]), [255, 0, 0], "a channel at 103 % is tolerated too");
+    assert_ne!(
+        b.shade([1.03, 0.5, 0.5]),
+        [255, 0, 0],
+        "a channel at 103 % is tolerated too"
+    );
     assert_eq!(b.shade([1.06, 0.5, 0.5]), [255, 0, 0]);
 }
 
@@ -165,17 +215,29 @@ fn the_label_names_the_levels_and_any_tolerance_in_use() {
     let label = video.label();
     assert!(label.starts_with("Gamut/legal warning"), "{label}");
     assert!(label.contains("Legal 64–940"), "{label}");
-    assert!(label.contains("red above 90 % (code 852)") && label.contains("blue below 10 % (code 152)"), "{label}");
+    assert!(
+        label.contains("red above 90 % (code 852)") && label.contains("blue below 10 % (code 152)"),
+        "{label}"
+    );
     assert!(label.contains("no tolerance"), "{label}");
     video.choose("r103", "on");
-    assert!(video.label().contains("EBU R103 tolerance on (-5 % to 105 %)"), "{}", video.label());
+    assert!(
+        video
+            .label()
+            .contains("EBU R103 tolerance on (-5 % to 105 %)"),
+        "{}",
+        video.label()
+    );
     drop(video);
 
     let mut data = Bench::new("label-data", DATA);
     data.shade(grey(0.5));
     let label = data.label();
     assert!(label.contains("Full 0–1023"), "{label}");
-    assert!(label.contains("red above 90 % (code 921)") && label.contains("blue below 10 % (code 102)"), "{label}");
+    assert!(
+        label.contains("red above 90 % (code 921)") && label.contains("blue below 10 % (code 102)"),
+        "{label}"
+    );
 }
 
 #[test]
@@ -189,24 +251,53 @@ fn before_the_colour_setup_is_known_the_label_says_what_is_assumed() {
 fn the_menu_offers_two_thresholds_and_the_r103_tolerance_with_the_ticket_defaults_first() {
     let b = Bench::new("menu", VIDEO);
     let defs = b.set.setting_defs(0);
-    assert_eq!(defs.iter().map(|d| d.key).collect::<Vec<_>>(), ["low", "high", "r103"]);
+    assert_eq!(
+        defs.iter().map(|d| d.key).collect::<Vec<_>>(),
+        ["low", "high", "r103"]
+    );
     let (blue, red) = (defs[0].amount.unwrap(), defs[1].amount.unwrap());
-    assert_eq!((blue.default, red.default, defs[2].choices[0].value), (10.0, 90.0, "off"));
-    assert_eq!((blue.text(blue.default), red.text(red.default)), ("10 %".to_string(), "90 %".to_string()));
+    assert_eq!(
+        (blue.default, red.default, defs[2].choices[0].value),
+        (10.0, 90.0, "off")
+    );
+    assert_eq!(
+        (blue.text(blue.default), red.text(red.default)),
+        ("10 %".to_string(), "90 %".to_string())
+    );
     // Blue can never be set above red: the two ranges do not overlap, wherever a slider is dragged.
     assert!(blue.at_fraction(1.0) <= red.at_fraction(0.0));
     // Lists an earlier version saved still mean the number they named; anything else is the default or clamped.
-    assert_eq!((blue.read(Some("5")), blue.read(Some("20")), red.read(Some("95")), red.read(Some("85"))), (5.0, 20.0, 95.0, 85.0));
-    assert_eq!((blue.read(Some("80")), red.read(Some("10")), blue.read(Some("x")), red.read(None)), (50.0, 50.0, 10.0, 90.0));
+    assert_eq!(
+        (
+            blue.read(Some("5")),
+            blue.read(Some("20")),
+            red.read(Some("95")),
+            red.read(Some("85"))
+        ),
+        (5.0, 20.0, 95.0, 85.0)
+    );
+    assert_eq!(
+        (
+            blue.read(Some("80")),
+            red.read(Some("10")),
+            blue.read(Some("x")),
+            red.read(None)
+        ),
+        (50.0, 50.0, 10.0, 90.0)
+    );
 }
 
 #[test]
-fn a_blue_threshold_past_the_red_one_is_clamped_below_it_and_the_label_names_the_values_and_codes() {
+fn a_blue_threshold_past_the_red_one_is_clamped_below_it_and_the_label_names_the_values_and_codes()
+{
     let mut b = Bench::new("clamp", VIDEO);
     b.choose("low", "70");
     b.choose("high", "20");
     let label = b.label();
-    assert!(label.contains("blue below 50 % (code 502)") && label.contains("red above 50 % (code 502)"), "{label}");
+    assert!(
+        label.contains("blue below 50 % (code 502)") && label.contains("red above 50 % (code 502)"),
+        "{label}"
+    );
 }
 
 /// The ColorChecker in DaVinci Wide Gamut / Intermediate, converted to Rec.709 Gamma 2.4 by the app, drawn by the
@@ -226,10 +317,19 @@ fn on_the_colorchecker_in_rec709_only_cyan_is_coloured_blue() {
         let i = (y as usize * width as usize + x as usize) * 4;
         let rgb = [image[i], image[i + 1], image[i + 2]];
         if patch.name == "cyan" {
-            assert_eq!(rgb, [0, 0, 255], "cyan (negative red in Rec.709) is solid blue");
+            assert_eq!(
+                rgb,
+                [0, 0, 255],
+                "cyan (negative red in Rec.709) is solid blue"
+            );
         } else {
             // Not solid red or solid blue: a patch inside Rec.709 either stays grey or has a partial tint.
-            assert!(rgb != [255, 0, 0] && rgb != [0, 0, 255], "patch {} {} crosses a limit: {rgb:?}", patch.number, patch.name);
+            assert!(
+                rgb != [255, 0, 0] && rgb != [0, 0, 255],
+                "patch {} {} crosses a limit: {rgb:?}",
+                patch.number,
+                patch.name
+            );
         }
     }
 }

@@ -21,10 +21,14 @@ impl Image {
 }
 
 pub fn read_exr(path: &Path) -> Result<Image, String> {
-    use exr::prelude::{read_first_rgba_layer_from_file, Vec2};
+    use exr::prelude::{Vec2, read_first_rgba_layer_from_file};
     let img = read_first_rgba_layer_from_file(
         path,
-        |res: Vec2<usize>, _| Image { width: res.width(), height: res.height(), rgb: vec![[0.0; 3]; res.width() * res.height()] },
+        |res: Vec2<usize>, _| Image {
+            width: res.width(),
+            height: res.height(),
+            rgb: vec![[0.0; 3]; res.width() * res.height()],
+        },
         |img: &mut Image, pos, (r, g, b, _a): (f32, f32, f32, f32)| {
             img.rgb[pos.y() * img.width + pos.x()] = [r, g, b];
         },
@@ -47,13 +51,19 @@ pub fn write_exr(path: &Path, image: &Image) -> Result<(), String> {
 pub fn read_tiff16(path: &Path) -> Result<Image, String> {
     use tiff::decoder::{Decoder, DecodingResult};
     let f = File::open(path).map_err(|e| format!("{}: {e}", path.display()))?;
-    let mut dec = Decoder::new(BufReader::new(f)).map_err(|e| format!("{}: {e}", path.display()))?;
+    let mut dec =
+        Decoder::new(BufReader::new(f)).map_err(|e| format!("{}: {e}", path.display()))?;
     let (w, h) = dec.dimensions().map_err(|e| e.to_string())?;
     let ct = dec.colortype().map_err(|e| e.to_string())?;
     let n = match ct {
         tiff::ColorType::RGB(16) => 3,
         tiff::ColorType::RGBA(16) => 4,
-        other => return Err(format!("{}: unsupported TIFF colour type {other:?}", path.display())),
+        other => {
+            return Err(format!(
+                "{}: unsupported TIFF colour type {other:?}",
+                path.display()
+            ));
+        }
     };
     let data = match dec.read_image().map_err(|e| e.to_string())? {
         DecodingResult::U16(v) => v,
@@ -61,9 +71,19 @@ pub fn read_tiff16(path: &Path) -> Result<Image, String> {
     };
     let (w, h) = (w as usize, h as usize);
     let rgb = (0..w * h)
-        .map(|i| [data[i * n] as f32 / 65535.0, data[i * n + 1] as f32 / 65535.0, data[i * n + 2] as f32 / 65535.0])
+        .map(|i| {
+            [
+                data[i * n] as f32 / 65535.0,
+                data[i * n + 1] as f32 / 65535.0,
+                data[i * n + 2] as f32 / 65535.0,
+            ]
+        })
         .collect();
-    Ok(Image { width: w, height: h, rgb })
+    Ok(Image {
+        width: w,
+        height: h,
+        rgb,
+    })
 }
 
 #[cfg(test)]
@@ -83,7 +103,12 @@ mod tests {
         let p = tmp("rt.exr");
         write_rgba_file(&p, 3, 2, |x, y| {
             let i = (y * 3 + x) % vals.len();
-            (vals[i], vals[(i + 1) % vals.len()], vals[(i + 2) % vals.len()], 1.0f32)
+            (
+                vals[i],
+                vals[(i + 1) % vals.len()],
+                vals[(i + 2) % vals.len()],
+                1.0f32,
+            )
         })
         .unwrap();
         let img = read_exr(&p).unwrap();
@@ -91,14 +116,26 @@ mod tests {
         for y in 0..2 {
             for x in 0..3 {
                 let i = (y * 3 + x) % vals.len();
-                assert_eq!(img.pixel(x, y), [vals[i], vals[(i + 1) % 6], vals[(i + 2) % 6]]);
+                assert_eq!(
+                    img.pixel(x, y),
+                    [vals[i], vals[(i + 1) % 6], vals[(i + 2) % 6]]
+                );
             }
         }
     }
 
     #[test]
     fn written_exr_reads_back_bit_exact() {
-        let image = Image { width: 2, height: 2, rgb: vec![[-0.25, 0.0, 0.18], [1.0, 10.0, 1234.5], [f32::MIN_POSITIVE, 0.5, 1e-9], [0.1, 0.2, 0.3]] };
+        let image = Image {
+            width: 2,
+            height: 2,
+            rgb: vec![
+                [-0.25, 0.0, 0.18],
+                [1.0, 10.0, 1234.5],
+                [f32::MIN_POSITIVE, 0.5, 1e-9],
+                [0.1, 0.2, 0.3],
+            ],
+        };
         let p = tmp("written.exr");
         write_exr(&p, &image).unwrap();
         assert_eq!(read_exr(&p).unwrap().rgb, image.rgb);
@@ -110,10 +147,16 @@ mod tests {
         let p = tmp("rt.tif");
         let data: Vec<u16> = vec![0, 65535, 32768, 1, 2, 3];
         let mut f = File::create(&p).unwrap();
-        TiffEncoder::new(&mut f).unwrap().write_image::<RGB16>(2, 1, &data).unwrap();
+        TiffEncoder::new(&mut f)
+            .unwrap()
+            .write_image::<RGB16>(2, 1, &data)
+            .unwrap();
         drop(f);
         let img = read_tiff16(&p).unwrap();
         assert_eq!(img.pixel(0, 0), [0.0, 1.0, 32768.0 / 65535.0]);
-        assert_eq!(img.pixel(1, 0), [1.0 / 65535.0, 2.0 / 65535.0, 3.0 / 65535.0]);
+        assert_eq!(
+            img.pixel(1, 0),
+            [1.0 / 65535.0, 2.0 / 65535.0, 3.0 / 65535.0]
+        );
     }
 }

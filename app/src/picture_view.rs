@@ -10,8 +10,10 @@ use crate::loupe::{self, Loupe};
 use crate::output_conversion::Plan;
 use crate::picture_stage::{PictureStage, Rule};
 use crate::settings::SettingDef;
+use crate::toolbar::{
+    CHANNEL_DEF, CHANNEL_SETTING, CHANNEL_TOOLBAR, LOUPE_DEF, LOUPE_TOOLBAR, ToolbarDef, channel_of,
+};
 use crate::zoom::{PanelZoom, PictureZoom};
-use crate::toolbar::{CHANNEL_DEF, CHANNEL_SETTING, CHANNEL_TOOLBAR, LOUPE_DEF, LOUPE_TOOLBAR, ToolbarDef, channel_of};
 use std::sync::{Arc, Mutex};
 
 /// The colour rule: the frame as it is.
@@ -60,10 +62,35 @@ pub struct PictureView {
 
 impl PictureView {
     /// `filterable`: the device can smooth 32-bit float textures (else the picture is drawn nearest-neighbour).
-    pub fn new(device: &wgpu::Device, queue: &wgpu::Queue, target: wgpu::TextureFormat, filterable: bool) -> PictureView {
-        let stage = PictureStage::new::<[f32; 4]>(device, queue, target, filterable, Rule { label: "picture view", wgsl: RULE.into(), has_legend: false });
+    pub fn new(
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+        target: wgpu::TextureFormat,
+        filterable: bool,
+    ) -> PictureView {
+        let stage = PictureStage::new::<[f32; 4]>(
+            device,
+            queue,
+            target,
+            filterable,
+            Rule {
+                label: "picture view",
+                wgsl: RULE.into(),
+                has_legend: false,
+            },
+        );
         let loupe = Loupe::new::<[f32; 4]>(device, queue, target, RULE);
-        let view = PictureView { stage, loupe, label_tail: Arc::new(Mutex::new(String::new())), zoom: PanelZoom::default(), look: Arc::new(Mutex::new(Look { weights: crate::measurement::REC709_LUMA.map(|v| v as f32), channel: 0.0, loupe: false })) };
+        let view = PictureView {
+            stage,
+            loupe,
+            label_tail: Arc::new(Mutex::new(String::new())),
+            zoom: PanelZoom::default(),
+            look: Arc::new(Mutex::new(Look {
+                weights: crate::measurement::REC709_LUMA.map(|v| v as f32),
+                channel: 0.0,
+                loupe: false,
+            })),
+        };
         // Only the label's tail: the Loupe takes its remembered state from the first real `configure`.
         *view.label_tail.lock().unwrap() = Self::label_tail(&DisplayContext::default());
         view
@@ -96,7 +123,11 @@ impl PictureView {
 
     /// For tests: what the Loupe reports it drew, `None` while it is off or before the first draw.
     pub fn drawn(&self) -> Option<LoupeDrawn> {
-        if self.look.lock().unwrap().loupe { self.loupe.drawn() } else { None }
+        if self.look.lock().unwrap().loupe {
+            self.loupe.drawn()
+        } else {
+            None
+        }
     }
 
     /// The size of the frame on screen (width, height), once one has arrived: the window lays the panels out in
@@ -127,9 +158,16 @@ impl Display for PictureView {
 
     fn configure(&self, context: &DisplayContext) {
         *self.label_tail.lock().unwrap() = Self::label_tail(context);
-        let [r, g, b] = crate::output_conversion::measurement(context.colour_setup.clone(), context.luma).weights();
-        let channel = channel_of(context.settings.get(CHANNEL_SETTING).map(String::as_str)).map_or(0.0, |c| c.shader);
-        *self.look.lock().unwrap() = Look { weights: [r as f32, g as f32, b as f32], channel, loupe: loupe::is_on(&context.settings) };
+        let [r, g, b] =
+            crate::output_conversion::measurement(context.colour_setup.clone(), context.luma)
+                .weights();
+        let channel = channel_of(context.settings.get(CHANNEL_SETTING).map(String::as_str))
+            .map_or(0.0, |c| c.shader);
+        *self.look.lock().unwrap() = Look {
+            weights: [r as f32, g as f32, b as f32],
+            channel,
+            loupe: loupe::is_on(&context.settings),
+        };
         self.loupe.configure(&context.settings);
     }
 
@@ -156,7 +194,10 @@ impl Display for PictureView {
                     return result;
                 }
             }
-            return self.zoom.pointer(self.geometry(area, scale), event).unwrap_or_default();
+            return self
+                .zoom
+                .pointer(self.geometry(area, scale), event)
+                .unwrap_or_default();
         }
         // The middle button pans the zoomed picture; its movement is the pan's, whatever the Loupe is doing.
         if let Some(result) = self.zoom.pointer(self.geometry(area, scale), event) {
@@ -179,12 +220,20 @@ impl Display for PictureView {
     /// Draw the picture, scaled to fit inside `area` with its shape kept.
     fn draw(&self, pass: &mut wgpu::RenderPass<'_>, area: [f32; 4], surface: [f32; 2], scale: f32) {
         let look = *self.look.lock().unwrap();
-        let values = [look.weights[0], look.weights[1], look.weights[2], look.channel];
-        self.stage.draw_zoomed(pass, area, surface, &values, None, &self.zoom.model());
-        if look.loupe && area[2] >= 1.0 && area[3] >= 1.0 {
-            if let Some(shown) = self.stage.shown() {
-                self.loupe.draw(pass, &shown, area, surface, scale, &values);
-            }
+        let values = [
+            look.weights[0],
+            look.weights[1],
+            look.weights[2],
+            look.channel,
+        ];
+        self.stage
+            .draw_zoomed(pass, area, surface, &values, None, &self.zoom.model());
+        if look.loupe
+            && area[2] >= 1.0
+            && area[3] >= 1.0
+            && let Some(shown) = self.stage.shown()
+        {
+            self.loupe.draw(pass, &shown, area, surface, scale, &values);
         }
     }
 }

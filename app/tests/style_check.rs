@@ -14,8 +14,16 @@ fn raw_literals(source: &str) -> Vec<String> {
         }
         let code = line.split("//").next().unwrap_or("");
         let t = code.trim();
-        let digit_after = |pat: &str| code.match_indices(pat).any(|(i, _)| code[i + pat.len()..].trim_start().starts_with(|c: char| c.is_ascii_digit()));
-        let mut bad = digit_after("Color::rgb(") || digit_after("Color::rgba(") || code.contains("wgpu::Color {");
+        let digit_after = |pat: &str| {
+            code.match_indices(pat).any(|(i, _)| {
+                code[i + pat.len()..]
+                    .trim_start()
+                    .starts_with(|c: char| c.is_ascii_digit())
+            })
+        };
+        let mut bad = digit_after("Color::rgb(")
+            || digit_after("Color::rgba(")
+            || code.contains("wgpu::Color {");
         // A text size is a float (`size: 12.5`); a GPU buffer's byte `size: 16` is not a style size.
         let float_after = |pat: &str| {
             code.match_indices(pat).any(|(i, _)| {
@@ -28,12 +36,20 @@ fn raw_literals(source: &str) -> Vec<String> {
         if t.contains("const ") && t.contains("= ") {
             let rhs = t.split("= ").nth(1).unwrap_or("").trim_start();
             bad |= t.contains(": f32 =") && rhs.starts_with(|c: char| c.is_ascii_digit());
-            bad |= t.contains(": [f32") && rhs.starts_with('[') && rhs[1..].trim_start().starts_with(|c: char| c.is_ascii_digit());
+            bad |= t.contains(": [f32")
+                && rhs.starts_with('[')
+                && rhs[1..]
+                    .trim_start()
+                    .starts_with(|c: char| c.is_ascii_digit());
         }
         for (i, _) in code.match_indices('[') {
             if let Some(end) = code[i..].find(']') {
                 let parts: Vec<&str> = code[i + 1..i + end].split(',').map(str::trim).collect();
-                if (parts.len() == 3 || parts.len() == 4) && parts.iter().all(|p| p.contains('.') && p.parse::<f32>().is_ok()) {
+                if (parts.len() == 3 || parts.len() == 4)
+                    && parts
+                        .iter()
+                        .all(|p| p.contains('.') && p.parse::<f32>().is_ok())
+                {
                     bad = true;
                 }
             }
@@ -46,7 +62,14 @@ fn raw_literals(source: &str) -> Vec<String> {
 }
 
 /// The chrome: everything that draws or lays out the Window's frame rather than a measurement.
-const CHROME: [&str; 6] = ["src/components.rs", "src/main.rs", "src/settings.rs", "src/panel_grid.rs", "src/layout.rs", "src/flat_rects.rs"];
+const CHROME: [&str; 6] = [
+    "src/components.rs",
+    "src/main.rs",
+    "src/settings.rs",
+    "src/panel_grid.rs",
+    "src/layout.rs",
+    "src/flat_rects.rs",
+];
 
 #[test]
 fn chrome_code_holds_no_raw_colour_or_size() {
@@ -54,7 +77,11 @@ fn chrome_code_holds_no_raw_colour_or_size() {
         let path = format!("{}/{file}", env!("CARGO_MANIFEST_DIR"));
         let source = std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("{path}: {e}"));
         let found = raw_literals(&source);
-        assert!(found.is_empty(), "{file} has raw colour or size literals, use the tokens in style.rs:\n{}", found.join("\n"));
+        assert!(
+            found.is_empty(),
+            "{file} has raw colour or size literals, use the tokens in style.rs:\n{}",
+            found.join("\n")
+        );
     }
 }
 
@@ -69,7 +96,11 @@ fn the_check_fails_on_a_planted_raw_colour_or_size() {
         "Metrics::new(12.0, 16.0)",
         "const MIN: [f32; 2] = [120.0, 110.0];",
     ] {
-        assert_eq!(raw_literals(planted).len(), 1, "should be caught: {planted}");
+        assert_eq!(
+            raw_literals(planted).len(),
+            1,
+            "should be caught: {planted}"
+        );
     }
 }
 
@@ -90,7 +121,14 @@ fn the_check_passes_tokens_comments_and_ordinary_arithmetic() {
 #[test]
 fn a_measurement_colour_in_a_display_is_exempt() {
     // Displays are not in CHROME: the heatmap's palette is data and stays where it is.
-    let display = std::fs::read_to_string(format!("{}/src/muted_palette.rs", env!("CARGO_MANIFEST_DIR"))).unwrap();
-    assert!(!raw_literals(&display).is_empty(), "the palette holds raw colours, as measurement data does");
+    let display = std::fs::read_to_string(format!(
+        "{}/src/muted_palette.rs",
+        env!("CARGO_MANIFEST_DIR")
+    ))
+    .unwrap();
+    assert!(
+        !raw_literals(&display).is_empty(),
+        "the palette holds raw colours, as measurement data does"
+    );
     assert!(!CHROME.contains(&"src/muted_palette.rs"));
 }

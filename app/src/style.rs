@@ -167,5 +167,10 @@ pub fn rgba(c: Rgb) -> [f32; 4] {
 
 /// A colour as the clear colour of a render pass.
 pub fn clear(c: Rgb) -> wgpu::Color {
-    wgpu::Color { r: c[0] as f64, g: c[1] as f64, b: c[2] as f64, a: 1.0 }
+    wgpu::Color {
+        r: c[0] as f64,
+        g: c[1] as f64,
+        b: c[2] as f64,
+        a: 1.0,
+    }
 }

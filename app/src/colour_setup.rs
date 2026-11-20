@@ -4,8 +4,8 @@
 //! It arrives by two roads. The project's Colour Setup is read from Resolve's own setting keys by the scripting
 //! helper ([`ColourSetup::from_resolve_settings`]). A Colour Setup set by hand on the Sender node travels in the
 //! Feed, in the protocol's `key=value` vocabulary ([`ColourSetup::from_feed`]). The manual one wins.
-pub use scopecreep_feed::Provenance;
 use crate::measurement::MeasuredSpace;
+pub use scopecreep_feed::Provenance;
 use scopecreep_feed::SentColourSetup;
 
 /// How Resolve manages colour in the project.
@@ -43,7 +43,9 @@ pub enum TimelineSpace {
 impl TimelineSpace {
     pub fn parse(name: &str) -> TimelineSpace {
         match name {
-            "DaVinci WG/Intermediate" | "DaVinci Wide Gamut / DaVinci Intermediate" => TimelineSpace::DaVinciWideGamut,
+            "DaVinci WG/Intermediate" | "DaVinci Wide Gamut / DaVinci Intermediate" => {
+                TimelineSpace::DaVinciWideGamut
+            }
             "ACEScct" => TimelineSpace::Acescct,
             "ACEScc" => TimelineSpace::Acescc,
             "Rec.709 Gamma 2.4" => TimelineSpace::Rec709Gamma24,
@@ -100,7 +102,9 @@ impl OutputSpace {
     /// separate gamma ("Rec.709 / Gamma 2.4") are matched by their start.
     pub fn measured_space(&self) -> Option<MeasuredSpace> {
         Some(match self {
-            OutputSpace::Rec709Gamma24 | OutputSpace::Rec709Bt1886 | OutputSpace::Srgb => MeasuredSpace::Rec709,
+            OutputSpace::Rec709Gamma24 | OutputSpace::Rec709Bt1886 | OutputSpace::Srgb => {
+                MeasuredSpace::Rec709
+            }
             OutputSpace::P3D65 => MeasuredSpace::P3D65,
             OutputSpace::P3Dci => MeasuredSpace::P3Dci,
             OutputSpace::Rec2020Gamma24 => MeasuredSpace::Rec2020,
@@ -152,7 +156,10 @@ pub struct ColourSetup {
 pub const ASSUMED_ACES_VERSION: &str = "2.0";
 
 fn mapping(value: Option<&str>) -> Option<String> {
-    value.map(str::trim).filter(|v| !v.is_empty() && *v != "None").map(str::to_string)
+    value
+        .map(str::trim)
+        .filter(|v| !v.is_empty() && *v != "None")
+        .map(str::to_string)
 }
 
 fn levels(value: Option<&str>) -> Option<Levels> {
@@ -189,34 +196,73 @@ impl ColourSetup {
     /// From Resolve's own setting keys and values (`Timeline.GetSetting()`, keys in #6's closing comment).
     /// `None` when there is no colour science mode to go on.
     pub fn from_resolve_settings(settings: &[(String, String)]) -> Option<ColourSetup> {
-        let get = |key: &str| settings.iter().find(|(k, _)| k == key).map(|(_, v)| v.as_str());
+        let get = |key: &str| {
+            settings
+                .iter()
+                .find(|(k, _)| k == key)
+                .map(|(_, v)| v.as_str())
+        };
         let mode = get("colorScienceMode")?.trim();
         // A colour space and its gamma are separate settings when "separateColorSpaceAndGamma" is on.
         let space = |name: &str| {
             let s = get(name).unwrap_or("").trim().to_string();
             match get(&format!("{name}Gamma")).map(str::trim) {
-                Some(g) if get("separateColorSpaceAndGamma") == Some("1") && !g.is_empty() => format!("{s} / {g}"),
+                Some(g) if get("separateColorSpaceAndGamma") == Some("1") && !g.is_empty() => {
+                    format!("{s} / {g}")
+                }
                 _ => s,
             }
         };
         let (science, timeline, output) = match mode {
             // In ACES modes Resolve still reports the YRGB colour space keys, with values that mean nothing.
             "acescct" | "acescc" => {
-                let timeline = if mode == "acescct" { "ACEScct" } else { "ACEScc" };
-                (Science::Aces, timeline.to_string(), get("colorAcesODT").unwrap_or("").trim().to_string())
+                let timeline = if mode == "acescct" {
+                    "ACEScct"
+                } else {
+                    "ACEScc"
+                };
+                (
+                    Science::Aces,
+                    timeline.to_string(),
+                    get("colorAcesODT").unwrap_or("").trim().to_string(),
+                )
             }
-            "davinciYRGB" => (Science::Yrgb, space("colorSpaceTimeline"), space("colorSpaceOutput")),
-            m if m.starts_with("davinciYRGBColorManaged") => (Science::ColourManaged, space("colorSpaceTimeline"), space("colorSpaceOutput")),
-            m => (Science::Other(m.to_string()), space("colorSpaceTimeline"), space("colorSpaceOutput")),
+            "davinciYRGB" => (
+                Science::Yrgb,
+                space("colorSpaceTimeline"),
+                space("colorSpaceOutput"),
+            ),
+            m if m.starts_with("davinciYRGBColorManaged") => (
+                Science::ColourManaged,
+                space("colorSpaceTimeline"),
+                space("colorSpaceOutput"),
+            ),
+            m => (
+                Science::Other(m.to_string()),
+                space("colorSpaceTimeline"),
+                space("colorSpaceOutput"),
+            ),
         };
         let aces = science == Science::Aces;
         Some(ColourSetup::new(
             Some(science),
             timeline,
             output,
-            if aces { None } else { mapping(get("colorSpaceOutputToneMapping")) },
-            if aces { None } else { mapping(get("colorSpaceOutputGamutMapping")) },
-            if aces { mapping(get("acesVersion")) } else { None },
+            if aces {
+                None
+            } else {
+                mapping(get("colorSpaceOutputToneMapping"))
+            },
+            if aces {
+                None
+            } else {
+                mapping(get("colorSpaceOutputGamutMapping"))
+            },
+            if aces {
+                mapping(get("acesVersion"))
+            } else {
+                None
+            },
             levels(get("videoDataLevels")),
         ))
     }
@@ -251,7 +297,8 @@ impl ColourSetup {
 
     /// The ACES version the Scopes should use: the known one, else the assumed 2.0. `None` when not ACES.
     pub fn effective_aces_version(&self) -> Option<&str> {
-        self.is_aces().then(|| self.aces_version.as_deref().unwrap_or(ASSUMED_ACES_VERSION))
+        self.is_aces()
+            .then(|| self.aces_version.as_deref().unwrap_or(ASSUMED_ACES_VERSION))
     }
 
     /// The Measured Space by default: the Output Colour Space, by its primaries and encoding. `None` when the name
@@ -263,7 +310,11 @@ impl ColourSetup {
     /// Output Colour Space as the label shows it. Resolve's "P3-D65" is gamma 2.6 (Stage 0, check 4), which its
     /// name does not say.
     pub fn output_label(&self) -> String {
-        if self.output_space == OutputSpace::P3D65 { "P3-D65 (gamma 2.6)".to_string() } else { self.output.clone() }
+        if self.output_space == OutputSpace::P3D65 {
+            "P3-D65 (gamma 2.6)".to_string()
+        } else {
+            self.output.clone()
+        }
     }
 }
 

@@ -48,7 +48,13 @@ pub struct FrameUploader {
 
 impl FrameUploader {
     pub fn new(device: &wgpu::Device, queue: &wgpu::Queue) -> FrameUploader {
-        FrameUploader { device: device.clone(), queue: queue.clone(), staging: Vec::new(), next: 0, frame: None }
+        FrameUploader {
+            device: device.clone(),
+            queue: queue.clone(),
+            staging: Vec::new(),
+            next: 0,
+            frame: None,
+        }
     }
 
     /// The latest frame put on the GPU, if any.
@@ -57,7 +63,11 @@ impl FrameUploader {
     }
 
     /// Put `frame` on the GPU. `then` records the work that reads it (the Scopes) into the same submission.
-    pub fn upload(&mut self, frame: &Frame, then: impl FnOnce(&mut wgpu::CommandEncoder, &GpuFrame)) {
+    pub fn upload(
+        &mut self,
+        frame: &Frame,
+        then: impl FnOnce(&mut wgpu::CommandEncoder, &GpuFrame),
+    ) {
         let (width, height) = (frame.width(), frame.height());
         if width == 0 || height == 0 {
             return;
@@ -81,16 +91,26 @@ impl FrameUploader {
                 .collect();
             self.next = 0;
         }
-        if self.frame.as_ref().is_none_or(|f| f.width != width || f.height != height) {
+        if self
+            .frame
+            .as_ref()
+            .is_none_or(|f| f.width != width || f.height != height)
+        {
             self.frame = Some(GpuFrame {
                 texture: self.device.create_texture(&wgpu::TextureDescriptor {
                     label: Some("feed frame"),
-                    size: wgpu::Extent3d { width, height, depth_or_array_layers: 1 },
+                    size: wgpu::Extent3d {
+                        width,
+                        height,
+                        depth_or_array_layers: 1,
+                    },
                     mip_level_count: 1,
                     sample_count: 1,
                     dimension: wgpu::TextureDimension::D2,
                     format: wgpu::TextureFormat::Rgba32Float,
-                    usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST | wgpu::TextureUsages::COPY_SRC,
+                    usage: wgpu::TextureUsages::TEXTURE_BINDING
+                        | wgpu::TextureUsages::COPY_DST
+                        | wgpu::TextureUsages::COPY_SRC,
                     view_formats: &[],
                 }),
                 width,
@@ -109,14 +129,20 @@ impl FrameUploader {
             if staging.ready.load(Ordering::Acquire) {
                 break;
             }
-            let wait = wgpu::PollType::Wait { submission_index: staging.submission.clone(), timeout: Some(std::time::Duration::from_secs(1)) };
+            let wait = wgpu::PollType::Wait {
+                submission_index: staging.submission.clone(),
+                timeout: Some(std::time::Duration::from_secs(1)),
+            };
             let _ = self.device.poll(wait);
         }
         if !staging.ready.load(Ordering::Acquire) {
             return; // the GPU is lost or hung: show nothing new rather than hold the Feed up
         }
         {
-            let mut mapped = staging.buffer.get_mapped_range_mut(..).expect("staging buffer is mapped");
+            let mut mapped = staging
+                .buffer
+                .get_mapped_range_mut(..)
+                .expect("staging buffer is mapped");
             let pixels: &[u8] = bytemuck::cast_slice(frame.pixels());
             let source_row = frame.row_floats() * 4;
             if source_row == padded_row {
@@ -124,26 +150,49 @@ impl FrameUploader {
             } else {
                 for row in 0..height as usize {
                     let to = row * padded_row;
-                    mapped.slice(to..to + row_bytes).copy_from_slice(&pixels[row * source_row..row * source_row + row_bytes]);
+                    mapped
+                        .slice(to..to + row_bytes)
+                        .copy_from_slice(&pixels[row * source_row..row * source_row + row_bytes]);
                 }
             }
         }
         staging.buffer.unmap();
         staging.ready.store(false, Ordering::Release);
 
-        let mut encoder = self.device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: Some("feed frame") });
+        let mut encoder = self
+            .device
+            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                label: Some("feed frame"),
+            });
         encoder.copy_buffer_to_texture(
             wgpu::TexelCopyBufferInfo {
                 buffer: &staging.buffer,
-                layout: wgpu::TexelCopyBufferLayout { offset: 0, bytes_per_row: Some(padded_row as u32), rows_per_image: Some(height) },
+                layout: wgpu::TexelCopyBufferLayout {
+                    offset: 0,
+                    bytes_per_row: Some(padded_row as u32),
+                    rows_per_image: Some(height),
+                },
             },
-            wgpu::TexelCopyTextureInfo { texture: &gpu_frame.texture, mip_level: 0, origin: wgpu::Origin3d::ZERO, aspect: wgpu::TextureAspect::All },
-            wgpu::Extent3d { width, height, depth_or_array_layers: 1 },
+            wgpu::TexelCopyTextureInfo {
+                texture: &gpu_frame.texture,
+                mip_level: 0,
+                origin: wgpu::Origin3d::ZERO,
+                aspect: wgpu::TextureAspect::All,
+            },
+            wgpu::Extent3d {
+                width,
+                height,
+                depth_or_array_layers: 1,
+            },
         );
         then(&mut encoder, gpu_frame);
         staging.submission = Some(self.queue.submit([encoder.finish()]));
         let ready = staging.ready.clone();
-        staging.buffer.map_async(wgpu::MapMode::Write, .., move |result| ready.store(result.is_ok(), Ordering::Release));
+        staging
+            .buffer
+            .map_async(wgpu::MapMode::Write, .., move |result| {
+                ready.store(result.is_ok(), Ordering::Release)
+            });
         // Let finished work report back (and the mapping complete) without waiting.
         let _ = self.device.poll(wgpu::PollType::Poll);
     }

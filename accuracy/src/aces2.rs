@@ -11,7 +11,10 @@
 //! Differences from the CTL: f64 instead of f32 (so this is the "ideal" result, Resolve runs f32 on a GPU);
 //! otherwise the algorithm, tables and search tolerances are the same.
 
-use crate::colour::{self, AP0, Chromaticities, M3, P3_D65, REC709, REC2020, V3, invert, mmul, rgb_to_xyz, vmul, xyz_to_rgb};
+use crate::colour::{
+    self, AP0, Chromaticities, M3, P3_D65, REC709, REC2020, V3, invert, mmul, rgb_to_xyz, vmul,
+    xyz_to_rgb,
+};
 use crate::transfer;
 
 pub const TABLE_SIZE: usize = 360;
@@ -78,7 +81,13 @@ fn scale_diag(a: &M3, v: V3) -> M3 {
 }
 
 fn sign(x: f64) -> f64 {
-    if x < 0.0 { -1.0 } else if x > 0.0 { 1.0 } else { 0.0 }
+    if x < 0.0 {
+        -1.0
+    } else if x > 0.0 {
+        1.0
+    } else {
+        0.0
+    }
 }
 
 /// CTL `copysign`: sign(y) * |x| (so 0 for y == 0).
@@ -91,7 +100,11 @@ fn lerp(a: f64, b: f64, t: f64) -> f64 {
 }
 
 fn lerp3(a: V3, b: V3, t: f64) -> V3 {
-    [lerp(a[0], b[0], t), lerp(a[1], b[1], t), lerp(a[2], b[2], t)]
+    [
+        lerp(a[0], b[0], t),
+        lerp(a[1], b[1], t),
+        lerp(a[2], b[2], t),
+    ]
 }
 
 fn midpoint(a: f64, b: f64) -> f64 {
@@ -234,7 +247,11 @@ fn y_to_j(y: f64, p: &JmhParams) -> f64 {
 
 fn rgb_to_aab(rgb: V3, p: &JmhParams) -> V3 {
     let rgb_m = vmul(rgb, &p.m_rgb_to_cam16_c);
-    let rgb_a = [post_adaptation_fwd(rgb_m[0]), post_adaptation_fwd(rgb_m[1]), post_adaptation_fwd(rgb_m[2])];
+    let rgb_a = [
+        post_adaptation_fwd(rgb_m[0]),
+        post_adaptation_fwd(rgb_m[1]),
+        post_adaptation_fwd(rgb_m[2]),
+    ];
     vmul(rgb_a, &p.m_cone_response_to_aab)
 }
 
@@ -260,7 +277,11 @@ fn jmh_to_aab(jmh: V3, p: &JmhParams) -> V3 {
 
 fn aab_to_rgb(aab: V3, p: &JmhParams) -> V3 {
     let rgb_a = vmul(aab, &p.m_aab_to_cone_response);
-    let rgb_m = [post_adaptation_inv(rgb_a[0]), post_adaptation_inv(rgb_a[1]), post_adaptation_inv(rgb_a[2])];
+    let rgb_m = [
+        post_adaptation_inv(rgb_a[0]),
+        post_adaptation_inv(rgb_a[1]),
+        post_adaptation_inv(rgb_a[2]),
+    ];
     vmul(rgb_m, &p.m_cam16_c_to_rgb)
 }
 
@@ -292,12 +313,29 @@ pub fn init_jmh_params(prims: &Chromaticities) -> JmhParams {
     let f_l_n = f_l / REF_LUMINANCE;
     let cz = model_gamma();
 
-    let d_rgb = [f_l_n * y_w / rgb_w[0], f_l_n * y_w / rgb_w[1], f_l_n * y_w / rgb_w[2]];
-    let rgb_wc = [d_rgb[0] * rgb_w[0], d_rgb[1] * rgb_w[1], d_rgb[2] * rgb_w[2]];
-    let rgb_aw = [post_adaptation_fwd(rgb_wc[0]), post_adaptation_fwd(rgb_wc[1]), post_adaptation_fwd(rgb_wc[2])];
+    let d_rgb = [
+        f_l_n * y_w / rgb_w[0],
+        f_l_n * y_w / rgb_w[1],
+        f_l_n * y_w / rgb_w[2],
+    ];
+    let rgb_wc = [
+        d_rgb[0] * rgb_w[0],
+        d_rgb[1] * rgb_w[1],
+        d_rgb[2] * rgb_w[2],
+    ];
+    let rgb_aw = [
+        post_adaptation_fwd(rgb_wc[0]),
+        post_adaptation_fwd(rgb_wc[1]),
+        post_adaptation_fwd(rgb_wc[2]),
+    ];
 
-    let cone_response_to_aab = mmul(&scale_m(CAM_NL_SCALE, &IDENTITY), &base_cone_response_to_aab);
-    let a_w = cone_response_to_aab[0][0] * rgb_aw[0] + cone_response_to_aab[1][0] * rgb_aw[1] + cone_response_to_aab[2][0] * rgb_aw[2];
+    let cone_response_to_aab = mmul(
+        &scale_m(CAM_NL_SCALE, &IDENTITY),
+        &base_cone_response_to_aab,
+    );
+    let a_w = cone_response_to_aab[0][0] * rgb_aw[0]
+        + cone_response_to_aab[1][0] * rgb_aw[1]
+        + cone_response_to_aab[2][0] * rgb_aw[2];
     let a_w_j = post_adaptation_fwd_(f_l);
 
     let m1 = mmul(&rgb_to_xyz_m, &matrix_16);
@@ -368,7 +406,11 @@ fn reach_m_from_table(h: f64, table: &[f64]) -> f64 {
 
 fn reinhard_remap(scale: f64, nd: f64, invert: bool) -> f64 {
     if invert {
-        if nd >= 1.0 { scale } else { scale * -(nd / (nd - 1.0)) }
+        if nd >= 1.0 {
+            scale
+        } else {
+            scale * -(nd / (nd - 1.0))
+        }
     } else {
         scale * nd / (1.0 + nd)
     }
@@ -398,7 +440,13 @@ fn chroma_compress_norm(h: f64, chroma_compress_scale: f64) -> f64 {
     let sin_hr2 = 2.0 * a * b;
     let cos_hr3 = 4.0 * a * a * a - 3.0 * a;
     let sin_hr3 = 3.0 * b - 4.0 * b * b * b;
-    let m = 11.34072 * a + 16.46899 * cos_hr2 + 7.88380 * cos_hr3 + 14.66441 * b + -6.37224 * sin_hr2 + 9.19364 * sin_hr3 + 77.12896;
+    let m = 11.34072 * a
+        + 16.46899 * cos_hr2
+        + 7.88380 * cos_hr3
+        + 14.66441 * b
+        + -6.37224 * sin_hr2
+        + 9.19364 * sin_hr3
+        + 77.12896;
     m * chroma_compress_scale
 }
 
@@ -418,7 +466,14 @@ fn chroma_compress_fwd(jmh: V3, tonemapped_j: f64, p: &OdtParams) -> V3 {
 
         m_compr = m * (tonemapped_j / j).powf(p.model_gamma_inv);
         m_compr /= mnorm;
-        m_compr = limit - toe(limit - m_compr, toe_limit, toe_sn_j_sat, toe_sqrt_n_j_sat_thr, false);
+        m_compr = limit
+            - toe(
+                limit - m_compr,
+                toe_limit,
+                toe_sn_j_sat,
+                toe_sqrt_n_j_sat_thr,
+                false,
+            );
         m_compr = toe(m_compr, limit, toe_n_j_compr, sn_j, false);
         m_compr *= mnorm;
     }
@@ -432,8 +487,17 @@ fn tonemap_and_compress_fwd(jmh: V3, p: &OdtParams) -> V3 {
     chroma_compress_fwd(jmh, j_ts, p)
 }
 
-fn compute_compression_vector_slope(intersect_j: f64, focus_j: f64, limit_j_max: f64, slope_gain: f64) -> f64 {
-    let direction_scalar = if intersect_j < focus_j { intersect_j } else { limit_j_max - intersect_j };
+fn compute_compression_vector_slope(
+    intersect_j: f64,
+    focus_j: f64,
+    limit_j_max: f64,
+    slope_gain: f64,
+) -> f64 {
+    let direction_scalar = if intersect_j < focus_j {
+        intersect_j
+    } else {
+        limit_j_max - intersect_j
+    };
     direction_scalar * (intersect_j - focus_j) / (focus_j * slope_gain)
 }
 
@@ -461,25 +525,55 @@ fn smin_scaled(a: f64, b: f64, scale_reference: f64) -> f64 {
     a.min(b) - h * h * h * s_scaled * (1.0 / 6.0)
 }
 
-fn estimate_line_and_boundary_intersection_m(j_axis_intersect: f64, slope: f64, inv_gamma: f64, j_max: f64, m_max: f64, j_intersection_reference: f64) -> f64 {
+fn estimate_line_and_boundary_intersection_m(
+    j_axis_intersect: f64,
+    slope: f64,
+    inv_gamma: f64,
+    j_max: f64,
+    m_max: f64,
+    j_intersection_reference: f64,
+) -> f64 {
     let normalised_j = j_axis_intersect / j_intersection_reference;
     let shifted_intersection = j_intersection_reference * normalised_j.powf(inv_gamma);
     shifted_intersection * m_max / (j_max - slope * m_max)
 }
 
-fn find_gamut_boundary_intersection(jm_cusp: [f64; 2], j_max: f64, gamma_top_inv: f64, gamma_bottom_inv: f64, j_intersect_source: f64, slope: f64, j_intersect_cusp: f64) -> f64 {
-    let m_boundary_lower = estimate_line_and_boundary_intersection_m(j_intersect_source, slope, gamma_bottom_inv, jm_cusp[0], jm_cusp[1], j_intersect_cusp);
+fn find_gamut_boundary_intersection(
+    jm_cusp: [f64; 2],
+    j_max: f64,
+    gamma_top_inv: f64,
+    gamma_bottom_inv: f64,
+    j_intersect_source: f64,
+    slope: f64,
+    j_intersect_cusp: f64,
+) -> f64 {
+    let m_boundary_lower = estimate_line_and_boundary_intersection_m(
+        j_intersect_source,
+        slope,
+        gamma_bottom_inv,
+        jm_cusp[0],
+        jm_cusp[1],
+        j_intersect_cusp,
+    );
     let f_j_intersect_cusp = j_max - j_intersect_cusp;
     let f_j_intersect_source = j_max - j_intersect_source;
     let f_jm_cusp_j = j_max - jm_cusp[0];
-    let m_boundary_upper = estimate_line_and_boundary_intersection_m(f_j_intersect_source, -slope, gamma_top_inv, f_jm_cusp_j, jm_cusp[1], f_j_intersect_cusp);
+    let m_boundary_upper = estimate_line_and_boundary_intersection_m(
+        f_j_intersect_source,
+        -slope,
+        gamma_top_inv,
+        f_jm_cusp_j,
+        jm_cusp[1],
+        f_j_intersect_cusp,
+    );
     smin_scaled(m_boundary_lower, m_boundary_upper, jm_cusp[1])
 }
 
 fn get_focus_gain(j: f64, analytical_threshold: f64, limit_j_max: f64, focus_dist: f64) -> f64 {
     let mut gain = limit_j_max * focus_dist;
     if j > analytical_threshold {
-        let mut gain_adjustment = ((limit_j_max - analytical_threshold) / (0.0001f64).max(limit_j_max - j)).log10();
+        let mut gain_adjustment =
+            ((limit_j_max - analytical_threshold) / (0.0001f64).max(limit_j_max - j)).log10();
         gain_adjustment = gain_adjustment * gain_adjustment + 1.0;
         gain *= gain_adjustment;
     }
@@ -501,18 +595,50 @@ fn remap_m(m: f64, gamut_boundary_m: f64, reach_boundary_m: f64, invert: bool) -
     threshold + reinhard_remap(scale, nd, invert)
 }
 
-fn compress_gamut(jmh: V3, jx: f64, p: &OdtParams, hdp: &HueDependentGamutParams, invert: bool) -> V3 {
+fn compress_gamut(
+    jmh: V3,
+    jx: f64,
+    p: &OdtParams,
+    hdp: &HueDependentGamutParams,
+    invert: bool,
+) -> V3 {
     let (j, m, h) = (jmh[0], jmh[1], jmh[2]);
     let slope_gain = get_focus_gain(jx, hdp.analytical_threshold, p.limit_j_max, p.focus_dist);
     let j_intersect_source = solve_j_intersect(j, m, hdp.focus_j, p.limit_j_max, slope_gain);
-    let gamut_slope = compute_compression_vector_slope(j_intersect_source, hdp.focus_j, p.limit_j_max, slope_gain);
-    let j_intersect_cusp = solve_j_intersect(hdp.jm_cusp[0], hdp.jm_cusp[1], hdp.focus_j, p.limit_j_max, slope_gain);
-    let gamut_boundary_m = find_gamut_boundary_intersection(hdp.jm_cusp, p.limit_j_max, hdp.gamma_top_inv, hdp.gamma_bottom_inv, j_intersect_source, gamut_slope, j_intersect_cusp);
+    let gamut_slope = compute_compression_vector_slope(
+        j_intersect_source,
+        hdp.focus_j,
+        p.limit_j_max,
+        slope_gain,
+    );
+    let j_intersect_cusp = solve_j_intersect(
+        hdp.jm_cusp[0],
+        hdp.jm_cusp[1],
+        hdp.focus_j,
+        p.limit_j_max,
+        slope_gain,
+    );
+    let gamut_boundary_m = find_gamut_boundary_intersection(
+        hdp.jm_cusp,
+        p.limit_j_max,
+        hdp.gamma_top_inv,
+        hdp.gamma_bottom_inv,
+        j_intersect_source,
+        gamut_slope,
+        j_intersect_cusp,
+    );
     if gamut_boundary_m <= 0.0 {
         return [j, 0.0, h];
     }
     let reach_max_m = reach_m_from_table(h, &p.table_reach_m);
-    let reach_boundary_m = estimate_line_and_boundary_intersection_m(j_intersect_source, gamut_slope, p.model_gamma_inv, p.limit_j_max, reach_max_m, p.limit_j_max);
+    let reach_boundary_m = estimate_line_and_boundary_intersection_m(
+        j_intersect_source,
+        gamut_slope,
+        p.model_gamma_inv,
+        p.limit_j_max,
+        reach_max_m,
+        p.limit_j_max,
+    );
     let remapped_m = remap_m(m, gamut_boundary_m, reach_boundary_m, invert);
     [j_intersect_source + remapped_m * gamut_slope, remapped_m, h]
 }
@@ -552,7 +678,11 @@ fn lookup_hue_interval(h: f64, hue_table: &[f64], range: [i64; 2]) -> usize {
 }
 
 fn compute_focus_j(cusp_j: f64, mid_j: f64, limit_j_max: f64) -> f64 {
-    lerp(cusp_j, mid_j, (1.0f64).min(CUSP_MID_BLEND - (cusp_j / limit_j_max)))
+    lerp(
+        cusp_j,
+        mid_j,
+        (1.0f64).min(CUSP_MID_BLEND - (cusp_j / limit_j_max)),
+    )
 }
 
 fn init_hue_dependent_gamut_params(hue: f64, p: &OdtParams) -> HueDependentGamutParams {
@@ -562,7 +692,11 @@ fn init_hue_dependent_gamut_params(hue: f64, p: &OdtParams) -> HueDependentGamut
     HueDependentGamutParams {
         jm_cusp,
         gamma_bottom_inv: p.lower_hull_gamma_inv,
-        gamma_top_inv: lerp(p.table_upper_hull_gamma[i_hi - 1], p.table_upper_hull_gamma[i_hi], t),
+        gamma_top_inv: lerp(
+            p.table_upper_hull_gamma[i_hi - 1],
+            p.table_upper_hull_gamma[i_hi],
+            t,
+        ),
         focus_j: compute_focus_j(jm_cusp[0], p.mid_j, p.limit_j_max),
         analytical_threshold: lerp(jm_cusp[0], p.limit_j_max, FOCUS_GAIN_BLEND),
     }
@@ -587,11 +721,20 @@ fn any_below_zero(v: V3) -> bool {
 }
 
 fn generate_unit_cube_cusp_corners(corner: usize) -> V3 {
-    let f = |k: usize| if (corner + k) % CUSP_CORNER_COUNT < 3 { 1.0 } else { 0.0 };
+    let f = |k: usize| {
+        if (corner + k) % CUSP_CORNER_COUNT < 3 {
+            1.0
+        } else {
+            0.0
+        }
+    };
     [f(1), f(5), f(3)]
 }
 
-fn build_limiting_cusp_corners_tables(params: &JmhParams, peak_luminance: f64) -> ([V3; TOTAL_CORNER_COUNT], [V3; TOTAL_CORNER_COUNT]) {
+fn build_limiting_cusp_corners_tables(
+    params: &JmhParams,
+    peak_luminance: f64,
+) -> ([V3; TOTAL_CORNER_COUNT], [V3; TOTAL_CORNER_COUNT]) {
     let mut temp_rgb = [[0.0; 3]; CUSP_CORNER_COUNT];
     let mut temp_jmh = [[0.0; 3]; CUSP_CORNER_COUNT];
     let mut min_index = 0;
@@ -619,7 +762,11 @@ fn build_limiting_cusp_corners_tables(params: &JmhParams, peak_luminance: f64) -
     (rgb_corners, jmh_corners)
 }
 
-fn find_reach_corners_table(params_reach: &JmhParams, limit_j_max: f64, forward_limit: f64) -> [V3; TOTAL_CORNER_COUNT] {
+fn find_reach_corners_table(
+    params_reach: &JmhParams,
+    limit_j_max: f64,
+    forward_limit: f64,
+) -> [V3; TOTAL_CORNER_COUNT] {
     let mut temp_jmh = [[0.0; 3]; CUSP_CORNER_COUNT];
     let limit_a = j_to_achromatic_n(limit_j_max, params_reach.inv_cz);
     let mut min_index = 0;
@@ -653,7 +800,10 @@ fn find_reach_corners_table(params_reach: &JmhParams, limit_j_max: f64, forward_
     jmh_corners
 }
 
-fn extract_sorted_cube_hues(reach: &[V3; TOTAL_CORNER_COUNT], limit: &[V3; TOTAL_CORNER_COUNT]) -> [f64; MAX_SORTED_CORNERS] {
+fn extract_sorted_cube_hues(
+    reach: &[V3; TOTAL_CORNER_COUNT],
+    limit: &[V3; TOTAL_CORNER_COUNT],
+) -> [f64; MAX_SORTED_CORNERS] {
     let mut sorted = [0.0; MAX_SORTED_CORNERS];
     let (mut idx, mut reach_idx, mut limit_idx) = (0, 1, 1);
     while reach_idx < CUSP_CORNER_COUNT + 1 || limit_idx < CUSP_CORNER_COUNT + 1 {
@@ -675,7 +825,13 @@ fn extract_sorted_cube_hues(reach: &[V3; TOTAL_CORNER_COUNT], limit: &[V3; TOTAL
     sorted
 }
 
-fn build_hue_sample_interval(samples: i64, lower: f64, upper: f64, table: &mut [f64; TOTAL_TABLE_SIZE], base: i64) {
+fn build_hue_sample_interval(
+    samples: i64,
+    lower: f64,
+    upper: f64,
+    table: &mut [f64; TOTAL_TABLE_SIZE],
+    base: i64,
+) {
     if samples <= 0 {
         return;
     }
@@ -686,7 +842,11 @@ fn build_hue_sample_interval(samples: i64, lower: f64, upper: f64, table: &mut [
 }
 
 fn round_ctl(x: f64) -> i64 {
-    if x < 0.0 { (x - 0.5) as i64 } else { (x + 0.5) as i64 }
+    if x < 0.0 {
+        (x - 0.5) as i64
+    } else {
+        (x + 0.5) as i64
+    }
 }
 
 fn build_hue_table(sorted_hues: &[f64; MAX_SORTED_CORNERS]) -> [f64; TOTAL_TABLE_SIZE] {
@@ -697,7 +857,9 @@ fn build_hue_table(sorted_hues: &[f64; MAX_SORTED_CORNERS]) -> [f64; TOTAL_TABLE
     let mut min_index: i64 = if sorted_hues[0] == 0.0 { 0 } else { 1 };
 
     for hue_idx in 0..MAX_SORTED_CORNERS {
-        let mut nominal_idx = round_ctl(sorted_hues[hue_idx] * ideal_spacing).max(min_index).min(TABLE_SIZE as i64 - 1);
+        let mut nominal_idx = round_ctl(sorted_hues[hue_idx] * ideal_spacing)
+            .max(min_index)
+            .min(TABLE_SIZE as i64 - 1);
         if last_idx == nominal_idx {
             if hue_idx > 1 && samples_count[hue_idx - 2] != (samples_count[hue_idx - 1] - 1) {
                 samples_count[hue_idx - 1] -= 1;
@@ -711,21 +873,44 @@ fn build_hue_table(sorted_hues: &[f64; MAX_SORTED_CORNERS]) -> [f64; TOTAL_TABLE
     }
 
     let mut total_samples = 0i64;
-    build_hue_sample_interval(samples_count[0], 0.0, sorted_hues[0], &mut hue_table, total_samples + 1);
+    build_hue_sample_interval(
+        samples_count[0],
+        0.0,
+        sorted_hues[0],
+        &mut hue_table,
+        total_samples + 1,
+    );
     total_samples += samples_count[0];
     for i in 1..MAX_SORTED_CORNERS {
         let samples = samples_count[i] - samples_count[i - 1];
-        build_hue_sample_interval(samples, sorted_hues[i - 1], sorted_hues[i], &mut hue_table, total_samples + 1);
+        build_hue_sample_interval(
+            samples,
+            sorted_hues[i - 1],
+            sorted_hues[i],
+            &mut hue_table,
+            total_samples + 1,
+        );
         total_samples += samples;
     }
-    build_hue_sample_interval(TABLE_SIZE as i64 - total_samples, sorted_hues[MAX_SORTED_CORNERS - 1], HUE_LIMIT, &mut hue_table, total_samples + 1);
+    build_hue_sample_interval(
+        TABLE_SIZE as i64 - total_samples,
+        sorted_hues[MAX_SORTED_CORNERS - 1],
+        HUE_LIMIT,
+        &mut hue_table,
+        total_samples + 1,
+    );
 
     hue_table[0] = hue_table[BASE_INDEX + TABLE_SIZE - 1] - HUE_LIMIT;
     hue_table[BASE_INDEX + TABLE_SIZE] = hue_table[BASE_INDEX] + HUE_LIMIT;
     hue_table
 }
 
-fn find_display_cusp_for_hue(hue: f64, rgb_corners: &[V3; TOTAL_CORNER_COUNT], jmh_corners: &[V3; TOTAL_CORNER_COUNT], params: &JmhParams) -> [f64; 2] {
+fn find_display_cusp_for_hue(
+    hue: f64,
+    rgb_corners: &[V3; TOTAL_CORNER_COUNT],
+    jmh_corners: &[V3; TOTAL_CORNER_COUNT],
+    params: &JmhParams,
+) -> [f64; 2] {
     let mut upper_corner = 1;
     let mut found = false;
     let mut i = upper_corner;
@@ -764,7 +949,12 @@ fn find_display_cusp_for_hue(hue: f64, rgb_corners: &[V3; TOTAL_CORNER_COUNT], j
     [jmh[0], jmh[1]]
 }
 
-fn build_cusp_table(hue_table: &[f64; TOTAL_TABLE_SIZE], rgb_corners: &[V3; TOTAL_CORNER_COUNT], jmh_corners: &[V3; TOTAL_CORNER_COUNT], params: &JmhParams) -> [[f64; 3]; TOTAL_TABLE_SIZE] {
+fn build_cusp_table(
+    hue_table: &[f64; TOTAL_TABLE_SIZE],
+    rgb_corners: &[V3; TOTAL_CORNER_COUNT],
+    jmh_corners: &[V3; TOTAL_CORNER_COUNT],
+    params: &JmhParams,
+) -> [[f64; 3]; TOTAL_TABLE_SIZE] {
     let mut out = [[0.0; 3]; TOTAL_TABLE_SIZE];
     for i in BASE_INDEX..TOTAL_TABLE_SIZE {
         let hue = hue_table[i];
@@ -772,7 +962,11 @@ fn build_cusp_table(hue_table: &[f64; TOTAL_TABLE_SIZE], rgb_corners: &[V3; TOTA
         out[i] = [jm[0], jm[1] * (1.0 + SMOOTH_M * SMOOTH_CUSPS), hue];
     }
     out[0] = [out[TABLE_SIZE][0], out[TABLE_SIZE][1], hue_table[0]];
-    out[BASE_INDEX + TABLE_SIZE] = [out[BASE_INDEX][0], out[BASE_INDEX][1], hue_table[BASE_INDEX + TABLE_SIZE]];
+    out[BASE_INDEX + TABLE_SIZE] = [
+        out[BASE_INDEX][0],
+        out[BASE_INDEX][1],
+        hue_table[BASE_INDEX + TABLE_SIZE],
+    ];
     out
 }
 
@@ -827,10 +1021,22 @@ fn evaluate_gamma_fit(
 ) -> bool {
     let luminance_limit = peak_luminance / REF_LUMINANCE;
     for k in 0..TEST_COUNT {
-        let approx_limit_m = find_gamut_boundary_intersection(jm_cusp, limit_j_max, top_gamma_inv, lower_hull_gamma_inv, j_intersect_source[k], slopes[k], j_intersect_cusp[k]);
+        let approx_limit_m = find_gamut_boundary_intersection(
+            jm_cusp,
+            limit_j_max,
+            top_gamma_inv,
+            lower_hull_gamma_inv,
+            j_intersect_source[k],
+            slopes[k],
+            j_intersect_cusp[k],
+        );
         let approx_limit_j = j_intersect_source[k] + slopes[k] * approx_limit_m;
-        let rgb = jmh_to_rgb([approx_limit_j, approx_limit_m, test_jmh[k][2]], limit_params);
-        let outside = rgb[0] > luminance_limit || rgb[1] > luminance_limit || rgb[2] > luminance_limit;
+        let rgb = jmh_to_rgb(
+            [approx_limit_j, approx_limit_m, test_jmh[k][2]],
+            limit_params,
+        );
+        let outside =
+            rgb[0] > luminance_limit || rgb[1] > luminance_limit || rgb[2] > luminance_limit;
         if !outside {
             return false;
         }
@@ -838,7 +1044,10 @@ fn evaluate_gamma_fit(
     true
 }
 
-fn make_upper_hull_gamma_table(cusps: &[[f64; 3]; TOTAL_TABLE_SIZE], p: &OdtParams) -> [f64; TOTAL_TABLE_SIZE] {
+fn make_upper_hull_gamma_table(
+    cusps: &[[f64; 3]; TOTAL_TABLE_SIZE],
+    p: &OdtParams,
+) -> [f64; TOTAL_TABLE_SIZE] {
     let mut upper = [0.0; TOTAL_TABLE_SIZE];
     for i in BASE_INDEX..BASE_INDEX + TABLE_SIZE {
         let hue = cusps[i][2];
@@ -853,10 +1062,14 @@ fn make_upper_hull_gamma_table(cusps: &[[f64; 3]; TOTAL_TABLE_SIZE], p: &OdtPara
         let mut j_intersect_cusp = [0.0; TEST_COUNT];
         for k in 0..TEST_COUNT {
             let test_j = lerp(jm_cusp[0], p.limit_j_max, TEST_POSITIONS[k]);
-            let slope_gain = get_focus_gain(test_j, analytical_threshold, p.limit_j_max, p.focus_dist);
-            let j_intersect = solve_j_intersect(test_j, jm_cusp[1], focus_j, p.limit_j_max, slope_gain);
-            let slope = compute_compression_vector_slope(j_intersect, focus_j, p.limit_j_max, slope_gain);
-            let j_cusp = solve_j_intersect(jm_cusp[0], jm_cusp[1], focus_j, p.limit_j_max, slope_gain);
+            let slope_gain =
+                get_focus_gain(test_j, analytical_threshold, p.limit_j_max, p.focus_dist);
+            let j_intersect =
+                solve_j_intersect(test_j, jm_cusp[1], focus_j, p.limit_j_max, slope_gain);
+            let slope =
+                compute_compression_vector_slope(j_intersect, focus_j, p.limit_j_max, slope_gain);
+            let j_cusp =
+                solve_j_intersect(jm_cusp[0], jm_cusp[1], focus_j, p.limit_j_max, slope_gain);
             test_jmh[k] = [test_j, jm_cusp[1], hue];
             j_intersect_source[k] = j_intersect;
             slopes[k] = slope;
@@ -864,7 +1077,18 @@ fn make_upper_hull_gamma_table(cusps: &[[f64; 3]; TOTAL_TABLE_SIZE], p: &OdtPara
         }
 
         let fit = |gamma_inv: f64| {
-            evaluate_gamma_fit(jm_cusp, &test_jmh, &j_intersect_source, &slopes, &j_intersect_cusp, gamma_inv, p.peak_luminance, p.limit_j_max, p.lower_hull_gamma_inv, &p.limit_params)
+            evaluate_gamma_fit(
+                jm_cusp,
+                &test_jmh,
+                &j_intersect_source,
+                &slopes,
+                &j_intersect_cusp,
+                gamma_inv,
+                p.peak_luminance,
+                p.limit_j_max,
+                p.lower_hull_gamma_inv,
+                &p.limit_params,
+            )
         };
 
         let search_range = GAMMA_SEARCH_STEP;
@@ -945,11 +1169,18 @@ pub fn init_odt_params(peak_luminance: f64, limiting: &Chromaticities) -> OdtPar
     };
 
     // make_uniform_hue_gamut_table
-    let reach_jmh_corners = find_reach_corners_table(&p.reach_params, p.limit_j_max, p.ts.forward_limit);
-    let (limiting_rgb_corners, limiting_jmh_corners) = build_limiting_cusp_corners_tables(&p.limit_params, p.peak_luminance);
+    let reach_jmh_corners =
+        find_reach_corners_table(&p.reach_params, p.limit_j_max, p.ts.forward_limit);
+    let (limiting_rgb_corners, limiting_jmh_corners) =
+        build_limiting_cusp_corners_tables(&p.limit_params, p.peak_luminance);
     let sorted_hues = extract_sorted_cube_hues(&reach_jmh_corners, &limiting_jmh_corners);
     let hue_table = build_hue_table(&sorted_hues);
-    p.table_gamut_cusps = build_cusp_table(&hue_table, &limiting_rgb_corners, &limiting_jmh_corners, &p.limit_params);
+    p.table_gamut_cusps = build_cusp_table(
+        &hue_table,
+        &limiting_rgb_corners,
+        &limiting_jmh_corners,
+        &p.limit_params,
+    );
     for i in 0..TOTAL_TABLE_SIZE {
         p.table_hues[i] = p.table_gamut_cusps[i][2];
     }
@@ -960,7 +1191,11 @@ pub fn init_odt_params(peak_luminance: f64, limiting: &Chromaticities) -> OdtPar
 
 pub fn output_transform_fwd(aces: V3, p: &OdtParams, ap0_to_ap1: &M3, ap1_to_ap0: &M3) -> V3 {
     let ap1 = vmul(aces, ap0_to_ap1);
-    let c = [ap1[0].clamp(0.0, p.ts.forward_limit), ap1[1].clamp(0.0, p.ts.forward_limit), ap1[2].clamp(0.0, p.ts.forward_limit)];
+    let c = [
+        ap1[0].clamp(0.0, p.ts.forward_limit),
+        ap1[1].clamp(0.0, p.ts.forward_limit),
+        ap1[2].clamp(0.0, p.ts.forward_limit),
+    ];
     let ap0_clamped = vmul(c, ap1_to_ap0);
     let jmh = rgb_to_jmh(ap0_clamped, &p.input_params);
     let tonemapped = tonemap_and_compress_fwd(jmh, p);
@@ -989,7 +1224,13 @@ pub struct AcesOutputTransform {
 }
 
 impl AcesOutputTransform {
-    fn new(name: &'static str, limiting: &Chromaticities, encoding: &Chromaticities, peak: f64, eotf: Eotf) -> Self {
+    fn new(
+        name: &'static str,
+        limiting: &Chromaticities,
+        encoding: &Chromaticities,
+        peak: f64,
+        eotf: Eotf,
+    ) -> Self {
         AcesOutputTransform {
             name,
             odt: init_odt_params(peak, limiting),
@@ -1003,7 +1244,13 @@ impl AcesOutputTransform {
 
     /// "Rec.709 BT.1886": 100 nit, Rec.709 limiting and encoding primaries, BT.1886 gamma 2.4.
     pub fn rec709_bt1886() -> Self {
-        Self::new("ACES 2.0 Rec.709 BT.1886", &REC709, &REC709, 100.0, Eotf::Bt1886Gamma24)
+        Self::new(
+            "ACES 2.0 Rec.709 BT.1886",
+            &REC709,
+            &REC709,
+            100.0,
+            Eotf::Bt1886Gamma24,
+        )
     }
     /// "P3-D65": peakLuminance 100 (= 48 nit * 100/48), P3 primaries, gamma 2.6.
     pub fn p3_d65() -> Self {
@@ -1011,7 +1258,13 @@ impl AcesOutputTransform {
     }
     /// "Rec.2100 ST2084 (1000 nit)": 1000 nit, Rec.2100 primaries, PQ.
     pub fn rec2100_pq_1000() -> Self {
-        Self::new("ACES 2.0 Rec.2100 ST2084 (1000 nit)", &REC2020, &REC2020, 1000.0, Eotf::St2084)
+        Self::new(
+            "ACES 2.0 Rec.2100 ST2084 (1000 nit)",
+            &REC2020,
+            &REC2020,
+            1000.0,
+            Eotf::St2084,
+        )
     }
 
     /// Display code value to display-linear light relative to 100 nit (1.0 = 100 nit).
@@ -1055,8 +1308,16 @@ mod tests {
     fn tonescale_constants_for_100_nit() {
         // CTL: 18% grey lands on c_d = 10.013 nit for a 100 nit display, white hits peak at r_hit = 128
         let p = init_ts_params(100.0);
-        assert!(close(tonescale_fwd(0.18, &p), 10.013, 0.02), "{}", tonescale_fwd(0.18, &p));
-        assert!(close(tonescale_fwd(128.0, &p), 100.0, 0.5), "{}", tonescale_fwd(128.0, &p));
+        assert!(
+            close(tonescale_fwd(0.18, &p), 10.013, 0.02),
+            "{}",
+            tonescale_fwd(0.18, &p)
+        );
+        assert!(
+            close(tonescale_fwd(128.0, &p), 100.0, 0.5),
+            "{}",
+            tonescale_fwd(128.0, &p)
+        );
         assert!(close(p.forward_limit, 8.0 * 128.0, 1e-9));
         assert_eq!(tonescale_fwd(0.0, &p), 0.0);
         assert!(tonescale_fwd(0.5, &p) < tonescale_fwd(1.0, &p));
@@ -1067,7 +1328,11 @@ mod tests {
         let p = init_ts_params(1000.0);
         let r_hit = 128.0 + (896.0 - 128.0) * (10f64.ln() / 100f64.ln());
         assert!(close(p.forward_limit, 8.0 * r_hit, 1e-9));
-        assert!(close(tonescale_fwd(r_hit, &p), 1000.0, 5.0), "{}", tonescale_fwd(r_hit, &p));
+        assert!(
+            close(tonescale_fwd(r_hit, &p), 1000.0, 5.0),
+            "{}",
+            tonescale_fwd(r_hit, &p)
+        );
     }
 
     #[test]
@@ -1076,15 +1341,29 @@ mod tests {
         let p = &t.odt;
         // hue tables strictly increase and wrap at +-360
         for i in 1..TOTAL_TABLE_SIZE {
-            assert!(p.table_hues[i] > p.table_hues[i - 1], "hue table not monotonic at {i}");
+            assert!(
+                p.table_hues[i] > p.table_hues[i - 1],
+                "hue table not monotonic at {i}"
+            );
         }
-        assert!(close(p.table_hues[BASE_INDEX + TABLE_SIZE] - p.table_hues[BASE_INDEX], 360.0, 1e-9));
+        assert!(close(
+            p.table_hues[BASE_INDEX + TABLE_SIZE] - p.table_hues[BASE_INDEX],
+            360.0,
+            1e-9
+        ));
         // cusps are inside the limit J range and have positive colourfulness
         for i in BASE_INDEX..BASE_INDEX + TABLE_SIZE {
-            assert!(p.table_gamut_cusps[i][0] > 0.0 && p.table_gamut_cusps[i][0] <= p.limit_j_max + 1e-6);
+            assert!(
+                p.table_gamut_cusps[i][0] > 0.0
+                    && p.table_gamut_cusps[i][0] <= p.limit_j_max + 1e-6
+            );
             assert!(p.table_gamut_cusps[i][1] > 0.0);
         }
-        assert!(p.table_upper_hull_gamma.iter().all(|g| *g > 0.0 && g.is_finite()));
+        assert!(
+            p.table_upper_hull_gamma
+                .iter()
+                .all(|g| *g > 0.0 && g.is_finite())
+        );
     }
 
     #[test]
@@ -1094,20 +1373,34 @@ mod tests {
         // 18% grey -> 10.013 nit of 100 -> BT.1886 code 0.1001^(1/2.4)
         let want = (10.013f64 / 100.0).powf(1.0 / 2.4);
         assert!(close(grey[0], want, 2e-3), "{grey:?} vs {want}");
-        assert!(close(grey[0], grey[1], 1e-6) && close(grey[1], grey[2], 1e-6), "{grey:?}");
+        assert!(
+            close(grey[0], grey[1], 1e-6) && close(grey[1], grey[2], 1e-6),
+            "{grey:?}"
+        );
         let white = t.forward([128.0, 128.0, 128.0]);
-        assert!(close(white[0], 1.0, 1e-3) && close(white[2], 1.0, 1e-3), "{white:?}");
+        assert!(
+            close(white[0], 1.0, 1e-3) && close(white[2], 1.0, 1e-3),
+            "{white:?}"
+        );
         assert_eq!(t.forward([0.0, 0.0, 0.0]), [0.0, 0.0, 0.0]);
     }
 
     #[test]
     fn output_is_monotonic_in_exposure_and_within_display_range() {
-        for t in [AcesOutputTransform::rec709_bt1886(), AcesOutputTransform::p3_d65(), AcesOutputTransform::rec2100_pq_1000()] {
+        for t in [
+            AcesOutputTransform::rec709_bt1886(),
+            AcesOutputTransform::p3_d65(),
+            AcesOutputTransform::rec2100_pq_1000(),
+        ] {
             let mut prev = -1.0;
             for stop in -8..=9 {
                 let v = 0.18 * 2f64.powi(stop);
                 let o = t.forward([v, v, v]);
-                assert!(o.iter().all(|c| (0.0..=1.0 + 1e-9).contains(c)), "{} {o:?}", t.name);
+                assert!(
+                    o.iter().all(|c| (0.0..=1.0 + 1e-9).contains(c)),
+                    "{} {o:?}",
+                    t.name
+                );
                 assert!(o[1] >= prev, "{} not monotonic at stop {stop}", t.name);
                 prev = o[1];
             }
@@ -1117,11 +1410,19 @@ mod tests {
     #[test]
     fn saturated_primaries_land_inside_the_display_gamut() {
         let t = AcesOutputTransform::rec709_bt1886();
-        for rgb in [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0], [0.5, 0.0, 0.5]] {
+        for rgb in [
+            [1.0, 0.0, 0.0],
+            [0.0, 1.0, 0.0],
+            [0.0, 0.0, 1.0],
+            [0.5, 0.0, 0.5],
+        ] {
             // ACEScg (AP1) primaries are outside Rec.709; gamut compression must pull them inside.
             let aces = vmul(rgb, &colour::rgb_to_rgb(&colour::AP1, &AP0));
             let o = t.forward(aces);
-            assert!(o.iter().all(|c| c.is_finite() && *c >= 0.0 && *c <= 1.0), "{rgb:?} -> {o:?}");
+            assert!(
+                o.iter().all(|c| c.is_finite() && *c >= 0.0 && *c <= 1.0),
+                "{rgb:?} -> {o:?}"
+            );
         }
     }
 }

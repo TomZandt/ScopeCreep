@@ -4,7 +4,13 @@ use scopecreep::picture_stage::place;
 use scopecreep::zoom::{Geometry, ZoomModel};
 
 const SHAPES: [[u32; 2]; 5] = [[1920, 1080], [1080, 1920], [3840, 2160], [64, 36], [1, 1]];
-const AREAS: [[f32; 4]; 5] = [[0.0, 0.0, 192.0, 200.0], [0.0, 0.0, 300.0, 100.0], [10.5, 20.25, 333.0, 187.0], [12.0, 12.0, 1256.0, 716.0], [0.0, 0.0, 0.5, 90.0]];
+const AREAS: [[f32; 4]; 5] = [
+    [0.0, 0.0, 192.0, 200.0],
+    [0.0, 0.0, 300.0, 100.0],
+    [10.5, 20.25, 333.0, 187.0],
+    [12.0, 12.0, 1256.0, 716.0],
+    [0.0, 0.0, 0.5, 90.0],
+];
 
 #[test]
 fn at_fit_every_frame_and_panel_places_as_before() {
@@ -12,7 +18,11 @@ fn at_fit_every_frame_and_panel_places_as_before() {
     for picture in SHAPES {
         for area in AREAS {
             for strip in [0.0, 40.0, 95.0] {
-                assert_eq!(model.placement(Geometry::new(area, picture, strip)), place(area, picture, strip), "{picture:?} in {area:?} strip {strip}");
+                assert_eq!(
+                    model.placement(Geometry::new(area, picture, strip)),
+                    place(area, picture, strip),
+                    "{picture:?} in {area:?} strip {strip}"
+                );
             }
         }
     }
@@ -21,19 +31,40 @@ fn at_fit_every_frame_and_panel_places_as_before() {
 #[test]
 fn a_frame_over_100_percent_at_fit_stays_at_fit_and_says_so() {
     let model = ZoomModel::default();
-    let p = model.placement(Geometry::new([0.0, 0.0, 1000.0, 1000.0], [100, 50], 0.0)).unwrap();
+    let p = model
+        .placement(Geometry::new([0.0, 0.0, 1000.0, 1000.0], [100, 50], 0.0))
+        .unwrap();
     assert_eq!((p.w, p.h), (1000.0, 500.0));
-    assert_eq!(model.fit_percent(Geometry::new([0.0, 0.0, 1000.0, 1000.0], [100, 50], 0.0)), Some(1000));
+    assert_eq!(
+        model.fit_percent(Geometry::new([0.0, 0.0, 1000.0, 1000.0], [100, 50], 0.0)),
+        Some(1000)
+    );
 }
 
 #[test]
 fn fit_percent_is_how_much_the_frame_is_scaled() {
     let model = ZoomModel::default();
-    assert_eq!(model.fit_percent(Geometry::new([0.0, 0.0, 442.0, 400.0], [1920, 1080], 0.0)), Some(23));
+    assert_eq!(
+        model.fit_percent(Geometry::new([0.0, 0.0, 442.0, 400.0], [1920, 1080], 0.0)),
+        Some(23)
+    );
     // The strip kept for a legend takes room from the fit.
-    assert_eq!(model.fit_percent(Geometry::new([0.0, 0.0, 1920.0, 1180.0], [1920, 1080], 100.0)), Some(100));
-    assert_eq!(model.fit_percent(Geometry::new([0.0, 0.0, 0.5, 90.0], [1920, 1080], 0.0)), None);
-    assert_eq!(model.fit_percent(Geometry::new([0.0, 0.0, 100.0, 100.0], [0, 0], 0.0)), None);
+    assert_eq!(
+        model.fit_percent(Geometry::new(
+            [0.0, 0.0, 1920.0, 1180.0],
+            [1920, 1080],
+            100.0
+        )),
+        Some(100)
+    );
+    assert_eq!(
+        model.fit_percent(Geometry::new([0.0, 0.0, 0.5, 90.0], [1920, 1080], 0.0)),
+        None
+    );
+    assert_eq!(
+        model.fit_percent(Geometry::new([0.0, 0.0, 100.0, 100.0], [0, 0], 0.0)),
+        None
+    );
 }
 
 // ---- zoom (#165)
@@ -66,10 +97,20 @@ fn wheel_in_from_fit_is_free_below_100_lands_on_100_then_whole_steps_and_stops_a
             seen.push(p);
         }
     }
-    assert!(seen.windows(2).all(|w| w[1] > w[0]), "each notch zooms in: {seen:?}");
+    assert!(
+        seen.windows(2).all(|w| w[1] > w[0]),
+        "each notch zooms in: {seen:?}"
+    );
     let tail: Vec<f32> = seen.iter().copied().filter(|p| *p >= 100.0).collect();
-    assert_eq!(tail, [100.0, 200.0, 300.0, 400.0, 500.0, 600.0, 700.0, 800.0], "lands on 100 then whole steps");
-    assert!(seen.iter().filter(|p| **p < 100.0).count() > 3, "free steps below 100: {seen:?}");
+    assert_eq!(
+        tail,
+        [100.0, 200.0, 300.0, 400.0, 500.0, 600.0, 700.0, 800.0],
+        "lands on 100 then whole steps"
+    );
+    assert!(
+        seen.iter().filter(|p| **p < 100.0).count() > 3,
+        "free steps below 100: {seen:?}"
+    );
     assert_eq!(m.zoom, Zoom::Percent(800.0));
 }
 
@@ -86,7 +127,10 @@ fn wheel_out_retraces_the_steps_and_stops_at_fit() {
             seen.push(p);
         }
     }
-    assert_eq!(&seen[..8], [800.0, 700.0, 600.0, 500.0, 400.0, 300.0, 200.0, 100.0]);
+    assert_eq!(
+        &seen[..8],
+        [800.0, 700.0, 600.0, 500.0, 400.0, 300.0, 200.0, 100.0]
+    );
     assert!(seen[8] < 100.0);
     assert_eq!(m.zoom, Zoom::Fit, "stops at Fit");
     let fit = percent(&m);
@@ -127,12 +171,17 @@ fn the_picture_pixel_under_the_pointer_stays_under_it() {
                 let on_picture_before = before[axis] >= 0.0 && before[axis] <= size as f32;
                 // The picture's edge stopping at the Panel's edge also holds the spot where it is.
                 let pinned = v.window[axis] == 0.0 || v.window[2 + axis] == 1.0;
-                on_picture_before && !pinned && [v.placement.w, v.placement.h][axis] > PANEL[2 + axis]
+                on_picture_before
+                    && !pinned
+                    && [v.placement.w, v.placement.h][axis] > PANEL[2 + axis]
             };
             for axis in 0..2 {
                 if held(axis, FRAME[axis]) {
                     let off = (after[axis] - before[axis]).abs() * k;
-                    assert!(off <= 1.5, "notch {notch} at {at:?} axis {axis}: {before:?} -> {after:?}");
+                    assert!(
+                        off <= 1.5,
+                        "notch {notch} at {at:?} axis {axis}: {before:?} -> {after:?}"
+                    );
                 }
             }
         }
@@ -152,7 +201,8 @@ fn zooming_toward_a_corner_never_leaves_the_panel_empty() {
 }
 
 #[test]
-fn a_zoomed_view_shows_the_window_of_the_picture_it_covers_and_an_axis_smaller_than_the_panel_stays_centred() {
+fn a_zoomed_view_shows_the_window_of_the_picture_it_covers_and_an_axis_smaller_than_the_panel_stays_centred()
+ {
     let mut m = Model::default();
     let fit = m.view(Geometry::new(PANEL, FRAME, 0.0)).unwrap();
     assert_eq!(fit.window, [0.0, 0.0, 1.0, 1.0]);
@@ -165,7 +215,10 @@ fn a_zoomed_view_shows_the_window_of_the_picture_it_covers_and_an_axis_smaller_t
     assert_eq!(v.placement.y, 20.0 + 50.0, "centred in the Panel's height");
     assert_eq!((v.visible[0], v.visible[2]), (10.0, 400.0));
     assert_eq!((v.window[1], v.window[3]), (0.0, 1.0));
-    assert!((v.window[2] - v.window[0] - 400.0 / 600.0).abs() < 1e-4, "two thirds of the width is drawn");
+    assert!(
+        (v.window[2] - v.window[0] - 400.0 / 600.0).abs() < 1e-4,
+        "two thirds of the width is drawn"
+    );
 }
 
 #[test]
@@ -201,7 +254,11 @@ fn the_readout_says_fit_with_its_percent_or_the_whole_zoom() {
     let r = m.readout(Geometry::new(PANEL, FRAME, 0.0)).unwrap();
     assert_eq!((r.text.as_str(), r.percent), ("200 %", 200.0));
     assert!(r.fit < 25.0);
-    assert!(Model::default().readout(Geometry::new(PANEL, [0, 0], 0.0)).is_none());
+    assert!(
+        Model::default()
+            .readout(Geometry::new(PANEL, [0, 0], 0.0))
+            .is_none()
+    );
 }
 
 #[test]
@@ -216,7 +273,11 @@ fn a_frame_already_over_100_percent_at_fit_zooms_on_from_fit_in_whole_steps() {
     assert_eq!(seen, [300.0, 400.0, 500.0, 600.0, 700.0, 800.0, 800.0]);
     let mut big = Model::default();
     big.wheel(Geometry::new(PANEL, [50, 25], 0.0), [200.0, 150.0], 1.0);
-    assert_eq!(big.zoom, Zoom::Fit, "nothing beyond Fit when Fit is already 800 % or more");
+    assert_eq!(
+        big.zoom,
+        Zoom::Fit,
+        "nothing beyond Fit when Fit is already 800 % or more"
+    );
 }
 
 // ---- pan (#166)
@@ -242,17 +303,31 @@ fn pan_clamps_so_the_picture_edge_stops_at_the_panel_edge() {
     let mut m = zoomed(200.0);
     m.pan(Geometry::new(PANEL, FRAME, 0.0), [1.0e6, 1.0e6]);
     let p = m.placement(Geometry::new(PANEL, FRAME, 0.0)).unwrap();
-    assert_eq!((p.x, p.y), (PANEL[0], PANEL[1]), "left and top edges at the Panel's");
+    assert_eq!(
+        (p.x, p.y),
+        (PANEL[0], PANEL[1]),
+        "left and top edges at the Panel's"
+    );
     m.pan(Geometry::new(PANEL, FRAME, 0.0), [-1.0e6, -1.0e6]);
     let p = m.placement(Geometry::new(PANEL, FRAME, 0.0)).unwrap();
-    assert_eq!((p.x + p.w, p.y + p.h), (PANEL[0] + PANEL[2], PANEL[1] + PANEL[3]), "right and bottom edges at the Panel's");
-    assert!(!m.pan(Geometry::new(PANEL, FRAME, 0.0), [-5.0, -5.0]), "already at the edge: nothing moves");
+    assert_eq!(
+        (p.x + p.w, p.y + p.h),
+        (PANEL[0] + PANEL[2], PANEL[1] + PANEL[3]),
+        "right and bottom edges at the Panel's"
+    );
+    assert!(
+        !m.pan(Geometry::new(PANEL, FRAME, 0.0), [-5.0, -5.0]),
+        "already at the edge: nothing moves"
+    );
 }
 
 #[test]
 fn a_picture_smaller_than_the_panel_stays_centred_and_fit_does_not_pan() {
     let mut m = Model::default();
-    assert!(!m.pan(Geometry::new(PANEL, FRAME, 0.0), [40.0, 40.0]), "nothing to pan at Fit");
+    assert!(
+        !m.pan(Geometry::new(PANEL, FRAME, 0.0), [40.0, 40.0]),
+        "nothing to pan at Fit"
+    );
     // 300 x 100 at 200 % is 600 x 200: wider than the Panel, centred in its height.
     let mut m = Model::default();
     m.set_percent(200.0, Geometry::new(PANEL, [300, 100], 0.0));
@@ -272,5 +347,8 @@ fn zooming_after_a_pan_still_zooms_toward_the_pointer() {
     m.wheel(Geometry::new(PANEL, FRAME, 0.0), at, 1.0);
     let (q, k) = (m.placement(Geometry::new(PANEL, FRAME, 0.0)).unwrap(), 3.0);
     let now = [(at[0] - q.x) / k, (at[1] - q.y) / k];
-    assert!((now[0] - under[0]).abs() < 1.0 && (now[1] - under[1]).abs() < 1.0, "{under:?} vs {now:?}");
+    assert!(
+        (now[0] - under[0]).abs() < 1.0 && (now[1] - under[1]).abs() < 1.0,
+        "{under:?} vs {now:?}"
+    );
 }

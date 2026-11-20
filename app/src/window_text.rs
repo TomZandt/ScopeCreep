@@ -9,8 +9,8 @@
 //! Claims are made by the top bar and the title bar together, never overstated (ADR 0007). Pure: no GPU, no window.
 use crate::colour_setup::{KnownColourSetup, Levels};
 use crate::display::DisplayContext;
-use crate::output_conversion::{Accuracy, Plan, measurement};
 use crate::measurement::LumaWeights;
+use crate::output_conversion::{Accuracy, Plan, measurement};
 use scopecreep_feed::Provenance;
 
 /// Between the parts of a line.
@@ -35,7 +35,9 @@ impl PanelTitle {
 /// The Colour Setup line across the top of the Window: Timeline → Output, Levels, where it came from, and whether
 /// Output Conversion is exact or approximated (ADR 0007's words). `unknown` is what to say without one.
 pub fn top_bar(known: Option<&KnownColourSetup>, unknown: &str) -> String {
-    let Some(known) = known else { return format!("{unknown}{SEP}{}", Plan::Unknown.label()) };
+    let Some(known) = known else {
+        return format!("{unknown}{SEP}{}", Plan::Unknown.label());
+    };
     let s = &known.setup;
     let mut route = format!("{} → {}", s.timeline, s.output_label());
     if let Some(t) = &s.tone_mapping {
@@ -59,14 +61,23 @@ pub fn top_bar(known: Option<&KnownColourSetup>, unknown: &str) -> String {
             None => format!("assumes ACES {}", crate::colour_setup::ASSUMED_ACES_VERSION),
         });
     }
-    [route, levels.to_string(), from.join(", "), Plan::for_setup(Some(s)).label()].join(SEP)
+    [
+        route,
+        levels.to_string(),
+        from.join(", "),
+        Plan::for_setup(Some(s)).label(),
+    ]
+    .join(SEP)
 }
 
 /// The tags a picture's conversion needs on a Panel: "approximated" when Output Conversion is, "unconverted" when
 /// the picture is shown as sent.
 pub fn conversion_tags(context: &DisplayContext) -> Vec<String> {
     match Plan::for_setup(context.colour_setup.as_ref().map(|c| &c.setup)) {
-        Plan::Convert { accuracy: Accuracy::Approximated(_), .. } => vec!["approximated".into()],
+        Plan::Convert {
+            accuracy: Accuracy::Approximated(_),
+            ..
+        } => vec!["approximated".into()],
         Plan::Convert { .. } => Vec::new(),
         Plan::Unknown | Plan::Unsupported(_) => vec!["unconverted".into()],
     }
@@ -74,13 +85,22 @@ pub fn conversion_tags(context: &DisplayContext) -> Vec<String> {
 
 /// The clean picture's channel as a tag (#160): its name when it is not colour, nothing in colour.
 fn channel_tag(context: &DisplayContext) -> Option<String> {
-    crate::toolbar::channel_of(context.settings.get(crate::toolbar::CHANNEL_SETTING).map(String::as_str)).map(|c| c.tag.to_string())
+    crate::toolbar::channel_of(
+        context
+            .settings
+            .get(crate::toolbar::CHANNEL_SETTING)
+            .map(String::as_str),
+    )
+    .map(|c| c.tag.to_string())
 }
 
 /// The B/W tag (#118): "B/W" when the unpainted picture is grey on a Panel that defaults to colour, "colour" when it
 /// is in colour on one that defaults to grey. Defaults are not repeated.
 pub(crate) fn bw_tag(context: &DisplayContext, default_grey: bool) -> Option<String> {
-    let grey = context.settings.get(crate::toolbar::BW_SETTING).map_or(default_grey, |v| v == "on");
+    let grey = context
+        .settings
+        .get(crate::toolbar::BW_SETTING)
+        .map_or(default_grey, |v| v == "on");
     match (grey, default_grey) {
         (true, false) => Some("B/W".into()),
         (false, true) => Some("colour".into()),
@@ -112,7 +132,12 @@ fn waveform_tags(context: &DisplayContext) -> Vec<String> {
         (Levels::Video, Some(_)) => {}
     }
     // The scale's unit when it is not 10-bit codes (nits only where the Output Colour Space has light).
-    let unit = crate::waveform_scale::Unit::from_setting(context.settings.get(crate::waveform_scale::UNIT_SETTING).map(String::as_str));
+    let unit = crate::waveform_scale::Unit::from_setting(
+        context
+            .settings
+            .get(crate::waveform_scale::UNIT_SETTING)
+            .map(String::as_str),
+    );
     tags.extend(unit.effective(m.space, m.assumed).tag(m.space));
     tags
 }
@@ -122,17 +147,35 @@ fn waveform_tags(context: &DisplayContext) -> Vec<String> {
 pub fn panel_title(display_name: &str, context: &DisplayContext, full: String) -> PanelTitle {
     let setting = |key: &str| context.settings.get(key).map(String::as_str);
     let (name, tags): (String, Vec<String>) = match display_name {
-        "Clean picture" => ("Clean picture".into(), channel_tag(context).into_iter().chain(crate::loupe::tag(&context.settings)).chain(conversion_tags(context)).collect()),
+        "Clean picture" => (
+            "Clean picture".into(),
+            channel_tag(context)
+                .into_iter()
+                .chain(crate::loupe::tag(&context.settings))
+                .chain(conversion_tags(context))
+                .collect(),
+        ),
         crate::waveform::NAME => {
             // The channels drawn, when not just Luma.
-            let channels = crate::waveform::Channels::from_setting(setting(crate::waveform::CHANNELS_SETTING));
-            let mut tags = if channels.is_default() { Vec::new() } else { vec![channels.names()] };
+            let channels =
+                crate::waveform::Channels::from_setting(setting(crate::waveform::CHANNELS_SETTING));
+            let mut tags = if channels.is_default() {
+                Vec::new()
+            } else {
+                vec![channels.names()]
+            };
             tags.extend(waveform_tags(context));
             ("Luma waveform".into(), tags)
         }
         crate::waveform::COLOUR_NAME => ("Colour waveform".into(), waveform_tags(context)),
         "Black and white" => ("Black and white".into(), measurement_tags(context)),
-        "ARRI False Colour" => ("ARRI False Colour".into(), bw_tag(context, true).into_iter().chain(measurement_tags(context)).collect()),
+        "ARRI False Colour" => (
+            "ARRI False Colour".into(),
+            bw_tag(context, true)
+                .into_iter()
+                .chain(measurement_tags(context))
+                .collect(),
+        ),
         crate::vectorscope::NAME => {
             // Both target sets are drawn by default; a single set is tagged. Plots are joined by default; one plot is tagged.
             let mut tags = measurement_tags(context);
@@ -142,26 +185,41 @@ pub fn panel_title(display_name: &str, context: &DisplayContext, full: String) -
                 _ => {}
             }
             // The plots shown are a reading (#123); the trace colour is not.
-            if let crate::vectorscope::Plots::Only(zoom) = crate::vectorscope::Plots::from_setting(setting(crate::vectorscope::PLOTS_SETTING)) {
+            if let crate::vectorscope::Plots::Only(zoom) =
+                crate::vectorscope::Plots::from_setting(setting(crate::vectorscope::PLOTS_SETTING))
+            {
                 tags.push(format!("{} % plot only", zoom.factor() as u32 * 100));
             }
             // The tonal range changes what is plotted and what clipping counts (#124).
-            if let Some(tag) = crate::vectorscope::Tonal::from_setting(setting(crate::vectorscope::TONAL_SETTING)).tag() {
+            if let Some(tag) =
+                crate::vectorscope::Tonal::from_setting(setting(crate::vectorscope::TONAL_SETTING))
+                    .tag()
+            {
                 tags.push(tag.into());
             }
             (crate::vectorscope::NAME.into(), tags)
         }
         "Saturation heatmap" => {
             let mut tags = Vec::new();
-            let scale = crate::saturation_heatmap::scale_of(setting(crate::saturation_heatmap::SCALE_SETTING));
+            let scale = crate::saturation_heatmap::scale_of(setting(
+                crate::saturation_heatmap::SCALE_SETTING,
+            ));
             if scale != crate::saturation_heatmap::SCALE_AMOUNT.default as f64 {
-                tags.push(format!("hot {} %", crate::saturation_heatmap::SCALE_AMOUNT.text(scale as f32).trim_end_matches(" %")));
+                tags.push(format!(
+                    "hot {} %",
+                    crate::saturation_heatmap::SCALE_AMOUNT
+                        .text(scale as f32)
+                        .trim_end_matches(" %")
+                ));
             }
             tags.extend(measurement_tags(context));
             ("Saturation heatmap".into(), tags)
         }
         "Skin tone" => {
-            let mut tags: Vec<String> = bw_tag(context, false).into_iter().chain(conversion_tags(context)).collect();
+            let mut tags: Vec<String> = bw_tag(context, false)
+                .into_iter()
+                .chain(conversion_tags(context))
+                .collect();
             let amount = crate::skin_tone_view::TOLERANCE_AMOUNT;
             let degrees = amount.read(setting(crate::skin_tone_view::TOLERANCE_SETTING));
             if degrees != amount.default {
@@ -176,15 +234,24 @@ pub fn panel_title(display_name: &str, context: &DisplayContext, full: String) -
                 Some("luma") => "Luma",
                 _ => "Blue",
             };
-            let mut tags = vec![channel.to_string(), format!("{} %", crate::loupe::zoom(&context.settings))];
+            let mut tags = vec![
+                channel.to_string(),
+                format!("{} %", crate::loupe::zoom(&context.settings)),
+            ];
             tags.extend(conversion_tags(context));
             // Luma follows the waveform's weights, so a grey that is not the default says so.
-            if setting("channel") == Some("luma") && measurement(context.colour_setup.clone(), context.luma).luma == LumaWeights::MatchResolve {
+            if setting("channel") == Some("luma")
+                && measurement(context.colour_setup.clone(), context.luma).luma
+                    == LumaWeights::MatchResolve
+            {
                 tags.push("luma weights: match Resolve".into());
             }
             ("Channel view".into(), tags)
         }
-        crate::stops_false_colour::NAME => (crate::stops_false_colour::NAME.into(), crate::stops_false_colour::reading_tags(context)),
+        crate::stops_false_colour::NAME => (
+            crate::stops_false_colour::NAME.into(),
+            crate::stops_false_colour::reading_tags(context),
+        ),
         other => (other.to_string(), Vec::new()),
     };
     PanelTitle { name, tags, full }
@@ -198,14 +265,22 @@ pub fn text_width(text: &str, scale: f32) -> f32 {
 /// The status line for `width` device pixels: the first of `candidates` (most complete first, whole parts only, so
 /// never cut mid-word) that fits; the last, which holds the rate and the drops, when none does.
 pub fn fit_status(candidates: &[String], width: f32, scale: f32) -> &str {
-    candidates.iter().find(|c| text_width(c, scale) <= width).or(candidates.last()).map_or("", String::as_str)
+    candidates
+        .iter()
+        .find(|c| text_width(c, scale) <= width)
+        .or(candidates.last())
+        .map_or("", String::as_str)
 }
 
 /// `line` with its last parts (split at [`SEP`]) dropped, whole parts only, until it fits `width` device pixels;
 /// the first part is always kept.
 pub fn fit_parts(line: &str, width: f32, scale: f32) -> String {
     let parts: Vec<&str> = line.split(SEP).collect();
-    (1..=parts.len()).rev().map(|n| parts[..n].join(SEP)).find(|s| text_width(s, scale) <= width).unwrap_or_else(|| parts[0].to_string())
+    (1..=parts.len())
+        .rev()
+        .map(|n| parts[..n].join(SEP))
+        .find(|s| text_width(s, scale) <= width)
+        .unwrap_or_else(|| parts[0].to_string())
 }
 
 /// A panel's hover: what its title bar leaves out first (the name and tags when they were cut), then its full
@@ -213,7 +288,11 @@ pub fn fit_parts(line: &str, width: f32, scale: f32) -> String {
 pub fn hover_text(title: &PanelTitle, name_and_tags_cut: bool, max_chars: usize) -> String {
     let mut lines = Vec::new();
     if name_and_tags_cut {
-        lines.push(if title.tags.is_empty() { title.name.clone() } else { format!("{}  ({})", title.name, title.tags_text()) });
+        lines.push(if title.tags.is_empty() {
+            title.name.clone()
+        } else {
+            format!("{}  ({})", title.name, title.tags_text())
+        });
     }
     for part in title.full.split(SEP) {
         let mut line = String::new();
@@ -236,17 +315,33 @@ pub fn hover_text(title: &PanelTitle, name_and_tags_cut: bool, max_chars: usize)
 /// A Panel's title bar laid out in `bar` (device pixels) at `scale`, on one line: the name, then as many of the
 /// tags (most important first) as fit beside it. Returns the layout and whether everything fit; when not, the
 /// hover carries the rest ([`hover_text`]).
-pub fn lay_out_title(title: &PanelTitle, bar: [f32; 4], scale: f32) -> (crate::components::TitleLayout, String, bool) {
+pub fn lay_out_title(
+    title: &PanelTitle,
+    bar: [f32; 4],
+    scale: f32,
+) -> (crate::components::TitleLayout, String, bool) {
     lay_out_toolbar_title(title, &[], false, bar, scale)
 }
 
 /// The same with the Panel's toolbar: its `chips` and, when it has one, its settings button stay at the right of
 /// the bar. When the Panel is small the name truncates first and the tags go to the hover; the chips never move.
-pub fn lay_out_toolbar_title(title: &PanelTitle, chips: &[crate::components::Chip], settings_button: bool, bar: [f32; 4], scale: f32) -> (crate::components::TitleLayout, String, bool) {
+pub fn lay_out_toolbar_title(
+    title: &PanelTitle,
+    chips: &[crate::components::Chip],
+    settings_button: bool,
+    bar: [f32; 4],
+    scale: f32,
+) -> (crate::components::TitleLayout, String, bool) {
     use crate::components::TitleBar;
     for n in (0..=title.tags.len()).rev() {
         let tags = title.tags[..n].join(", ");
-        let layout = TitleBar { name: title.name.clone(), tags: tags.clone(), chips: chips.to_vec(), settings_button }.layout(bar, scale);
+        let layout = TitleBar {
+            name: title.name.clone(),
+            tags: tags.clone(),
+            chips: chips.to_vec(),
+            settings_button,
+        }
+        .layout(bar, scale);
         if layout.name_cut {
             return (layout, String::new(), false);
         }

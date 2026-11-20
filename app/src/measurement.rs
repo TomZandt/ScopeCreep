@@ -36,7 +36,12 @@ type Chromaticities = [[f64; 2]; 4];
 const D65: [f64; 2] = [0.3127, 0.3290];
 const REC709: Chromaticities = [[0.640, 0.330], [0.300, 0.600], [0.150, 0.060], D65];
 const P3_D65: Chromaticities = [[0.680, 0.320], [0.265, 0.690], [0.150, 0.060], D65];
-const P3_DCI: Chromaticities = [[0.680, 0.320], [0.265, 0.690], [0.150, 0.060], [0.314, 0.351]];
+const P3_DCI: Chromaticities = [
+    [0.680, 0.320],
+    [0.265, 0.690],
+    [0.150, 0.060],
+    [0.314, 0.351],
+];
 const REC2020: Chromaticities = [[0.708, 0.292], [0.170, 0.797], [0.131, 0.046], D65];
 
 impl MeasuredSpace {
@@ -56,15 +61,21 @@ impl MeasuredSpace {
             MeasuredSpace::Rec709 => REC709,
             MeasuredSpace::P3D65 => P3_D65,
             MeasuredSpace::P3Dci => P3_DCI,
-            MeasuredSpace::Rec2020 | MeasuredSpace::Rec2100Pq | MeasuredSpace::Rec2100Hlg => REC2020,
+            MeasuredSpace::Rec2020 | MeasuredSpace::Rec2100Pq | MeasuredSpace::Rec2100Hlg => {
+                REC2020
+            }
         }
     }
 
     /// The space whose primaries Resolve's own waveform takes its weights from (Stage 0 report, section 6).
     fn resolve_weights_space(self) -> MeasuredSpace {
         match self {
-            MeasuredSpace::Rec709 | MeasuredSpace::P3D65 | MeasuredSpace::P3Dci => MeasuredSpace::Rec709,
-            MeasuredSpace::Rec2020 | MeasuredSpace::Rec2100Pq | MeasuredSpace::Rec2100Hlg => MeasuredSpace::Rec2020,
+            MeasuredSpace::Rec709 | MeasuredSpace::P3D65 | MeasuredSpace::P3Dci => {
+                MeasuredSpace::Rec709
+            }
+            MeasuredSpace::Rec2020 | MeasuredSpace::Rec2100Pq | MeasuredSpace::Rec2100Hlg => {
+                MeasuredSpace::Rec2020
+            }
         }
     }
 }
@@ -76,7 +87,8 @@ fn y_row([r, g, b, w]: Chromaticities) -> [f64; 3] {
     let (r, g, b, w) = (xyz(r), xyz(g), xyz(b), xyz(w));
     // Solve [r g b] · s = w for each primary's scale s (Cramer's rule); each primary's Y is then its s.
     let det = |a: [f64; 3], b: [f64; 3], c: [f64; 3]| {
-        a[0] * (b[1] * c[2] - b[2] * c[1]) - b[0] * (a[1] * c[2] - a[2] * c[1]) + c[0] * (a[1] * b[2] - a[2] * b[1])
+        a[0] * (b[1] * c[2] - b[2] * c[1]) - b[0] * (a[1] * c[2] - a[2] * c[1])
+            + c[0] * (a[1] * b[2] - a[2] * b[1])
     };
     let d = det(r, g, b);
     [det(w, g, b) / d, det(r, w, b) / d, det(r, g, w) / d]
@@ -98,7 +110,13 @@ pub struct Measurement {
 
 impl Default for Measurement {
     fn default() -> Measurement {
-        Measurement { space: MeasuredSpace::Rec709, assumed: true, luma: DEFAULT_LUMA_WEIGHTS, levels: Levels::Video, levels_from: None }
+        Measurement {
+            space: MeasuredSpace::Rec709,
+            assumed: true,
+            luma: DEFAULT_LUMA_WEIGHTS,
+            levels: Levels::Video,
+            levels_from: None,
+        }
     }
 }
 
@@ -133,8 +151,15 @@ impl Measurement {
         let name = self.space.name();
         // Assumed means the picture is not converted into a known Output Colour Space: the values are measured as
         // sent, like the Picture View's "as sent, no Output Conversion", and must not read as a Rec.709 measurement.
-        let space = if self.assumed { format!("{name} assumed, measured as sent, unconverted") } else { name.to_string() };
-        format!("{space}  ·  Y = {r:.4} R + {g:.4} G + {b:.4} B {}", self.weights_how())
+        let space = if self.assumed {
+            format!("{name} assumed, measured as sent, unconverted")
+        } else {
+            name.to_string()
+        };
+        format!(
+            "{space}  ·  Y = {r:.4} R + {g:.4} G + {b:.4} B {}",
+            self.weights_how()
+        )
     }
 
     /// How the weights were chosen, for a label: "from primaries" or "to match Resolve".

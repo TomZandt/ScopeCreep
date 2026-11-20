@@ -10,11 +10,11 @@
 //! larger Cb/Cr angle (towards yellow) is green, the other way magenta.
 use crate::display::{Display, DisplayContext};
 use crate::gpu_frame::GpuFrame;
-use crate::picture_stage::{PictureStage, Rule};
 use crate::output_conversion::{Plan, measurement};
+use crate::picture_stage::{PictureStage, Rule};
 use crate::settings::{Amount, SettingDef};
-use crate::toolbar::{BW_DEFAULT_COLOUR, BW_SETTING, BW_TOOLBAR, ToolbarDef};
 use crate::skin_tone::SKIN_TONE_LINE_DEGREES;
+use crate::toolbar::{BW_DEFAULT_COLOUR, BW_SETTING, BW_TOOLBAR, ToolbarDef};
 use std::sync::{Arc, Mutex};
 
 pub const TOLERANCE_SETTING: &str = "tolerance";
@@ -22,14 +22,25 @@ pub const TOLERANCE_SETTING: &str = "tolerance";
 /// The tolerance slider (#88): degrees either side of the skin-tone line, 5 as before the slider. The bands run
 /// to 6 t, so 12 degrees is the widest (72 degrees each side, short of meaning everything). The lists earlier
 /// versions saved (2, 3, 5, 8, 10) are the degrees they name.
-pub const TOLERANCE_AMOUNT: Amount = Amount { min: 1.0, max: 12.0, step: 1.0, default: 5.0, unit: "°", decimals: 0, legacy: &[] };
+pub const TOLERANCE_AMOUNT: Amount = Amount {
+    min: 1.0,
+    max: 12.0,
+    step: 1.0,
+    default: 5.0,
+    unit: "°",
+    decimals: 0,
+    legacy: &[],
+};
 
-pub static SETTINGS: [SettingDef; 2] = [SettingDef {
-    key: TOLERANCE_SETTING,
-    label: "On-line tolerance (± degrees)",
-    amount: Some(TOLERANCE_AMOUNT),
-    choices: &[],
-}, BW_DEFAULT_COLOUR];
+pub static SETTINGS: [SettingDef; 2] = [
+    SettingDef {
+        key: TOLERANCE_SETTING,
+        label: "On-line tolerance (± degrees)",
+        amount: Some(TOLERANCE_AMOUNT),
+        choices: &[],
+    },
+    BW_DEFAULT_COLOUR,
+];
 pub static TOOLBAR: [ToolbarDef; 1] = BW_TOOLBAR;
 
 /// The colour rule: solid flat colours for the hues near the skin-tone line, the picture's own colour elsewhere.
@@ -78,7 +89,12 @@ struct Config {
 
 impl Default for Config {
     fn default() -> Config {
-        Config { weights: crate::measurement::REC709_LUMA.map(|v| v as f32), tolerance: TOLERANCE_AMOUNT.default, bw: false, source: String::new() }
+        Config {
+            weights: crate::measurement::REC709_LUMA.map(|v| v as f32),
+            tolerance: TOLERANCE_AMOUNT.default,
+            bw: false,
+            source: String::new(),
+        }
     }
 }
 
@@ -92,9 +108,28 @@ pub struct SkinTone {
 }
 
 impl SkinTone {
-    pub fn new(device: &wgpu::Device, queue: &wgpu::Queue, target: wgpu::TextureFormat, _filterable: bool) -> SkinTone {
-        let stage = PictureStage::new::<[f32; 8]>(device, queue, target, false, Rule { label: "skin tone", wgsl: RULE.into(), has_legend: false });
-        SkinTone { stage, zoom: Default::default(), config: Arc::new(Mutex::new(Config::default())) }
+    pub fn new(
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+        target: wgpu::TextureFormat,
+        _filterable: bool,
+    ) -> SkinTone {
+        let stage = PictureStage::new::<[f32; 8]>(
+            device,
+            queue,
+            target,
+            false,
+            Rule {
+                label: "skin tone",
+                wgsl: RULE.into(),
+                has_legend: false,
+            },
+        );
+        SkinTone {
+            stage,
+            zoom: Default::default(),
+            config: Arc::new(Mutex::new(Config::default())),
+        }
     }
 }
 
@@ -122,11 +157,21 @@ impl Display for SkinTone {
         let plan = Plan::for_setup(setup);
         // The weights the vectorscope uses, so the hue here is the angle the vectorscope shows.
         let [r, g, b] = measurement(context.colour_setup.clone(), context.luma).weights();
-        let tolerance = TOLERANCE_AMOUNT.read(context.settings.get(TOLERANCE_SETTING).map(String::as_str));
+        let tolerance =
+            TOLERANCE_AMOUNT.read(context.settings.get(TOLERANCE_SETTING).map(String::as_str));
         // The picture is the Output picture only once it has been converted (ADR 0007).
-        let what = if plan.method().is_some() || plan.measured_space(setup).is_some() { "Output picture" } else { "Picture as sent" };
+        let what = if plan.method().is_some() || plan.measured_space(setup).is_some() {
+            "Output picture"
+        } else {
+            "Picture as sent"
+        };
         let source = format!("{what}  ·  {}  ·  {}", context.colour_label, plan.label());
-        *self.config.lock().unwrap() = Config { weights: [r as f32, g as f32, b as f32], tolerance, bw: context.settings.get(BW_SETTING).map(String::as_str) == Some("on"), source };
+        *self.config.lock().unwrap() = Config {
+            weights: [r as f32, g as f32, b as f32],
+            tolerance,
+            bw: context.settings.get(BW_SETTING).map(String::as_str) == Some("on"),
+            source,
+        };
     }
 
     fn setting_defs(&self) -> &'static [SettingDef] {
@@ -158,9 +203,31 @@ impl Display for SkinTone {
     }
 
     /// Draw the picture, scaled to fit inside `area` with its shape kept.
-    fn draw(&self, pass: &mut wgpu::RenderPass<'_>, area: [f32; 4], surface: [f32; 2], _scale: f32) {
+    fn draw(
+        &self,
+        pass: &mut wgpu::RenderPass<'_>,
+        area: [f32; 4],
+        surface: [f32; 2],
+        _scale: f32,
+    ) {
         let config = self.config.lock().unwrap().clone();
         let [r, g, b] = config.weights;
-        self.stage.draw_zoomed(pass, area, surface, &[r, g, b, 0.0, config.tolerance, SKIN_TONE_LINE_DEGREES as f32, config.bw as u32 as f32, 0.0], None, &self.zoom.model());
+        self.stage.draw_zoomed(
+            pass,
+            area,
+            surface,
+            &[
+                r,
+                g,
+                b,
+                0.0,
+                config.tolerance,
+                SKIN_TONE_LINE_DEGREES as f32,
+                config.bw as u32 as f32,
+                0.0,
+            ],
+            None,
+            &self.zoom.model(),
+        );
     }
 }

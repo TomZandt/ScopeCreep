@@ -20,11 +20,18 @@ fn the_references_were_rendered_from_the_state_the_feed_frames_were_taken_from()
     let mut drift = vec![];
     for s in SETUPS {
         match data::state_problems(&root, s.key) {
-            None => eprintln!("{}: no project state recorded with its references (harness.py record-state or render)", s.key),
+            None => eprintln!(
+                "{}: no project state recorded with its references (harness.py record-state or render)",
+                s.key
+            ),
             Some(found) => drift.extend(found.into_iter().map(|p| format!("{}: {p}", s.key))),
         }
     }
-    assert!(drift.is_empty(), "test data out of step with its project (harness.py check-state):\n  {}", drift.join("\n  "));
+    assert!(
+        drift.is_empty(),
+        "test data out of step with its project (harness.py check-state):\n  {}",
+        drift.join("\n  ")
+    );
 }
 
 #[test]

@@ -3,7 +3,13 @@ use scopecreep::style::*;
 
 #[test]
 fn every_chrome_colour_is_a_neutral_grey() {
-    for c in [SURFACE_WINDOW, SURFACE_MENU, LINE_BORDER, STATE_HOVER, STATE_ON] {
+    for c in [
+        SURFACE_WINDOW,
+        SURFACE_MENU,
+        LINE_BORDER,
+        STATE_HOVER,
+        STATE_ON,
+    ] {
         assert!(c[0] == c[1] && c[1] == c[2], "{c:?} tints the eye");
     }
     for c in [TEXT_PRIMARY, TEXT_SECONDARY, TEXT_MUTED] {
@@ -14,7 +20,11 @@ fn every_chrome_colour_is_a_neutral_grey() {
 #[test]
 fn text_steps_down_and_the_picture_stays_the_brightest_thing() {
     assert!(TEXT_PRIMARY[0] > TEXT_SECONDARY[0] && TEXT_SECONDARY[0] > TEXT_MUTED[0]);
-    assert!(SURFACE_WINDOW[0] < SURFACE_MENU[0] && SURFACE_MENU[0] < STATE_HOVER[0] && STATE_HOVER[0] < LINE_BORDER[0]);
+    assert!(
+        SURFACE_WINDOW[0] < SURFACE_MENU[0]
+            && SURFACE_MENU[0] < STATE_HOVER[0]
+            && STATE_HOVER[0] < LINE_BORDER[0]
+    );
     // Chrome never reaches white.
     assert!(STATE_ON[0] < 0.9 && TEXT_PRIMARY[0] < 200);
 }
@@ -31,5 +41,8 @@ fn the_tokens_keep_the_values_the_window_already_used() {
     assert_eq!(rgba(SURFACE_MENU), [0.11, 0.11, 0.11, 1.0]);
     assert_eq!(clear(SURFACE_WINDOW).r, 0.071f32 as f64);
     assert_eq!((TYPE_LABEL, TYPE_SCALE, TYPE_NOTICE), (12.5, 11.0, 15.0));
-    assert_eq!((SPACE_MARGIN, SPACE_MENU_ROW, SPACE_STATUS_ROW), (12.0, 24.0, 20.0));
+    assert_eq!(
+        (SPACE_MARGIN, SPACE_MENU_ROW, SPACE_STATUS_ROW),
+        (12.0, 24.0, 20.0)
+    );
 }

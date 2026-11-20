@@ -42,12 +42,19 @@ pub fn overlay(grey: f32, t: f32) -> [f32; 3] {
 pub fn wgsl() -> String {
     let n = STOPS.len();
     let mut code = String::from("fn heat(t: f32) -> vec3<f32> {\n");
-    code += &format!("    let x = clamp(t, 0.0, 1.0) * {:?};\n    let i = min(u32(floor(x)), {}u);\n    let f = x - f32(i);\n", (n - 1) as f32, n - 2);
+    code += &format!(
+        "    let x = clamp(t, 0.0, 1.0) * {:?};\n    let i = min(u32(floor(x)), {}u);\n    let f = x - f32(i);\n",
+        (n - 1) as f32,
+        n - 2
+    );
     code += &format!("    var stops = array<vec3<f32>, {n}>(\n");
     for s in STOPS {
         code += &format!("        vec3<f32>({:?}, {:?}, {:?}),\n", s[0], s[1], s[2]);
     }
     code += "    );\n    return mix(stops[i], stops[i + 1u], f);\n}\n";
-    code += &format!("fn overlay(grey: f32, t: f32) -> vec3<f32> {{\n    return mix(vec3<f32>(grey), heat(t), smoothstep(0.0, {:?}, t));\n}}\n", FULL_STRENGTH_AT);
+    code += &format!(
+        "fn overlay(grey: f32, t: f32) -> vec3<f32> {{\n    return mix(vec3<f32>(grey), heat(t), smoothstep(0.0, {:?}, t));\n}}\n",
+        FULL_STRENGTH_AT
+    );
     code
 }

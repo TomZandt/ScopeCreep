@@ -7,8 +7,8 @@
 //! (#88, ADR 0013), 3 % by default.
 use crate::display::{Display, DisplayContext};
 use crate::gpu_frame::GpuFrame;
-use crate::picture_stage::{PictureStage, Rule};
 use crate::output_conversion::{Plan, measurement};
+use crate::picture_stage::{PictureStage, Rule};
 use crate::settings::{Amount, SettingDef};
 use std::sync::{Arc, Mutex};
 
@@ -17,9 +17,22 @@ pub const TOLERANCE_SETTING: &str = "tolerance";
 /// The tolerance slider (#88): the largest difference between channels still neutral, in percent of the signal
 /// range, 3 % as before the slider. At most 10 %, past which nearly every picture would be neutral. The lists
 /// earlier versions saved (0.5 to 10) are the percentages they name.
-pub const TOLERANCE_AMOUNT: Amount = Amount { min: 0.5, max: 10.0, step: 0.5, default: 3.0, unit: " %", decimals: 1, legacy: &[] };
+pub const TOLERANCE_AMOUNT: Amount = Amount {
+    min: 0.5,
+    max: 10.0,
+    step: 0.5,
+    default: 3.0,
+    unit: " %",
+    decimals: 1,
+    legacy: &[],
+};
 
-const SETTINGS: [SettingDef; 1] = [SettingDef { key: TOLERANCE_SETTING, label: "Neutral tolerance", amount: Some(TOLERANCE_AMOUNT), choices: &[] }];
+const SETTINGS: [SettingDef; 1] = [SettingDef {
+    key: TOLERANCE_SETTING,
+    label: "Neutral tolerance",
+    amount: Some(TOLERANCE_AMOUNT),
+    choices: &[],
+}];
 
 /// The colour rule: Luma in grey, with the near-neutral pixels green.
 const RULE: &str = r#"
@@ -52,7 +65,11 @@ struct Config {
 
 impl Default for Config {
     fn default() -> Config {
-        Config { weights: crate::measurement::REC709_LUMA.map(|v| v as f32), percent: TOLERANCE_AMOUNT.default, source: String::new() }
+        Config {
+            weights: crate::measurement::REC709_LUMA.map(|v| v as f32),
+            percent: TOLERANCE_AMOUNT.default,
+            source: String::new(),
+        }
     }
 }
 
@@ -65,9 +82,27 @@ pub struct HighlightNeutrals {
 }
 
 impl HighlightNeutrals {
-    pub fn new(device: &wgpu::Device, queue: &wgpu::Queue, target: wgpu::TextureFormat, _filterable: bool) -> HighlightNeutrals {
-        let stage = PictureStage::new::<[f32; 8]>(device, queue, target, false, Rule { label: "highlight neutrals", wgsl: RULE.into(), has_legend: false });
-        HighlightNeutrals { stage, config: Arc::new(Mutex::new(Config::default())) }
+    pub fn new(
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+        target: wgpu::TextureFormat,
+        _filterable: bool,
+    ) -> HighlightNeutrals {
+        let stage = PictureStage::new::<[f32; 8]>(
+            device,
+            queue,
+            target,
+            false,
+            Rule {
+                label: "highlight neutrals",
+                wgsl: RULE.into(),
+                has_legend: false,
+            },
+        );
+        HighlightNeutrals {
+            stage,
+            config: Arc::new(Mutex::new(Config::default())),
+        }
     }
 }
 
@@ -84,11 +119,20 @@ impl Display for HighlightNeutrals {
         let setup = context.colour_setup.as_ref().map(|c| &c.setup);
         let plan = Plan::for_setup(setup);
         let [r, g, b] = measurement(context.colour_setup.clone(), context.luma).weights();
-        let percent = TOLERANCE_AMOUNT.read(context.settings.get(TOLERANCE_SETTING).map(String::as_str));
+        let percent =
+            TOLERANCE_AMOUNT.read(context.settings.get(TOLERANCE_SETTING).map(String::as_str));
         // The picture is the Output picture only once it has been converted (ADR 0007).
-        let what = if plan.method().is_some() || plan.measured_space(setup).is_some() { "Output picture" } else { "Picture as sent" };
+        let what = if plan.method().is_some() || plan.measured_space(setup).is_some() {
+            "Output picture"
+        } else {
+            "Picture as sent"
+        };
         let source = format!("{what}  ·  {}  ·  {}", context.colour_label, plan.label());
-        *self.config.lock().unwrap() = Config { weights: [r as f32, g as f32, b as f32], percent, source };
+        *self.config.lock().unwrap() = Config {
+            weights: [r as f32, g as f32, b as f32],
+            percent,
+            source,
+        };
     }
 
     fn setting_defs(&self) -> &'static [SettingDef] {
@@ -100,13 +144,29 @@ impl Display for HighlightNeutrals {
             return "Highlight neutrals".to_string();
         }
         let config = self.config.lock().unwrap();
-        format!("Highlight neutrals  ·  green where R, G and B are within {} of each other, the rest in Luma grey  ·  {}", TOLERANCE_AMOUNT.text(config.percent), config.source)
+        format!(
+            "Highlight neutrals  ·  green where R, G and B are within {} of each other, the rest in Luma grey  ·  {}",
+            TOLERANCE_AMOUNT.text(config.percent),
+            config.source
+        )
     }
 
     /// Draw the picture, scaled to fit inside `area` with its shape kept.
-    fn draw(&self, pass: &mut wgpu::RenderPass<'_>, area: [f32; 4], surface: [f32; 2], _scale: f32) {
+    fn draw(
+        &self,
+        pass: &mut wgpu::RenderPass<'_>,
+        area: [f32; 4],
+        surface: [f32; 2],
+        _scale: f32,
+    ) {
         let config = self.config.lock().unwrap().clone();
         let [r, g, b] = config.weights;
-        self.stage.draw(pass, area, surface, &[r, g, b, 0.0, config.percent / 100.0, 0.0, 0.0, 0.0], None);
+        self.stage.draw(
+            pass,
+            area,
+            surface,
+            &[r, g, b, 0.0, config.percent / 100.0, 0.0, 0.0, 0.0],
+            None,
+        );
     }
 }

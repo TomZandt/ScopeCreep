@@ -15,9 +15,14 @@
 //! Two threads. The Feed thread polls the Feed every millisecond (the ring is short and the Sender never waits),
 //! puts the frames to show on the GPU once, converts them once, hands that one frame to every display, and wakes
 //! the window. The window thread only draws.
-use glyphon::{Attrs, Buffer, Cache, Color, ColorMode, Family, FontSystem, Metrics, Resolution, Shaping, SwashCache, TextArea, TextAtlas, TextBounds, TextRenderer, Viewport};
+use glyphon::{
+    Attrs, Buffer, Cache, Color, ColorMode, Family, FontSystem, Metrics, Resolution, Shaping,
+    SwashCache, TextArea, TextAtlas, TextBounds, TextRenderer, Viewport,
+};
+use scopecreep::components::{self, Align, BarKind, Prim, State, Tooltip};
 use scopecreep::display::{DisplaySet, Pointer};
 use scopecreep::feed_loop::{FeedLoop, Texts};
+use scopecreep::flat_rects::FlatRects;
 use scopecreep::gpu_frame::FrameUploader;
 use scopecreep::layout::MARGIN;
 use scopecreep::layouts::{self, Action, Click, Layouts, Rename};
@@ -25,12 +30,10 @@ use scopecreep::monitor::Monitor;
 use scopecreep::output_conversion::OutputConversion;
 use scopecreep::panel_grid::{Border, PanelGrid, PanelLayout, Press, min_panel_size};
 use scopecreep::resolve_helper::ScriptHelper;
-use scopecreep::flat_rects::FlatRects;
-use scopecreep::components::{self, Align, BarKind, Prim, State, Tooltip};
-use scopecreep::toolbar::{ChipAction, Toolbar};
-use scopecreep::window_text;
 use scopecreep::settings::{Amount, Menu, PanelSettings};
 use scopecreep::style;
+use scopecreep::toolbar::{ChipAction, Toolbar};
+use scopecreep::window_text;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
@@ -38,8 +41,8 @@ use std::time::Duration;
 use winit::application::ApplicationHandler;
 use winit::dpi::LogicalSize;
 use winit::event::{ElementState, MouseButton, MouseScrollDelta, WindowEvent};
-use winit::keyboard::{Key, KeyCode, ModifiersState, NamedKey, PhysicalKey};
 use winit::event_loop::{ActiveEventLoop, EventLoop, EventLoopProxy};
+use winit::keyboard::{Key, KeyCode, ModifiersState, NamedKey, PhysicalKey};
 use winit::window::{CursorIcon, Window, WindowId};
 
 /// Neutral, dark, and the same on every channel: nothing around the picture may tint the eye.
@@ -71,7 +74,10 @@ enum ToolbarHit {
 /// Where the border positions are remembered: `$XDG_CONFIG_HOME/scopecreep/panel-grid`, else
 /// `~/.config/scopecreep/panel-grid`.
 fn grid_file() -> Option<PathBuf> {
-    let base = std::env::var_os("XDG_CONFIG_HOME").filter(|v| !v.is_empty()).map(PathBuf::from).or_else(|| std::env::var_os("HOME").map(|h| PathBuf::from(h).join(".config")))?;
+    let base = std::env::var_os("XDG_CONFIG_HOME")
+        .filter(|v| !v.is_empty())
+        .map(PathBuf::from)
+        .or_else(|| std::env::var_os("HOME").map(|h| PathBuf::from(h).join(".config")))?;
     Some(base.join("scopecreep").join("panel-grid"))
 }
 
@@ -94,14 +100,29 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             "--feed" => feed = args.next().ok_or("--feed needs a path")?.into(),
             "--no-scripting" => scripting = false,
             "--version" => {
-                println!("scopecreep {} (Feed protocol {}.{})", env!("CARGO_PKG_VERSION"), scopecreep_feed::VERSION_MAJOR, scopecreep_feed::VERSION_MINOR);
+                println!(
+                    "scopecreep {} (Feed protocol {}.{})",
+                    env!("CARGO_PKG_VERSION"),
+                    scopecreep_feed::VERSION_MAJOR,
+                    scopecreep_feed::VERSION_MINOR
+                );
                 return Ok(());
             }
-            _ => return Err(format!("unknown argument {arg}. Usage: scopecreep [--feed <path>] [--no-scripting]").into()),
+            _ => {
+                return Err(format!(
+                    "unknown argument {arg}. Usage: scopecreep [--feed <path>] [--no-scripting]"
+                )
+                .into());
+            }
         }
     }
     let event_loop = EventLoop::<Wake>::with_user_event().build()?;
-    let mut app = App { feed, scripting, proxy: event_loop.create_proxy(), window: None };
+    let mut app = App {
+        feed,
+        scripting,
+        proxy: event_loop.create_proxy(),
+        window: None,
+    };
     event_loop.run_app(&mut app)?;
     Ok(())
 }
@@ -126,9 +147,19 @@ struct TextStyle {
 
 impl TextStyle {
     /// The quiet labels, the status line and the menu.
-    const LABEL: TextStyle = TextStyle { size: style::TYPE_LABEL, line: style::TYPE_LABEL_LINE, align: None, wrap: true };
+    const LABEL: TextStyle = TextStyle {
+        size: style::TYPE_LABEL,
+        line: style::TYPE_LABEL_LINE,
+        align: None,
+        wrap: true,
+    };
     /// A notice on its own over the Panel.
-    const NOTICE: TextStyle = TextStyle { size: style::TYPE_NOTICE, line: style::TYPE_NOTICE_LINE, align: Some(glyphon::cosmic_text::Align::Center), wrap: true };
+    const NOTICE: TextStyle = TextStyle {
+        size: style::TYPE_NOTICE,
+        line: style::TYPE_NOTICE_LINE,
+        align: Some(glyphon::cosmic_text::Align::Center),
+        wrap: true,
+    };
 }
 
 /// A piece of text kept shaped until what it says, how it is set, or the room it has, changes.
@@ -139,20 +170,46 @@ struct Text {
 
 impl Text {
     fn new(font_system: &mut FontSystem) -> Text {
-        Text { buffer: Buffer::new(font_system, Metrics::new(style::TYPE_LABEL, style::TYPE_LABEL * style::TYPE_LABEL_LINE)), key: None }
+        Text {
+            buffer: Buffer::new(
+                font_system,
+                Metrics::new(
+                    style::TYPE_LABEL,
+                    style::TYPE_LABEL * style::TYPE_LABEL_LINE,
+                ),
+            ),
+            key: None,
+        }
     }
 
     /// Shape `text` in `style` (at `scale`) in `width` device pixels, unless it already is.
-    fn set(&mut self, font_system: &mut FontSystem, text: &str, style: TextStyle, scale: f32, width: f32) {
+    fn set(
+        &mut self,
+        font_system: &mut FontSystem,
+        text: &str,
+        style: TextStyle,
+        scale: f32,
+        width: f32,
+    ) {
         let width = width.round() as u32;
-        if self.key.as_ref().is_some_and(|(t, w, s, st)| t == text && *w == width && *s == scale.to_bits() && *st == style) {
+        if self.key.as_ref().is_some_and(|(t, w, s, st)| {
+            t == text && *w == width && *s == scale.to_bits() && *st == style
+        }) {
             return;
         }
         let attrs = Attrs::new().family(Family::SansSerif);
-        self.buffer.set_metrics(Metrics::new(style.size * scale, style.size * scale * style.line));
+        self.buffer.set_metrics(Metrics::new(
+            style.size * scale,
+            style.size * scale * style.line,
+        ));
         self.buffer.set_size(Some((width as f32).max(1.0)), None);
-        self.buffer.set_wrap(if style.wrap { glyphon::cosmic_text::Wrap::WordOrGlyph } else { glyphon::cosmic_text::Wrap::None });
-        self.buffer.set_text(text, &attrs, Shaping::Advanced, style.align);
+        self.buffer.set_wrap(if style.wrap {
+            glyphon::cosmic_text::Wrap::WordOrGlyph
+        } else {
+            glyphon::cosmic_text::Wrap::None
+        });
+        self.buffer
+            .set_text(text, &attrs, Shaping::Advanced, style.align);
         self.buffer.shape_until_scroll(font_system, false);
         self.key = Some((text.to_string(), width, scale.to_bits(), style));
     }
@@ -234,54 +291,119 @@ struct AppWindow {
 }
 
 impl AppWindow {
-    fn new(window: Arc<Window>, event_loop: &ActiveEventLoop, feed: PathBuf, scripting: bool, proxy: EventLoopProxy<Wake>) -> Result<AppWindow, Box<dyn std::error::Error>> {
+    fn new(
+        window: Arc<Window>,
+        event_loop: &ActiveEventLoop,
+        feed: PathBuf,
+        scripting: bool,
+        proxy: EventLoopProxy<Wake>,
+    ) -> Result<AppWindow, Box<dyn std::error::Error>> {
         // WGPU_BACKEND and friends are honoured, for trying another graphics backend.
-        let instance = wgpu::Instance::new(wgpu::InstanceDescriptor::new_with_display_handle_from_env(Box::new(event_loop.owned_display_handle())));
-        let surface = instance.create_surface(window.clone()).map_err(|e| format!("no drawing surface: {e}"))?;
+        let instance =
+            wgpu::Instance::new(wgpu::InstanceDescriptor::new_with_display_handle_from_env(
+                Box::new(event_loop.owned_display_handle()),
+            ));
+        let surface = instance
+            .create_surface(window.clone())
+            .map_err(|e| format!("no drawing surface: {e}"))?;
         let adapter = pollster::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions {
             power_preference: wgpu::PowerPreference::HighPerformance,
             compatible_surface: Some(&surface),
             ..Default::default()
         }))
         .map_err(|e| format!("no usable GPU: {e}"))?;
-        let filterable = adapter.features().contains(wgpu::Features::FLOAT32_FILTERABLE);
+        let filterable = adapter
+            .features()
+            .contains(wgpu::Features::FLOAT32_FILTERABLE);
         let info = adapter.get_info();
         let (device, queue) = pollster::block_on(adapter.request_device(&wgpu::DeviceDescriptor {
             label: Some("scopecreep"),
-            required_features: if filterable { wgpu::Features::FLOAT32_FILTERABLE } else { wgpu::Features::empty() },
+            required_features: if filterable {
+                wgpu::Features::FLOAT32_FILTERABLE
+            } else {
+                wgpu::Features::empty()
+            },
             // Resolve fills most of the graphics memory (Stage 0: 7.7 of 8 GB): take only what is used.
             memory_hints: wgpu::MemoryHints::MemoryUsage,
             ..Default::default()
         }))
-        .map_err(|e| format!("{} ({:?}) would not give a device: {e}", info.name, info.backend))?;
+        .map_err(|e| {
+            format!(
+                "{} ({:?}) would not give a device: {e}",
+                info.name, info.backend
+            )
+        })?;
         device.on_uncaptured_error(Arc::new(|e| eprintln!("scopecreep: graphics error: {e}")));
         let size = window.inner_size();
         let caps = surface.get_capabilities(&adapter);
         // Not an sRGB surface: the Feed's values are shown as they are, with no extra encoding.
-        let format = caps.formats.iter().copied().find(|f| !f.is_srgb()).unwrap_or(caps.formats[0]);
-        let mut config = surface.get_default_config(&adapter, size.width.max(1), size.height.max(1)).ok_or("the window surface is not supported by the GPU")?;
+        let format = caps
+            .formats
+            .iter()
+            .copied()
+            .find(|f| !f.is_srgb())
+            .unwrap_or(caps.formats[0]);
+        let mut config = surface
+            .get_default_config(&adapter, size.width.max(1), size.height.max(1))
+            .ok_or("the window surface is not supported by the GPU")?;
         config.format = format;
         config.present_mode = wgpu::PresentMode::AutoVsync;
         surface.configure(&device, &config);
 
         let displays = DisplaySet::standard(&device, &queue, format, filterable);
-        let settings = Arc::new(Mutex::new(settings_file().and_then(|path| std::fs::read_to_string(path).ok()).map_or_else(PanelSettings::default, |text| PanelSettings::from_text(&text))));
-        displays.set_link(scopecreep::zoom::link_remembered(&settings.lock().unwrap()), 0);
+        let settings = Arc::new(Mutex::new(
+            settings_file()
+                .and_then(|path| std::fs::read_to_string(path).ok())
+                .map_or_else(PanelSettings::default, |text| {
+                    PanelSettings::from_text(&text)
+                }),
+        ));
+        displays.set_link(
+            scopecreep::zoom::link_remembered(&settings.lock().unwrap()),
+            0,
+        );
         let names = displays.names();
-        let grid = grid_file().and_then(|path| std::fs::read_to_string(path).ok()).map_or_else(|| PanelGrid::default_for(&names), |text| PanelGrid::from_text(&names, &text));
+        let grid = grid_file()
+            .and_then(|path| std::fs::read_to_string(path).ok())
+            .map_or_else(
+                || PanelGrid::default_for(&names),
+                |text| PanelGrid::from_text(&names, &text),
+            );
         let mut font_system = FontSystem::new();
         let cache = Cache::new(&device);
         let viewport = Viewport::new(&device, &cache);
-        let mut atlas = TextAtlas::with_color_mode(&device, &queue, &cache, format, if format.is_srgb() { ColorMode::Accurate } else { ColorMode::Web });
-        let text_renderer = TextRenderer::new(&mut atlas, &device, wgpu::MultisampleState::default(), None);
-        let menu_renderer = TextRenderer::new(&mut atlas, &device, wgpu::MultisampleState::default(), None);
+        let mut atlas = TextAtlas::with_color_mode(
+            &device,
+            &queue,
+            &cache,
+            format,
+            if format.is_srgb() {
+                ColorMode::Accurate
+            } else {
+                ColorMode::Web
+            },
+        );
+        let text_renderer =
+            TextRenderer::new(&mut atlas, &device, wgpu::MultisampleState::default(), None);
+        let menu_renderer =
+            TextRenderer::new(&mut atlas, &device, wgpu::MultisampleState::default(), None);
         let flat = FlatRects::new(&device, &queue, format);
         let status = Text::new(&mut font_system);
         let top_bar = Text::new(&mut font_system);
         let notice = Text::new(&mut font_system);
-        let panel_texts = (0..displays.len()).map(|_| PanelText { label: Text::new(&mut font_system), tags: Text::new(&mut font_system), scale: Vec::new() }).collect();
+        let panel_texts = (0..displays.len())
+            .map(|_| PanelText {
+                label: Text::new(&mut font_system),
+                tags: Text::new(&mut font_system),
+                scale: Vec::new(),
+            })
+            .collect();
 
-        let mut feed_loop = FeedLoop::new(displays.clone(), settings.clone(), OutputConversion::new(&device, &queue));
+        let mut feed_loop = FeedLoop::new(
+            displays.clone(),
+            settings.clone(),
+            OutputConversion::new(&device, &queue),
+        );
         let texts = feed_loop.texts();
         let stop = Arc::new(AtomicBool::new(false));
         let feed_thread = {
@@ -343,7 +465,9 @@ impl AppWindow {
             settings,
             menu: None,
             slider_drag: None,
-            layouts: layouts_file().and_then(|path| std::fs::read_to_string(path).ok()).map_or_else(Layouts::default, |text| Layouts::from_text(&text)),
+            layouts: layouts_file()
+                .and_then(|path| std::fs::read_to_string(path).ok())
+                .map_or_else(Layouts::default, |text| Layouts::from_text(&text)),
             layout_menu: false,
             renaming: None,
             modifiers: ModifiersState::empty(),
@@ -393,22 +517,32 @@ impl AppWindow {
 
     /// What a press at the pointer would start: a border drag or a Panel drag.
     fn press_under_pointer(&self) -> Option<Press> {
-        self.grid.press_at(self.grid_area, self.grid_gap, self.cursor, style::SPACE_GRAB * self.scale, self.scale)
+        self.grid.press_at(
+            self.grid_area,
+            self.grid_gap,
+            self.cursor,
+            style::SPACE_GRAB * self.scale,
+            self.scale,
+        )
     }
 
     /// Remember the layout.
     fn save_grid(&self) {
-        if let Some(path) = grid_file() {
-            if let Err(e) = scopecreep::settings::save(&path, &self.grid.to_text(&self.displays.names())) {
-                eprintln!("scopecreep: cannot remember the Panel layout: {e}");
-            }
+        if let Some(path) = grid_file()
+            && let Err(e) =
+                scopecreep::settings::save(&path, &self.grid.to_text(&self.displays.names()))
+        {
+            eprintln!("scopecreep: cannot remember the Panel layout: {e}");
         }
     }
 
     /// Rest the hover on what is under the pointer: a Panel's title bar or the status line (never while a drag or
     /// a Loupe holds the pointer).
     fn update_hover(&mut self) {
-        let busy = self.pointer_panel.is_some() || self.middle_panel.is_some() || self.drag.is_some() || self.panel_drag.is_some();
+        let busy = self.pointer_panel.is_some()
+            || self.middle_panel.is_some()
+            || self.drag.is_some()
+            || self.panel_drag.is_some();
         let hover = if busy {
             None
         } else if components::contains(self.status_bar, self.cursor) {
@@ -417,7 +551,11 @@ impl AppWindow {
             match self.toolbar_hit() {
                 Some(ToolbarHit::Chip(panel, chip)) => Some(Hover::Chip(panel, chip)),
                 Some(ToolbarHit::Settings(panel)) => Some(Hover::SettingsButton(panel)),
-                None => self.title_bars.iter().position(|t| components::contains(*t, self.cursor)).map(Hover::Title),
+                None => self
+                    .title_bars
+                    .iter()
+                    .position(|t| components::contains(*t, self.cursor))
+                    .map(Hover::Title),
             }
         };
         if hover != self.hover {
@@ -428,24 +566,38 @@ impl AppWindow {
 
     /// The chip or settings button of a title bar under the pointer.
     fn toolbar_hit(&self) -> Option<ToolbarHit> {
-        self.title_layouts.iter().enumerate().find_map(|(panel, l)| {
-            if let Some(chip) = l.chips.iter().position(|c| components::contains(*c, self.cursor)) {
-                return Some(ToolbarHit::Chip(panel, chip));
-            }
-            l.settings.filter(|b| components::contains(*b, self.cursor)).map(|_| ToolbarHit::Settings(panel))
-        })
+        self.title_layouts
+            .iter()
+            .enumerate()
+            .find_map(|(panel, l)| {
+                if let Some(chip) = l
+                    .chips
+                    .iter()
+                    .position(|c| components::contains(*c, self.cursor))
+                {
+                    return Some(ToolbarHit::Chip(panel, chip));
+                }
+                l.settings
+                    .filter(|b| components::contains(*b, self.cursor))
+                    .map(|_| ToolbarHit::Settings(panel))
+            })
     }
 
     /// Open Panel `panel`'s popover at `at` (none when every setting of the Panel is a chip, or it has none).
     fn open_popover(&mut self, panel: usize, at: [f32; 2]) {
-        let current = self.displays.settings_of(panel, &self.settings.lock().unwrap());
-        self.menu = Menu::new(panel, &self.displays.popover_defs(panel), &current).map(|menu| (menu, at));
+        let current = self
+            .displays
+            .settings_of(panel, &self.settings.lock().unwrap());
+        self.menu =
+            Menu::new(panel, &self.displays.popover_defs(panel), &current).map(|menu| (menu, at));
     }
 
     /// Take Panel `panel`'s zoom chip click: back to Fit (every picture Panel while Link is on). Zoom is display
     /// state: it is never put in the settings or saved.
     fn zoom_to_fit(&mut self, panel: usize) {
-        let Some(area) = self.contents.get(panel).copied() else { return };
+        let Some(area) = self.contents.get(panel).copied() else {
+            return;
+        };
         self.displays.zoom_to_fit(panel, area, self.scale);
         self.window.request_redraw();
     }
@@ -478,7 +630,9 @@ impl AppWindow {
 
     fn pointer_moved(&mut self, x: f32, y: f32) {
         self.cursor = [x, y];
-        if let (Some(key), Some((menu, _)), Some(rect)) = (self.slider_drag, self.menu.as_ref(), self.menu_rect()) {
+        if let (Some(key), Some((menu, _)), Some(rect)) =
+            (self.slider_drag, self.menu.as_ref(), self.menu_rect())
+        {
             if let Some(value) = menu.slider_value(rect, key, x, self.scale) {
                 let panel = menu.panel;
                 self.choose(panel, key, &Amount::store(value));
@@ -489,7 +643,13 @@ impl AppWindow {
         if let Some(panel) = self.pointer_panel.or(self.middle_panel) {
             self.display_pointer(panel, Pointer::Move(self.cursor));
         } else if let Some(border) = self.drag {
-            self.grid.drag(border, self.cursor, self.grid_area, self.grid_gap, min_panel_size(self.scale));
+            self.grid.drag(
+                border,
+                self.cursor,
+                self.grid_area,
+                self.grid_gap,
+                min_panel_size(self.scale),
+            );
             self.window.request_redraw();
         } else if self.panel_drag.is_some() {
             self.window.request_redraw();
@@ -507,16 +667,14 @@ impl AppWindow {
     /// Panel), or close the one that is open.
     fn right_click(&mut self) {
         // In the layout menu, a right-click on a saved layout starts renaming it.
-        if self.layout_menu {
-            if let (Some((menu, _)), Some(rect)) = (self.menu.as_ref(), self.menu_rect()) {
-                if let Some((_, value)) = menu.choice_at(rect, self.cursor, self.scale) {
-                    if let Some(Action::Rename(slot)) = layouts::action(&self.layouts, value, Click::Right) {
-                        self.renaming = Rename::start(&self.layouts, slot);
-                        self.show_layout_menu();
-                        return;
-                    }
-                }
-            }
+        if self.layout_menu
+            && let (Some((menu, _)), Some(rect)) = (self.menu.as_ref(), self.menu_rect())
+            && let Some((_, value)) = menu.choice_at(rect, self.cursor, self.scale)
+            && let Some(Action::Rename(slot)) = layouts::action(&self.layouts, value, Click::Right)
+        {
+            self.renaming = Rename::start(&self.layouts, slot);
+            self.show_layout_menu();
+            return;
         }
         let was_open = self.menu.take().is_some();
         self.layout_menu = false;
@@ -528,7 +686,10 @@ impl AppWindow {
             self.window.request_redraw();
             return;
         }
-        let hit = self.cells.iter().position(|c| Menu::contains(*c, self.cursor));
+        let hit = self
+            .cells
+            .iter()
+            .position(|c| Menu::contains(*c, self.cursor));
         if let Some(panel) = hit {
             self.open_popover(panel, self.cursor);
         }
@@ -547,10 +708,10 @@ impl AppWindow {
 
     /// Remember the named layouts.
     fn save_layouts(&self) {
-        if let Some(path) = layouts_file() {
-            if let Err(e) = scopecreep::settings::save(&path, &self.layouts.to_text()) {
-                eprintln!("scopecreep: cannot remember the layouts: {e}");
-            }
+        if let Some(path) = layouts_file()
+            && let Err(e) = scopecreep::settings::save(&path, &self.layouts.to_text())
+        {
+            eprintln!("scopecreep: cannot remember the layouts: {e}");
         }
     }
 
@@ -576,11 +737,19 @@ impl AppWindow {
 
     /// Left button in the layout menu: a click does what the row says; any click ends a rename being typed.
     fn layout_menu_click(&mut self) {
-        let (Some((menu, _)), Some(rect)) = (self.menu.as_ref(), self.menu_rect()) else { return };
+        let (Some((menu, _)), Some(rect)) = (self.menu.as_ref(), self.menu_rect()) else {
+            return;
+        };
         let choice = menu.choice_at(rect, self.cursor, self.scale);
         self.finish_rename(true);
-        let click = if self.modifiers.shift_key() { Click::Shift } else { Click::Plain };
-        if let Some(action) = choice.and_then(|(_, value)| layouts::action(&self.layouts, value, click)) {
+        let click = if self.modifiers.shift_key() {
+            Click::Shift
+        } else {
+            Click::Plain
+        };
+        if let Some(action) =
+            choice.and_then(|(_, value)| layouts::action(&self.layouts, value, click))
+        {
             self.layout_action(action);
             self.close_menu();
         } else if choice.is_none() && Menu::contains(rect, self.cursor) {
@@ -599,10 +768,11 @@ impl AppWindow {
 
     /// End a rename being typed: keep the name (`accept`) or drop it.
     fn finish_rename(&mut self, accept: bool) {
-        if let Some(rename) = self.renaming.take() {
-            if accept && rename.accept(&mut self.layouts) {
-                self.save_layouts();
-            }
+        if let Some(rename) = self.renaming.take()
+            && accept
+            && rename.accept(&mut self.layouts)
+        {
+            self.save_layouts();
         }
     }
 
@@ -654,7 +824,9 @@ impl AppWindow {
             _ => None,
         };
         let m = self.modifiers;
-        if let Some(shortcut) = digit.and_then(|d| layouts::shortcut(d, m.control_key(), m.shift_key(), m.alt_key())) {
+        if let Some(shortcut) =
+            digit.and_then(|d| layouts::shortcut(d, m.control_key(), m.shift_key(), m.alt_key()))
+        {
             let action = match shortcut {
                 layouts::Shortcut::Recall(slot) => Action::Recall(slot),
                 layouts::Shortcut::Save(slot) => Action::Save(slot),
@@ -665,7 +837,11 @@ impl AppWindow {
 
     fn menu_rect(&self) -> Option<[f32; 4]> {
         let (menu, at) = self.menu.as_ref()?;
-        Some(menu.rect(*at, [self.config.width as f32, self.config.height as f32], self.scale))
+        Some(menu.rect(
+            *at,
+            [self.config.width as f32, self.config.height as f32],
+            self.scale,
+        ))
     }
 
     /// Left button while a menu is open: a click on a choice picks it (and remembers it); a click on a heading or
@@ -674,7 +850,9 @@ impl AppWindow {
         if self.layout_menu {
             return self.layout_menu_click();
         }
-        let (Some((menu, _)), Some(rect)) = (self.menu.as_ref(), self.menu_rect()) else { return };
+        let (Some((menu, _)), Some(rect)) = (self.menu.as_ref(), self.menu_rect()) else {
+            return;
+        };
         let (panel, cursor, scale) = (menu.panel, self.cursor, self.scale);
         // A press on a slider takes it (the menu stays open while it is dragged); on a reset row, sets the default.
         if let Some((key, value)) = menu.slider_at(rect, cursor, scale) {
@@ -710,7 +888,9 @@ impl AppWindow {
     /// Give a display the pointer: what it asks to remember is kept with the Panel settings (and written to the
     /// file once the movement is done), and the window draws again. Returns whether the display took the event.
     fn display_pointer(&mut self, panel: usize, event: Pointer) -> bool {
-        let Some(area) = self.contents.get(panel).copied() else { return false };
+        let Some(area) = self.contents.get(panel).copied() else {
+            return false;
+        };
         let result = self.displays.pointer(panel, area, self.scale, event);
         if result.used {
             let name = self.displays.name(panel);
@@ -735,9 +915,19 @@ impl AppWindow {
         if self.menu.is_some() {
             return;
         }
-        let panel = self.contents.iter().position(|c| Menu::contains(*c, self.cursor)).filter(|p| self.displays.takes_wheel(*p, self.contents[*p], self.scale));
+        let panel = self
+            .contents
+            .iter()
+            .position(|c| Menu::contains(*c, self.cursor))
+            .filter(|p| self.displays.takes_wheel(*p, self.contents[*p], self.scale));
         if let Some(panel) = panel {
-            self.display_pointer(panel, Pointer::Wheel { at: self.cursor, lines });
+            self.display_pointer(
+                panel,
+                Pointer::Wheel {
+                    at: self.cursor,
+                    lines,
+                },
+            );
         }
     }
 
@@ -754,11 +944,14 @@ impl AppWindow {
                 if self.menu.is_some() {
                     return;
                 }
-                let panel = self.contents.iter().position(|c| Menu::contains(*c, self.cursor));
-                if let Some(panel) = panel {
-                    if self.display_pointer(panel, Pointer::MiddleDown(self.cursor)) {
-                        self.middle_panel = Some(panel);
-                    }
+                let panel = self
+                    .contents
+                    .iter()
+                    .position(|c| Menu::contains(*c, self.cursor));
+                if let Some(panel) = panel
+                    && self.display_pointer(panel, Pointer::MiddleDown(self.cursor))
+                {
+                    self.middle_panel = Some(panel);
                 }
             }
         }
@@ -776,7 +969,11 @@ impl AppWindow {
             }
             if let Some(from) = self.panel_drag.take() {
                 // Let go on another Panel to swap; anywhere else cancels.
-                if let Some(to) = self.grid.panel_at(self.grid_area, self.grid_gap, self.cursor).filter(|to| *to != from) {
+                if let Some(to) = self
+                    .grid
+                    .panel_at(self.grid_area, self.grid_gap, self.cursor)
+                    .filter(|to| *to != from)
+                {
                     self.grid.swap(from, to);
                     self.save_grid();
                 }
@@ -794,7 +991,12 @@ impl AppWindow {
                 // A chip or the settings button on a title bar takes the press before the bar can be dragged.
                 match self.toolbar_hit() {
                     Some(ToolbarHit::Chip(panel, chip)) => {
-                        if let Some(action) = self.toolbars.get(panel).and_then(|t| t.action(chip)).cloned() {
+                        if let Some(action) = self
+                            .toolbars
+                            .get(panel)
+                            .and_then(|t| t.action(chip))
+                            .cloned()
+                        {
                             match action {
                                 ChipAction::Zoom { .. } => self.zoom_to_fit(panel),
                                 ChipAction::Link(on) => self.set_link(panel, on),
@@ -804,7 +1006,8 @@ impl AppWindow {
                         return;
                     }
                     Some(ToolbarHit::Settings(panel)) => {
-                        if let Some(button) = self.title_layouts.get(panel).and_then(|l| l.settings) {
+                        if let Some(button) = self.title_layouts.get(panel).and_then(|l| l.settings)
+                        {
                             self.open_popover(panel, [button[0], button[1] + button[3]]);
                             self.window.request_redraw();
                         }
@@ -813,12 +1016,16 @@ impl AppWindow {
                     None => {}
                 }
                 // A display that uses the pointer (a Loupe) gets it first; else a border may be grabbed.
-                let panel = self.contents.iter().position(|c| Menu::contains(*c, self.cursor)).filter(|p| self.displays.takes_pointer(*p));
-                if let Some(panel) = panel {
-                    if self.display_pointer(panel, Pointer::Down(self.cursor)) {
-                        self.pointer_panel = Some(panel);
-                        return;
-                    }
+                let panel = self
+                    .contents
+                    .iter()
+                    .position(|c| Menu::contains(*c, self.cursor))
+                    .filter(|p| self.displays.takes_pointer(*p));
+                if let Some(panel) = panel
+                    && self.display_pointer(panel, Pointer::Down(self.cursor))
+                {
+                    self.pointer_panel = Some(panel);
+                    return;
                 }
                 match self.press_under_pointer() {
                     Some(Press::Border(border)) => self.drag = Some(border),
@@ -848,7 +1055,12 @@ impl AppWindow {
         // The Colour Setup is said once, in the bar across the top.
         let top_height = BarKind::Top.height(scale);
         let area_top = top_height + margin;
-        let area = [margin, area_top, (width - 2.0 * margin).max(1.0), (height - status_height - area_top).max(1.0)];
+        let area = [
+            margin,
+            area_top,
+            (width - 2.0 * margin).max(1.0),
+            (height - status_height - area_top).max(1.0),
+        ];
         let cells = self.grid.cells(area, margin);
         self.cells = cells.clone();
         self.grid_area = area;
@@ -864,19 +1076,53 @@ impl AppWindow {
         let settings_now = self.settings.lock().unwrap().clone();
         let mut toolbars: Vec<Toolbar> = Vec::new();
         let mut layouts: Vec<components::TitleLayout> = Vec::new();
-        let max_chars = ((width / (style::SPACE_CHAR_WIDTH * scale)) as usize).saturating_sub(8).clamp(40, 110);
+        let max_chars = ((width / (style::SPACE_CHAR_WIDTH * scale)) as usize)
+            .saturating_sub(8)
+            .clamp(40, 110);
         for (i, cell) in cells.iter().enumerate() {
             let title = texts.titles.get(i).cloned().unwrap_or_default();
             let panel = PanelLayout::new(*cell, scale);
-            let mut toolbar = self.displays.toolbar(i, &settings_now, panel.content, scale);
+            let mut toolbar = self
+                .displays
+                .toolbar(i, &settings_now, panel.content, scale);
             let has_popover = !self.displays.popover_defs(i).is_empty();
             toolbar.fit_to(panel.title[2], has_popover, scale);
-            let (l, tags, all_shown) = window_text::lay_out_toolbar_title(&title, &toolbar.chips, has_popover, panel.title, scale);
+            let (l, tags, all_shown) = window_text::lay_out_toolbar_title(
+                &title,
+                &toolbar.chips,
+                has_popover,
+                panel.title,
+                scale,
+            );
             toolbars.push(toolbar);
-            self.panel_texts[i].label.set(&mut self.font_system, &title.name, TextStyle { wrap: false, ..TextStyle::LABEL }, scale, l.name[2].max(1.0));
-            let tags_style = TextStyle { size: style::TYPE_SCALE, line: style::TYPE_SCALE_LINE, align: None, wrap: false };
-            self.panel_texts[i].tags.set(&mut self.font_system, &tags, tags_style, scale, l.tags.map_or(1.0, |t| t[2].max(1.0)));
-            self.title_hovers.push(window_text::hover_text(&title, l.name_cut || !all_shown, max_chars));
+            self.panel_texts[i].label.set(
+                &mut self.font_system,
+                &title.name,
+                TextStyle {
+                    wrap: false,
+                    ..TextStyle::LABEL
+                },
+                scale,
+                l.name[2].max(1.0),
+            );
+            let tags_style = TextStyle {
+                size: style::TYPE_SCALE,
+                line: style::TYPE_SCALE_LINE,
+                align: None,
+                wrap: false,
+            };
+            self.panel_texts[i].tags.set(
+                &mut self.font_system,
+                &tags,
+                tags_style,
+                scale,
+                l.tags.map_or(1.0, |t| t[2].max(1.0)),
+            );
+            self.title_hovers.push(window_text::hover_text(
+                &title,
+                l.name_cut || !all_shown,
+                max_chars,
+            ));
             title_parts.push((l.name, l.tags));
             layouts.push(l);
             panels.push(panel);
@@ -888,26 +1134,72 @@ impl AppWindow {
         let status_width = width - 2.0 * margin;
         // Playback and performance only: the longest choice that fits, whole parts only (never cut mid-word).
         let status_line = window_text::fit_status(&texts.status, status_width, scale);
-        self.status.set(&mut self.font_system, status_line, TextStyle { wrap: false, ..TextStyle::LABEL }, scale, status_width);
+        self.status.set(
+            &mut self.font_system,
+            status_line,
+            TextStyle {
+                wrap: false,
+                ..TextStyle::LABEL
+            },
+            scale,
+            status_width,
+        );
         self.status_bar = [0.0, height - row, width, row];
         self.status_hover = texts.status_hover.clone();
-        let top_line = window_text::fit_parts(&texts.top_bar, width - 2.0 * style::SPACE_BAR_PAD * scale, scale);
-        self.top_bar.set(&mut self.font_system, &top_line, TextStyle { wrap: false, ..TextStyle::LABEL }, scale, (width - 2.0 * style::SPACE_BAR_PAD * scale).max(1.0));
+        let top_line = window_text::fit_parts(
+            &texts.top_bar,
+            width - 2.0 * style::SPACE_BAR_PAD * scale,
+            scale,
+        );
+        self.top_bar.set(
+            &mut self.font_system,
+            &top_line,
+            TextStyle {
+                wrap: false,
+                ..TextStyle::LABEL
+            },
+            scale,
+            (width - 2.0 * style::SPACE_BAR_PAD * scale).max(1.0),
+        );
         let (notice_style, notice_width) = if notice_in_status {
             (TextStyle::LABEL, status_width)
         } else {
-            (TextStyle::NOTICE, (panels.first().map_or(1.0, |p| p.content[2]) - 2.0 * margin).max(1.0))
+            (
+                TextStyle::NOTICE,
+                (panels.first().map_or(1.0, |p| p.content[2]) - 2.0 * margin).max(1.0),
+            )
         };
-        self.notice.set(&mut self.font_system, texts.notice.as_deref().unwrap_or(""), notice_style, scale, notice_width);
-        let notice_height: f32 = self.notice.buffer.layout_runs().map(|run| run.line_height).sum();
+        self.notice.set(
+            &mut self.font_system,
+            texts.notice.as_deref().unwrap_or(""),
+            notice_style,
+            scale,
+            notice_width,
+        );
+        let notice_height: f32 = self
+            .notice
+            .buffer
+            .layout_runs()
+            .map(|run| run.line_height)
+            .sum();
 
-        let whole = TextBounds { left: 0, top: 0, right: width as i32, bottom: height as i32 };
+        let whole = TextBounds {
+            left: 0,
+            top: 0,
+            right: width as i32,
+            bottom: height as i32,
+        };
         let status_top = height - row + (row - line) / 2.0 - 0.25 * margin;
         let (notice_left, notice_top) = if notice_in_status {
             (margin, status_top - row)
         } else {
-            let [left, top, _, height] = panels.first().map_or([margin, margin, 1.0, 1.0], |p| p.content);
-            (left + margin, (top + (height - notice_height) / 2.0).max(top))
+            let [left, top, _, height] = panels
+                .first()
+                .map_or([margin, margin, 1.0, 1.0], |p| p.content);
+            (
+                left + margin,
+                (top + (height - notice_height) / 2.0).max(top),
+            )
         };
         // The scale's numbers, per Panel, shaped once and reused until they or the room change.
         let scale_mark_line = style::TYPE_SCALE * scale * style::TYPE_SCALE_LINE;
@@ -930,34 +1222,123 @@ impl AppWindow {
         for (i, mark) in &marks {
             let n = used[*i];
             used[*i] += 1;
-            let style = TextStyle { size: style::TYPE_SCALE, line: style::TYPE_SCALE_LINE, align: if mark.centred { Some(glyphon::cosmic_text::Align::Center) } else { mark.right_aligned.then_some(glyphon::cosmic_text::Align::Right) }, wrap: false };
-            self.panel_texts[*i].scale[n].set(&mut self.font_system, &mark.text, style, scale, mark.width);
+            let style = TextStyle {
+                size: style::TYPE_SCALE,
+                line: style::TYPE_SCALE_LINE,
+                align: if mark.centred {
+                    Some(glyphon::cosmic_text::Align::Center)
+                } else {
+                    mark.right_aligned
+                        .then_some(glyphon::cosmic_text::Align::Right)
+                },
+                wrap: false,
+            };
+            self.panel_texts[*i].scale[n].set(
+                &mut self.font_system,
+                &mark.text,
+                style,
+                scale,
+                mark.width,
+            );
             mark_areas.push((*i, n, mark.left, mark.top - scale_mark_line / 2.0));
         }
 
         let mut areas = vec![
-            TextArea { buffer: &self.status.buffer, left: margin, top: status_top, scale: 1.0, bounds: whole, default_color: text_colour(style::TEXT_SECONDARY), custom_glyphs: &[] },
-            TextArea { buffer: &self.notice.buffer, left: notice_left, top: notice_top, scale: 1.0, bounds: whole, default_color: text_colour(style::TEXT_PRIMARY), custom_glyphs: &[] },
+            TextArea {
+                buffer: &self.status.buffer,
+                left: margin,
+                top: status_top,
+                scale: 1.0,
+                bounds: whole,
+                default_color: text_colour(style::TEXT_SECONDARY),
+                custom_glyphs: &[],
+            },
+            TextArea {
+                buffer: &self.notice.buffer,
+                left: notice_left,
+                top: notice_top,
+                scale: 1.0,
+                bounds: whole,
+                default_color: text_colour(style::TEXT_PRIMARY),
+                custom_glyphs: &[],
+            },
         ];
         let top_pad = style::SPACE_BAR_PAD * scale;
-        areas.push(TextArea { buffer: &self.top_bar.buffer, left: top_pad, top: (top_height - line) / 2.0, scale: 1.0, bounds: whole, default_color: text_colour(style::TEXT_PRIMARY), custom_glyphs: &[] });
+        areas.push(TextArea {
+            buffer: &self.top_bar.buffer,
+            left: top_pad,
+            top: (top_height - line) / 2.0,
+            scale: 1.0,
+            bounds: whole,
+            default_color: text_colour(style::TEXT_PRIMARY),
+            custom_glyphs: &[],
+        });
         let tags_line = style::TYPE_SCALE * scale * style::TYPE_SCALE_LINE;
-        for ((panel, text), (name, tags)) in panels.iter().zip(&self.panel_texts).zip(&title_parts) {
+        for ((panel, text), (name, tags)) in panels.iter().zip(&self.panel_texts).zip(&title_parts)
+        {
             let [left, top, w, h] = panel.title;
             // A label never spills out of its title bar.
-            let bounds = TextBounds { left: left as i32, top: top as i32, right: (left + w).ceil() as i32, bottom: (top + h).ceil() as i32 };
-            areas.push(TextArea { buffer: &text.label.buffer, left: name[0], top: top + (h - line) / 2.0, scale: 1.0, bounds, default_color: text_colour(style::TEXT_PRIMARY), custom_glyphs: &[] });
+            let bounds = TextBounds {
+                left: left as i32,
+                top: top as i32,
+                right: (left + w).ceil() as i32,
+                bottom: (top + h).ceil() as i32,
+            };
+            areas.push(TextArea {
+                buffer: &text.label.buffer,
+                left: name[0],
+                top: top + (h - line) / 2.0,
+                scale: 1.0,
+                bounds,
+                default_color: text_colour(style::TEXT_PRIMARY),
+                custom_glyphs: &[],
+            });
             if let Some(tags) = tags {
-                areas.push(TextArea { buffer: &text.tags.buffer, left: tags[0], top: top + (h - tags_line) / 2.0, scale: 1.0, bounds, default_color: text_colour(style::TEXT_MUTED), custom_glyphs: &[] });
+                areas.push(TextArea {
+                    buffer: &text.tags.buffer,
+                    left: tags[0],
+                    top: top + (h - tags_line) / 2.0,
+                    scale: 1.0,
+                    bounds,
+                    default_color: text_colour(style::TEXT_MUTED),
+                    custom_glyphs: &[],
+                });
             }
         }
         for (i, n, left, top) in mark_areas {
             let c = panels[i].content;
-            let bounds = TextBounds { left: c[0] as i32, top: c[1] as i32, right: (c[0] + c[2]).ceil() as i32, bottom: (c[1] + c[3]).ceil() as i32 };
-            areas.push(TextArea { buffer: &self.panel_texts[i].scale[n].buffer, left, top, scale: 1.0, bounds, default_color: text_colour(style::TEXT_MUTED), custom_glyphs: &[] });
+            let bounds = TextBounds {
+                left: c[0] as i32,
+                top: c[1] as i32,
+                right: (c[0] + c[2]).ceil() as i32,
+                bottom: (c[1] + c[3]).ceil() as i32,
+            };
+            areas.push(TextArea {
+                buffer: &self.panel_texts[i].scale[n].buffer,
+                left,
+                top,
+                scale: 1.0,
+                bounds,
+                default_color: text_colour(style::TEXT_MUTED),
+                custom_glyphs: &[],
+            });
         }
-        self.viewport.update(&self.queue, Resolution { width: self.config.width, height: self.config.height });
-        let prepared = self.text_renderer.prepare(&self.device, &self.queue, &mut self.font_system, &mut self.atlas, &self.viewport, areas, &mut self.swash_cache);
+        self.viewport.update(
+            &self.queue,
+            Resolution {
+                width: self.config.width,
+                height: self.config.height,
+            },
+        );
+        let prepared = self.text_renderer.prepare(
+            &self.device,
+            &self.queue,
+            &mut self.font_system,
+            &mut self.atlas,
+            &self.viewport,
+            areas,
+            &mut self.swash_cache,
+        );
         if let Err(e) = prepared {
             eprintln!("scopecreep: text could not be prepared: {e}");
         }
@@ -966,8 +1347,19 @@ impl AppWindow {
         // (so it sits above the Panels' text).
         let mut rects: Vec<([f32; 4], [f32; 4])> = Vec::new();
         // The top bar: its fill and the line under it.
-        rects.push(([0.0, 0.0, width, top_height], style::rgba(style::SURFACE_PANEL)));
-        rects.push(([0.0, top_height - (style::LINE_WEIGHT * scale).max(1.0), width, (style::LINE_WEIGHT * scale).max(1.0)], style::rgba(style::LINE_BORDER)));
+        rects.push((
+            [0.0, 0.0, width, top_height],
+            style::rgba(style::SURFACE_PANEL),
+        ));
+        rects.push((
+            [
+                0.0,
+                top_height - (style::LINE_WEIGHT * scale).max(1.0),
+                width,
+                (style::LINE_WEIGHT * scale).max(1.0),
+            ],
+            style::rgba(style::LINE_BORDER),
+        ));
         // Each Panel's thin border and the line under its title bar.
         for panel in &panels {
             for edge in panel.lines((style::LINE_WEIGHT * scale).max(1.0)) {
@@ -975,9 +1367,17 @@ impl AppWindow {
             }
         }
         // While a Panel is dragged, the Panel it would swap with is outlined, quietly.
-        if let Some(target) = self.panel_drag.and_then(|from| self.grid.panel_at(area, margin, self.cursor).filter(|to| *to != from)) {
+        if let Some(target) = self.panel_drag.and_then(|from| {
+            self.grid
+                .panel_at(area, margin, self.cursor)
+                .filter(|to| *to != from)
+        }) {
             let weight = (style::LINE_WEIGHT * scale).max(1.0);
-            for edge in PanelLayout::new(cells[target], scale).lines(weight).iter().take(4) {
+            for edge in PanelLayout::new(cells[target], scale)
+                .lines(weight)
+                .iter()
+                .take(4)
+            {
                 rects.push((*edge, style::rgba(style::STATE_FOCUS)));
             }
         }
@@ -985,15 +1385,29 @@ impl AppWindow {
         // The menu over the Panels, or else the hover of what the pointer rests on, over everything.
         let mut over: Vec<Prim> = Vec::new();
         // Each title bar's chips and settings button, lit under the pointer.
-        let pointer_over = if self.menu.is_some() { None } else { self.toolbar_hit() };
+        let pointer_over = if self.menu.is_some() {
+            None
+        } else {
+            self.toolbar_hit()
+        };
         for (i, (toolbar, l)) in self.toolbars.iter().zip(&self.title_layouts).enumerate() {
             for (c, (chip, r)) in toolbar.chips.iter().zip(&l.chips).enumerate() {
-                let state = if pointer_over == Some(ToolbarHit::Chip(i, c)) { State::Hover } else { State::Normal };
+                let state = if pointer_over == Some(ToolbarHit::Chip(i, c)) {
+                    State::Hover
+                } else {
+                    State::Normal
+                };
                 over.extend(chip.draw([r[0], r[1]], toolbar.on[c], state, scale));
             }
             if let Some(button) = l.settings {
                 let open = self.menu.as_ref().is_some_and(|(m, _)| m.panel == i);
-                let state = if open { State::Pressed } else if pointer_over == Some(ToolbarHit::Settings(i)) { State::Hover } else { State::Normal };
+                let state = if open {
+                    State::Pressed
+                } else if pointer_over == Some(ToolbarHit::Settings(i)) {
+                    State::Hover
+                } else {
+                    State::Normal
+                };
                 over.extend(components::settings_button(button, state, scale));
             }
         }
@@ -1001,9 +1415,24 @@ impl AppWindow {
             over.extend(components::popover(menu, rect, self.cursor, scale));
         } else if let Some(hover) = self.hover {
             let (anchor, text) = match hover {
-                Hover::Chip(p, c) => (self.title_layouts.get(p).and_then(|l| l.chips.get(c)).copied(), self.toolbars.get(p).and_then(|t| t.tooltips.get(c)).cloned()),
-                Hover::SettingsButton(p) => (self.title_layouts.get(p).and_then(|l| l.settings), Some("Settings".to_string())),
-                Hover::Title(i) => (self.title_bars.get(i).copied(), self.title_hovers.get(i).cloned()),
+                Hover::Chip(p, c) => (
+                    self.title_layouts
+                        .get(p)
+                        .and_then(|l| l.chips.get(c))
+                        .copied(),
+                    self.toolbars
+                        .get(p)
+                        .and_then(|t| t.tooltips.get(c))
+                        .cloned(),
+                ),
+                Hover::SettingsButton(p) => (
+                    self.title_layouts.get(p).and_then(|l| l.settings),
+                    Some("Settings".to_string()),
+                ),
+                Hover::Title(i) => (
+                    self.title_bars.get(i).copied(),
+                    self.title_hovers.get(i).cloned(),
+                ),
                 Hover::Status => (Some(self.status_bar), Some(self.status_hover.clone())),
             };
             if let (Some(anchor), Some(text)) = (anchor, text.filter(|t| !t.is_empty())) {
@@ -1015,7 +1444,13 @@ impl AppWindow {
         for prim in over {
             match prim {
                 Prim::Rect { rect, colour } => rects.push((rect, colour)),
-                Prim::Text { text, rect: at, colour, align, .. } => {
+                Prim::Text {
+                    text,
+                    rect: at,
+                    colour,
+                    align,
+                    ..
+                } => {
                     if self.menu_texts.len() <= texts_used {
                         self.menu_texts.push(Text::new(&mut self.font_system));
                     }
@@ -1024,7 +1459,17 @@ impl AppWindow {
                         Align::Centre => Some(glyphon::cosmic_text::Align::Center),
                         Align::Right => Some(glyphon::cosmic_text::Align::Right),
                     };
-                    self.menu_texts[texts_used].set(&mut self.font_system, &text, TextStyle { wrap: false, align, ..TextStyle::LABEL }, scale, at[2]);
+                    self.menu_texts[texts_used].set(
+                        &mut self.font_system,
+                        &text,
+                        TextStyle {
+                            wrap: false,
+                            align,
+                            ..TextStyle::LABEL
+                        },
+                        scale,
+                        at[2],
+                    );
                     menu_areas.push((texts_used, at[0], at[1] + (at[3] - line) / 2.0, colour));
                     texts_used += 1;
                 }
@@ -1033,9 +1478,25 @@ impl AppWindow {
         self.flat.set([width, height], &rects);
         let menu_text_areas: Vec<TextArea> = menu_areas
             .iter()
-            .map(|(i, left, top, colour)| TextArea { buffer: &self.menu_texts[*i].buffer, left: *left, top: *top, scale: 1.0, bounds: whole, default_color: text_colour(*colour), custom_glyphs: &[] })
+            .map(|(i, left, top, colour)| TextArea {
+                buffer: &self.menu_texts[*i].buffer,
+                left: *left,
+                top: *top,
+                scale: 1.0,
+                bounds: whole,
+                default_color: text_colour(*colour),
+                custom_glyphs: &[],
+            })
             .collect();
-        if let Err(e) = self.menu_renderer.prepare(&self.device, &self.queue, &mut self.font_system, &mut self.atlas, &self.viewport, menu_text_areas, &mut self.swash_cache) {
+        if let Err(e) = self.menu_renderer.prepare(
+            &self.device,
+            &self.queue,
+            &mut self.font_system,
+            &mut self.atlas,
+            &self.viewport,
+            menu_text_areas,
+            &mut self.swash_cache,
+        ) {
             eprintln!("scopecreep: menu text could not be prepared: {e}");
         }
 
@@ -1058,7 +1519,10 @@ impl AppWindow {
                     view: &view,
                     depth_slice: None,
                     resolve_target: None,
-                    ops: wgpu::Operations { load: wgpu::LoadOp::Clear(style::clear(style::SURFACE_WINDOW)), store: wgpu::StoreOp::Store },
+                    ops: wgpu::Operations {
+                        load: wgpu::LoadOp::Clear(style::clear(style::SURFACE_WINDOW)),
+                        store: wgpu::StoreOp::Store,
+                    },
                 })],
                 depth_stencil_attachment: None,
                 timestamp_writes: None,
@@ -1066,13 +1530,20 @@ impl AppWindow {
                 multiview_mask: None,
             });
             for (i, panel) in panels.iter().enumerate() {
-                self.displays.draw(&mut pass, i, panel.content, [width, height], scale);
+                self.displays
+                    .draw(&mut pass, i, panel.content, [width, height], scale);
             }
-            if let Err(e) = self.text_renderer.render(&self.atlas, &self.viewport, &mut pass) {
+            if let Err(e) = self
+                .text_renderer
+                .render(&self.atlas, &self.viewport, &mut pass)
+            {
                 eprintln!("scopecreep: text could not be drawn: {e}");
             }
             self.flat.draw(&mut pass);
-            if let Err(e) = self.menu_renderer.render(&self.atlas, &self.viewport, &mut pass) {
+            if let Err(e) = self
+                .menu_renderer
+                .render(&self.atlas, &self.viewport, &mut pass)
+            {
                 eprintln!("scopecreep: menu text could not be drawn: {e}");
             }
         }
@@ -1094,7 +1565,9 @@ impl ApplicationHandler<Wake> for App {
         if self.window.is_some() {
             return;
         }
-        let attributes = Window::default_attributes().with_title("scopecreep").with_inner_size(LogicalSize::new(1280.0, 760.0));
+        let attributes = Window::default_attributes()
+            .with_title("scopecreep")
+            .with_inner_size(LogicalSize::new(1280.0, 760.0));
         #[cfg(target_os = "linux")]
         let attributes = {
             use winit::platform::wayland::WindowAttributesExtWayland;
@@ -1103,7 +1576,15 @@ impl ApplicationHandler<Wake> for App {
         let made = event_loop
             .create_window(attributes)
             .map_err(Into::into)
-            .and_then(|window| AppWindow::new(Arc::new(window), event_loop, self.feed.clone(), self.scripting, self.proxy.clone()));
+            .and_then(|window| {
+                AppWindow::new(
+                    Arc::new(window),
+                    event_loop,
+                    self.feed.clone(),
+                    self.scripting,
+                    self.proxy.clone(),
+                )
+            });
         match made {
             Ok(window) => self.window = Some(window),
             Err(e) => {
@@ -1127,12 +1608,30 @@ impl ApplicationHandler<Wake> for App {
                 let size = w.window.inner_size();
                 w.resize(size.width, size.height);
             }
-            WindowEvent::CursorMoved { position, .. } => w.pointer_moved(position.x as f32, position.y as f32),
-            WindowEvent::MouseInput { state, button: MouseButton::Left, .. } => w.button(state),
-            WindowEvent::MouseInput { state: ElementState::Pressed, button: MouseButton::Right, .. } => w.right_click(),
-            WindowEvent::MouseInput { state, button: MouseButton::Middle, .. } => w.middle_button(state),
+            WindowEvent::CursorMoved { position, .. } => {
+                w.pointer_moved(position.x as f32, position.y as f32)
+            }
+            WindowEvent::MouseInput {
+                state,
+                button: MouseButton::Left,
+                ..
+            } => w.button(state),
+            WindowEvent::MouseInput {
+                state: ElementState::Pressed,
+                button: MouseButton::Right,
+                ..
+            } => w.right_click(),
+            WindowEvent::MouseInput {
+                state,
+                button: MouseButton::Middle,
+                ..
+            } => w.middle_button(state),
             WindowEvent::ModifiersChanged(m) => w.modifiers = m.state(),
-            WindowEvent::KeyboardInput { event, is_synthetic: false, .. } => w.key(&event),
+            WindowEvent::KeyboardInput {
+                event,
+                is_synthetic: false,
+                ..
+            } => w.key(&event),
             WindowEvent::MouseWheel { delta, .. } => w.wheel(match delta {
                 MouseScrollDelta::LineDelta(_, y) => y,
                 MouseScrollDelta::PixelDelta(p) => p.y as f32 / 40.0,

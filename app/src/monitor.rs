@@ -6,10 +6,10 @@
 //!
 //! Everything here is driven by [`Monitor::poll`] with an explicit clock, so tests can drive it with synthetic
 //! Feed frames and no window (app/tests/feed_seam.rs, app/tests/colour_setup_seam.rs).
-use crate::playback_rate::PlaybackRate;
-use crate::senders::{Arbiter, SenderKey};
 use crate::colour_setup::{ColourSetup, KnownColourSetup, Provenance};
+use crate::playback_rate::PlaybackRate;
 use crate::project::{Outcome, ProjectReader, ProjectReading};
+use crate::senders::{Arbiter, SenderKey};
 use crate::viewer_gate::{Timing, ViewerGate};
 use scopecreep_feed::{FeedReader, FeedStats, Frame, OpenError, SenderInfo};
 use std::io::Write;
@@ -41,9 +41,14 @@ pub enum FeedState {
     NoSender,
     /// Attached to a Sender's Feed. Frames may or may not be flowing; no frames is not an error.
     Connected,
-    VersionMismatch { found: (u32, u32), supported: (u32, u32) },
+    VersionMismatch {
+        found: (u32, u32),
+        supported: (u32, u32),
+    },
     /// Another app is attached to the Feed.
-    Busy { pid: u64 },
+    Busy {
+        pid: u64,
+    },
     NotAFeed,
     Unreadable(String),
 }
@@ -101,7 +106,10 @@ impl SenderSummary {
     /// "Sender 2 (process 4242)", or with names "Sender 2 in Project › Timeline (process 4242)".
     pub fn short_name(&self) -> String {
         match &self.names {
-            Some(n) => format!("Sender {} in {} › {} (process {})", self.instance, n.project, n.timeline, self.pid),
+            Some(n) => format!(
+                "Sender {} in {} › {} (process {})",
+                self.instance, n.project, n.timeline, self.pid
+            ),
             None => format!("Sender {} (process {})", self.instance, self.pid),
         }
     }
@@ -167,8 +175,18 @@ pub struct Status {
 impl Status {
     /// The Colour Setup of the picture on screen: the Sender's manual override if it sent one, else the project's.
     pub fn colour_setup(&self) -> Option<KnownColourSetup> {
-        let sent = self.picture.as_ref().and_then(|p| p.sent_colour_setup.clone());
-        let project = self.project.as_ref().and_then(|r| r.colour_setup.clone()).map(|setup| KnownColourSetup { setup, provenance: Provenance::Project });
+        let sent = self
+            .picture
+            .as_ref()
+            .and_then(|p| p.sent_colour_setup.clone());
+        let project = self
+            .project
+            .as_ref()
+            .and_then(|r| r.colour_setup.clone())
+            .map(|setup| KnownColourSetup {
+                setup,
+                provenance: Provenance::Project,
+            });
         match sent {
             Some(s) if s.provenance == Provenance::Manual => Some(s),
             s => project.or(s),
@@ -186,13 +204,23 @@ impl Status {
 
     /// What every display needs to know about the Colour Setup.
     pub fn display_context(&self) -> crate::display::DisplayContext {
-        crate::display::DisplayContext { colour_setup: self.colour_setup(), colour_label: self.colour_label(), ..Default::default() }
+        crate::display::DisplayContext {
+            colour_setup: self.colour_setup(),
+            colour_label: self.colour_label(),
+            ..Default::default()
+        }
     }
 
     /// The feeding timeline's name, once known (from the Sender, else the project as last read).
     pub fn timeline_name(&self) -> Option<String> {
-        let sender = self.driving.as_ref().and_then(|d| d.names.as_ref()).map(|n| n.timeline.clone());
-        sender.or_else(|| self.project.as_ref().and_then(|p| p.timeline.clone())).filter(|t| !t.is_empty())
+        let sender = self
+            .driving
+            .as_ref()
+            .and_then(|d| d.names.as_ref())
+            .map(|n| n.timeline.clone());
+        sender
+            .or_else(|| self.project.as_ref().and_then(|p| p.timeline.clone()))
+            .filter(|t| !t.is_empty())
     }
 
     fn rate_text(&self) -> String {
@@ -219,7 +247,11 @@ impl Status {
     /// parts only, so rate and drops stay visible at any width the window can have.
     pub fn status_candidates(&self) -> Vec<String> {
         let sep = crate::window_text::SEP;
-        let (rate, why, short) = (self.rate_text(), self.dropped_text(true), self.dropped_text(false));
+        let (rate, why, short) = (
+            self.rate_text(),
+            self.dropped_text(true),
+            self.dropped_text(false),
+        );
         let mut all = Vec::new();
         if let Some(timeline) = self.timeline_name() {
             all.push(format!("{rate}{sep}{why}{sep}{timeline}"));
@@ -247,9 +279,21 @@ impl Status {
             lines.push(format!("Not shown: {}", other.short_name()));
         }
         if let Some(p) = &self.project {
-            lines.push(format!("Project {}{}  ·  {}", p.project, p.timeline.as_ref().map_or(String::new(), |t| format!(" › {t}")), p.product));
+            lines.push(format!(
+                "Project {}{}  ·  {}",
+                p.project,
+                p.timeline
+                    .as_ref()
+                    .map_or(String::new(), |t| format!(" › {t}")),
+                p.product
+            ));
         }
-        lines.push(format!("Feed {}  ·  {} shown, {} dropped", self.path.display(), self.viewer_frames, self.dropped));
+        lines.push(format!(
+            "Feed {}  ·  {} shown, {} dropped",
+            self.path.display(),
+            self.viewer_frames,
+            self.dropped
+        ));
         lines.join("\n")
     }
 
@@ -265,20 +309,36 @@ impl Status {
     /// One sentence when there is something the user needs to know, else nothing.
     pub fn notice(&self) -> Option<String> {
         match &self.feed {
-            FeedState::NoSender => Some("No Sender. Put the scopecreep Sender on the last timeline node in Resolve.".into()),
+            FeedState::NoSender => Some(
+                "No Sender. Put the scopecreep Sender on the last timeline node in Resolve.".into(),
+            ),
             FeedState::VersionMismatch { found, supported } => Some(format!(
                 "The Sender speaks Feed version {}.{} and this app reads version {}.x. Install the Sender and the app from the same release.",
                 found.0, found.1, supported.0
             )),
-            FeedState::Busy { pid } => Some(format!("Another scopecreep app (process {pid}) is already showing this Feed.")),
-            FeedState::NotAFeed => Some(format!("The file at {} is not a Feed.", self.path.display())),
-            FeedState::Unreadable(why) => Some(format!("The Feed at {} cannot be opened: {why}.", self.path.display())),
+            FeedState::Busy { pid } => Some(format!(
+                "Another scopecreep app (process {pid}) is already showing this Feed."
+            )),
+            FeedState::NotAFeed => Some(format!(
+                "The file at {} is not a Feed.",
+                self.path.display()
+            )),
+            FeedState::Unreadable(why) => Some(format!(
+                "The Feed at {} cannot be opened: {why}.",
+                self.path.display()
+            )),
             FeedState::Connected => match (&self.sender_error, &self.picture) {
                 (Some(e), _) => Some(format!("Sender: {e}")),
-                (None, None) => self.conflict_notice().or_else(|| Some("Waiting for frames. Play or move the playhead in Resolve.".into())),
-                (None, Some(_)) => self.conflict_notice().or_else(|| match (&self.project_state, self.colour_setup()) {
-                    (ProjectState::Problem(why), None) => Some(format!("Colour Setup unknown: {why}. Or set it on the Sender node in Resolve.")),
-                    _ => None,
+                (None, None) => self.conflict_notice().or_else(|| {
+                    Some("Waiting for frames. Play or move the playhead in Resolve.".into())
+                }),
+                (None, Some(_)) => self.conflict_notice().or_else(|| {
+                    match (&self.project_state, self.colour_setup()) {
+                        (ProjectState::Problem(why), None) => Some(format!(
+                            "Colour Setup unknown: {why}. Or set it on the Sender node in Resolve."
+                        )),
+                        _ => None,
+                    }
                 }),
             },
         }
@@ -297,13 +357,21 @@ impl Status {
             ));
         };
         let others: Vec<String> = self.ignored.iter().map(SenderSummary::short_name).collect();
-        let lead = if others.len() == 1 { "Another Sender is active" } else { "Other Senders are active" };
+        let lead = if others.len() == 1 {
+            "Another Sender is active"
+        } else {
+            "Other Senders are active"
+        };
         let advice = if self.ignored.iter().any(|s| s.pid != driving.pid) {
             "Only the Resolve that loaded its Sender first sends frames: close the other Resolve or remove its Sender."
         } else {
             "Keep one Sender, on the last timeline node."
         };
-        Some(format!("{lead}: {}. Showing {} only. {advice}", others.join(", "), driving.short_name()))
+        Some(format!(
+            "{lead}: {}. Showing {} only. {advice}",
+            others.join(", "),
+            driving.short_name()
+        ))
     }
 }
 
@@ -370,7 +438,11 @@ impl Monitor {
                 ignored: Vec::new(),
                 project: None,
                 project_reads: 0,
-                project_state: if project_reader.is_some() { ProjectState::NotYetRead } else { ProjectState::NoReader },
+                project_state: if project_reader.is_some() {
+                    ProjectState::NotYetRead
+                } else {
+                    ProjectState::NoReader
+                },
             },
             next_open_ns: 0,
             next_check_ns: 0,
@@ -419,7 +491,9 @@ impl Monitor {
                 self.arbiter.reset();
                 self.guests.clear();
                 self.last_sequence = None;
-                if let (Some(base), Some(stats)) = (self.drops_baseline.take(), self.status.feed_stats) {
+                if let (Some(base), Some(stats)) =
+                    (self.drops_baseline.take(), self.status.feed_stats)
+                {
                     // Counted drops stay counted; the next Feed file is measured from its own starting values.
                     self.drops_before.0 += stats.drops_overwritten.saturating_sub(base.0);
                     self.drops_before.1 += stats.drops_busy.saturating_sub(base.1);
@@ -446,7 +520,9 @@ impl Monitor {
                     self.status.feed = match e {
                         OpenError::NoFeed => FeedState::NoSender,
                         OpenError::NotAFeed => FeedState::NotAFeed,
-                        OpenError::VersionMismatch { found, supported } => FeedState::VersionMismatch { found, supported },
+                        OpenError::VersionMismatch { found, supported } => {
+                            FeedState::VersionMismatch { found, supported }
+                        }
                         OpenError::Busy { pid } => FeedState::Busy { pid },
                         OpenError::Io(e) => FeedState::Unreadable(e.to_string()),
                     };
@@ -459,16 +535,30 @@ impl Monitor {
         };
         if slow_check || now_ns >= self.next_check_ns {
             self.next_check_ns = now_ns + CHECK_INTERVAL_NS;
-            self.status.feed = if reader.sender_alive() { FeedState::Connected } else { FeedState::NoSender };
+            self.status.feed = if reader.sender_alive() {
+                FeedState::Connected
+            } else {
+                FeedState::NoSender
+            };
             self.status.sender_error = reader.sender_error();
             // Guests: registered instances of other Resolve processes that rendered lately and still run.
             let owner = self.status.sender.as_ref().map_or(0, |s| s.pid);
             self.guests = reader
                 .registry()
                 .into_iter()
-                .filter(|e| e.pid != owner && e.last_render_ns != 0 && now_ns.saturating_sub(e.last_render_ns) < GUEST_ACTIVE_NS)
+                .filter(|e| {
+                    e.pid != owner
+                        && e.last_render_ns != 0
+                        && now_ns.saturating_sub(e.last_render_ns) < GUEST_ACTIVE_NS
+                })
                 .filter(|e| scopecreep_feed::process_alive(e.pid))
-                .map(|e| SenderSummary { pid: e.pid, instance: e.instance, host: e.host, frame_rate: e.frame_rate, names: None })
+                .map(|e| SenderSummary {
+                    pid: e.pid,
+                    instance: e.instance,
+                    host: e.host,
+                    frame_rate: e.frame_rate,
+                    names: None,
+                })
                 .collect();
         }
         let sender_pid = self.status.sender.as_ref().map_or(0, |s| s.pid);
@@ -477,8 +567,13 @@ impl Monitor {
                 self.lost_pending += frame.sequence().saturating_sub(prev + 1);
             }
             self.last_sequence = Some(frame.sequence());
-            let key = SenderKey { pid: sender_pid, instance: frame.sender_instance() };
-            let decision = self.arbiter.frame(key, frame.render_ns(), frame.frame_rate());
+            let key = SenderKey {
+                pid: sender_pid,
+                instance: frame.sender_instance(),
+            };
+            let decision = self
+                .arbiter
+                .frame(key, frame.render_ns(), frame.frame_rate());
             if let Some(trace) = &mut self.trace {
                 let _ = writeln!(
                     trace,
@@ -519,27 +614,49 @@ impl Monitor {
                 sequence: frame.sequence(),
                 render_ns: frame.render_ns(),
                 sent_colour_setup: frame.colour_setup().and_then(|sent| {
-                    ColourSetup::from_feed(&sent).map(|setup| KnownColourSetup { setup, provenance: sent.provenance })
+                    ColourSetup::from_feed(&sent).map(|setup| KnownColourSetup {
+                        setup,
+                        provenance: sent.provenance,
+                    })
                 }),
             });
             if let Some(trace) = &mut self.trace {
-                let _ = writeln!(trace, "shown seq={} time={} at_ns={now_ns}", frame.sequence(), frame.frame_time());
+                let _ = writeln!(
+                    trace,
+                    "shown seq={} time={} at_ns={now_ns}",
+                    frame.sequence(),
+                    frame.frame_time()
+                );
             }
-            self.rate.viewer_frame(frame.render_ns(), frame.frame_time(), frame.frame_rate(), std::mem::take(&mut self.lost_pending));
+            self.rate.viewer_frame(
+                frame.render_ns(),
+                frame.frame_time(),
+                frame.frame_rate(),
+                std::mem::take(&mut self.lost_pending),
+            );
             show(&frame);
         }
         let stats = reader.stats();
         let counts = self.gate.counts();
-        let base = *self.drops_baseline.get_or_insert((stats.drops_overwritten, stats.drops_busy));
-        self.status.dropped_app_slow = self.drops_before.0 + stats.drops_overwritten.saturating_sub(base.0);
-        self.status.dropped_sender_busy = self.drops_before.1 + stats.drops_busy.saturating_sub(base.1);
+        let base = *self
+            .drops_baseline
+            .get_or_insert((stats.drops_overwritten, stats.drops_busy));
+        self.status.dropped_app_slow =
+            self.drops_before.0 + stats.drops_overwritten.saturating_sub(base.0);
+        self.status.dropped_sender_busy =
+            self.drops_before.1 + stats.drops_busy.saturating_sub(base.1);
         self.status.dropped = self.status.dropped_app_slow + self.status.dropped_sender_busy;
         self.status.feed_stats = Some(stats);
         self.status.viewer_frames = counts.viewer_frames;
         self.status.repeat_renders = counts.repeat_renders;
         self.status.cache_renders_ignored = counts.cache_renders_ignored;
         self.status.playback_rate = self.rate.rate(now_ns);
-        let host = self.status.sender.as_ref().map(|s| s.host.clone()).unwrap_or_default();
+        let host = self
+            .status
+            .sender
+            .as_ref()
+            .map(|s| s.host.clone())
+            .unwrap_or_default();
         let summary = |key: SenderKey, arbiter: &Arbiter| SenderSummary {
             pid: key.pid,
             instance: key.instance,
@@ -553,9 +670,17 @@ impl Monitor {
         if let (Some(d), Some(p)) = (&mut self.status.driving, &self.status.project)
             && let Some(timeline) = &p.timeline
         {
-            d.names = Some(SenderNames { project: p.project.clone(), timeline: timeline.clone() });
+            d.names = Some(SenderNames {
+                project: p.project.clone(),
+                timeline: timeline.clone(),
+            });
         }
-        self.status.ignored = self.arbiter.flagged(now_ns).into_iter().map(|k| summary(k, &self.arbiter)).collect();
+        self.status.ignored = self
+            .arbiter
+            .flagged(now_ns)
+            .into_iter()
+            .map(|k| summary(k, &self.arbiter))
+            .collect();
         self.status.ignored.extend(self.guests.iter().cloned());
         self.last_render_ns = self.last_render_ns.max(stats.last_render_ns);
         let sender_here = self.status.feed == FeedState::Connected;
@@ -565,7 +690,9 @@ impl Monitor {
     /// Collect a finished read, give up on a stuck one, and start a new one when it is safe: a Sender is here (so
     /// its renders tell whether Resolve is playing) and it has rendered nothing for [`QUIET_BEFORE_READ_NS`].
     fn poll_project(&mut self, now_ns: u64, sender_here: bool) {
-        let Some(project_reader) = &mut self.project_reader else { return };
+        let Some(project_reader) = &mut self.project_reader else {
+            return;
+        };
         if let Some(started) = self.read_started_ns {
             if self.last_render_ns > started {
                 self.quiet_needed_ns = QUIET_AFTER_COLLISION_NS; // Resolve rendered while being asked
@@ -591,7 +718,8 @@ impl Monitor {
             } else if now_ns.saturating_sub(started) > READ_TIMEOUT_NS {
                 project_reader.abandon();
                 self.read_started_ns = None;
-                self.status.project_state = ProjectState::Problem("Resolve did not answer by script".to_string());
+                self.status.project_state =
+                    ProjectState::Problem("Resolve did not answer by script".to_string());
                 self.next_read_ns = now_ns + RETRY_AFTER_PROBLEM_NS;
             }
             return;

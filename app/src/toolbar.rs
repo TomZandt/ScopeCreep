@@ -13,12 +13,45 @@ pub const TOGGLE_OFF: &str = "off";
 /// The B/W toggle (#118): the setting and its chip, for the Panels that draw their unpainted picture in Luma grey
 /// or in colour. The setting's first choice is its default, so each Panel picks the one that suits it.
 pub const BW_SETTING: &str = "bw";
-pub const BW_DEFAULT_COLOUR: SettingDef = SettingDef { key: BW_SETTING, label: "Black and white", amount: None, choices: &[Choice { value: TOGGLE_OFF, text: "Colour" }, Choice { value: "on", text: "Black and white" }] };
-pub const BW_DEFAULT_GREY: SettingDef = SettingDef { key: BW_SETTING, label: "Black and white", amount: None, choices: &[Choice { value: "on", text: "Black and white" }, Choice { value: TOGGLE_OFF, text: "Colour" }] };
+pub const BW_DEFAULT_COLOUR: SettingDef = SettingDef {
+    key: BW_SETTING,
+    label: "Black and white",
+    amount: None,
+    choices: &[
+        Choice {
+            value: TOGGLE_OFF,
+            text: "Colour",
+        },
+        Choice {
+            value: "on",
+            text: "Black and white",
+        },
+    ],
+};
+pub const BW_DEFAULT_GREY: SettingDef = SettingDef {
+    key: BW_SETTING,
+    label: "Black and white",
+    amount: None,
+    choices: &[
+        Choice {
+            value: "on",
+            text: "Black and white",
+        },
+        Choice {
+            value: TOGGLE_OFF,
+            text: "Colour",
+        },
+    ],
+};
 pub static BW_TOOLBAR: [ToolbarDef; 1] = [ToolbarDef {
     key: BW_SETTING,
     mode: ChipMode::Toggle,
-    chips: &[ToolbarChip { value: "on", text: "B/W", tooltip: "Unpainted picture in black and white (Luma grey)", channel: None }],
+    chips: &[ToolbarChip {
+        value: "on",
+        text: "B/W",
+        tooltip: "Unpainted picture in black and white (Luma grey)",
+        channel: None,
+    }],
 }];
 
 /// The clean picture's channel (#160): colour (off), or one of Y R G B as grey, one or none lit. Colour is the
@@ -28,7 +61,28 @@ pub const CHANNEL_DEF: SettingDef = SettingDef {
     key: CHANNEL_SETTING,
     label: "Channel",
     amount: None,
-    choices: &[Choice { value: TOGGLE_OFF, text: "Colour" }, Choice { value: "luma", text: "Luma (Y)" }, Choice { value: "red", text: "Red" }, Choice { value: "green", text: "Green" }, Choice { value: "blue", text: "Blue" }],
+    choices: &[
+        Choice {
+            value: TOGGLE_OFF,
+            text: "Colour",
+        },
+        Choice {
+            value: "luma",
+            text: "Luma (Y)",
+        },
+        Choice {
+            value: "red",
+            text: "Red",
+        },
+        Choice {
+            value: "green",
+            text: "Green",
+        },
+        Choice {
+            value: "blue",
+            text: "Blue",
+        },
+    ],
 };
 
 /// One channel the clean picture can show as grey: the single table the chips, the shader and the title tag read.
@@ -48,10 +102,38 @@ pub struct ChannelChoice {
 
 /// The channels in chip order.
 pub const CHANNELS: [ChannelChoice; 4] = [
-    ChannelChoice { value: "luma", letter: "Y", colour: Channel::Y, tooltip: "Luma (Y)", tag: "Luma", shader: 1.0 },
-    ChannelChoice { value: "red", letter: "R", colour: Channel::R, tooltip: "Red", tag: "Red", shader: 2.0 },
-    ChannelChoice { value: "green", letter: "G", colour: Channel::G, tooltip: "Green", tag: "Green", shader: 3.0 },
-    ChannelChoice { value: "blue", letter: "B", colour: Channel::B, tooltip: "Blue", tag: "Blue", shader: 4.0 },
+    ChannelChoice {
+        value: "luma",
+        letter: "Y",
+        colour: Channel::Y,
+        tooltip: "Luma (Y)",
+        tag: "Luma",
+        shader: 1.0,
+    },
+    ChannelChoice {
+        value: "red",
+        letter: "R",
+        colour: Channel::R,
+        tooltip: "Red",
+        tag: "Red",
+        shader: 2.0,
+    },
+    ChannelChoice {
+        value: "green",
+        letter: "G",
+        colour: Channel::G,
+        tooltip: "Green",
+        tag: "Green",
+        shader: 3.0,
+    },
+    ChannelChoice {
+        value: "blue",
+        letter: "B",
+        colour: Channel::B,
+        tooltip: "Blue",
+        tag: "Blue",
+        shader: 4.0,
+    },
 ];
 
 /// The channel `value` (a stored setting) names; `None` for colour or anything else.
@@ -61,22 +143,51 @@ pub fn channel_of(value: Option<&str>) -> Option<&'static ChannelChoice> {
 
 const fn channel_chip(i: usize) -> ToolbarChip {
     let c = &CHANNELS[i];
-    ToolbarChip { value: c.value, text: c.letter, tooltip: c.tooltip, channel: Some(c.colour) }
+    ToolbarChip {
+        value: c.value,
+        text: c.letter,
+        tooltip: c.tooltip,
+        channel: Some(c.colour),
+    }
 }
 
 pub static CHANNEL_TOOLBAR: [ToolbarDef; 1] = [ToolbarDef {
     key: CHANNEL_SETTING,
     mode: ChipMode::OneOrNone,
-    chips: &[channel_chip(0), channel_chip(1), channel_chip(2), channel_chip(3)],
+    chips: &[
+        channel_chip(0),
+        channel_chip(1),
+        channel_chip(2),
+        channel_chip(3),
+    ],
 }];
 
 /// The clean picture's Loupe toggle (#161): off by default; its size is the popover's `size` choice.
 pub const LOUPE_SETTING: &str = "loupe";
-pub const LOUPE_DEF: SettingDef = SettingDef { key: LOUPE_SETTING, label: "Loupe", amount: None, choices: &[Choice { value: TOGGLE_OFF, text: "Off" }, Choice { value: "on", text: "On" }] };
+pub const LOUPE_DEF: SettingDef = SettingDef {
+    key: LOUPE_SETTING,
+    label: "Loupe",
+    amount: None,
+    choices: &[
+        Choice {
+            value: TOGGLE_OFF,
+            text: "Off",
+        },
+        Choice {
+            value: "on",
+            text: "On",
+        },
+    ],
+};
 pub static LOUPE_TOOLBAR: [ToolbarDef; 1] = [ToolbarDef {
     key: LOUPE_SETTING,
     mode: ChipMode::Toggle,
-    chips: &[ToolbarChip { value: "on", text: "L", tooltip: "Loupe: drag it, scroll over it to zoom", channel: None }],
+    chips: &[ToolbarChip {
+        value: "on",
+        text: "L",
+        tooltip: "Loupe: drag it, scroll over it to zoom",
+        channel: None,
+    }],
 }];
 
 /// One chip: the setting's choice it selects, the letter on it, what hovering it says, and the colour it takes
@@ -137,7 +248,12 @@ impl Toolbar {
         self.chips.insert(0, Chip::new(&r.text));
         self.on.insert(0, r.percent > r.fit + 0.01);
         self.tooltips.insert(0, ZOOM_TOOLTIP.to_string());
-        self.picks.insert(0, ChipAction::Zoom { short: r.short.clone() });
+        self.picks.insert(
+            0,
+            ChipAction::Zoom {
+                short: r.short.clone(),
+            },
+        );
         self
     }
 
@@ -158,9 +274,17 @@ impl Toolbar {
     /// On a title bar `bar_width` wide (device pixels), shorten the zoom chip to its number ("23 %" for "Fit 23 %")
     /// when the chips and the settings button would not fit with it long. It stays first, so it stays on the bar.
     pub fn fit_to(&mut self, bar_width: f32, settings_button: bool, scale: f32) {
-        let Some(ChipAction::Zoom { short }) = self.picks.first() else { return };
-        let button = if settings_button { (crate::style::SPACE_SETTINGS_BUTTON + crate::style::SPACE_CHIP_GAP) * scale } else { 0.0 };
-        let needed = crate::components::chip_row_width(&self.chips, scale) + button + 2.0 * crate::style::SPACE_BAR_PAD * scale;
+        let Some(ChipAction::Zoom { short }) = self.picks.first() else {
+            return;
+        };
+        let button = if settings_button {
+            (crate::style::SPACE_SETTINGS_BUTTON + crate::style::SPACE_CHIP_GAP) * scale
+        } else {
+            0.0
+        };
+        let needed = crate::components::chip_row_width(&self.chips, scale)
+            + button
+            + 2.0 * crate::style::SPACE_BAR_PAD * scale;
         if needed > bar_width {
             self.chips[0].text = short.clone();
         }
@@ -182,7 +306,9 @@ impl Toolbar {
                     _ => stored == Some(chip.value),
                 });
                 toolbar.tooltips.push(chip.tooltip.to_string());
-                toolbar.picks.push(ChipAction::Set(def.key, chip.value.to_string()));
+                toolbar
+                    .picks
+                    .push(ChipAction::Set(def.key, chip.value.to_string()));
             }
             if matches!(def.mode, ChipMode::Toggle | ChipMode::OneOrNone) {
                 // A click on a toggle (or a one-or-none chip) that is on turns it off.
@@ -197,7 +323,13 @@ impl Toolbar {
                 let on = toolbar.on[first..].to_vec();
                 for i in 0..def.chips.len() {
                     let next = crate::components::clicked(def.mode, &on, i);
-                    let value: String = def.chips.iter().zip(&next).filter(|(_, on)| **on).map(|(c, _)| c.value).collect();
+                    let value: String = def
+                        .chips
+                        .iter()
+                        .zip(&next)
+                        .filter(|(_, on)| **on)
+                        .map(|(c, _)| c.value)
+                        .collect();
                     toolbar.picks[first + i] = ChipAction::Set(def.key, value);
                 }
             }
@@ -223,5 +355,8 @@ impl Toolbar {
 
 /// The settings left for the popover: those the toolbar does not show.
 pub fn popover_defs(defs: &[SettingDef], toolbar: &[ToolbarDef]) -> Vec<SettingDef> {
-    defs.iter().filter(|d| !toolbar.iter().any(|t| t.key == d.key)).copied().collect()
+    defs.iter()
+        .filter(|d| !toolbar.iter().any(|t| t.key == d.key))
+        .copied()
+        .collect()
 }

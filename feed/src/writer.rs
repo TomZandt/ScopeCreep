@@ -4,7 +4,9 @@
 //! processes join it as guests.
 use crate::SentColourSetup;
 use crate::layout::*;
-use crate::{READER_TIMEOUT_NS, REGISTRY_ENTRIES, SENDER_NAME, VERSION_MAJOR, VERSION_MINOR, now_ns};
+use crate::{
+    READER_TIMEOUT_NS, REGISTRY_ENTRIES, SENDER_NAME, VERSION_MAJOR, VERSION_MINOR, now_ns,
+};
 use std::fs::OpenOptions;
 use std::io;
 use std::os::unix::fs::OpenOptionsExt;
@@ -36,7 +38,10 @@ pub struct SenderIdentity {
 
 impl Default for SenderIdentity {
     fn default() -> Self {
-        SenderIdentity { pid: std::process::id() as u64, host: "synthetic frame writer".into() }
+        SenderIdentity {
+            pid: std::process::id() as u64,
+            host: "synthetic frame writer".into(),
+        }
     }
 }
 
@@ -62,13 +67,39 @@ pub struct FeedWriter {
 impl FeedWriter {
     /// Publish a new Feed at `path` with `slot_count` slots of `slot_capacity` bytes (rounded up to 4096), as this
     /// process. A Feed already at `path` is replaced and marked retired, whoever owns it.
-    pub fn create(path: impl AsRef<Path>, slot_count: usize, slot_capacity: usize) -> io::Result<FeedWriter> {
-        Self::publish(path.as_ref(), slot_count, slot_capacity, VERSION_MAJOR, VERSION_MINOR, SenderIdentity::default(), None)
+    pub fn create(
+        path: impl AsRef<Path>,
+        slot_count: usize,
+        slot_capacity: usize,
+    ) -> io::Result<FeedWriter> {
+        Self::publish(
+            path.as_ref(),
+            slot_count,
+            slot_capacity,
+            VERSION_MAJOR,
+            VERSION_MINOR,
+            SenderIdentity::default(),
+            None,
+        )
     }
 
     /// As [`FeedWriter::create`], but claiming another protocol version (to test how readers react).
-    pub fn create_with_version(path: impl AsRef<Path>, slot_count: usize, slot_capacity: usize, major: u32, minor: u32) -> io::Result<FeedWriter> {
-        Self::publish(path.as_ref(), slot_count, slot_capacity, major, minor, SenderIdentity::default(), None)
+    pub fn create_with_version(
+        path: impl AsRef<Path>,
+        slot_count: usize,
+        slot_capacity: usize,
+        major: u32,
+        minor: u32,
+    ) -> io::Result<FeedWriter> {
+        Self::publish(
+            path.as_ref(),
+            slot_count,
+            slot_capacity,
+            major,
+            minor,
+            SenderIdentity::default(),
+            None,
+        )
     }
 
     /// Start as a Sender process does when Resolve loads it: if the Feed at `path` belongs to another Sender
@@ -76,7 +107,13 @@ impl FeedWriter {
     pub fn start(path: impl AsRef<Path>, identity: SenderIdentity) -> io::Result<FeedWriter> {
         let path = path.as_ref();
         if let Some(map) = live_feed_of_another(path, identity.pid) {
-            return Ok(FeedWriter { map, path: path.to_path_buf(), identity, guest: true, colour_setup: None });
+            return Ok(FeedWriter {
+                map,
+                path: path.to_path_buf(),
+                identity,
+                guest: true,
+                colour_setup: None,
+            });
         }
         Self::publish(path, 0, 0, VERSION_MAJOR, VERSION_MINOR, identity, None)
     }
@@ -86,7 +123,15 @@ impl FeedWriter {
     pub fn replace(&mut self, slot_count: usize, slot_capacity: usize) -> io::Result<()> {
         assert!(!self.guest, "a guest does not publish Feeds");
         let colour_setup = self.colour_setup.take();
-        *self = Self::publish(&self.path, slot_count, slot_capacity, VERSION_MAJOR, VERSION_MINOR, self.identity.clone(), Some(&self.map))?;
+        *self = Self::publish(
+            &self.path,
+            slot_count,
+            slot_capacity,
+            VERSION_MAJOR,
+            VERSION_MINOR,
+            self.identity.clone(),
+            Some(&self.map),
+        )?;
         self.colour_setup = colour_setup;
         Ok(())
     }
@@ -108,7 +153,15 @@ impl FeedWriter {
             return;
         }
         // The owner has quit: publish a Feed of our own with only our own instances.
-        if let Ok(w) = Self::publish(&self.path, 0, 0, VERSION_MAJOR, VERSION_MINOR, self.identity.clone(), None) {
+        if let Ok(w) = Self::publish(
+            &self.path,
+            0,
+            0,
+            VERSION_MAJOR,
+            VERSION_MINOR,
+            self.identity.clone(),
+            None,
+        ) {
             let mine = registry_of(&self.map, Some(self.identity.pid));
             *self = w;
             for e in mine {
@@ -154,7 +207,10 @@ impl FeedWriter {
         }
         for i in 0..REGISTRY_ENTRIES {
             let e = entry(i);
-            if m.atomic_u32(e + R_STATE).compare_exchange(ENTRY_FREE, ENTRY_CLAIMING, AcqRel, Acquire).is_ok() {
+            if m.atomic_u32(e + R_STATE)
+                .compare_exchange(ENTRY_FREE, ENTRY_CLAIMING, AcqRel, Acquire)
+                .is_ok()
+            {
                 m.set_u32(e + R_INSTANCE, instance);
                 m.set_u64(e + R_PID, pid);
                 m.set_f64(e + R_FRAME_RATE, frame_rate);
@@ -172,7 +228,9 @@ impl FeedWriter {
     /// A Sender instance was destroyed: take it off the registry.
     pub fn unregister(&mut self, instance: u32) {
         if let Some(i) = find_entry(&self.map, self.identity.pid, instance) {
-            self.map.atomic_u32(entry(i) + R_STATE).store(ENTRY_FREE, Release);
+            self.map
+                .atomic_u32(entry(i) + R_STATE)
+                .store(ENTRY_FREE, Release);
         }
     }
 
@@ -182,7 +240,9 @@ impl FeedWriter {
             let e = entry(i);
             self.map.set_f64(e + R_LAST_FRAME_TIME, frame_time);
             self.map.atomic_u64(e + R_RENDERS).fetch_add(1, Relaxed);
-            self.map.atomic_u64(e + R_LAST_RENDER_NS).store(render_ns, Release);
+            self.map
+                .atomic_u64(e + R_LAST_RENDER_NS)
+                .store(render_ns, Release);
         }
     }
 
@@ -207,7 +267,11 @@ impl FeedWriter {
         let m = &self.map;
         let row_bytes = meta.width as usize * 16;
         let data_bytes = row_bytes * meta.height as usize;
-        assert_eq!(pixels.len() * 4, data_bytes, "pixels must be width * height * 4 floats");
+        assert_eq!(
+            pixels.len() * 4,
+            data_bytes,
+            "pixels must be width * height * 4 floats"
+        );
         if data_bytes > m.slot_capacity() || m.slot_count() == 0 {
             return Err(WriteError::TooLarge);
         }
@@ -230,11 +294,18 @@ impl FeedWriter {
         m.set_u32(s + S_SENDER_INSTANCE, meta.sender_instance);
         SentColourSetup::store(self.colour_setup.as_ref(), m, s);
         // SAFETY: the slot is WRITING, so only this writer touches its pixel area; the range was checked.
-        unsafe { std::ptr::copy_nonoverlapping(pixels.as_ptr(), m.floats(s + SLOT_HEADER_BYTES, pixels.len()), pixels.len()) };
+        unsafe {
+            std::ptr::copy_nonoverlapping(
+                pixels.as_ptr(),
+                m.floats(s + SLOT_HEADER_BYTES, pixels.len()),
+                pixels.len(),
+            )
+        };
         m.set_u64(s + S_PUBLISH_NS, now_ns());
         m.atomic_u64(H_FRAMES_PUBLISHED).fetch_add(1, Relaxed);
         m.atomic_u64(H_RENDERS_TOTAL).fetch_add(1, Relaxed);
-        m.atomic_u64(H_LAST_RENDER_NS).store(meta.render_ns, Relaxed);
+        m.atomic_u64(H_LAST_RENDER_NS)
+            .store(meta.render_ns, Relaxed);
         m.atomic_u32(s + S_STATE).store(READY, Release);
         Ok(sequence)
     }
@@ -244,14 +315,20 @@ impl FeedWriter {
         let n = m.slot_count();
         for _ in 0..2 {
             for i in 0..n {
-                if m.atomic_u32(m.slot(i) + S_STATE).compare_exchange(FREE, WRITING, AcqRel, Acquire).is_ok() {
+                if m.atomic_u32(m.slot(i) + S_STATE)
+                    .compare_exchange(FREE, WRITING, AcqRel, Acquire)
+                    .is_ok()
+                {
                     return Some(i);
                 }
             }
             let oldest = (0..n)
                 .filter(|&i| m.atomic_u32(m.slot(i) + S_STATE).load(Acquire) == READY)
                 .min_by_key(|&i| m.atomic_u64(m.slot(i) + S_SEQUENCE).load(Acquire))?;
-            if m.atomic_u32(m.slot(oldest) + S_STATE).compare_exchange(READY, WRITING, AcqRel, Acquire).is_ok() {
+            if m.atomic_u32(m.slot(oldest) + S_STATE)
+                .compare_exchange(READY, WRITING, AcqRel, Acquire)
+                .is_ok()
+            {
                 m.atomic_u64(H_DROPS_OVERWRITTEN).fetch_add(1, Relaxed);
                 return Some(oldest);
             } // else the reader took it between the scan and the swap: look once more
@@ -261,13 +338,26 @@ impl FeedWriter {
 
     /// Build a Feed file under a temporary name, rename it over `path` and retire the Feed that was there.
     /// `carry`: the previous Feed of the same Sender, whose counters and registry continue in the new file.
-    fn publish(path: &Path, slot_count: usize, slot_capacity: usize, major: u32, minor: u32, identity: SenderIdentity, carry: Option<&Mapping>) -> io::Result<FeedWriter> {
+    fn publish(
+        path: &Path,
+        slot_count: usize,
+        slot_capacity: usize,
+        major: u32,
+        minor: u32,
+        identity: SenderIdentity,
+        carry: Option<&Mapping>,
+    ) -> io::Result<FeedWriter> {
         let path = path.to_path_buf();
         let slot_capacity = slot_capacity.div_ceil(4096) * 4096;
         let bytes = file_bytes(slot_count, slot_capacity);
         let tmp = PathBuf::from(format!("{}.{}.tmp", path.display(), std::process::id()));
         let _ = std::fs::remove_file(&tmp);
-        let file = OpenOptions::new().read(true).write(true).create_new(true).mode(0o600).open(&tmp)?;
+        let file = OpenOptions::new()
+            .read(true)
+            .write(true)
+            .create_new(true)
+            .mode(0o600)
+            .open(&tmp)?;
         file.set_len(bytes as u64)?;
         let map = Mapping::map(&file, bytes)?;
         map.set_u32(H_VERSION_MAJOR, major);
@@ -276,13 +366,31 @@ impl FeedWriter {
         map.set_u32(H_SLOT_HEADER_BYTES, SLOT_HEADER_BYTES as u32);
         map.set_u32(H_SLOT_COUNT, slot_count as u32);
         map.set_u64(H_SLOT_CAPACITY, slot_capacity as u64);
-        map.set_u64(H_FEED_ID, (now_ns() << 16 ^ std::process::id() as u64 ^ identity.pid).max(1));
+        map.set_u64(
+            H_FEED_ID,
+            (now_ns() << 16 ^ std::process::id() as u64 ^ identity.pid).max(1),
+        );
         map.set_u64(H_SENDER_PID, identity.pid);
         map.set_text(H_SENDER_NAME, SENDER_NAME_BYTES, SENDER_NAME);
-        map.set_text(H_SENDER_VERSION, SENDER_VERSION_BYTES, concat!(env!("CARGO_PKG_VERSION"), " synthetic"));
+        map.set_text(
+            H_SENDER_VERSION,
+            SENDER_VERSION_BYTES,
+            concat!(env!("CARGO_PKG_VERSION"), " synthetic"),
+        );
         map.set_text(H_HOST_NAME, HOST_NAME_BYTES, &identity.host);
         if let Some(old) = carry {
-            for off in [H_NEXT_SEQUENCE, H_FRAMES_PUBLISHED, H_DROPS_OVERWRITTEN, H_DROPS_BUSY, H_RENDERS_TOTAL, H_RENDERS_THUMBNAIL, H_RENDERS_IDLE, H_RENDERS_UNSUPPORTED, H_RENDER_CALL_NS_TOTAL, H_LAST_RENDER_NS] {
+            for off in [
+                H_NEXT_SEQUENCE,
+                H_FRAMES_PUBLISHED,
+                H_DROPS_OVERWRITTEN,
+                H_DROPS_BUSY,
+                H_RENDERS_TOTAL,
+                H_RENDERS_THUMBNAIL,
+                H_RENDERS_IDLE,
+                H_RENDERS_UNSUPPORTED,
+                H_RENDER_CALL_NS_TOTAL,
+                H_LAST_RENDER_NS,
+            ] {
                 map.set_u64(off, old.atomic_u64(off).load(Relaxed));
             }
             copy_registry(old, &map);
@@ -290,9 +398,16 @@ impl FeedWriter {
         map.set_u64(H_MAGIC, MAGIC);
 
         // Find the Feed that is there now, so it can be told it has been replaced.
-        let old = OpenOptions::new().read(true).write(true).open(&path).ok().and_then(|f| {
-            (f.metadata().ok()?.len() >= HEADER_BYTES as u64).then(|| Mapping::map(&f, HEADER_BYTES).ok()).flatten()
-        });
+        let old = OpenOptions::new()
+            .read(true)
+            .write(true)
+            .open(&path)
+            .ok()
+            .and_then(|f| {
+                (f.metadata().ok()?.len() >= HEADER_BYTES as u64)
+                    .then(|| Mapping::map(&f, HEADER_BYTES).ok())
+                    .flatten()
+            });
         std::fs::rename(&tmp, &path).inspect_err(|_| {
             let _ = std::fs::remove_file(&tmp);
         })?;
@@ -301,7 +416,13 @@ impl FeedWriter {
         {
             old.atomic_u32(H_RETIRED).store(1, Release);
         }
-        Ok(FeedWriter { map, path, identity, guest: false, colour_setup: None })
+        Ok(FeedWriter {
+            map,
+            path,
+            identity,
+            guest: false,
+            colour_setup: None,
+        })
     }
 }
 
@@ -326,7 +447,9 @@ fn live_feed_of_another(path: &Path, my_pid: u64) -> Option<Mapping> {
 fn find_entry(m: &Mapping, pid: u64, instance: u32) -> Option<usize> {
     (0..REGISTRY_ENTRIES).find(|&i| {
         let e = entry(i);
-        m.atomic_u32(e + R_STATE).load(Acquire) == ENTRY_LIVE && m.u64(e + R_PID) == pid && m.u32(e + R_INSTANCE) == instance
+        m.atomic_u32(e + R_STATE).load(Acquire) == ENTRY_LIVE
+            && m.u64(e + R_PID) == pid
+            && m.u32(e + R_INSTANCE) == instance
     })
 }
 
@@ -334,7 +457,10 @@ fn find_entry(m: &Mapping, pid: u64, instance: u32) -> Option<usize> {
 fn registry_of(m: &Mapping, pid: Option<u64>) -> Vec<(u32, f64)> {
     (0..REGISTRY_ENTRIES)
         .map(entry)
-        .filter(|&e| m.atomic_u32(e + R_STATE).load(Acquire) == ENTRY_LIVE && pid.is_none_or(|p| m.u64(e + R_PID) == p))
+        .filter(|&e| {
+            m.atomic_u32(e + R_STATE).load(Acquire) == ENTRY_LIVE
+                && pid.is_none_or(|p| m.u64(e + R_PID) == p)
+        })
         .map(|e| (m.u32(e + R_INSTANCE), m.f64(e + R_FRAME_RATE)))
         .collect()
 }

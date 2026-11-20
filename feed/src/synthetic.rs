@@ -3,9 +3,24 @@
 
 /// Values a careless copy would damage: negative, over-range, denormal, tiny, huge, and every pixel different.
 pub fn awkward_values(width: u32, height: u32) -> Vec<f32> {
-    let specials = [-0.5f32, 7.25, 1e-40, 1.0, -0.0, 65504.0, f32::MIN_POSITIVE, 0.18];
+    let specials = [
+        -0.5f32,
+        7.25,
+        1e-40,
+        1.0,
+        -0.0,
+        65504.0,
+        f32::MIN_POSITIVE,
+        0.18,
+    ];
     (0..width as usize * height as usize * 4)
-        .map(|i| if i < specials.len() { specials[i] } else { (i as f32 * 0.618_034).fract() * 2.0 - 0.5 })
+        .map(|i| {
+            if i < specials.len() {
+                specials[i]
+            } else {
+                (i as f32 * 0.618_034).fract() * 2.0 - 0.5
+            }
+        })
         .collect()
 }
 
@@ -32,10 +47,22 @@ pub fn test_card(width: u32, height: u32, frame: u64) -> Vec<f32> {
 pub fn move_test_card_marker(pixels: &mut [f32], width: u32, height: u32, frame: u64) {
     let h = height as usize;
     let band_from_top = h * 2 / 3 - h / 12..h * 2 / 3;
-    draw_test_card_rows(pixels, width, height, frame, h - band_from_top.end..h - band_from_top.start);
+    draw_test_card_rows(
+        pixels,
+        width,
+        height,
+        frame,
+        h - band_from_top.end..h - band_from_top.start,
+    );
 }
 
-fn draw_test_card_rows(out: &mut [f32], width: u32, height: u32, frame: u64, rows: std::ops::Range<usize>) {
+fn draw_test_card_rows(
+    out: &mut [f32],
+    width: u32,
+    height: u32,
+    frame: u64,
+    rows: std::ops::Range<usize>,
+) {
     const BARS: [[f32; 3]; 8] = [
         [0.75, 0.75, 0.75],
         [0.75, 0.75, 0.0],

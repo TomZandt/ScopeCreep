@@ -42,13 +42,28 @@ pub enum Outcome {
 
 impl Outcome {
     pub fn from_answer(answer: &Answer) -> Outcome {
-        let get = |key: &str| answer.iter().find(|(k, _)| k == key).map(|(_, v)| v.as_str());
+        let get = |key: &str| {
+            answer
+                .iter()
+                .find(|(k, _)| k == key)
+                .map(|(_, v)| v.as_str())
+        };
         let message = get("message").unwrap_or("").to_string();
         match get("result") {
             Some("ok") => {
-                let settings: Vec<(String, String)> =
-                    answer.iter().filter_map(|(k, v)| k.strip_prefix("setting.").map(|k| (k.to_string(), v.clone()))).collect();
-                let product = [get("product"), get("version")].into_iter().flatten().filter(|s| !s.is_empty()).collect::<Vec<_>>().join(" ");
+                let settings: Vec<(String, String)> = answer
+                    .iter()
+                    .filter_map(|(k, v)| {
+                        k.strip_prefix("setting.")
+                            .map(|k| (k.to_string(), v.clone()))
+                    })
+                    .collect();
+                let product = [get("product"), get("version")]
+                    .into_iter()
+                    .flatten()
+                    .filter(|s| !s.is_empty())
+                    .collect::<Vec<_>>()
+                    .join(" ");
                 Outcome::Read(Box::new(ProjectReading {
                     product,
                     studio: get("studio") == Some("1"),
@@ -57,8 +72,14 @@ impl Outcome {
                     colour_setup: ColourSetup::from_resolve_settings(&settings),
                 }))
             }
-            Some("unreachable") | Some("no-project") | Some("unavailable") => Outcome::Gone(message),
-            _ => Outcome::Failed(if message.is_empty() { "the scripting helper gave no answer".to_string() } else { message }),
+            Some("unreachable") | Some("no-project") | Some("unavailable") => {
+                Outcome::Gone(message)
+            }
+            _ => Outcome::Failed(if message.is_empty() {
+                "the scripting helper gave no answer".to_string()
+            } else {
+                message
+            }),
         }
     }
 }

@@ -8,8 +8,8 @@ use scopecreep::feed_loop::{Changed, FeedLoop};
 use scopecreep::gpu_frame::GpuFrame;
 use scopecreep::output_conversion::OutputConversion;
 use scopecreep::picture_view::PictureView;
-use scopecreep::settings::PanelSettings;
 use scopecreep::project::{Answer, ProjectReader};
+use scopecreep::settings::PanelSettings;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 
@@ -42,7 +42,14 @@ impl Display for Counter {
     fn label(&self) -> String {
         "Counter".into()
     }
-    fn draw(&self, _pass: &mut wgpu::RenderPass<'_>, _area: [f32; 4], _surface: [f32; 2], _scale: f32) {}
+    fn draw(
+        &self,
+        _pass: &mut wgpu::RenderPass<'_>,
+        _area: [f32; 4],
+        _surface: [f32; 2],
+        _scale: f32,
+    ) {
+    }
 }
 
 struct Bench {
@@ -63,22 +70,50 @@ impl Bench {
 
     /// No manual Colour Setup; the project, read by script once Resolve stops, is Rec.709 from DaVinci WG.
     fn with_project(name: &str) -> Bench {
-        let mut answer: Answer = vec![("result".into(), "ok".into()), ("project".into(), "scopecreep-test".into()), ("studio".into(), "1".into())];
-        for (k, v) in [("colorScienceMode", "davinciYRGBColorManagedv2"), ("colorSpaceTimeline", "DaVinci WG/Intermediate"), ("colorSpaceOutput", "Rec.709 Gamma 2.4")] {
+        let mut answer: Answer = vec![
+            ("result".into(), "ok".into()),
+            ("project".into(), "scopecreep-test".into()),
+            ("studio".into(), "1".into()),
+        ];
+        for (k, v) in [
+            ("colorScienceMode", "davinciYRGBColorManagedv2"),
+            ("colorSpaceTimeline", "DaVinci WG/Intermediate"),
+            ("colorSpaceOutput", "Rec.709 Gamma 2.4"),
+        ] {
             answer.push((format!("setting.{k}"), v.to_string()));
         }
-        Bench::make(Rig::build(name, 1024 * 64 * 16, None, Some(Box::new(Helper(answer)))))
+        Bench::make(Rig::build(
+            name,
+            1024 * 64 * 16,
+            None,
+            Some(Box::new(Helper(answer))),
+        ))
     }
 
     fn make(mut rig: Rig) -> Bench {
         let frames = Arc::new(AtomicUsize::new(0));
         let mut set = DisplaySet::default();
-        set.register(Arc::new(PictureView::new(&rig.device, &rig.queue, TARGET, false)));
+        set.register(Arc::new(PictureView::new(
+            &rig.device,
+            &rig.queue,
+            TARGET,
+            false,
+        )));
         set.register(Arc::new(Counter(frames.clone())));
         let settings = Arc::new(Mutex::new(PanelSettings::default()));
-        let mut feed = FeedLoop::new(set.clone(), settings.clone(), OutputConversion::new(&rig.device, &rig.queue));
+        let mut feed = FeedLoop::new(
+            set.clone(),
+            settings.clone(),
+            OutputConversion::new(&rig.device, &rig.queue),
+        );
         rig.step(&mut feed);
-        Bench { rig, feed, set, settings, frames }
+        Bench {
+            rig,
+            feed,
+            set,
+            settings,
+            frames,
+        }
     }
 
     /// Resolve plays one frame of one colour, and the app has a moment to take it.
@@ -103,7 +138,15 @@ impl Bench {
 
     /// The middle pixel of the Picture View's Panel.
     fn shown(&self) -> [u8; 3] {
-        let image = self.rig.render(W, H, |pass| self.set.draw(pass, 0, [0.0, 0.0, W as f32, H as f32], [W as f32, H as f32], 1.0));
+        let image = self.rig.render(W, H, |pass| {
+            self.set.draw(
+                pass,
+                0,
+                [0.0, 0.0, W as f32, H as f32],
+                [W as f32, H as f32],
+                1.0,
+            )
+        });
         let i = ((H / 2) as usize * W as usize + (W / 2) as usize) * 4;
         [image[i], image[i + 1], image[i + 2]]
     }
@@ -114,21 +157,37 @@ impl Bench {
 }
 
 #[test]
-fn a_setting_changed_with_resolve_stopped_measures_the_frame_on_screen_again_through_output_conversion() {
+fn a_setting_changed_with_resolve_stopped_measures_the_frame_on_screen_again_through_output_conversion()
+ {
     let mut b = Bench::new("loop-setting", Some(DWG_REC709));
     b.play([0.5, 0.5, 0.5]);
     let converted = b.shown();
-    assert!(converted[0].abs_diff(128) > 8, "the picture on screen is the converted one, not the frame as sent: {converted:?}");
+    assert!(
+        converted[0].abs_diff(128) > 8,
+        "the picture on screen is the converted one, not the frame as sent: {converted:?}"
+    );
     let before = b.counted();
-    b.settings.lock().unwrap().set("Counter", "anything", "else");
+    b.settings
+        .lock()
+        .unwrap()
+        .set("Counter", "anything", "else");
     let changed = b.rig.step(&mut b.feed);
-    assert_eq!(b.counted(), before + 1, "every display measures the frame on screen once more");
+    assert_eq!(
+        b.counted(),
+        before + 1,
+        "every display measures the frame on screen once more"
+    );
     assert!(changed.picture);
-    assert_eq!(b.shown(), converted, "measured through Output Conversion again, not the raw frame");
+    assert_eq!(
+        b.shown(),
+        converted,
+        "measured through Output Conversion again, not the raw frame"
+    );
 }
 
 #[test]
-fn a_colour_setup_arriving_while_resolve_is_stopped_converts_the_frame_on_screen_and_measures_it_again() {
+fn a_colour_setup_arriving_while_resolve_is_stopped_converts_the_frame_on_screen_and_measures_it_again()
+ {
     let mut b = Bench::with_project("loop-setup");
     b.play([0.5, 0.5, 0.5]);
     let as_sent = b.shown();
@@ -137,7 +196,10 @@ fn a_colour_setup_arriving_while_resolve_is_stopped_converts_the_frame_on_screen
     let changed = b.stopped(1500);
     assert!(changed.picture, "the picture changed with no new frame");
     assert!(b.counted() > before, "the displays measured again");
-    assert!(b.shown()[0].abs_diff(as_sent[0]) > 8, "the frame on screen is now converted");
+    assert!(
+        b.shown()[0].abs_diff(as_sent[0]) > 8,
+        "the frame on screen is now converted"
+    );
 }
 
 #[test]
@@ -147,5 +209,9 @@ fn an_idle_poll_does_no_work() {
     b.stopped(100);
     let (frames, scope_frames) = (b.counted(), b.feed.scope_frames);
     assert_eq!(b.stopped(200), Changed::default(), "nothing to redraw");
-    assert_eq!((b.counted(), b.feed.scope_frames), (frames, scope_frames), "no display measured anything");
+    assert_eq!(
+        (b.counted(), b.feed.scope_frames),
+        (frames, scope_frames),
+        "no display measured anything"
+    );
 }

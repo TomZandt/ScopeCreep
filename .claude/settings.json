@@ -8,7 +8,11 @@
       "Bash(git push origin --delete:*)",
       "Bash(git branch -D:*)",
       "Bash(git push:*)",
-      "Bash(git tag:*)"
+      "Bash(git tag:*)",
+      "Bash(git merge --ff-only:*)",
+      "Bash(git worktree remove:*)",
+      "Bash(git worktree prune:*)",
+      "Bash(git push -q origin --delete:*)"
     ],
     "deny": [
       "Bash(git push --force:*)",

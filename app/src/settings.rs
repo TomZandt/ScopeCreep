@@ -36,8 +36,15 @@ impl Amount {
     /// The valid value for what was stored (`None`, or something unreadable, is the default; a leftover list
     /// value is the number it produced; a number out of the range is clamped).
     pub fn read(&self, stored: Option<&str>) -> f32 {
-        let Some(stored) = stored else { return self.default };
-        let number = self.legacy.iter().find(|(old, _)| *old == stored).map(|(_, v)| *v).or_else(|| stored.parse::<f32>().ok().filter(|v| v.is_finite()));
+        let Some(stored) = stored else {
+            return self.default;
+        };
+        let number = self
+            .legacy
+            .iter()
+            .find(|(old, _)| *old == stored)
+            .map(|(_, v)| *v)
+            .or_else(|| stored.parse::<f32>().ok().filter(|v| v.is_finite()));
         number.map_or(self.default, |v| v.clamp(self.min, self.max))
     }
 
@@ -104,7 +111,11 @@ const STATE_PREFIX: &str = "state:";
 
 impl PanelSettings {
     pub fn set(&mut self, panel: &str, key: &str, value: &str) {
-        let old = self.panels.entry(panel.to_string()).or_default().insert(key.to_string(), value.to_string());
+        let old = self
+            .panels
+            .entry(panel.to_string())
+            .or_default()
+            .insert(key.to_string(), value.to_string());
         if old.as_deref() != Some(value) {
             self.version += 1;
         }
@@ -117,7 +128,11 @@ impl PanelSettings {
 
     /// Remember a value a display keeps for itself (not a menu choice). Returns whether it changed.
     pub fn set_state(&mut self, panel: &str, key: &str, value: &str) -> bool {
-        let old = self.state.entry(panel.to_string()).or_default().insert(key.to_string(), value.to_string());
+        let old = self
+            .state
+            .entry(panel.to_string())
+            .or_default()
+            .insert(key.to_string(), value.to_string());
         let changed = old.as_deref() != Some(value);
         if changed {
             self.state_version += 1;
@@ -132,8 +147,12 @@ impl PanelSettings {
 
     /// `panel`'s remembered values for `keys`, as a display reads them; those never remembered are left out.
     pub fn state_of(&self, panel: &str, keys: &[&str]) -> Settings {
-        let Some(own) = self.state.get(panel) else { return Settings::new() };
-        keys.iter().filter_map(|k| own.get(*k).map(|v| (k.to_string(), v.clone()))).collect()
+        let Some(own) = self.state.get(panel) else {
+            return Settings::new();
+        };
+        keys.iter()
+            .filter_map(|k| own.get(*k).map(|v| (k.to_string(), v.clone())))
+            .collect()
     }
 
     /// `panel`'s settings for the settings it offers (`defs`): the user's choice, or the default when there is
@@ -143,10 +162,19 @@ impl PanelSettings {
         defs.iter()
             .filter_map(|def| {
                 if let Some(amount) = &def.amount {
-                    return Some((def.key.to_string(), Amount::store(amount.read(chosen.and_then(|c| c.get(def.key)).map(String::as_str)))));
+                    return Some((
+                        def.key.to_string(),
+                        Amount::store(
+                            amount.read(chosen.and_then(|c| c.get(def.key)).map(String::as_str)),
+                        ),
+                    ));
                 }
                 let wanted = chosen.and_then(|c| c.get(def.key));
-                let choice = def.choices.iter().find(|c| Some(c.value) == wanted.map(String::as_str)).or(def.choices.first())?;
+                let choice = def
+                    .choices
+                    .iter()
+                    .find(|c| Some(c.value) == wanted.map(String::as_str))
+                    .or(def.choices.first())?;
                 Some((def.key.to_string(), choice.value.to_string()))
             })
             .collect()
@@ -175,7 +203,9 @@ impl PanelSettings {
         let mut legacy_luma = false;
         for line in text.lines() {
             let mut parts = line.split('\t');
-            if let (Some(panel), Some(key), Some(value), None) = (parts.next(), parts.next(), parts.next(), parts.next()) {
+            if let (Some(panel), Some(key), Some(value), None) =
+                (parts.next(), parts.next(), parts.next(), parts.next())
+            {
                 // The milestone 2 vectorscope Panels became one (#92): the 100 % Panel's settings are the one
                 // Panel's, and the 200 % Panel's are ignored.
                 let panel = match panel {
@@ -197,7 +227,12 @@ impl PanelSettings {
                 }
             }
         }
-        if legacy_luma && !settings.panels.get("Clean picture").is_some_and(|p| p.contains_key("channel")) {
+        if legacy_luma
+            && !settings
+                .panels
+                .get("Clean picture")
+                .is_some_and(|p| p.contains_key("channel"))
+        {
             settings.set("Clean picture", "channel", "luma");
         }
         settings
@@ -215,11 +250,24 @@ pub enum MenuRow {
     /// A setting's name; not clickable.
     Heading(String),
     /// A choice; `on` when it is the setting's current value.
-    Choice { key: &'static str, value: &'static str, text: String, on: bool },
+    Choice {
+        key: &'static str,
+        value: &'static str,
+        text: String,
+        on: bool,
+    },
     /// An amount: a slider with its number.
-    Slider { key: &'static str, amount: Amount, value: f32 },
+    Slider {
+        key: &'static str,
+        amount: Amount,
+        value: f32,
+    },
     /// The way back to an amount's default, under its slider.
-    Reset { key: &'static str, value: f32, text: String },
+    Reset {
+        key: &'static str,
+        value: f32,
+        text: String,
+    },
 }
 
 /// The right-click menu of one Panel.
@@ -242,12 +290,25 @@ impl Menu {
             rows.push(MenuRow::Heading(def.label.to_string()));
             if let Some(amount) = def.amount {
                 let value = amount.read(current.get(def.key).map(String::as_str));
-                rows.push(MenuRow::Slider { key: def.key, amount, value });
-                rows.push(MenuRow::Reset { key: def.key, value: amount.default, text: format!("Reset to default ({})", amount.text(amount.default)) });
+                rows.push(MenuRow::Slider {
+                    key: def.key,
+                    amount,
+                    value,
+                });
+                rows.push(MenuRow::Reset {
+                    key: def.key,
+                    value: amount.default,
+                    text: format!("Reset to default ({})", amount.text(amount.default)),
+                });
                 continue;
             }
             for choice in def.choices {
-                rows.push(MenuRow::Choice { key: def.key, value: choice.value, text: choice.text.to_string(), on: current.get(def.key).map(String::as_str) == Some(choice.value) });
+                rows.push(MenuRow::Choice {
+                    key: def.key,
+                    value: choice.value,
+                    text: choice.text.to_string(),
+                    on: current.get(def.key).map(String::as_str) == Some(choice.value),
+                });
             }
         }
         Some(Menu { panel, rows })
@@ -256,8 +317,16 @@ impl Menu {
     /// Where the menu sits when opened at `at` in a window of `window` device pixels at `scale`: the whole menu
     /// stays inside the window. Left, top, width, height.
     pub fn rect(&self, at: [f32; 2], window: [f32; 2], scale: f32) -> [f32; 4] {
-        let (w, h) = (MENU_WIDTH * scale, (self.rows.len() as f32 * MENU_ROW + 2.0 * MENU_PAD) * scale);
-        [at[0].min(window[0] - w).max(0.0), at[1].min(window[1] - h).max(0.0), w, h]
+        let (w, h) = (
+            MENU_WIDTH * scale,
+            (self.rows.len() as f32 * MENU_ROW + 2.0 * MENU_PAD) * scale,
+        );
+        [
+            at[0].min(window[0] - w).max(0.0),
+            at[1].min(window[1] - h).max(0.0),
+            w,
+            h,
+        ]
     }
 
     /// The top of row `row` inside `rect`.
@@ -266,7 +335,12 @@ impl Menu {
     }
 
     /// The choice (setting key and value) under `point`, if the point is on a choice row.
-    pub fn choice_at(&self, rect: [f32; 4], point: [f32; 2], scale: f32) -> Option<(&'static str, &'static str)> {
+    pub fn choice_at(
+        &self,
+        rect: [f32; 4],
+        point: [f32; 2],
+        scale: f32,
+    ) -> Option<(&'static str, &'static str)> {
         if point[0] < rect[0] || point[0] >= rect[0] + rect[2] {
             return None;
         }
@@ -283,36 +357,71 @@ impl Menu {
     /// The row under `point`'s y, when `point` is inside the menu's width.
     fn row_at(&self, rect: [f32; 4], point: [f32; 2], scale: f32) -> Option<usize> {
         let offset = point[1] - rect[1] - MENU_PAD * scale;
-        (offset >= 0.0 && point[0] >= rect[0] && point[0] < rect[0] + rect[2]).then(|| (offset / (MENU_ROW * scale)) as usize)
+        (offset >= 0.0 && point[0] >= rect[0] && point[0] < rect[0] + rect[2])
+            .then(|| (offset / (MENU_ROW * scale)) as usize)
     }
 
     /// Where a slider's row begins, for [`crate::components::Slider`] to place its parts.
     pub fn slider_origin(rect: [f32; 4], row: usize, scale: f32) -> [f32; 2] {
-        [rect[0] + crate::style::SPACE_MENU_HEADING_LEFT * scale, Menu::row_top(rect, row, scale)]
+        [
+            rect[0] + crate::style::SPACE_MENU_HEADING_LEFT * scale,
+            Menu::row_top(rect, row, scale),
+        ]
     }
 
     /// The setting and value a press at `point` means when it is on a slider's track, handle or number.
-    pub fn slider_at(&self, rect: [f32; 4], point: [f32; 2], scale: f32) -> Option<(&'static str, f32)> {
+    pub fn slider_at(
+        &self,
+        rect: [f32; 4],
+        point: [f32; 2],
+        scale: f32,
+    ) -> Option<(&'static str, f32)> {
         let row = self.row_at(rect, point, scale)?;
-        let MenuRow::Slider { key, .. } = self.rows.get(row)? else { return None };
+        let MenuRow::Slider { key, .. } = self.rows.get(row)? else {
+            return None;
+        };
         let at = Menu::slider_origin(rect, row, scale);
-        let slider = crate::components::Slider { value: 0.0, number: String::new() };
+        let slider = crate::components::Slider {
+            value: 0.0,
+            number: String::new(),
+        };
         let (grab, layout) = (slider.grab(at, scale), slider.layout(at, scale));
         let in_row = point[0] >= grab[0] && point[0] < layout.row[0] + layout.row[2];
-        in_row.then(|| self.slider_value(rect, key, point[0], scale)).flatten().map(|v| (*key, v))
+        in_row
+            .then(|| self.slider_value(rect, key, point[0], scale))
+            .flatten()
+            .map(|v| (*key, v))
     }
 
     /// The value of slider `key` with the pointer at `x`, wherever it is: a drag goes on past the ends of the
     /// track and out of the menu.
     pub fn slider_value(&self, rect: [f32; 4], key: &str, x: f32, scale: f32) -> Option<f32> {
-        let row = self.rows.iter().position(|r| matches!(r, MenuRow::Slider { key: k, .. } if *k == key))?;
-        let MenuRow::Slider { amount, .. } = &self.rows[row] else { return None };
+        let row = self
+            .rows
+            .iter()
+            .position(|r| matches!(r, MenuRow::Slider { key: k, .. } if *k == key))?;
+        let MenuRow::Slider { amount, .. } = &self.rows[row] else {
+            return None;
+        };
         let at = Menu::slider_origin(rect, row, scale);
-        Some(amount.at_fraction(crate::components::Slider { value: 0.0, number: String::new() }.value_at(at, x, scale)))
+        Some(
+            amount.at_fraction(
+                crate::components::Slider {
+                    value: 0.0,
+                    number: String::new(),
+                }
+                .value_at(at, x, scale),
+            ),
+        )
     }
 
     /// The setting and default value when `point` is on an amount's reset row.
-    pub fn reset_at(&self, rect: [f32; 4], point: [f32; 2], scale: f32) -> Option<(&'static str, f32)> {
+    pub fn reset_at(
+        &self,
+        rect: [f32; 4],
+        point: [f32; 2],
+        scale: f32,
+    ) -> Option<(&'static str, f32)> {
         match self.rows.get(self.row_at(rect, point, scale)?)? {
             MenuRow::Reset { key, value, .. } => Some((key, *value)),
             _ => None,
@@ -321,7 +430,10 @@ impl Menu {
 
     /// Whether `point` is inside the menu.
     pub fn contains(rect: [f32; 4], point: [f32; 2]) -> bool {
-        point[0] >= rect[0] && point[0] < rect[0] + rect[2] && point[1] >= rect[1] && point[1] < rect[1] + rect[3]
+        point[0] >= rect[0]
+            && point[0] < rect[0] + rect[2]
+            && point[1] >= rect[1]
+            && point[1] < rect[1] + rect[3]
     }
 }
 
@@ -331,7 +443,9 @@ pub fn save(path: &std::path::Path, text: &str) -> std::io::Result<()> {
     if let Some(dir) = path.parent() {
         std::fs::create_dir_all(dir)?;
     }
-    let name = path.file_name().map_or_else(|| "file".into(), |n| n.to_string_lossy().into_owned());
+    let name = path
+        .file_name()
+        .map_or_else(|| "file".into(), |n| n.to_string_lossy().into_owned());
     let temporary = path.with_file_name(format!(".{name}.tmp"));
     let written = std::fs::write(&temporary, text).and_then(|()| std::fs::rename(&temporary, path));
     if written.is_err() {

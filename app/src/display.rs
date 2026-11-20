@@ -12,9 +12,9 @@
 //! once) and hands that one [`GpuFrame`] to every display.
 use crate::colour_setup::KnownColourSetup;
 use crate::gpu_frame::GpuFrame;
+use crate::measurement::LumaWeights;
 use crate::settings::{PanelSettings, SettingDef, Settings};
 use crate::toolbar::{Toolbar, ToolbarDef};
-use crate::measurement::LumaWeights;
 use crate::waveform::Waveform;
 use std::sync::Arc;
 
@@ -34,7 +34,12 @@ pub struct DisplayContext {
 
 impl Default for DisplayContext {
     fn default() -> DisplayContext {
-        DisplayContext { colour_setup: None, colour_label: "Colour Setup unknown".into(), settings: Settings::new(), luma: crate::measurement::DEFAULT_LUMA_WEIGHTS }
+        DisplayContext {
+            colour_setup: None,
+            colour_label: "Colour Setup unknown".into(),
+            settings: Settings::new(),
+            luma: crate::measurement::DEFAULT_LUMA_WEIGHTS,
+        }
     }
 }
 
@@ -136,7 +141,9 @@ pub trait Display: Send + Sync {
     /// The pointer over the display's `area` (see [`Display::draw`]). A zooming display's wheel and middle button
     /// zoom and pan; anything else is ignored by default.
     fn pointer(&self, area: [f32; 4], scale: f32, event: Pointer) -> PointerResult {
-        self.picture_zoom().and_then(|z| z.panel_zoom().pointer(z.geometry(area, scale), event)).unwrap_or_default()
+        self.picture_zoom()
+            .and_then(|z| z.panel_zoom().pointer(z.geometry(area, scale), event))
+            .unwrap_or_default()
     }
     /// What the zoom chip on the title bar says for a picture Panel whose content is `area` (spec #163): `None`
     /// for a display that does not zoom (every Scope), and before a frame has arrived.
@@ -188,7 +195,14 @@ pub struct InWindow {
 /// What the Window shows (ticket #95: the first three displays below are out of it for now; #118: the clean picture's
 /// B/W toggle does the black and white Panel's job; #145: the Colour Waveform is out, Colorise on the luma waveform
 /// does its job; #162: the Channel view is out, the clean picture's Y R G B chips and Loupe do its job).
-pub const IN_WINDOW: InWindow = InWindow { gamut_legal_warning: false, highlight_neutrals: false, cie_plot: false, black_and_white: false, colour_waveform: false, channel_view: false };
+pub const IN_WINDOW: InWindow = InWindow {
+    gamut_legal_warning: false,
+    highlight_neutrals: false,
+    cie_plot: false,
+    black_and_white: false,
+    colour_waveform: false,
+    channel_view: false,
+};
 
 /// The Scopes of [`DisplaySet::standard`] kept with their own types, so a test reads their counts through typed
 /// methods (no untyped read-back on [`Display`]).
@@ -208,41 +222,80 @@ pub struct DisplaySet {
 impl DisplaySet {
     /// The displays the app shows, in Panel order. A new display is one module that implements [`Display`], and
     /// one line here.
-    pub fn standard(device: &wgpu::Device, queue: &wgpu::Queue, target: wgpu::TextureFormat, filterable: bool) -> DisplaySet {
+    pub fn standard(
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+        target: wgpu::TextureFormat,
+        filterable: bool,
+    ) -> DisplaySet {
         Self::standard_with_handles(device, queue, target, filterable).0
     }
 
     /// [`DisplaySet::standard`], and the typed handles of its Scopes for tests.
-    pub fn standard_with_handles(device: &wgpu::Device, queue: &wgpu::Queue, target: wgpu::TextureFormat, filterable: bool) -> (DisplaySet, ScopeHandles) {
+    pub fn standard_with_handles(
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+        target: wgpu::TextureFormat,
+        filterable: bool,
+    ) -> (DisplaySet, ScopeHandles) {
         let mut set = DisplaySet::default();
-        set.register(Arc::new(crate::picture_view::PictureView::new(device, queue, target, filterable)));
+        set.register(Arc::new(crate::picture_view::PictureView::new(
+            device, queue, target, filterable,
+        )));
         let luma_waveform = Waveform::new(device, queue, target);
         set.register(Arc::new(luma_waveform.clone()));
         if IN_WINDOW.gamut_legal_warning {
-            set.register(Arc::new(crate::gamut_warning::GamutWarning::new(device, queue, target)));
+            set.register(Arc::new(crate::gamut_warning::GamutWarning::new(
+                device, queue, target,
+            )));
         }
         if IN_WINDOW.highlight_neutrals {
-            set.register(Arc::new(crate::highlight_neutrals::HighlightNeutrals::new(device, queue, target, filterable)));
+            set.register(Arc::new(crate::highlight_neutrals::HighlightNeutrals::new(
+                device, queue, target, filterable,
+            )));
         }
         if IN_WINDOW.channel_view {
-            set.register(Arc::new(crate::channel_view::ChannelView::new(device, queue, target, filterable)));
+            set.register(Arc::new(crate::channel_view::ChannelView::new(
+                device, queue, target, filterable,
+            )));
         }
-        set.register(Arc::new(crate::arri_false_colour::ArriFalseColour::new(device, queue, target)));
+        set.register(Arc::new(crate::arri_false_colour::ArriFalseColour::new(
+            device, queue, target,
+        )));
         if IN_WINDOW.black_and_white {
-            set.register(Arc::new(crate::black_and_white::BlackAndWhite::new(device, queue, target, filterable)));
+            set.register(Arc::new(crate::black_and_white::BlackAndWhite::new(
+                device, queue, target, filterable,
+            )));
         }
         let vectorscope = Arc::new(crate::vectorscope::Vectorscope::new(device, queue, target));
         set.register(vectorscope.clone());
-        set.register(Arc::new(crate::saturation_heatmap::SaturationHeatmap::new(device, queue, target)));
-        set.register(Arc::new(crate::skin_tone_view::SkinTone::new(device, queue, target, filterable)));
-        set.register(Arc::new(crate::stops_false_colour::StopsFalseColour::new(device, queue, target)));
+        set.register(Arc::new(crate::saturation_heatmap::SaturationHeatmap::new(
+            device, queue, target,
+        )));
+        set.register(Arc::new(crate::skin_tone_view::SkinTone::new(
+            device, queue, target, filterable,
+        )));
+        set.register(Arc::new(crate::stops_false_colour::StopsFalseColour::new(
+            device, queue, target,
+        )));
         if IN_WINDOW.cie_plot {
             set.register(Arc::new(crate::cie::CiePlot::new(device, queue, target)));
         }
         if IN_WINDOW.colour_waveform {
-            set.register(Arc::new(Waveform::new_colour(device, queue, target, &luma_waveform)));
+            set.register(Arc::new(Waveform::new_colour(
+                device,
+                queue,
+                target,
+                &luma_waveform,
+            )));
         }
-        (set, ScopeHandles { luma_waveform, vectorscope })
+        (
+            set,
+            ScopeHandles {
+                luma_waveform,
+                vectorscope,
+            },
+        )
     }
 
     /// Add a display after the others.
@@ -259,7 +312,8 @@ impl DisplaySet {
     /// Switch the Window's Link. Turning it on from Panel `from` brings every picture Panel to that Panel's zoom
     /// and spot; turning it off leaves each where it is.
     pub fn set_link(&self, on: bool, from: usize) {
-        self.link.set(on, self.displays.get(from).and_then(|d| d.zoom_model()));
+        self.link
+            .set(on, self.displays.get(from).and_then(|d| d.zoom_model()));
     }
 
     pub fn len(&self) -> usize {
@@ -280,13 +334,24 @@ impl DisplaySet {
 
     /// Every Panel's title bar: its name and short tags (only state that changes how to read it), with the full
     /// label for the hover (#99). `context` and `settings` are what [`DisplaySet::configure`] was given.
-    pub fn titles(&self, context: &DisplayContext, settings: &PanelSettings) -> Vec<crate::window_text::PanelTitle> {
-        let luma = crate::measurement::luma_weights_of(&settings.resolve(crate::waveform::NAME, &crate::waveform::SETTINGS));
+    pub fn titles(
+        &self,
+        context: &DisplayContext,
+        settings: &PanelSettings,
+    ) -> Vec<crate::window_text::PanelTitle> {
+        let luma = crate::measurement::luma_weights_of(
+            &settings.resolve(crate::waveform::NAME, &crate::waveform::SETTINGS),
+        );
         self.displays
             .iter()
             .map(|display| {
-                let mut own = DisplayContext { settings: settings.resolve(display.name(), display.setting_defs()), luma, ..context.clone() };
-                own.settings.extend(settings.state_of(display.name(), display.state_keys()));
+                let mut own = DisplayContext {
+                    settings: settings.resolve(display.name(), display.setting_defs()),
+                    luma,
+                    ..context.clone()
+                };
+                own.settings
+                    .extend(settings.state_of(display.name(), display.state_keys()));
                 crate::window_text::panel_title(display.name(), &own, display.label())
             })
             .collect()
@@ -308,10 +373,17 @@ impl DisplaySet {
 
     /// Give every display the Colour Setup and its own settings (`settings` holds every Panel's choices).
     pub fn configure(&self, context: &DisplayContext, settings: &PanelSettings) {
-        let luma = crate::measurement::luma_weights_of(&settings.resolve(crate::waveform::NAME, &crate::waveform::SETTINGS));
+        let luma = crate::measurement::luma_weights_of(
+            &settings.resolve(crate::waveform::NAME, &crate::waveform::SETTINGS),
+        );
         for display in &self.displays {
-            let mut own = DisplayContext { settings: settings.resolve(display.name(), display.setting_defs()), luma, ..context.clone() };
-            own.settings.extend(settings.state_of(display.name(), display.state_keys()));
+            let mut own = DisplayContext {
+                settings: settings.resolve(display.name(), display.setting_defs()),
+                luma,
+                ..context.clone()
+            };
+            own.settings
+                .extend(settings.state_of(display.name(), display.state_keys()));
             display.configure(&own);
         }
     }
@@ -323,14 +395,25 @@ impl DisplaySet {
 
     /// The settings the display in Panel `index` leaves for the popover: those that are not chips on its title bar.
     pub fn popover_defs(&self, index: usize) -> Vec<SettingDef> {
-        crate::toolbar::popover_defs(&self.displays[index].offered_defs(), self.displays[index].toolbar_defs())
+        crate::toolbar::popover_defs(
+            &self.displays[index].offered_defs(),
+            self.displays[index].toolbar_defs(),
+        )
     }
 
     /// The chips on the title bar of the display in Panel `index`, given everyone's choices: a picture Panel
     /// whose content is `area` starts with its zoom chip.
-    pub fn toolbar(&self, index: usize, settings: &PanelSettings, area: [f32; 4], scale: f32) -> Toolbar {
+    pub fn toolbar(
+        &self,
+        index: usize,
+        settings: &PanelSettings,
+        area: [f32; 4],
+        scale: f32,
+    ) -> Toolbar {
         let own = self.settings_of(index, settings);
-        Toolbar::new(self.displays[index].toolbar_defs_for(&own), &own).with_zoom(self.displays[index].zoom(area, scale).as_ref()).with_link(self.link.on())
+        Toolbar::new(self.displays[index].toolbar_defs_for(&own), &own)
+            .with_zoom(self.displays[index].zoom(area, scale).as_ref())
+            .with_link(self.link.on())
     }
 
     /// What the zoom chip of the display in Panel `index` says, with its content in `area`.
@@ -359,7 +442,14 @@ impl DisplaySet {
         self.displays[index].name()
     }
 
-    pub fn draw(&self, pass: &mut wgpu::RenderPass<'_>, index: usize, area: [f32; 4], surface: [f32; 2], scale: f32) {
+    pub fn draw(
+        &self,
+        pass: &mut wgpu::RenderPass<'_>,
+        index: usize,
+        area: [f32; 4],
+        surface: [f32; 2],
+        scale: f32,
+    ) {
         self.displays[index].draw(pass, area, surface, scale);
     }
 
@@ -368,7 +458,13 @@ impl DisplaySet {
     }
 
     /// The pointer over the display in Panel `index`.
-    pub fn pointer(&self, index: usize, area: [f32; 4], scale: f32, event: Pointer) -> PointerResult {
+    pub fn pointer(
+        &self,
+        index: usize,
+        area: [f32; 4],
+        scale: f32,
+        event: Pointer,
+    ) -> PointerResult {
         self.displays[index].pointer(area, scale, event)
     }
 

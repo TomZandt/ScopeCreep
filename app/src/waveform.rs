@@ -9,11 +9,11 @@
 //! The Colour Setup's Levels decide where values land on the scale (#18): video levels put black (0.0) at code 64
 //! and white (1.0) at 940, full (data) levels at 0 and 1023. Resolve hands the Sender the same values either way.
 use crate::colour_setup::Levels;
-use crate::measurement::{luma_weights_of, MeasuredSpace, Measurement, LUMA_SETTING};
 use crate::gpu_frame::GpuFrame;
-use crate::waveform_scale::{Unit, UNIT_SETTING};
-use crate::scope_shader::{graticule_gain, GRATICULE_AMOUNT, GRATICULE_SETTING};
+use crate::measurement::{LUMA_SETTING, MeasuredSpace, Measurement, luma_weights_of};
+use crate::scope_shader::{GRATICULE_AMOUNT, GRATICULE_SETTING, graticule_gain};
 use crate::settings::{Amount, Choice, SettingDef};
+use crate::waveform_scale::{UNIT_SETTING, Unit};
 use std::sync::{Arc, Mutex};
 
 /// Code values on the 10-bit scale: 0 to 1023.
@@ -72,8 +72,15 @@ impl Brightness {
 
 /// The trace brightness slider, the same on every scope that draws a trace: 100 % is the normal look. The lists
 /// earlier versions saved (Dimmer, Normal, Brighter) map to the percentages that gave the same gains.
-pub const BRIGHTNESS_AMOUNT: Amount =
-    crate::scope_shader::trace_brightness_amount(300.0, &[("normal", 100.0), ("dim", 48.0), ("dimmer", 48.0), ("brighter", 240.0)]);
+pub const BRIGHTNESS_AMOUNT: Amount = crate::scope_shader::trace_brightness_amount(
+    300.0,
+    &[
+        ("normal", 100.0),
+        ("dim", 48.0),
+        ("dimmer", 48.0),
+        ("brighter", 240.0),
+    ],
+);
 
 /// How far the trace is spread over its neighbours, in device pixels (the soft spread slider, #85).
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -93,7 +100,11 @@ pub struct Look {
 
 impl Default for Look {
     fn default() -> Look {
-        Look { brightness: Brightness(BRIGHTNESS_AMOUNT.default), spread: Spread(SPREAD_AMOUNT.default), graticule: 1.0 }
+        Look {
+            brightness: Brightness(BRIGHTNESS_AMOUNT.default),
+            spread: Spread(SPREAD_AMOUNT.default),
+            graticule: 1.0,
+        }
     }
 }
 
@@ -108,7 +119,12 @@ pub struct Channels {
 
 impl Default for Channels {
     fn default() -> Channels {
-        Channels { y: true, r: false, g: false, b: false }
+        Channels {
+            y: true,
+            r: false,
+            g: false,
+            b: false,
+        }
     }
 }
 
@@ -117,8 +133,17 @@ impl Channels {
     /// is the default.
     pub fn from_setting(value: Option<&str>) -> Channels {
         let on = |c: char| value.is_some_and(|v| v.contains(c));
-        let channels = Channels { y: on('y'), r: on('r'), g: on('g'), b: on('b') };
-        if channels.any() { channels } else { Channels::default() }
+        let channels = Channels {
+            y: on('y'),
+            r: on('r'),
+            g: on('g'),
+            b: on('b'),
+        };
+        if channels.any() {
+            channels
+        } else {
+            Channels::default()
+        }
     }
 
     pub fn any(&self) -> bool {
@@ -142,7 +167,12 @@ impl Channels {
 
     /// The channels on, named for a tag: "Y", "R G", "Y R G B".
     pub fn names(&self) -> String {
-        [(self.y, "Y"), (self.r, "R"), (self.g, "G"), (self.b, "B")].iter().filter(|(on, _)| *on).map(|(_, n)| *n).collect::<Vec<_>>().join(" ")
+        [(self.y, "Y"), (self.r, "R"), (self.g, "G"), (self.b, "B")]
+            .iter()
+            .filter(|(on, _)| *on)
+            .map(|(_, n)| *n)
+            .collect::<Vec<_>>()
+            .join(" ")
     }
 }
 
@@ -297,12 +327,19 @@ impl PlotLayout {
     /// keeps its full width (the scale's numbers stay readable however small the panel), so the plot is exactly
     /// the waveform's Panel display area.
     pub fn new([left, top, width, height]: [f32; 4], scale: f32) -> PlotLayout {
-        let gutter = (crate::layout::GUTTER * scale).round().min((width - 1.0).max(0.0));
+        let gutter = (crate::layout::GUTTER * scale)
+            .round()
+            .min((width - 1.0).max(0.0));
         let (row, gap) = ((EDGE_ROW * scale).round(), (EDGE_GAP * scale).round());
         let (l, w) = (left + gutter, (width - gutter).max(1.0));
         let plot_top = top + row + gap;
         let plot_height = (height - 2.0 * (row + gap)).max(1.0);
-        PlotLayout { plot: [l, plot_top, w, plot_height], above: [l, top, w, row], below: [l, plot_top + plot_height + gap, w, row], gutter_left: left }
+        PlotLayout {
+            plot: [l, plot_top, w, plot_height],
+            above: [l, top, w, row],
+            below: [l, plot_top + plot_height + gap, w, row],
+            gutter_left: left,
+        }
     }
     /// The layout for a frame of `picture` (width, height) pixels: the plot has the frame's aspect, scaled to fit
     /// what [`PlotLayout::new`] would give it and centred in `area`, with the gutter on its left and an edge row
@@ -315,10 +352,18 @@ impl PlotLayout {
         let left = area[0];
         let [fl, ft, fw, fh] = full.plot;
         let fit = (fw / picture[0] as f32).min(fh / picture[1] as f32);
-        let (w, h) = ((picture[0] as f32 * fit).round().clamp(1.0, fw), (picture[1] as f32 * fit).round().clamp(1.0, fh));
+        let (w, h) = (
+            (picture[0] as f32 * fit).round().clamp(1.0, fw),
+            (picture[1] as f32 * fit).round().clamp(1.0, fh),
+        );
         let (l, t) = ((fl + (fw - w) / 2.0).round(), (ft + (fh - h) / 2.0).round());
         let (row, gap) = (full.above[3], full.below[1] - (ft + fh));
-        PlotLayout { plot: [l, t, w, h], above: [l, t - gap - row, w, row], below: [l, t + h + gap, w, row], gutter_left: l - (fl - left) }
+        PlotLayout {
+            plot: [l, t, w, h],
+            above: [l, t - gap - row, w, row],
+            below: [l, t + h + gap, w, row],
+            gutter_left: l - (fl - left),
+        }
     }
     /// Where the gutter for the scale's numbers starts.
     pub fn gutter_left(&self) -> f32 {
@@ -666,21 +711,38 @@ pub struct Waveform {
 
 impl Waveform {
     /// `target`: the format of what [`Waveform::draw`] draws into.
-    pub fn new(device: &wgpu::Device, queue: &wgpu::Queue, target: wgpu::TextureFormat) -> Waveform {
+    pub fn new(
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+        target: wgpu::TextureFormat,
+    ) -> Waveform {
         Waveform::build(device, queue, target, false)
     }
 
     /// The Colour Waveform: the same plot, tinted by the average colour of the pixels counted at each spot (#59).
     /// It shares the counts of `luma`, the luma waveform, which must measure each frame first (as the displays are
     /// handed a frame in order) and be configured with the same Colour Setup and luma weights.
-    pub fn new_colour(device: &wgpu::Device, queue: &wgpu::Queue, target: wgpu::TextureFormat, luma: &Waveform) -> Waveform {
+    pub fn new_colour(
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+        target: wgpu::TextureFormat,
+        luma: &Waveform,
+    ) -> Waveform {
         let mut colour = Waveform::build(device, queue, target, true);
         colour.source = Some(luma.state.clone());
         colour
     }
 
-    fn build(device: &wgpu::Device, queue: &wgpu::Queue, target: wgpu::TextureFormat, colour: bool) -> Waveform {
-        let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor { label: Some("waveform measure"), source: wgpu::ShaderSource::Wgsl(MEASURE_SHADER.into()) });
+    fn build(
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+        target: wgpu::TextureFormat,
+        colour: bool,
+    ) -> Waveform {
+        let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+            label: Some("waveform measure"),
+            source: wgpu::ShaderSource::Wgsl(MEASURE_SHADER.into()),
+        });
         let measure = device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
             label: Some("waveform measure"),
             layout: None,
@@ -711,26 +773,55 @@ impl Waveform {
             usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
             mapped_at_creation: false,
         });
-        let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor { label: Some("waveform draw"), source: wgpu::ShaderSource::Wgsl(crate::scope_shader::with_library(DRAW_SHADER).into()) });
+        let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+            label: Some("waveform draw"),
+            source: wgpu::ShaderSource::Wgsl(crate::scope_shader::with_library(DRAW_SHADER).into()),
+        });
         let draw = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
             label: Some("waveform draw"),
             layout: None,
-            vertex: wgpu::VertexState { module: &shader, entry_point: Some("vs"), buffers: &[], compilation_options: Default::default() },
-            primitive: wgpu::PrimitiveState { topology: wgpu::PrimitiveTopology::TriangleStrip, ..Default::default() },
+            vertex: wgpu::VertexState {
+                module: &shader,
+                entry_point: Some("vs"),
+                buffers: &[],
+                compilation_options: Default::default(),
+            },
+            primitive: wgpu::PrimitiveState {
+                topology: wgpu::PrimitiveTopology::TriangleStrip,
+                ..Default::default()
+            },
             depth_stencil: None,
             multisample: wgpu::MultisampleState::default(),
-            fragment: Some(wgpu::FragmentState { module: &shader, entry_point: Some("fs"), targets: &[Some(target.into())], compilation_options: Default::default() }),
+            fragment: Some(wgpu::FragmentState {
+                module: &shader,
+                entry_point: Some("fs"),
+                targets: &[Some(target.into())],
+                compilation_options: Default::default(),
+            }),
             multiview_mask: None,
             cache: None,
         });
         let trace_pass = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
             label: Some("waveform trace"),
             layout: None,
-            vertex: wgpu::VertexState { module: &shader, entry_point: Some("vs_trace"), buffers: &[], compilation_options: Default::default() },
-            primitive: wgpu::PrimitiveState { topology: wgpu::PrimitiveTopology::TriangleStrip, ..Default::default() },
+            vertex: wgpu::VertexState {
+                module: &shader,
+                entry_point: Some("vs_trace"),
+                buffers: &[],
+                compilation_options: Default::default(),
+            },
+            primitive: wgpu::PrimitiveState {
+                topology: wgpu::PrimitiveTopology::TriangleStrip,
+                ..Default::default()
+            },
             depth_stencil: None,
             multisample: wgpu::MultisampleState::default(),
-            fragment: Some(wgpu::FragmentState { module: &shader, entry_point: Some("fs_trace"), targets: &[Some(TRACE_FORMAT.into())], compilation_options: Default::default() }),
+            fragment: Some(wgpu::FragmentState {
+                module: &shader,
+                entry_point: Some("fs_trace"),
+                targets: &[Some(TRACE_FORMAT.into())],
+                compilation_options: Default::default(),
+            }),
             multiview_mask: None,
             cache: None,
         });
@@ -757,7 +848,17 @@ impl Waveform {
             channels: Arc::new(Mutex::new(Channels::default())),
             colorise: Arc::new(Mutex::new(false)),
             unit: Arc::new(Mutex::new(Unit::Codes)),
-            state: Arc::new(Mutex::new(State { counts: None, sums: None, bound_colour: None, bound: None, draw_bound: None, trace: None, trace_bound: None, rgb: None, rgb_bound: None })),
+            state: Arc::new(Mutex::new(State {
+                counts: None,
+                sums: None,
+                bound_colour: None,
+                bound: None,
+                draw_bound: None,
+                trace: None,
+                trace_bound: None,
+                rgb: None,
+                rgb_bound: None,
+            })),
         }
     }
 
@@ -773,7 +874,11 @@ impl Waveform {
 
     /// Which channels to measure and draw from the next frame on (the Colour Waveform only ever shows Luma).
     pub fn set_channels(&self, channels: Channels) {
-        *self.channels.lock().unwrap() = if self.colour { Channels::default() } else { channels };
+        *self.channels.lock().unwrap() = if self.colour {
+            Channels::default()
+        } else {
+            channels
+        };
     }
 
     pub fn channels(&self) -> Channels {
@@ -824,7 +929,11 @@ impl Waveform {
         let mut params = [0u8; PARAMS_BYTES as usize];
         params[..16].copy_from_slice(bytemuck::cast_slice(&[r as f32, g as f32, b as f32, 0.0]));
         let channels = self.channels();
-        params[16..28].copy_from_slice(bytemuck::cast_slice(&[frame.width, frame.height, channels.mask() >> 1]));
+        params[16..28].copy_from_slice(bytemuck::cast_slice(&[
+            frame.width,
+            frame.height,
+            channels.mask() >> 1,
+        ]));
         params[32..40].copy_from_slice(bytemuck::cast_slice(&[scale as f32, offset as f32]));
         self.queue.write_buffer(&self.params, 0, &params);
 
@@ -838,7 +947,11 @@ impl Waveform {
             None => None,
         };
         let mut state = self.state.lock().unwrap();
-        if state.counts.as_ref().is_none_or(|c| c.columns != frame.width) {
+        if state
+            .counts
+            .as_ref()
+            .is_none_or(|c| c.columns != frame.width)
+        {
             state.counts = Some(shared.clone().unwrap_or_else(|| Counts {
                 buffer: self.device.create_buffer(&wgpu::BufferDescriptor {
                     label: Some("waveform counts"),
@@ -856,7 +969,11 @@ impl Waveform {
         state.counts.as_mut().unwrap().picture_height = frame.height;
         // The colour sums exist only while the Y trace is tinted; a token buffer keeps the draw shader's bindings
         // whole otherwise.
-        let sums_size = if self.needs_colour_sums() { frame.width as u64 * ROWS as u64 * 12 } else { 16 };
+        let sums_size = if self.needs_colour_sums() {
+            frame.width as u64 * ROWS as u64 * 12
+        } else {
+            16
+        };
         if state.sums.as_ref().is_none_or(|b| b.size() != sums_size) {
             state.sums = Some(self.device.create_buffer(&wgpu::BufferDescriptor {
                 label: Some("waveform colour sums"),
@@ -873,20 +990,36 @@ impl Waveform {
             state.counts = Some(shared);
             return self.measure_colour(&mut state, encoder, frame);
         }
-        if state.bound.as_ref().is_none_or(|(id, _)| *id != frame.texture_id) {
+        if state
+            .bound
+            .as_ref()
+            .is_none_or(|(id, _)| *id != frame.texture_id)
+        {
             let view = frame.texture.create_view(&Default::default());
             let bind_group = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
                 label: Some("waveform measure"),
                 layout: &self.measure.get_bind_group_layout(0),
                 entries: &[
-                    wgpu::BindGroupEntry { binding: 0, resource: self.params.as_entire_binding() },
-                    wgpu::BindGroupEntry { binding: 1, resource: wgpu::BindingResource::TextureView(&view) },
-                    wgpu::BindGroupEntry { binding: 2, resource: state.counts.as_ref().unwrap().buffer.as_entire_binding() },
+                    wgpu::BindGroupEntry {
+                        binding: 0,
+                        resource: self.params.as_entire_binding(),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 1,
+                        resource: wgpu::BindingResource::TextureView(&view),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 2,
+                        resource: state.counts.as_ref().unwrap().buffer.as_entire_binding(),
+                    },
                 ],
             });
             state.bound = Some((frame.texture_id, bind_group));
         }
-        let mut pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor { label: Some("waveform measure"), timestamp_writes: None });
+        let mut pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
+            label: Some("waveform measure"),
+            timestamp_writes: None,
+        });
         pass.set_pipeline(&self.measure);
         pass.set_bind_group(0, &state.bound.as_ref().unwrap().1, &[]);
         pass.dispatch_workgroups(frame.width.div_ceil(2), 1, 1);
@@ -899,7 +1032,13 @@ impl Waveform {
 
     /// The R, G and B counts of this frame, for the chips that are on: one more pass over the frame, only while
     /// one of them is. Turning them all off frees the counts.
-    fn measure_channels(&self, state: &mut State, encoder: &mut wgpu::CommandEncoder, frame: &GpuFrame, channels: Channels) {
+    fn measure_channels(
+        &self,
+        state: &mut State,
+        encoder: &mut wgpu::CommandEncoder,
+        frame: &GpuFrame,
+        channels: Channels,
+    ) {
         if !channels.colour_channels() {
             if state.rgb.take().is_some() {
                 state.rgb_bound = None;
@@ -920,44 +1059,81 @@ impl Waveform {
             state.draw_bound = None;
             state.trace_bound = None;
         }
-        if state.rgb_bound.as_ref().is_none_or(|(id, _)| *id != frame.texture_id) {
+        if state
+            .rgb_bound
+            .as_ref()
+            .is_none_or(|(id, _)| *id != frame.texture_id)
+        {
             let view = frame.texture.create_view(&Default::default());
             let bind_group = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
                 label: Some("waveform channels"),
                 layout: &self.measure_rgb.get_bind_group_layout(0),
                 entries: &[
-                    wgpu::BindGroupEntry { binding: 0, resource: self.params.as_entire_binding() },
-                    wgpu::BindGroupEntry { binding: 1, resource: wgpu::BindingResource::TextureView(&view) },
-                    wgpu::BindGroupEntry { binding: 4, resource: state.rgb.as_ref().unwrap().as_entire_binding() },
+                    wgpu::BindGroupEntry {
+                        binding: 0,
+                        resource: self.params.as_entire_binding(),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 1,
+                        resource: wgpu::BindingResource::TextureView(&view),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 4,
+                        resource: state.rgb.as_ref().unwrap().as_entire_binding(),
+                    },
                 ],
             });
             state.rgb_bound = Some((frame.texture_id, bind_group));
         }
-        let mut pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor { label: Some("waveform channels"), timestamp_writes: None });
+        let mut pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
+            label: Some("waveform channels"),
+            timestamp_writes: None,
+        });
         pass.set_pipeline(&self.measure_rgb);
         pass.set_bind_group(0, &state.rgb_bound.as_ref().unwrap().1, &[]);
         pass.dispatch_workgroups(frame.width.div_ceil(2), 3, 1);
     }
 
     /// The Colour Waveform's second pass: the same pixels into the same rows as the counts, adding their colours.
-    fn measure_colour(&self, state: &mut State, encoder: &mut wgpu::CommandEncoder, frame: &GpuFrame) {
+    fn measure_colour(
+        &self,
+        state: &mut State,
+        encoder: &mut wgpu::CommandEncoder,
+        frame: &GpuFrame,
+    ) {
         // The sums start from zero.
         let sums = state.sums.clone().unwrap();
         encoder.clear_buffer(&sums, 0, None);
-        if state.bound_colour.as_ref().is_none_or(|(id, _)| *id != frame.texture_id) {
+        if state
+            .bound_colour
+            .as_ref()
+            .is_none_or(|(id, _)| *id != frame.texture_id)
+        {
             let view = frame.texture.create_view(&Default::default());
             let bind_group = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
                 label: Some("waveform colour"),
                 layout: &self.accumulate.get_bind_group_layout(0),
                 entries: &[
-                    wgpu::BindGroupEntry { binding: 0, resource: self.params.as_entire_binding() },
-                    wgpu::BindGroupEntry { binding: 1, resource: wgpu::BindingResource::TextureView(&view) },
-                    wgpu::BindGroupEntry { binding: 3, resource: sums.as_entire_binding() },
+                    wgpu::BindGroupEntry {
+                        binding: 0,
+                        resource: self.params.as_entire_binding(),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 1,
+                        resource: wgpu::BindingResource::TextureView(&view),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 3,
+                        resource: sums.as_entire_binding(),
+                    },
                 ],
             });
             state.bound_colour = Some((frame.texture_id, bind_group));
         }
-        let mut pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor { label: Some("waveform colour"), timestamp_writes: None });
+        let mut pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
+            label: Some("waveform colour"),
+            timestamp_writes: None,
+        });
         pass.set_pipeline(&self.accumulate);
         pass.set_bind_group(0, &state.bound_colour.as_ref().unwrap().1, &[]);
         pass.dispatch_workgroups(frame.width.div_ceil(8), frame.height.div_ceil(8), 1);
@@ -965,7 +1141,13 @@ impl Waveform {
 
     /// Draw the waveform into `area` (left, top, width, height in pixels of a `surface`-sized target), laid out as
     /// [`PlotLayout::new`] says. Draws nothing until a frame has been measured.
-    pub fn draw(&self, pass: &mut wgpu::RenderPass<'_>, area: [f32; 4], surface: [f32; 2], scale: f32) {
+    pub fn draw(
+        &self,
+        pass: &mut wgpu::RenderPass<'_>,
+        area: [f32; 4],
+        surface: [f32; 2],
+        scale: f32,
+    ) {
         let mut state = self.state.lock().unwrap();
         let Some(counts) = &state.counts else { return };
         let [left, top, width, height] = area;
@@ -975,19 +1157,30 @@ impl Waveform {
         let (columns, picture_height) = (counts.columns, counts.picture_height);
         let layout = PlotLayout::fitted(area, scale, [columns, picture_height]);
         // The trace texture covers the plot, one texel per device pixel.
-        let trace_size = [layout.plot[2].ceil().max(1.0) as u32, layout.plot[3].ceil().max(1.0) as u32];
+        let trace_size = [
+            layout.plot[2].ceil().max(1.0) as u32,
+            layout.plot[3].ceil().max(1.0) as u32,
+        ];
         if state.trace.as_ref().is_none_or(|t| t.size != trace_size) {
             let texture = self.device.create_texture(&wgpu::TextureDescriptor {
                 label: Some("waveform trace"),
-                size: wgpu::Extent3d { width: trace_size[0], height: trace_size[1], depth_or_array_layers: 1 },
+                size: wgpu::Extent3d {
+                    width: trace_size[0],
+                    height: trace_size[1],
+                    depth_or_array_layers: 1,
+                },
                 mip_level_count: 1,
                 sample_count: 1,
                 dimension: wgpu::TextureDimension::D2,
                 format: TRACE_FORMAT,
-                usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING,
+                usage: wgpu::TextureUsages::RENDER_ATTACHMENT
+                    | wgpu::TextureUsages::TEXTURE_BINDING,
                 view_formats: &[],
             });
-            state.trace = Some(Trace { view: texture.create_view(&Default::default()), size: trace_size });
+            state.trace = Some(Trace {
+                view: texture.create_view(&Default::default()),
+                size: trace_size,
+            });
             state.trace_bound = None;
             state.draw_bound = None;
         }
@@ -997,11 +1190,33 @@ impl Waveform {
                 label: Some("waveform draw"),
                 layout: &self.draw.get_bind_group_layout(0),
                 entries: &[
-                    wgpu::BindGroupEntry { binding: 0, resource: self.placement.as_entire_binding() },
-                    wgpu::BindGroupEntry { binding: 1, resource: counts.buffer.as_entire_binding() },
-                    wgpu::BindGroupEntry { binding: 2, resource: wgpu::BindingResource::TextureView(&state.trace.as_ref().unwrap().view) },
-                    wgpu::BindGroupEntry { binding: 3, resource: state.sums.as_ref().unwrap().as_entire_binding() },
-                    wgpu::BindGroupEntry { binding: 4, resource: state.rgb.as_ref().or(state.sums.as_ref()).unwrap().as_entire_binding() },
+                    wgpu::BindGroupEntry {
+                        binding: 0,
+                        resource: self.placement.as_entire_binding(),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 1,
+                        resource: counts.buffer.as_entire_binding(),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 2,
+                        resource: wgpu::BindingResource::TextureView(
+                            &state.trace.as_ref().unwrap().view,
+                        ),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 3,
+                        resource: state.sums.as_ref().unwrap().as_entire_binding(),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 4,
+                        resource: state
+                            .rgb
+                            .as_ref()
+                            .or(state.sums.as_ref())
+                            .unwrap()
+                            .as_entire_binding(),
+                    },
                 ],
             });
             state.draw_bound = Some(bind_group);
@@ -1012,10 +1227,27 @@ impl Waveform {
                 label: Some("waveform trace"),
                 layout: &self.trace_pass.get_bind_group_layout(0),
                 entries: &[
-                    wgpu::BindGroupEntry { binding: 0, resource: self.placement.as_entire_binding() },
-                    wgpu::BindGroupEntry { binding: 1, resource: counts.buffer.as_entire_binding() },
-                    wgpu::BindGroupEntry { binding: 3, resource: state.sums.as_ref().unwrap().as_entire_binding() },
-                    wgpu::BindGroupEntry { binding: 4, resource: state.rgb.as_ref().or(state.sums.as_ref()).unwrap().as_entire_binding() },
+                    wgpu::BindGroupEntry {
+                        binding: 0,
+                        resource: self.placement.as_entire_binding(),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 1,
+                        resource: counts.buffer.as_entire_binding(),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 3,
+                        resource: state.sums.as_ref().unwrap().as_entire_binding(),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 4,
+                        resource: state
+                            .rgb
+                            .as_ref()
+                            .or(state.sums.as_ref())
+                            .unwrap()
+                            .as_entire_binding(),
+                    },
                 ],
             });
             state.trace_bound = Some(bind_group);
@@ -1023,7 +1255,12 @@ impl Waveform {
         let clip = |px: f32, size: f32| px / size * 2.0 - 1.0;
         let look = *self.look.lock().unwrap();
         let mut placement = [0f32; (DRAW_UNIFORM_BYTES / 4) as usize];
-        placement[..4].copy_from_slice(&[clip(left, surface[0]), -clip(top, surface[1]), clip(left + width, surface[0]), -clip(top + height, surface[1])]);
+        placement[..4].copy_from_slice(&[
+            clip(left, surface[0]),
+            -clip(top, surface[1]),
+            clip(left + width, surface[0]),
+            -clip(top + height, surface[1]),
+        ]);
         placement[4..8].copy_from_slice(&layout.plot);
         placement[8..12].copy_from_slice(&layout.above);
         placement[12..16].copy_from_slice(&layout.below);
@@ -1031,24 +1268,53 @@ impl Waveform {
         let (black, white) = self.measurement().levels.black_and_white();
         placement[20..23].copy_from_slice(&[black as f32, white as f32, look.graticule]);
         let channels = self.channels();
-        let mask = if state.rgb.is_some() || !channels.colour_channels() { channels.mask() } else { channels.mask() & 1 };
-        placement[24..28].copy_from_slice(&[look.brightness.gain(), look.spread.0, if self.needs_colour_sums() { 1.0 } else { 0.0 }, (mask | if self.colour || self.colorise() { 1 << COLORISE_BIT } else { 0 }) as f32]);
-        for (i, colour) in [crate::style::CHANNEL_R, crate::style::CHANNEL_G, crate::style::CHANNEL_B].into_iter().enumerate() {
+        let mask = if state.rgb.is_some() || !channels.colour_channels() {
+            channels.mask()
+        } else {
+            channels.mask() & 1
+        };
+        placement[24..28].copy_from_slice(&[
+            look.brightness.gain(),
+            look.spread.0,
+            if self.needs_colour_sums() { 1.0 } else { 0.0 },
+            (mask
+                | if self.colour || self.colorise() {
+                    1 << COLORISE_BIT
+                } else {
+                    0
+                }) as f32,
+        ]);
+        for (i, colour) in [
+            crate::style::CHANNEL_R,
+            crate::style::CHANNEL_G,
+            crate::style::CHANNEL_B,
+        ]
+        .into_iter()
+        .enumerate()
+        {
             placement[28 + i * 4..31 + i * 4].copy_from_slice(&colour);
         }
         // The reference lines of the scale's unit (at most 8): the plot is the same, only where the lines sit differs.
         let measurement = self.measurement();
         let unit = self.unit();
         let mut lines = [-1000f32; 8];
-        for (slot, code) in lines.iter_mut().zip(unit.lines(measurement.levels, measurement.space)) {
+        for (slot, code) in lines
+            .iter_mut()
+            .zip(unit.lines(measurement.levels, measurement.space))
+        {
             *slot = code as f32;
         }
         placement[40..48].copy_from_slice(&lines);
-        self.queue.write_buffer(&self.placement, 0, bytemuck::cast_slice(&placement));
+        self.queue
+            .write_buffer(&self.placement, 0, bytemuck::cast_slice(&placement));
 
         // Pass 1, on its own: the trace's brightness into the texture. It is submitted ahead of the caller's
         // commands, which read the texture.
-        let mut encoder = self.device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: Some("waveform trace") });
+        let mut encoder = self
+            .device
+            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                label: Some("waveform trace"),
+            });
         {
             let mut trace_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("waveform trace"),
@@ -1056,7 +1322,10 @@ impl Waveform {
                     view: &state.trace.as_ref().unwrap().view,
                     depth_slice: None,
                     resolve_target: None,
-                    ops: wgpu::Operations { load: wgpu::LoadOp::Clear(wgpu::Color::BLACK), store: wgpu::StoreOp::Store },
+                    ops: wgpu::Operations {
+                        load: wgpu::LoadOp::Clear(wgpu::Color::BLACK),
+                        store: wgpu::StoreOp::Store,
+                    },
                 })],
                 depth_stencil_attachment: None,
                 timestamp_writes: None,
@@ -1085,10 +1354,18 @@ impl Waveform {
             Channel::Y => return self.counts(),
         };
         let state = self.state.lock().unwrap();
-        let (Some(counts), Some(rgb)) = (&state.counts, &state.rgb) else { return WaveformCounts { columns: 0, counts: Vec::new() } };
+        let (Some(counts), Some(rgb)) = (&state.counts, &state.rgb) else {
+            return WaveformCounts {
+                columns: 0,
+                counts: Vec::new(),
+            };
+        };
         let bytes = counts.columns as u64 * ROWS as u64 * 4;
         let data = self.read_buffer(rgb, block * bytes, bytes);
-        WaveformCounts { columns: counts.columns, counts: data }
+        WaveformCounts {
+            columns: counts.columns,
+            counts: data,
+        }
     }
 
     fn read_buffer(&self, buffer: &wgpu::Buffer, offset: u64, size: u64) -> Vec<u32> {
@@ -1102,17 +1379,27 @@ impl Waveform {
         encoder.copy_buffer_to_buffer(buffer, offset, &readback, 0, Some(size));
         self.queue.submit([encoder.finish()]);
         readback.map_async(wgpu::MapMode::Read, .., |_| {});
-        self.device.poll(wgpu::PollType::wait_indefinitely()).expect("the GPU finishes");
-        let data = bytemuck::cast_slice(&readback.get_mapped_range(..).expect("mapped")).to_vec();
-        data
+        self.device
+            .poll(wgpu::PollType::wait_indefinitely())
+            .expect("the GPU finishes");
+
+        bytemuck::cast_slice(&readback.get_mapped_range(..).expect("mapped")).to_vec()
     }
 
     /// Read the waveform's contents back from the GPU (waits for it): for tests and diagnostics, not per frame.
     pub fn counts(&self) -> WaveformCounts {
         let state = self.state.lock().unwrap();
-        let Some(counts) = &state.counts else { return WaveformCounts { columns: 0, counts: Vec::new() } };
+        let Some(counts) = &state.counts else {
+            return WaveformCounts {
+                columns: 0,
+                counts: Vec::new(),
+            };
+        };
         let data = self.read_buffer(&counts.buffer, 0, counts.buffer.size());
-        WaveformCounts { columns: counts.columns, counts: data }
+        WaveformCounts {
+            columns: counts.columns,
+            counts: data,
+        }
     }
 }
 
@@ -1126,8 +1413,14 @@ pub const SETTINGS: [SettingDef; 7] = [
         label: "Luma weights",
         amount: None,
         choices: &[
-            Choice { value: "primaries", text: "From the Measured Space's primaries" },
-            Choice { value: "match-resolve", text: "Match Resolve's waveform" },
+            Choice {
+                value: "primaries",
+                text: "From the Measured Space's primaries",
+            },
+            Choice {
+                value: "match-resolve",
+                text: "Match Resolve's waveform",
+            },
         ],
     },
     SettingDef {
@@ -1154,21 +1447,66 @@ pub const SETTINGS: [SettingDef; 7] = [
         label: "Channels",
         amount: None,
         choices: &[
-            Choice { value: "y", text: "Y" },
-            Choice { value: "r", text: "R" },
-            Choice { value: "g", text: "G" },
-            Choice { value: "b", text: "B" },
-            Choice { value: "yr", text: "Y R" },
-            Choice { value: "yg", text: "Y G" },
-            Choice { value: "yb", text: "Y B" },
-            Choice { value: "rg", text: "R G" },
-            Choice { value: "rb", text: "R B" },
-            Choice { value: "gb", text: "G B" },
-            Choice { value: "yrg", text: "Y R G" },
-            Choice { value: "yrb", text: "Y R B" },
-            Choice { value: "ygb", text: "Y G B" },
-            Choice { value: "rgb", text: "R G B" },
-            Choice { value: "yrgb", text: "Y R G B" },
+            Choice {
+                value: "y",
+                text: "Y",
+            },
+            Choice {
+                value: "r",
+                text: "R",
+            },
+            Choice {
+                value: "g",
+                text: "G",
+            },
+            Choice {
+                value: "b",
+                text: "B",
+            },
+            Choice {
+                value: "yr",
+                text: "Y R",
+            },
+            Choice {
+                value: "yg",
+                text: "Y G",
+            },
+            Choice {
+                value: "yb",
+                text: "Y B",
+            },
+            Choice {
+                value: "rg",
+                text: "R G",
+            },
+            Choice {
+                value: "rb",
+                text: "R B",
+            },
+            Choice {
+                value: "gb",
+                text: "G B",
+            },
+            Choice {
+                value: "yrg",
+                text: "Y R G",
+            },
+            Choice {
+                value: "yrb",
+                text: "Y R B",
+            },
+            Choice {
+                value: "ygb",
+                text: "Y G B",
+            },
+            Choice {
+                value: "rgb",
+                text: "R G B",
+            },
+            Choice {
+                value: "yrgb",
+                text: "Y R G B",
+            },
         ],
     },
     // Shown as the Colorise chip on the title bar, not in the popover (ADR 0032). Off first: it is the default.
@@ -1176,7 +1514,16 @@ pub const SETTINGS: [SettingDef; 7] = [
         key: COLORISE_SETTING,
         label: "Colorise",
         amount: None,
-        choices: &[Choice { value: crate::toolbar::TOGGLE_OFF, text: "Off" }, Choice { value: "on", text: "On" }],
+        choices: &[
+            Choice {
+                value: crate::toolbar::TOGGLE_OFF,
+                text: "Off",
+            },
+            Choice {
+                value: "on",
+                text: "On",
+            },
+        ],
     },
     SCALE_DEF,
 ];
@@ -1186,11 +1533,29 @@ const SCALE_DEF: SettingDef = SettingDef {
     key: UNIT_SETTING,
     label: "Scale units",
     amount: None,
-    choices: &[Choice { value: "codes", text: "10-bit codes" }, Choice { value: "percent", text: "Percent" }, Choice { value: "nits", text: "Nits" }],
+    choices: &[
+        Choice {
+            value: "codes",
+            text: "10-bit codes",
+        },
+        Choice {
+            value: "percent",
+            text: "Percent",
+        },
+        Choice {
+            value: "nits",
+            text: "Nits",
+        },
+    ],
 };
 
 /// The same without nits, for an Output Colour Space that has no light to name.
-const SCALE_DEF_NO_NITS: SettingDef = SettingDef { key: UNIT_SETTING, label: "Scale units", amount: None, choices: SCALE_DEF.choices.split_at(2).0 };
+const SCALE_DEF_NO_NITS: SettingDef = SettingDef {
+    key: UNIT_SETTING,
+    label: "Scale units",
+    amount: None,
+    choices: SCALE_DEF.choices.split_at(2).0,
+};
 
 /// The key of the Colorise setting: whether the traces are drawn in colour.
 pub const COLORISE_SETTING: &str = "colorise";
@@ -1199,25 +1564,48 @@ pub const COLORISE_SETTING: &str = "colorise";
 pub const CHANNELS_SETTING: &str = "channels";
 
 /// The chips on the luma waveform's title bar: Y R G B, any combination, at least one on (#117).
-pub static TOOLBAR: [crate::toolbar::ToolbarDef; 2] = [crate::toolbar::ToolbarDef {
-    key: CHANNELS_SETTING,
-    mode: crate::components::ChipMode::Multiple,
-    chips: &[
-        crate::toolbar::ToolbarChip { value: "y", text: "Y", tooltip: "Luma (Y)", channel: Some(crate::components::Channel::Y) },
-        crate::toolbar::ToolbarChip { value: "r", text: "R", tooltip: "Red", channel: Some(crate::components::Channel::R) },
-        crate::toolbar::ToolbarChip { value: "g", text: "G", tooltip: "Green", channel: Some(crate::components::Channel::G) },
-        crate::toolbar::ToolbarChip { value: "b", text: "B", tooltip: "Blue", channel: Some(crate::components::Channel::B) },
-    ],
-}, crate::toolbar::ToolbarDef {
-    key: COLORISE_SETTING,
-    mode: crate::components::ChipMode::Toggle,
-    chips: &[crate::toolbar::ToolbarChip {
-        value: "on",
-        text: "Col",
-        tooltip: "Colorise: traces drawn in colour, Y in the picture's colour (off: white)",
-        channel: None,
-    }],
-}];
+pub static TOOLBAR: [crate::toolbar::ToolbarDef; 2] = [
+    crate::toolbar::ToolbarDef {
+        key: CHANNELS_SETTING,
+        mode: crate::components::ChipMode::Multiple,
+        chips: &[
+            crate::toolbar::ToolbarChip {
+                value: "y",
+                text: "Y",
+                tooltip: "Luma (Y)",
+                channel: Some(crate::components::Channel::Y),
+            },
+            crate::toolbar::ToolbarChip {
+                value: "r",
+                text: "R",
+                tooltip: "Red",
+                channel: Some(crate::components::Channel::R),
+            },
+            crate::toolbar::ToolbarChip {
+                value: "g",
+                text: "G",
+                tooltip: "Green",
+                channel: Some(crate::components::Channel::G),
+            },
+            crate::toolbar::ToolbarChip {
+                value: "b",
+                text: "B",
+                tooltip: "Blue",
+                channel: Some(crate::components::Channel::B),
+            },
+        ],
+    },
+    crate::toolbar::ToolbarDef {
+        key: COLORISE_SETTING,
+        mode: crate::components::ChipMode::Toggle,
+        chips: &[crate::toolbar::ToolbarChip {
+            value: "on",
+            text: "Col",
+            tooltip: "Colorise: traces drawn in colour, Y in the picture's colour (off: white)",
+            channel: None,
+        }],
+    },
+];
 
 /// What the Colour Waveform is called: its Panel's settings are kept under this name.
 pub const COLOUR_NAME: &str = "Colour waveform";
@@ -1233,8 +1621,13 @@ pub const SPREAD_SETTING: &str = "spread";
 
 /// How the waveform is drawn, from its settings (a value that is not a choice falls back to the default).
 pub fn look_from(settings: &crate::settings::Settings) -> Look {
-    let brightness = Brightness(BRIGHTNESS_AMOUNT.read(settings.get(BRIGHTNESS_SETTING).map(String::as_str)));
-    Look { brightness, spread: Spread(SPREAD_AMOUNT.read(settings.get(SPREAD_SETTING).map(String::as_str))), graticule: graticule_gain(settings.get(GRATICULE_SETTING).map(String::as_str)) }
+    let brightness =
+        Brightness(BRIGHTNESS_AMOUNT.read(settings.get(BRIGHTNESS_SETTING).map(String::as_str)));
+    Look {
+        brightness,
+        spread: Spread(SPREAD_AMOUNT.read(settings.get(SPREAD_SETTING).map(String::as_str))),
+        graticule: graticule_gain(settings.get(GRATICULE_SETTING).map(String::as_str)),
+    }
 }
 
 /// Logical pixels: the size of the numbers on the scale.
@@ -1246,7 +1639,14 @@ impl Waveform {
         match self.unit() {
             Unit::Codes => label,
             Unit::Percent => format!("{label}  ·  scale in % of the Levels' range"),
-            Unit::Nits => format!("{label}  ·  scale in nits ({})", if self.measurement().space == MeasuredSpace::Rec2100Hlg { "HLG on a 1000 nit display" } else { "PQ" }),
+            Unit::Nits => format!(
+                "{label}  ·  scale in nits ({})",
+                if self.measurement().space == MeasuredSpace::Rec2100Hlg {
+                    "HLG on a 1000 nit display"
+                } else {
+                    "PQ"
+                }
+            ),
         }
     }
 }
@@ -1264,16 +1664,31 @@ impl crate::display::Display for Waveform {
         // The waveform measures in the Colour Setup's Output Colour Space (the default Measured Space), with the
         // luma weights the user chose (ADR 0004).
         // The Colour Waveform has no weights menu of its own: it follows the luma waveform's choice.
-        let luma = if self.colour { context.luma } else { luma_weights_of(&context.settings) };
+        let luma = if self.colour {
+            context.luma
+        } else {
+            luma_weights_of(&context.settings)
+        };
         self.set_look(look_from(&context.settings));
-        self.set_channels(Channels::from_setting(context.settings.get(CHANNELS_SETTING).map(String::as_str)));
+        self.set_channels(Channels::from_setting(
+            context.settings.get(CHANNELS_SETTING).map(String::as_str),
+        ));
         self.set_colorise(context.settings.get(COLORISE_SETTING).map(String::as_str) == Some("on"));
-        self.set_unit(Unit::from_setting(context.settings.get(UNIT_SETTING).map(String::as_str)));
-        self.set_measurement(crate::output_conversion::measurement(context.colour_setup.clone(), luma));
+        self.set_unit(Unit::from_setting(
+            context.settings.get(UNIT_SETTING).map(String::as_str),
+        ));
+        self.set_measurement(crate::output_conversion::measurement(
+            context.colour_setup.clone(),
+            luma,
+        ));
     }
 
     fn setting_defs(&self) -> &'static [SettingDef] {
-        if self.colour { &COLOUR_SETTINGS } else { &SETTINGS }
+        if self.colour {
+            &COLOUR_SETTINGS
+        } else {
+            &SETTINGS
+        }
     }
 
     fn toolbar_defs(&self) -> &'static [crate::toolbar::ToolbarDef] {
@@ -1284,7 +1699,16 @@ impl crate::display::Display for Waveform {
     fn offered_defs(&self) -> Vec<SettingDef> {
         let m = self.measurement();
         let offer_nits = crate::waveform_scale::nits_offered(m.space, m.assumed);
-        self.setting_defs().iter().map(|d| if d.key == UNIT_SETTING && !offer_nits { SCALE_DEF_NO_NITS } else { *d }).collect()
+        self.setting_defs()
+            .iter()
+            .map(|d| {
+                if d.key == UNIT_SETTING && !offer_nits {
+                    SCALE_DEF_NO_NITS
+                } else {
+                    *d
+                }
+            })
+            .collect()
     }
 
     fn label(&self) -> String {
@@ -1293,7 +1717,11 @@ impl crate::display::Display for Waveform {
         }
         // The channels named when not just Luma; the luma weights only while Luma is drawn.
         let channels = self.channels();
-        let title = if channels.is_default() { "Luma".to_string() } else { channels.names() };
+        let title = if channels.is_default() {
+            "Luma".to_string()
+        } else {
+            channels.names()
+        };
         self.with_unit(self.measurement().label_for(&title, channels.y))
     }
 
@@ -1309,11 +1737,19 @@ impl crate::display::Display for Waveform {
             None => return Vec::new(),
         };
         let plot = PlotLayout::fitted(area, scale, picture);
-        let (levels, space, unit) = (self.measurement().levels, self.measurement().space, self.unit());
+        let (levels, space, unit) = (
+            self.measurement().levels,
+            self.measurement().space,
+            self.unit(),
+        );
         let middle = |r: [f32; 4]| r[1] + r[3] / 2.0;
         // (text, height on screen, rank: lower matters more)
         let mut marks = vec![(unit.above_text(levels, space), middle(plot.above()), 1)];
-        marks.extend(unit.marks(levels, space).into_iter().map(|m| (m.text, plot.y_of_code(m.code), m.rank)));
+        marks.extend(
+            unit.marks(levels, space)
+                .into_iter()
+                .map(|m| (m.text, plot.y_of_code(m.code), m.rank)),
+        );
         marks.push((unit.below_text(levels), middle(plot.below()), 1));
         let placed: Vec<(f32, u32)> = marks.iter().map(|(_, y, rank)| (*y, *rank)).collect();
         let shown = marks_that_fit(&placed, SCALE_SIZE * scale * 1.3);
@@ -1322,7 +1758,14 @@ impl crate::display::Display for Waveform {
             .into_iter()
             .zip(shown)
             .filter(|(_, shown)| *shown)
-            .map(|((text, top, _), _)| crate::display::ScaleText { text, left: plot.gutter_left(), top, width, right_aligned: true, centred: false })
+            .map(|((text, top, _), _)| crate::display::ScaleText {
+                text,
+                left: plot.gutter_left(),
+                top,
+                width,
+                right_aligned: true,
+                centred: false,
+            })
             .collect()
     }
 }

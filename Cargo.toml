@@ -8,6 +8,14 @@ version = "0.3.0"
 edition = "2024"
 publish = false
 
+# Clippy's style lints below fight deliberate choices: index loops over fixed
+# grids, NaN-aware negated comparisons, constant checks in token tests.
+[workspace.lints.clippy]
+needless_range_loop = "allow"
+neg_cmp_op_on_partial_ord = "allow"
+type_complexity = "allow"
+assertions_on_constants = "allow"
+
 [profile.dev]
 opt-level = 1
 

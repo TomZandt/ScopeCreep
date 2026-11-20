@@ -2,7 +2,7 @@
 //! draws into a target, and the tests read back the pixels and what the Loupe reports it drew. Needs a GPU.
 mod common;
 use common::{Rig, TARGET, solid};
-use scopecreep::display::{LoupeDrawn, DisplayContext, DisplaySet, Pointer, PointerResult};
+use scopecreep::display::{DisplayContext, DisplaySet, LoupeDrawn, Pointer, PointerResult};
 use scopecreep::picture_view::PictureView;
 use scopecreep::settings::PanelSettings;
 use std::sync::Arc;
@@ -25,17 +25,25 @@ impl Bench {
         let mut set = DisplaySet::default();
         let view = Arc::new(PictureView::new(&rig.device, &rig.queue, TARGET, false));
         set.register(view.clone());
-        Bench { rig, set, view, settings: PanelSettings::default() }
+        Bench {
+            rig,
+            set,
+            view,
+            settings: PanelSettings::default(),
+        }
     }
 
     fn play(&mut self, width: u32, height: u32, pixels: &[f32]) {
         let set = &self.set;
-        self.rig.play(width, height, pixels, |rig| rig.poll(|encoder, frame| set.on_frame(encoder, frame)));
+        self.rig.play(width, height, pixels, |rig| {
+            rig.poll(|encoder, frame| set.on_frame(encoder, frame))
+        });
     }
 
     fn set(&mut self, key: &str, value: &str) {
         self.settings.set(NAME, key, value);
-        self.set.configure(&DisplayContext::default(), &self.settings);
+        self.set
+            .configure(&DisplayContext::default(), &self.settings);
     }
 
     fn pointer(&self, event: Pointer) -> PointerResult {
@@ -47,7 +55,9 @@ impl Bench {
     }
 
     fn render(&self) -> Vec<u8> {
-        self.rig.render(W, H, |pass| self.set.draw(pass, 0, AREA, [W as f32, H as f32], 1.0))
+        self.rig.render(W, H, |pass| {
+            self.set.draw(pass, 0, AREA, [W as f32, H as f32], 1.0)
+        })
     }
 }
 
@@ -58,7 +68,11 @@ fn px(image: &[u8], x: u32, y: u32) -> [u8; 3] {
 
 fn busy(width: u32, height: u32) -> Vec<f32> {
     let code = |x: u32, y: u32, shift: u32| (((3 * x + 5 * y + shift) % 200) + 20) as f32 / 255.0;
-    (0..height).flat_map(|y| (0..width).flat_map(move |x| [code(x, y, 0), code(x, y, 100), code(x, y, 57), 1.0])).collect()
+    (0..height)
+        .flat_map(|y| {
+            (0..width).flat_map(move |x| [code(x, y, 0), code(x, y, 100), code(x, y, 57), 1.0])
+        })
+        .collect()
 }
 
 fn centre(rect: [f32; 4]) -> [f32; 2] {
@@ -81,7 +95,10 @@ fn runs(values: &[u8]) -> Vec<usize> {
 }
 
 fn inside(inner: [f32; 4], outer: [f32; 4]) -> bool {
-    inner[0] >= outer[0] - 0.01 && inner[1] >= outer[1] - 0.01 && inner[0] + inner[2] <= outer[0] + outer[2] + 0.01 && inner[1] + inner[3] <= outer[1] + outer[3] + 0.01
+    inner[0] >= outer[0] - 0.01
+        && inner[1] >= outer[1] - 0.01
+        && inner[0] + inner[2] <= outer[0] + outer[2] + 0.01
+        && inner[1] + inner[3] <= outer[1] + outer[3] + 0.01
 }
 
 #[test]
@@ -92,10 +109,19 @@ fn with_the_loupe_off_nothing_is_drawn_over_the_picture_and_only_the_wheel_is_us
     assert!(b.drawn().is_none(), "no Loupe drawn");
     let c = [AREA[0] + AREA[2] / 2.0, AREA[1] + AREA[3] / 2.0];
     assert_eq!(b.pointer(Pointer::Down(c)), PointerResult::default());
-    assert_eq!(b.pointer(Pointer::Move([c[0] + 30.0, c[1]])), PointerResult::default());
+    assert_eq!(
+        b.pointer(Pointer::Move([c[0] + 30.0, c[1]])),
+        PointerResult::default()
+    );
     assert_eq!(b.pointer(Pointer::Up), PointerResult::default());
     // The wheel is the picture's zoom now (#165), and remembers nothing.
-    assert_eq!(b.pointer(Pointer::Wheel { at: c, lines: 3.0 }), PointerResult { used: true, remember: Vec::new() });
+    assert_eq!(
+        b.pointer(Pointer::Wheel { at: c, lines: 3.0 }),
+        PointerResult {
+            used: true,
+            remember: Vec::new()
+        }
+    );
 }
 
 #[test]
@@ -108,8 +134,17 @@ fn the_loupe_magnifies_colour_and_each_channel_as_the_panel_shows_it() {
         b.set("channel", channel);
         let image = b.render();
         let c = centre(b.drawn().expect("drawn with the Loupe on").loupe);
-        let (in_loupe, in_panel) = (px(&image, c[0] as u32, c[1] as u32), px(&image, away.0, away.1));
-        assert!(in_loupe.iter().zip(in_panel).all(|(a, b)| (*a as i32 - b as i32).abs() <= 1), "{channel}: Loupe {in_loupe:?} vs Panel {in_panel:?}");
+        let (in_loupe, in_panel) = (
+            px(&image, c[0] as u32, c[1] as u32),
+            px(&image, away.0, away.1),
+        );
+        assert!(
+            in_loupe
+                .iter()
+                .zip(in_panel)
+                .all(|(a, b)| (*a as i32 - b as i32).abs() <= 1),
+            "{channel}: Loupe {in_loupe:?} vs Panel {in_panel:?}"
+        );
     }
     b.set("channel", "off");
     let image = b.render();
@@ -124,10 +159,22 @@ fn assert_blocks(b: &Bench, side: usize) {
     let c = centre(rect);
     let (left, right) = (rect[0] as u32 + 4, (rect[0] + rect[2]) as u32 - 4);
     let (top, bottom) = (rect[1] as u32 + 4, (rect[1] + rect[3]) as u32 - 4);
-    let row: Vec<u8> = (left..right).map(|x| px(&image, x, c[1] as u32)[2]).collect();
-    let column: Vec<u8> = (top..bottom).map(|y| px(&image, c[0] as u32, y)[2]).collect();
-    assert!(runs(&row).iter().all(|n| *n == side), "across: {:?}", runs(&row));
-    assert!(runs(&column).iter().all(|n| *n == side), "down: {:?}", runs(&column));
+    let row: Vec<u8> = (left..right)
+        .map(|x| px(&image, x, c[1] as u32)[2])
+        .collect();
+    let column: Vec<u8> = (top..bottom)
+        .map(|y| px(&image, c[0] as u32, y)[2])
+        .collect();
+    assert!(
+        runs(&row).iter().all(|n| *n == side),
+        "across: {:?}",
+        runs(&row)
+    );
+    assert!(
+        runs(&column).iter().all(|n| *n == side),
+        "down: {:?}",
+        runs(&column)
+    );
     assert!(runs(&row).len() > 5 && runs(&column).len() > 5);
 }
 
@@ -154,7 +201,14 @@ fn the_loupe_zooms_100_to_800_percent_in_exact_whole_pixel_blocks() {
     assert_blocks(&b, 1);
     let away = [AREA[0] + 2.0, AREA[1] + 2.0];
     // Off the Loupe the wheel zooms the picture (#165) and leaves the Loupe's own zoom alone.
-    assert!(b.pointer(Pointer::Wheel { at: away, lines: 1.0 }).remember.is_empty());
+    assert!(
+        b.pointer(Pointer::Wheel {
+            at: away,
+            lines: 1.0
+        })
+        .remember
+        .is_empty()
+    );
     b.render();
     assert_eq!(b.drawn().unwrap().zoom, 100);
 }
@@ -166,13 +220,19 @@ fn the_loupe_drags_and_stays_inside_the_panel() {
     b.set("loupe", "on");
     b.render();
     let before = b.drawn().unwrap().loupe;
-    assert!(!b.pointer(Pointer::Down([AREA[0] + 2.0, AREA[1] + 2.0])).used);
+    assert!(
+        !b.pointer(Pointer::Down([AREA[0] + 2.0, AREA[1] + 2.0]))
+            .used
+    );
     let c = centre(before);
     assert!(b.pointer(Pointer::Down(c)).used);
     b.pointer(Pointer::Move([c[0] - 30.0, c[1] + 10.0]));
     b.render();
     let moved = b.drawn().unwrap().loupe;
-    assert!((moved[0] - (before[0] - 30.0)).abs() < 0.6 && (moved[1] - (before[1] + 10.0)).abs() < 0.6, "{before:?} -> {moved:?}");
+    assert!(
+        (moved[0] - (before[0] - 30.0)).abs() < 0.6 && (moved[1] - (before[1] + 10.0)).abs() < 0.6,
+        "{before:?} -> {moved:?}"
+    );
     b.pointer(Pointer::Move([-500.0, -500.0]));
     b.render();
     assert!(inside(b.drawn().unwrap().loupe, AREA));
@@ -202,11 +262,17 @@ fn the_loupe_size_is_a_popover_choice_and_position_and_zoom_are_remembered() {
     };
     let mut settings = first.settings.clone();
     remembered(first.pointer(Pointer::Down(c)), &mut settings);
-    remembered(first.pointer(Pointer::Move([c[0] + 120.0, c[1] - 60.0])), &mut settings);
+    remembered(
+        first.pointer(Pointer::Move([c[0] + 120.0, c[1] - 60.0])),
+        &mut settings,
+    );
     remembered(first.pointer(Pointer::Up), &mut settings);
     first.render();
     let at = centre(first.drawn().unwrap().loupe);
-    remembered(first.pointer(Pointer::Wheel { at, lines: 3.0 }), &mut settings);
+    remembered(
+        first.pointer(Pointer::Wheel { at, lines: 3.0 }),
+        &mut settings,
+    );
     first.render();
     let (rect, zoom) = (first.drawn().unwrap().loupe, first.drawn().unwrap().zoom);
     assert_eq!(zoom, 500);
@@ -214,10 +280,21 @@ fn the_loupe_size_is_a_popover_choice_and_position_and_zoom_are_remembered() {
     drop(first);
 
     let mut second = Bench::new("clean-loupe-remember-2");
-    second.set.configure(&DisplayContext::default(), &PanelSettings::from_text(&saved));
+    second.set.configure(
+        &DisplayContext::default(),
+        &PanelSettings::from_text(&saved),
+    );
     second.play(64, 36, &solid(64, 36, [0.4, 0.6, 0.8]));
     second.render();
     let again = second.drawn().expect("the Loupe is on again");
     assert_eq!(again.zoom, 500);
-    assert!(again.loupe.iter().zip(rect).all(|(a, b)| (a - b).abs() < 0.6), "{:?} vs {rect:?}", again.loupe);
+    assert!(
+        again
+            .loupe
+            .iter()
+            .zip(rect)
+            .all(|(a, b)| (a - b).abs() < 0.6),
+        "{:?} vs {rect:?}",
+        again.loupe
+    );
 }

@@ -26,11 +26,15 @@ fn first_file(dir: &Path, ext: &str) -> Result<PathBuf, String> {
         .filter(|p| p.extension().is_some_and(|x| x == ext))
         .collect();
     v.sort();
-    v.into_iter().next().ok_or_else(|| format!("no .{ext} in {}", dir.display()))
+    v.into_iter()
+        .next()
+        .ok_or_else(|| format!("no .{ext} in {}", dir.display()))
 }
 
 pub fn feed_path(root: &Path, key: &str, clip: &str) -> PathBuf {
-    root.join("dumps-feed").join(format!("{PROJECT_PREFIX}{key}")).join(format!("{clip}.exr"))
+    root.join("dumps-feed")
+        .join(format!("{PROJECT_PREFIX}{key}"))
+        .join(format!("{clip}.exr"))
 }
 
 pub fn read_feed(root: &Path, key: &str, clip: &str) -> Result<Image, String> {
@@ -38,17 +42,25 @@ pub fn read_feed(root: &Path, key: &str, clip: &str) -> Result<Image, String> {
 }
 
 pub fn read_reference_exr(root: &Path, key: &str, clip: &str) -> Result<Image, String> {
-    let dir = root.join("renders").join(format!("{PROJECT_PREFIX}{key}")).join(format!("{clip}-exr"));
+    let dir = root
+        .join("renders")
+        .join(format!("{PROJECT_PREFIX}{key}"))
+        .join(format!("{clip}-exr"));
     imageio::read_exr(&first_file(&dir, "exr")?)
 }
 
 pub fn read_reference_tiff(root: &Path, key: &str, clip: &str) -> Result<Image, String> {
-    let dir = root.join("renders").join(format!("{PROJECT_PREFIX}{key}")).join(format!("{clip}-tif"));
+    let dir = root
+        .join("renders")
+        .join(format!("{PROJECT_PREFIX}{key}"))
+        .join(format!("{clip}-tif"));
     imageio::read_tiff16(&first_file(&dir, "tif")?)
 }
 
 pub fn converted_path(root: &Path, key: &str, clip: &str) -> PathBuf {
-    root.join("feed-converted").join(format!("{PROJECT_PREFIX}{key}")).join(format!("{clip}.exr"))
+    root.join("feed-converted")
+        .join(format!("{PROJECT_PREFIX}{key}"))
+        .join(format!("{clip}.exr"))
 }
 
 /// The frame the app showed for `clip`: the real Feed after Output Conversion, as the accuracy suite captured it.
@@ -65,11 +77,16 @@ fn read_state(dir: PathBuf) -> Option<String> {
 pub fn state_problems(root: &Path, key: &str) -> Option<Vec<String>> {
     let project = format!("{PROJECT_PREFIX}{key}");
     let references = read_state(root.join("renders").join(&project))?;
-    Some(crate::state::problems(Some(&references), read_state(root.join("feed-converted").join(&project)).as_deref()))
+    Some(crate::state::problems(
+        Some(&references),
+        read_state(root.join("feed-converted").join(&project)).as_deref(),
+    ))
 }
 
 /// The app's Picture View label for that frame (it says whether the conversion is exact or approximated).
 pub fn read_converted_label(root: &Path, key: &str, clip: &str) -> Result<String, String> {
     let p = converted_path(root, key, clip).with_extension("label");
-    std::fs::read_to_string(&p).map(|s| s.trim().to_string()).map_err(|e| format!("{}: {e}", p.display()))
+    std::fs::read_to_string(&p)
+        .map(|s| s.trim().to_string())
+        .map_err(|e| format!("{}: {e}", p.display()))
 }

@@ -5,14 +5,14 @@
 //! definition of each Output Conversion: the app builds its GPU conversion's matrices, constants and ACES 2.0
 //! tables from them (app/src/output_conversion.rs), and the accuracy suite proves both against Resolve.
 
-pub mod colour;
-pub mod transfer;
-pub mod imageio;
-pub mod data;
 pub mod aces2;
-pub mod pipeline;
-pub mod compare;
-pub mod setups;
-pub mod report;
-pub mod state;
 pub mod colorchecker;
+pub mod colour;
+pub mod compare;
+pub mod data;
+pub mod imageio;
+pub mod pipeline;
+pub mod report;
+pub mod setups;
+pub mod state;
+pub mod transfer;

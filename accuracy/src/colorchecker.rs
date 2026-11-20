@@ -26,7 +26,12 @@ pub enum TimelineSpace {
 }
 
 impl TimelineSpace {
-    pub const ALL: [TimelineSpace; 4] = [TimelineSpace::AcesCct, TimelineSpace::AcesCg, TimelineSpace::DavinciIntermediate, TimelineSpace::Rec709Gamma24];
+    pub const ALL: [TimelineSpace; 4] = [
+        TimelineSpace::AcesCct,
+        TimelineSpace::AcesCg,
+        TimelineSpace::DavinciIntermediate,
+        TimelineSpace::Rec709Gamma24,
+    ];
 
     /// Resolve's name for the space, as the Colour Setup says it.
     pub fn name(self) -> &'static str {
@@ -51,7 +56,9 @@ impl TimelineSpace {
             TimelineSpace::AcesCct => transfer::acescct_encode(linear),
             TimelineSpace::AcesCg => linear,
             TimelineSpace::DavinciIntermediate => transfer::di_encode(linear),
-            TimelineSpace::Rec709Gamma24 => linear.signum() * transfer::gamma_encode(linear.abs(), 2.4),
+            TimelineSpace::Rec709Gamma24 => {
+                linear.signum() * transfer::gamma_encode(linear.abs(), 2.4)
+            }
         }
     }
 }
@@ -79,7 +86,10 @@ impl ArriBand {
             (97.0, 99.0, ArriBand::Yellow),
             (99.0, 100.0, ArriBand::Red),
         ];
-        bands.iter().find(|(from, to, _)| pct >= *from && pct < *to).map(|b| b.2)
+        bands
+            .iter()
+            .find(|(from, to, _)| pct >= *from && pct < *to)
+            .map(|b| b.2)
     }
 }
 
@@ -143,21 +153,39 @@ const D50_XYZ: V3 = [0.9642, 1.0, 0.8249];
 fn lab_to_xyz(lab: [f64; 3], white: V3) -> V3 {
     let fy = (lab[0] + 16.0) / 116.0;
     let (fx, fz) = (fy + lab[1] / 500.0, fy - lab[2] / 200.0);
-    let inv = |f: f64| if f.powi(3) > 216.0 / 24389.0 { f.powi(3) } else { (116.0 * f - 16.0) * 27.0 / 24389.0 };
+    let inv = |f: f64| {
+        if f.powi(3) > 216.0 / 24389.0 {
+            f.powi(3)
+        } else {
+            (116.0 * f - 16.0) * 27.0 / 24389.0
+        }
+    };
     [white[0] * inv(fx), white[1] * inv(fy), white[2] * inv(fz)]
 }
 
 fn white_xyz(c: &Chromaticities) -> V3 {
-    [c.white[0] / c.white[1], 1.0, (1.0 - c.white[0] - c.white[1]) / c.white[1]]
+    [
+        c.white[0] / c.white[1],
+        1.0,
+        (1.0 - c.white[0] - c.white[1]) / c.white[1],
+    ]
 }
 
 /// Bradford chromatic adaptation of `xyz` from the `from` white to the `to` white.
 fn bradford(xyz: V3, from: V3, to: V3) -> V3 {
     // Column convention matrix, applied below as rows (v * transpose).
-    const M: M3 = [[0.8951, 0.2664, -0.1614], [-0.7502, 1.7135, 0.0367], [0.0389, -0.0685, 1.0296]];
+    const M: M3 = [
+        [0.8951, 0.2664, -0.1614],
+        [-0.7502, 1.7135, 0.0367],
+        [0.0389, -0.0685, 1.0296],
+    ];
     let m = colour::transpose(&M);
     let (cone, src, dst) = (vmul(xyz, &m), vmul(from, &m), vmul(to, &m));
-    let scaled = [cone[0] * dst[0] / src[0], cone[1] * dst[1] / src[1], cone[2] * dst[2] / src[2]];
+    let scaled = [
+        cone[0] * dst[0] / src[0],
+        cone[1] * dst[1] / src[1],
+        cone[2] * dst[2] / src[2],
+    ];
     vmul(scaled, &colour::invert(&m))
 }
 
@@ -202,7 +230,9 @@ fn patch(space: TimelineSpace, number: usize, name: &'static str, xyz_d50: V3) -
         rec709_luma,
         arri_band: ArriBand::of_luma(rec709_luma),
         hue_degrees,
-        out_of_gamut_rec709: (0..3).filter(|&c| rec709_linear[c] < 0.0 || rec709_linear[c] > 1.0).collect(),
+        out_of_gamut_rec709: (0..3)
+            .filter(|&c| rec709_linear[c] < 0.0 || rec709_linear[c] > 1.0)
+            .collect(),
     }
 }
 
@@ -225,7 +255,11 @@ impl ColorChecker {
             .collect();
         // 18 % grey: a neutral of Y = 0.18 with the chart's D50 white.
         let grey_xyz = [D50_XYZ[0] * 0.18, 0.18, D50_XYZ[2] * 0.18];
-        ColorChecker { space, patches, grey_18: patch(space, 0, "18 % grey", grey_xyz) }
+        ColorChecker {
+            space,
+            patches,
+            grey_18: patch(space, 0, "18 % grey", grey_xyz),
+        }
     }
 
     pub fn space(&self) -> TimelineSpace {
@@ -247,10 +281,14 @@ impl ColorChecker {
     pub fn frame(&self, width: u32, height: u32) -> Frame {
         let black = self.space.encode(0.0) as f32;
         let mut pixels = vec![black; width as usize * height as usize * 4];
-        for px in pixels.chunks_exact_mut(4) {
+        for px in pixels.as_chunks_mut::<4>().0 {
             px[3] = 1.0;
         }
-        let frame = Frame { width, height, pixels: Vec::new() };
+        let frame = Frame {
+            width,
+            height,
+            pixels: Vec::new(),
+        };
         for p in &self.patches {
             let r = frame.patch_rect(p.number);
             for y in r.y0..r.y1 {
@@ -263,7 +301,11 @@ impl ColorChecker {
                 }
             }
         }
-        Frame { width, height, pixels }
+        Frame {
+            width,
+            height,
+            pixels,
+        }
     }
 }
 
@@ -289,10 +331,17 @@ impl Frame {
     /// of the cell on every side.
     pub fn patch_rect(&self, number: usize) -> Rect {
         let (col, row) = ((number - 1) % 6, (number - 1) / 6);
-        let cell = |i: usize, n: usize, size: u32| (i as u32 * size / n as u32, (i as u32 + 1) * size / n as u32);
+        let cell = |i: usize, n: usize, size: u32| {
+            (i as u32 * size / n as u32, (i as u32 + 1) * size / n as u32)
+        };
         let (cx0, cx1) = cell(col, 6, self.width);
         let (cy0, cy1) = cell(row, 4, self.height);
         let (ix, iy) = ((cx1 - cx0) / 10, (cy1 - cy0) / 10);
-        Rect { x0: cx0 + ix, y0: cy0 + iy, x1: cx1 - ix, y1: cy1 - iy }
+        Rect {
+            x0: cx0 + ix,
+            y0: cy0 + iy,
+            x1: cx1 - ix,
+            y1: cy1 - iy,
+        }
     }
 }

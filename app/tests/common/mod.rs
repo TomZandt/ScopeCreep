@@ -23,10 +23,18 @@ fn gpu() -> (MutexGuard<'static, ()>, wgpu::Device, wgpu::Queue) {
     static TURN: Mutex<()> = Mutex::new(());
     let turn = TURN.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
     let (device, queue) = GPU.get_or_init(|| {
-        let instance = wgpu::Instance::new(wgpu::InstanceDescriptor::new_without_display_handle_from_env());
-        let adapter = pollster::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions { power_preference: wgpu::PowerPreference::HighPerformance, ..Default::default() }))
-            .expect("these tests need a GPU");
-        pollster::block_on(adapter.request_device(&wgpu::DeviceDescriptor { label: Some("display tests"), ..Default::default() })).unwrap()
+        let instance =
+            wgpu::Instance::new(wgpu::InstanceDescriptor::new_without_display_handle_from_env());
+        let adapter = pollster::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions {
+            power_preference: wgpu::PowerPreference::HighPerformance,
+            ..Default::default()
+        }))
+        .expect("these tests need a GPU");
+        pollster::block_on(adapter.request_device(&wgpu::DeviceDescriptor {
+            label: Some("display tests"),
+            ..Default::default()
+        }))
+        .unwrap()
     });
     (turn, device.clone(), queue.clone())
 }
@@ -57,8 +65,17 @@ impl Rig {
     }
 
     /// Everything a bench can vary: the Feed's frame capacity and a stand-in project reader for the Monitor.
-    pub fn build(name: &str, capacity: usize, colour_setup: Option<&str>, project: Option<Box<dyn ProjectReader>>) -> Rig {
-        let path = PathBuf::from(format!("/dev/shm/scopecreep-test-{}-{}", std::process::id(), name));
+    pub fn build(
+        name: &str,
+        capacity: usize,
+        colour_setup: Option<&str>,
+        project: Option<Box<dyn ProjectReader>>,
+    ) -> Rig {
+        let path = PathBuf::from(format!(
+            "/dev/shm/scopecreep-test-{}-{}",
+            std::process::id(),
+            name
+        ));
         let _ = std::fs::remove_file(&path);
         let (turn, device, queue) = gpu();
         let mut writer = FeedWriter::create(&path, 4, capacity).unwrap();
@@ -69,13 +86,25 @@ impl Rig {
             Some(reader) => Monitor::with_project_reader(&path, reader),
             None => Monitor::new(&path),
         };
-        Rig { monitor, uploader: FrameUploader::new(&device, &queue), path, writer, device, queue, now: now_ns(), frame: 86400.0, _gpu_turn: turn }
+        Rig {
+            monitor,
+            uploader: FrameUploader::new(&device, &queue),
+            path,
+            writer,
+            device,
+            queue,
+            now: now_ns(),
+            frame: 86400.0,
+            _gpu_turn: turn,
+        }
     }
 
     /// The app polls the Feed once: a frame that arrived is uploaded and handed to `on_frame`.
     pub fn poll(&mut self, mut on_frame: impl FnMut(&mut wgpu::CommandEncoder, &GpuFrame)) {
         let uploader = &mut self.uploader;
-        self.monitor.poll(self.now, &mut |frame| uploader.upload(frame, |encoder, gpu_frame| on_frame(encoder, gpu_frame)));
+        self.monitor.poll(self.now, &mut |frame| {
+            uploader.upload(frame, |encoder, gpu_frame| on_frame(encoder, gpu_frame))
+        });
     }
 
     /// The app's Feed loop takes one step at the rig's clock: the same code the app's Feed thread runs.
@@ -85,7 +114,14 @@ impl Rig {
 
     /// Resolve plays one frame (RGBA, bottom row first); nothing has taken it yet.
     pub fn write(&mut self, width: u32, height: u32, pixels: &[f32]) {
-        let meta = FrameMeta { width, height, frame_time: self.frame, frame_rate: 24.0, render_ns: self.now, sender_instance: 1 };
+        let meta = FrameMeta {
+            width,
+            height,
+            frame_time: self.frame,
+            frame_rate: 24.0,
+            render_ns: self.now,
+            sender_instance: 1,
+        };
         self.writer.write_frame(&meta, pixels).unwrap();
         self.frame += 1.0;
     }
@@ -106,10 +142,19 @@ impl Rig {
     }
 
     /// Draw into a cleared `width` × `height` target with `draw` and read it back (RGBA8, rows top first).
-    pub fn render(&self, width: u32, height: u32, draw: impl FnOnce(&mut wgpu::RenderPass<'_>)) -> Vec<u8> {
+    pub fn render(
+        &self,
+        width: u32,
+        height: u32,
+        draw: impl FnOnce(&mut wgpu::RenderPass<'_>),
+    ) -> Vec<u8> {
         let target = self.device.create_texture(&wgpu::TextureDescriptor {
             label: None,
-            size: wgpu::Extent3d { width, height, depth_or_array_layers: 1 },
+            size: wgpu::Extent3d {
+                width,
+                height,
+                depth_or_array_layers: 1,
+            },
             mip_level_count: 1,
             sample_count: 1,
             dimension: wgpu::TextureDimension::D2,
@@ -126,7 +171,10 @@ impl Rig {
                     view: &view,
                     depth_slice: None,
                     resolve_target: None,
-                    ops: wgpu::Operations { load: wgpu::LoadOp::Clear(wgpu::Color::BLACK), store: wgpu::StoreOp::Store },
+                    ops: wgpu::Operations {
+                        load: wgpu::LoadOp::Clear(wgpu::Color::BLACK),
+                        store: wgpu::StoreOp::Store,
+                    },
                 })],
                 depth_stencil_attachment: None,
                 timestamp_writes: None,
@@ -136,17 +184,37 @@ impl Rig {
             draw(&mut pass);
         }
         let row = (width * 4).next_multiple_of(256);
-        let readback = self.device.create_buffer(&wgpu::BufferDescriptor { label: None, size: (row * height) as u64, usage: wgpu::BufferUsages::MAP_READ | wgpu::BufferUsages::COPY_DST, mapped_at_creation: false });
+        let readback = self.device.create_buffer(&wgpu::BufferDescriptor {
+            label: None,
+            size: (row * height) as u64,
+            usage: wgpu::BufferUsages::MAP_READ | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
         encoder.copy_texture_to_buffer(
             target.as_image_copy(),
-            wgpu::TexelCopyBufferInfo { buffer: &readback, layout: wgpu::TexelCopyBufferLayout { offset: 0, bytes_per_row: Some(row), rows_per_image: None } },
-            wgpu::Extent3d { width, height, depth_or_array_layers: 1 },
+            wgpu::TexelCopyBufferInfo {
+                buffer: &readback,
+                layout: wgpu::TexelCopyBufferLayout {
+                    offset: 0,
+                    bytes_per_row: Some(row),
+                    rows_per_image: None,
+                },
+            },
+            wgpu::Extent3d {
+                width,
+                height,
+                depth_or_array_layers: 1,
+            },
         );
         self.queue.submit([encoder.finish()]);
         readback.map_async(wgpu::MapMode::Read, .., |_| {});
-        self.device.poll(wgpu::PollType::wait_indefinitely()).unwrap();
+        self.device
+            .poll(wgpu::PollType::wait_indefinitely())
+            .unwrap();
         let mapped = readback.get_mapped_range(..).unwrap();
-        (0..height as usize).flat_map(|y| mapped[y * row as usize..y * row as usize + width as usize * 4].to_vec()).collect()
+        (0..height as usize)
+            .flat_map(|y| mapped[y * row as usize..y * row as usize + width as usize * 4].to_vec())
+            .collect()
     }
 }
 
@@ -158,11 +226,14 @@ impl Drop for Rig {
 
 /// The Panels of `count` displays in a `width` × `height` window at `scale`, as the window lays them out.
 pub fn layouts(count: usize, width: u32, height: u32, scale: f32) -> Vec<PanelLayout> {
-    let cells = PanelGrid::automatic(count).cells([0.0, 0.0, width as f32, height as f32], 8.0 * scale);
+    let cells =
+        PanelGrid::automatic(count).cells([0.0, 0.0, width as f32, height as f32], 8.0 * scale);
     cells.iter().map(|c| PanelLayout::new(*c, scale)).collect()
 }
 
 /// A frame of one colour (RGBA, as the Feed carries it).
 pub fn solid(width: u32, height: u32, rgb: [f32; 3]) -> Vec<f32> {
-    (0..width * height).flat_map(|_| [rgb[0], rgb[1], rgb[2], 1.0]).collect()
+    (0..width * height)
+        .flat_map(|_| [rgb[0], rgb[1], rgb[2], 1.0])
+        .collect()
 }
