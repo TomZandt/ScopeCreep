@@ -128,7 +128,7 @@ pub trait Display: Send + Sync {
         &[]
     }
     /// A picture Panel's zoom (spec #163): the display itself, for a display that zooms (see
-    /// [`crate::zoom::PictureZoom`]). The pointer's wheel and middle button, the zoom chip and slider and Link all
+    /// [`crate::zoom::PictureZoom`]). The pointer's wheel and middle button, the zoom chip and Link all
     /// follow from it. `None` for a display that does not zoom (every Scope).
     fn picture_zoom(&self) -> Option<&dyn crate::zoom::PictureZoom> {
         None
@@ -144,7 +144,7 @@ pub trait Display: Send + Sync {
         let z = self.picture_zoom()?;
         z.panel_zoom().readout(z.geometry(area, scale))
     }
-    /// Set the zoom from the chip's slider, in percent of source pixels (see [`crate::zoom::ZoomModel::set_percent`]).
+    /// Set the zoom, in percent of source pixels (see [`crate::zoom::ZoomModel::set_percent`]).
     /// Zoom is not a setting and is never saved.
     fn set_zoom(&self, area: [f32; 4], scale: f32, percent: f32) {
         if let Some(z) = self.picture_zoom() {
@@ -338,7 +338,12 @@ impl DisplaySet {
         self.displays[index].zoom(area, scale)
     }
 
-    /// Set the zoom of the display in Panel `index` from the chip's slider.
+    /// The zoom chip's click: the display in Panel `index` back to Fit (every picture Panel while Link is on).
+    pub fn zoom_to_fit(&self, index: usize, area: [f32; 4], scale: f32) {
+        self.displays[index].set_zoom(area, scale, 0.0);
+    }
+
+    /// Set the zoom of the display in Panel `index` to `percent` (tests set a zoom this way; 0 is Fit).
     pub fn set_zoom(&self, index: usize, area: [f32; 4], scale: f32, percent: f32) {
         self.displays[index].set_zoom(area, scale, percent);
     }

@@ -84,6 +84,7 @@ What we learned by testing, kept in the repo so it isn't lost when an issue thre
 | [165](165-clean-picture-zoom.md) | Does the clean picture zoom from Fit to 400 % with the wheel toward the pointer and a chip with a slider, in exact squares above 100 %, with mattes and strip untouched, and never save the zoom (pure and Feed seam)? |
 | [166](166-clean-picture-pan.md) | Does a middle-drag pan the zoomed clean picture exactly with the pointer, clamped at the Panel's edge and centred when smaller, and does zoom after a pan still go toward the pointer (pure and Feed seam)? |
 | [167](167-picture-panels-zoom.md) | Does every picture Panel in the Window (ARRI and Stops False Colour, Skin Tone, saturation heatmap) zoom and pan on its own in exact squares with mattes black and the legend strip untouched, and show a zoom chip that survives a small Panel (Feed and Toolbar seams)? |
+| [176](176-zoom-800-link-default.md) | Does zoom stop at 800 % in exact 8-pixel squares, does Link open on (saved off stays off, rubbish is on) and light on every picture Panel, and does a click on the zoom chip go to Fit on all Panels while linked (zoom model, Feed, Toolbar and Settings seams)? |
 | [168](168-link.md) | Do picture Panels of different sizes share one zoom and spot while Link is on (Fit fits each, on takes the clicked Panel's view, off keeps each), with a link chip lit on all of them, and is Link remembered while zoom is not (zoom model, Feed, Toolbar and Settings seams)? |
 
 ## Adding findings

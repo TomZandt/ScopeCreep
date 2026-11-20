@@ -51,6 +51,8 @@ impl Bench {
             settings.set(name, "legend", "off");
         }
         poll(&mut rig, &mut conversion, &set, &settings);
+        // As the window does on opening: Link as remembered (on when nothing is saved).
+        set.set_link(link_remembered(&settings), 0);
         let mut bench = Bench { rig, conversion, set, settings };
         bench.play(&split());
         bench
@@ -130,7 +132,7 @@ fn edge(image: &[u8], area: [f32; 4]) -> f32 {
 #[test]
 fn with_link_on_zooming_or_panning_one_panel_draws_the_same_pixels_in_every_panel() {
     let b = Bench::new("link-feed");
-    b.click_link(0);
+    assert!(b.set.link_on(), "a first session opens with Link on");
     for (i, name) in NAMES.iter().enumerate() {
         assert_eq!(b.text(i).starts_with("Fit"), true, "{name}: Link on from Fit stays at Fit");
     }
@@ -152,6 +154,8 @@ fn with_link_on_zooming_or_panning_one_panel_draws_the_same_pixels_in_every_pane
 #[test]
 fn turning_link_on_takes_the_clicked_panels_view_and_off_keeps_every_view() {
     let b = Bench::new("link-feed-onoff");
+    b.click_link(0);
+    assert!(!b.set.link_on());
     b.wheel_to(2, "200 %");
     assert_eq!((b.text(0).as_str(), b.text(2).as_str()), ("Fit 50 %", "200 %"));
     b.drag(2, 20.0);
@@ -171,25 +175,36 @@ fn turning_link_on_takes_the_clicked_panels_view_and_off_keeps_every_view() {
     assert_eq!(b.render(0), before[0]);
 }
 
+#[test]
+fn with_link_on_clicking_the_zoom_chip_takes_every_panel_back_to_fit() {
+    let b = Bench::new("link-fit-click");
+    b.wheel_to(3, "200 %");
+    assert!((0..4).all(|i| b.text(i) == "200 %"));
+    b.set.zoom_to_fit(1, AREAS[1], 1.0);
+    for i in 0..4 {
+        assert!(b.text(i).starts_with("Fit"), "Panel {i}: {}", b.text(i));
+    }
+}
+
 // ---- the Toolbar seam
 
 #[test]
-fn the_link_chip_shows_on_every_picture_panel_unlit_and_lights_on_all_of_them_at_once() {
+fn the_link_chip_shows_on_every_picture_panel_lit_by_default_and_goes_out_on_all_of_them_at_once() {
     let b = Bench::new("link-toolbar");
     for (i, name) in NAMES.iter().enumerate() {
         let t = b.chips(i);
         assert_eq!(t.chips[1].text, "Link", "{name}: beside the zoom chip");
-        assert!(!t.on[1], "{name}: unlit by default");
-        assert_eq!(t.click(1), Some((LINK_KEY, "on")), "{name}: a click turns Link on");
+        assert!(t.on[1], "{name}: lit by default");
+        assert_eq!(t.click(1), Some((LINK_KEY, "off")), "{name}: a click turns Link off");
     }
     b.click_link(2);
     for (i, name) in NAMES.iter().enumerate() {
         let t = b.chips(i);
-        assert!(t.on[1], "{name}: lit with Link on");
-        assert_eq!(t.click(1), Some((LINK_KEY, "off")), "{name}: a click turns it off");
+        assert!(!t.on[1], "{name}: unlit with Link off");
+        assert_eq!(t.click(1), Some((LINK_KEY, "on")), "{name}: a click turns it on");
     }
     b.click_link(3);
-    assert!((0..4).all(|i| !b.chips(i).on[1]));
+    assert!((0..4).all(|i| b.chips(i).on[1]));
 }
 
 // ---- the Settings seam
@@ -197,16 +212,18 @@ fn the_link_chip_shows_on_every_picture_panel_unlit_and_lights_on_all_of_them_at
 #[test]
 fn link_is_remembered_and_zoom_is_not() {
     let mut s = PanelSettings::default();
-    assert!(!link_remembered(&s), "nothing saved: off");
+    assert!(link_remembered(&s), "nothing saved: on");
     s.set_state(scopecreep::zoom::LINK_STATE_PANEL, LINK_KEY, "on");
     let back = PanelSettings::from_text(&s.to_text());
     assert!(link_remembered(&back), "on round-trips");
     assert!(s.to_text().contains("state:link"));
     s.set_state(scopecreep::zoom::LINK_STATE_PANEL, LINK_KEY, "off");
     assert!(!link_remembered(&PanelSettings::from_text(&s.to_text())), "off round-trips");
+    s.set_state(scopecreep::zoom::LINK_STATE_PANEL, LINK_KEY, "off");
+    assert!(!link_remembered(&s), "saved off stays off");
     for rubbish in ["rubbish", "ON", "1", "true", "on "] {
         let mut s = PanelSettings::default();
         s.set_state(scopecreep::zoom::LINK_STATE_PANEL, LINK_KEY, rubbish);
-        assert!(!link_remembered(&PanelSettings::from_text(&s.to_text())), "{rubbish:?} falls back to off");
+        assert!(link_remembered(&PanelSettings::from_text(&s.to_text())), "{rubbish:?} falls back to on");
     }
 }

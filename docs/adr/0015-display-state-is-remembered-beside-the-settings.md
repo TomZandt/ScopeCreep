@@ -31,3 +31,7 @@ A picture Panel's zoom (and later pan and Link, spec #163) is display state of t
 ## Note, 2026-11-19 (#168)
 
 Link (picture Panels zoom and pan together, ADR 0035) is the one Window-wide piece of state here: saved under the name "Window" as `state:link`, "on" or "off"; anything else reads as off. It is read once at start-up and written when the link chip is clicked. Zoom and pan stay unsaved.
+
+## Note, 2026-11-20 (#176)
+
+Link now opens on: nothing saved, or anything but "off", reads as on, and only a saved "off" keeps it off. Everything else above stands (ADR 0035).

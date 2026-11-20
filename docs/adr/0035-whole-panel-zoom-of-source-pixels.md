@@ -1,4 +1,4 @@
-# Whole-Panel zoom of source pixels, from Fit to 400 %
+# Whole-Panel zoom of source pixels, from Fit to 800 %
 
 A colourist checking noise, grain, focus or a key edge needs to see single picture pixels. The Loupe laid a small square over the picture, which covered what it magnified and had to be dragged to each spot; Resolve's own Viewer zooms the whole picture with the scroll wheel and shows the percentage. Spec #163 makes every Picture View zoom the way the Viewer does; this ADR records the first slice (#165, the clean picture's wheel, chip and slider).
 
@@ -36,3 +36,11 @@ A colourist checking noise, grain, focus or a key edge needs to see single pictu
 - **On takes the clicked Panel's view; off keeps each.** Turning Link on copies the clicked Panel's view into the shared one. Turning it off leaves every Panel at the shared view it had; each Panel takes it on its next use (a generation counter on the Link), and from then on they move apart.
 - **Link is remembered, zoom is not.** Link is Window-wide state under the name "Window" beside the Panel settings (ADR 0015, `state:link`); anything but "on" reads as off. Every session starts at Fit.
 - **Rejected:** a Link flag per Panel (they could disagree, and "lit on all of them" would need syncing); the Window moving every Panel's own model (it would have to know each Panel's frame and strip).
+
+## Note, 2026-11-20 (#176): Link on by default, 800 %, no slider
+
+Three changes asked for by the product owner after using the shipped zoom (spec #163 follows them):
+
+- **Link opens on.** Nothing saved, or rubbish saved, now reads as on; only a saved "off" is off, and a saved choice still wins. This replaces the rule in the #168 note ("anything but on reads as off").
+- **The range goes up to 800 %** (it was 400 %): free below 100 %, landing on 100 %, then whole steps 200, 300 ... 800 %, nearest texel above 100 %. The top of the range is the larger of 800 % and Fit.
+- **The zoom chip has no popover and no slider.** A click goes to Fit, on every picture Panel while Link is on; the wheel is the way to zoom. This drops the slider of #165 (`Menu::zoom`, the Reset row and their tests); `Display::set_zoom` stays as the model's Fit and test entry point, and `DisplaySet::zoom_to_fit` is what the window calls. The chip's tooltip says "Zoom: scroll, or click for Fit".

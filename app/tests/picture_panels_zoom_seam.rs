@@ -217,7 +217,7 @@ fn every_picture_panel_has_a_zoom_chip_before_its_own_chips_that_reads_fit_and_s
     for (i, name) in NAMES.iter().enumerate() {
         let toolbar = b.set.toolbar(i, &b.settings, AREA, 1.0);
         assert_eq!(toolbar.chips[0].text, "Fit 50 %", "{name}");
-        assert_eq!(toolbar.click(0), Some((scopecreep::zoom::ZOOM_KEY, "")), "{name}: a click asks for the slider");
+        assert_eq!(toolbar.click(0), Some((scopecreep::zoom::ZOOM_KEY, "")), "{name}: a click asks for Fit");
         assert!(toolbar.chips.len() > 1 || i == 1 || i == 3 || name == &"Skin Tone", "{name}: beside its own chips");
         let title = panel_title(name, &Default::default(), String::new());
         for scale in [1.0f32, 2.0] {
@@ -232,12 +232,13 @@ fn every_picture_panel_has_a_zoom_chip_before_its_own_chips_that_reads_fit_and_s
 }
 
 #[test]
-fn the_slider_zooms_each_picture_panel_and_a_scope_has_none() {
+fn clicking_the_zoom_chip_takes_each_picture_panel_back_to_fit_and_a_scope_has_none() {
     let b = Bench::new("panels-zoom-slider", "off");
     for (i, name) in NAMES.iter().enumerate() {
-        b.set.set_zoom(i, AREA, 1.0, 200.0);
+        b.wheel_to(i, "200 %");
         assert_eq!(b.chip(i), "200 %", "{name}");
-        assert_eq!(b.set.zoom(i, AREA, 1.0).unwrap().percent, 200.0);
+        b.set.zoom_to_fit(i, AREA, 1.0);
+        assert_eq!(b.chip(i), "Fit 50 %", "{name}");
     }
     // The rig holds the GPU, so the Panels' session ends before the Scope's starts.
     drop(b);

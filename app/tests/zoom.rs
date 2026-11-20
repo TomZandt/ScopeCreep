@@ -54,7 +54,7 @@ fn wheel_in(m: &mut Model, at: [f32; 2], notches: u32) {
 }
 
 #[test]
-fn wheel_in_from_fit_is_free_below_100_lands_on_100_then_whole_steps_and_stops_at_400() {
+fn wheel_in_from_fit_is_free_below_100_lands_on_100_then_whole_steps_and_stops_at_800() {
     let mut m = Model::default();
     let fit = percent(&m);
     assert!((fit - 400.0 / 1920.0 * 100.0).abs() < 0.01);
@@ -68,17 +68,17 @@ fn wheel_in_from_fit_is_free_below_100_lands_on_100_then_whole_steps_and_stops_a
     }
     assert!(seen.windows(2).all(|w| w[1] > w[0]), "each notch zooms in: {seen:?}");
     let tail: Vec<f32> = seen.iter().copied().filter(|p| *p >= 100.0).collect();
-    assert_eq!(tail, [100.0, 200.0, 300.0, 400.0], "lands on 100 then whole steps");
+    assert_eq!(tail, [100.0, 200.0, 300.0, 400.0, 500.0, 600.0, 700.0, 800.0], "lands on 100 then whole steps");
     assert!(seen.iter().filter(|p| **p < 100.0).count() > 3, "free steps below 100: {seen:?}");
-    assert_eq!(m.zoom, Zoom::Percent(400.0));
+    assert_eq!(m.zoom, Zoom::Percent(800.0));
 }
 
 #[test]
 fn wheel_out_retraces_the_steps_and_stops_at_fit() {
     let mut m = Model::default();
     wheel_in(&mut m, [200.0, 150.0], 40);
-    assert_eq!(percent(&m), 400.0);
-    let mut seen = vec![400.0];
+    assert_eq!(percent(&m), 800.0);
+    let mut seen = vec![800.0];
     for _ in 0..40 {
         m.wheel(Geometry::new(PANEL, FRAME, 0.0), [200.0, 150.0], -1.0);
         let p = percent(&m);
@@ -86,9 +86,8 @@ fn wheel_out_retraces_the_steps_and_stops_at_fit() {
             seen.push(p);
         }
     }
-    assert_eq!(&seen[..3], [400.0, 300.0, 200.0]);
-    assert_eq!(seen[3], 100.0);
-    assert!(seen[4] < 100.0);
+    assert_eq!(&seen[..8], [800.0, 700.0, 600.0, 500.0, 400.0, 300.0, 200.0, 100.0]);
+    assert!(seen[8] < 100.0);
     assert_eq!(m.zoom, Zoom::Fit, "stops at Fit");
     let fit = percent(&m);
     m.wheel(Geometry::new(PANEL, FRAME, 0.0), [200.0, 150.0], -1.0);
@@ -182,7 +181,8 @@ fn the_slider_snaps_to_whole_steps_above_100_and_is_free_below() {
     assert_eq!(set(&mut m, 150.0), 200.0);
     assert_eq!(set(&mut m, 260.0), 300.0);
     assert_eq!(set(&mut m, 399.0), 400.0);
-    assert_eq!(set(&mut m, 900.0), 400.0, "never beyond 400");
+    assert_eq!(set(&mut m, 760.0), 800.0);
+    assert_eq!(set(&mut m, 1200.0), 800.0, "never beyond 800");
     let fit = {
         m.set_percent(0.0, Geometry::new(PANEL, FRAME, 0.0));
         assert_eq!(m.zoom, Zoom::Fit, "the bottom of the slider is Fit");
@@ -196,7 +196,7 @@ fn the_readout_says_fit_with_its_percent_or_the_whole_zoom() {
     let mut m = Model::default();
     let r = m.readout(Geometry::new(PANEL, FRAME, 0.0)).unwrap();
     assert_eq!(r.text, "Fit 21 %");
-    assert_eq!((r.fit, r.max), (r.percent, 400.0));
+    assert_eq!((r.fit, r.max), (r.percent, 800.0));
     m.set_percent(200.0, Geometry::new(PANEL, FRAME, 0.0));
     let r = m.readout(Geometry::new(PANEL, FRAME, 0.0)).unwrap();
     assert_eq!((r.text.as_str(), r.percent), ("200 %", 200.0));
@@ -206,17 +206,17 @@ fn the_readout_says_fit_with_its_percent_or_the_whole_zoom() {
 
 #[test]
 fn a_frame_already_over_100_percent_at_fit_zooms_on_from_fit_in_whole_steps() {
-    // 100 x 50 in 400 x 300: Fit is 400 %, the top of the range; a 160 x 90 frame is Fit 250 %, then 300, 400.
+    // 50 x 25 in 400 x 300: Fit is 800 %, the top of the range; a 160 x 90 frame is Fit 250 %, then 300 ... 800.
     let mut m = Model::default();
     let mut seen = Vec::new();
-    for _ in 0..4 {
+    for _ in 0..7 {
         m.wheel(Geometry::new(PANEL, [160, 90], 0.0), [200.0, 150.0], 1.0);
         seen.push(m.percent(Geometry::new(PANEL, [160, 90], 0.0)).unwrap());
     }
-    assert_eq!(seen, [300.0, 400.0, 400.0, 400.0]);
+    assert_eq!(seen, [300.0, 400.0, 500.0, 600.0, 700.0, 800.0, 800.0]);
     let mut big = Model::default();
-    big.wheel(Geometry::new(PANEL, [100, 50], 0.0), [200.0, 150.0], 1.0);
-    assert_eq!(big.zoom, Zoom::Fit, "nothing beyond Fit when Fit is already 400 % or more");
+    big.wheel(Geometry::new(PANEL, [50, 25], 0.0), [200.0, 150.0], 1.0);
+    assert_eq!(big.zoom, Zoom::Fit, "nothing beyond Fit when Fit is already 800 % or more");
 }
 
 // ---- pan (#166)

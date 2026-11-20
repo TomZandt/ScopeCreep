@@ -123,7 +123,7 @@ pub enum ChipAction {
 }
 
 /// The tip on a picture Panel's zoom chip.
-pub const ZOOM_TOOLTIP: &str = "Zoom: scroll, or click for a slider";
+pub const ZOOM_TOOLTIP: &str = "Zoom: scroll, or click for Fit";
 
 /// The link chip's text and tip.
 pub const LINK_CHIP: &str = "Link";

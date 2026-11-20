@@ -442,21 +442,11 @@ impl AppWindow {
         self.menu = Menu::new(panel, &self.displays.popover_defs(panel), &current).map(|menu| (menu, at));
     }
 
-    /// Open Panel `panel`'s zoom popover at `at`: one slider from Fit to 400 %.
-    fn open_zoom_popover(&mut self, panel: usize, at: [f32; 2]) {
+    /// Take Panel `panel`'s zoom chip click: back to Fit (every picture Panel while Link is on). Zoom is display
+    /// state: it is never put in the settings or saved.
+    fn zoom_to_fit(&mut self, panel: usize) {
         let Some(area) = self.contents.get(panel).copied() else { return };
-        self.menu = self.displays.zoom(panel, area, self.scale).map(|readout| (Menu::zoom(panel, &readout), at));
-    }
-
-    /// Zoom Panel `panel` from the popover's slider (snapped above 100 %, which the slider then shows). Zoom is
-    /// display state: it is never put in the settings or saved.
-    fn set_zoom(&mut self, panel: usize, percent: f32) {
-        let Some(area) = self.contents.get(panel).copied() else { return };
-        self.displays.set_zoom(panel, area, self.scale, percent);
-        let shown = self.displays.zoom(panel, area, self.scale).map(|r| r.percent);
-        if let (Some((menu, _)), Some(shown)) = (self.menu.as_mut(), shown) {
-            menu.show_value(scopecreep::zoom::ZOOM_KEY, shown);
-        }
+        self.displays.zoom_to_fit(panel, area, self.scale);
         self.window.request_redraw();
     }
 
@@ -473,9 +463,6 @@ impl AppWindow {
 
     /// Set a Panel's setting from the popover or a chip, remembering it if it changed.
     fn choose(&mut self, panel: usize, key: &str, value: &str) {
-        if key == scopecreep::zoom::ZOOM_KEY {
-            return self.set_zoom(panel, value.parse().unwrap_or(0.0));
-        }
         let name = self.displays.name(panel);
         let changed = {
             let mut settings = self.settings.lock().unwrap();
@@ -809,12 +796,7 @@ impl AppWindow {
                     Some(ToolbarHit::Chip(panel, chip)) => {
                         if let Some(action) = self.toolbars.get(panel).and_then(|t| t.action(chip)).cloned() {
                             match action {
-                                ChipAction::Zoom { .. } => {
-                                    if let Some(r) = self.title_layouts.get(panel).and_then(|l| l.chips.get(chip)).copied() {
-                                        self.open_zoom_popover(panel, [r[0], r[1] + r[3]]);
-                                        self.window.request_redraw();
-                                    }
-                                }
+                                ChipAction::Zoom { .. } => self.zoom_to_fit(panel),
                                 ChipAction::Link(on) => self.set_link(panel, on),
                                 ChipAction::Set(key, value) => self.choose(panel, key, &value),
                             }

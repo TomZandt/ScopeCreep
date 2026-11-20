@@ -2,19 +2,19 @@
 //! the Panel. Pure (no GPU), so every Picture View places its frame through it and it is tested on its own.
 //!
 //! Zoom is of *source* pixels: 100 % is one picture pixel to one device pixel. The range is Fit (the whole frame
-//! fitted in the Panel) up to 400 %. Below 100 % zoom is free (each wheel notch scales by [`WHEEL_RATIO`], and a
-//! step across 100 % lands on it); above 100 % it is whole steps (200, 300, 400 %), so every picture pixel is an
+//! fitted in the Panel) up to 800 %. Below 100 % zoom is free (each wheel notch scales by [`WHEEL_RATIO`], and a
+//! step across 100 % lands on it); above 100 % it is whole steps (200, 300 ... 800 %), so every picture pixel is an
 //! exact square. A frame that is already past 100 % at Fit starts at Fit and zooms on in whole steps; when Fit is
-//! 400 % or more there is nothing beyond it.
+//! 800 % or more there is nothing beyond it.
 use crate::display::{Pointer, PointerResult};
 use crate::picture_stage::{Placement, place};
 use std::sync::{Arc, Mutex};
 
 /// The top of the zoom range, in percent of source pixels.
-pub const MAX_PERCENT: f32 = 400.0;
+pub const MAX_PERCENT: f32 = 800.0;
 /// What one wheel notch below 100 % scales the zoom by.
 pub const WHEEL_RATIO: f32 = 1.25;
-/// The key of the zoom slider in the Panel's zoom popover. Zoom is display state of the window, never a saved
+/// The key of the zoom chip's click (back to Fit). Zoom is display state of the window, never a saved
 /// setting: every session starts at Fit.
 pub const ZOOM_KEY: &str = "zoom";
 
@@ -23,9 +23,9 @@ pub const ZOOM_KEY: &str = "zoom";
 pub const LINK_KEY: &str = "link";
 pub const LINK_STATE_PANEL: &str = "Window";
 
-/// Whether Link was left on: anything but "on" (rubbish, nothing saved) is off.
+/// Whether Link is on: it opens on, so only a saved "off" turns it off (rubbish and nothing saved are on).
 pub fn link_remembered(settings: &crate::settings::PanelSettings) -> bool {
-    settings.state_of(LINK_STATE_PANEL, &[LINK_KEY]).get(LINK_KEY).is_some_and(|v| v == "on")
+    settings.state_of(LINK_STATE_PANEL, &[LINK_KEY]).get(LINK_KEY).is_none_or(|v| v != crate::toolbar::TOGGLE_OFF)
 }
 
 /// Remember Link as `on` (the same "on" and "off" [`link_remembered`] reads). Whether the saved state changed.
@@ -118,7 +118,7 @@ impl Geometry {
 }
 
 impl ZoomModel {
-    /// The top of the range: 400 %, or Fit when that is more.
+    /// The top of the range: 800 %, or Fit when that is more.
     fn top(fit: f32) -> f32 {
         MAX_PERCENT.max(fit)
     }
@@ -278,7 +278,7 @@ impl ZoomModel {
         self.zoom != before
     }
 
-    /// Set the zoom from the slider (Fit to 400 %): free below 100 %, whole steps above, nothing beyond the top.
+    /// Set the zoom from the slider (Fit to 800 %): free below 100 %, whole steps above, nothing beyond the top.
     /// At or below Fit is Fit.
     pub fn set_percent(&mut self, percent: f32, g: Geometry) {
         let Some(fit) = g.fit() else { return };

@@ -5,7 +5,7 @@ mod common;
 use common::{Rig, TARGET};
 use scopecreep::display::{DisplayContext, DisplaySet, Pointer};
 use scopecreep::picture_view::PictureView;
-use scopecreep::settings::{Menu, MenuRow, PanelSettings};
+use scopecreep::settings::PanelSettings;
 use scopecreep::window_text::{self, panel_title};
 use std::sync::Arc;
 
@@ -107,9 +107,9 @@ fn the_wheel_over_the_panel_zooms_from_fit_and_the_picture_changes() {
 }
 
 #[test]
-fn zoomed_in_every_picture_pixel_is_an_exact_square_and_the_wheel_stops_at_400() {
+fn zoomed_in_every_picture_pixel_is_an_exact_square_and_the_wheel_stops_at_800() {
     let b = Bench::new("clean-zoom-squares");
-    for (text, k) in [("100 %", 1usize), ("200 %", 2), ("300 %", 3), ("400 %", 4)] {
+    for (text, k) in [("100 %", 1usize), ("200 %", 2), ("300 %", 3), ("400 %", 4), ("800 %", 8)] {
         wheel_to(&b, text);
         let image = b.render();
         let y = (AREA[1] + AREA[3] / 2.0) as u32;
@@ -120,7 +120,7 @@ fn zoomed_in_every_picture_pixel_is_an_exact_square_and_the_wheel_stops_at_400()
     for _ in 0..5 {
         b.wheel(middle(), 1.0);
     }
-    assert_eq!(b.chip(), "400 %", "no further than 400 %");
+    assert_eq!(b.chip(), "800 %", "no further than 800 %");
 }
 
 #[test]
@@ -142,7 +142,7 @@ fn the_clean_picture_shows_a_zoom_chip_that_reads_fit_by_default() {
     let toolbar = b.set.toolbar(0, &b.settings, AREA, 1.0);
     assert_eq!(toolbar.chips[0].text, "Fit 75 %");
     assert!(!toolbar.on[0], "not lit at Fit");
-    assert_eq!(toolbar.click(0), Some((scopecreep::zoom::ZOOM_KEY, "")), "a click asks for the slider");
+    assert_eq!(toolbar.click(0), Some((scopecreep::zoom::ZOOM_KEY, "")), "a click asks for Fit");
     assert_eq!(toolbar.chips.len(), 7, "the zoom and link chips, then the channel and Loupe chips");
     wheel_to(&b, "200 %");
     let zoomed = b.set.toolbar(0, &b.settings, AREA, 1.0);
@@ -158,27 +158,14 @@ fn a_scope_has_no_zoom_chip() {
 }
 
 #[test]
-fn the_popover_slider_runs_fit_to_400_and_sets_the_zoom_snapping_above_100() {
-    let b = Bench::new("clean-zoom-slider");
-    let readout = b.set.zoom(0, AREA, 1.0).unwrap();
-    let menu = Menu::zoom(0, &readout);
-    let MenuRow::Slider { amount, value, .. } = &menu.rows[0] else { panic!("{:?}", menu.rows) };
-    assert_eq!((amount.min, amount.max, *value), (75.0, 400.0, readout.percent));
-    for (set, shows) in [(60.0, "60 %"), (100.0, "100 %"), (240.0, "200 %"), (260.0, "300 %"), (400.0, "400 %")] {
-        let set = if set < 75.0 { 75.0 } else { set };
-        b.set.set_zoom(0, AREA, 1.0, set);
-        let shown = b.chip();
-        if set == 75.0 {
-            assert_eq!(shown, "Fit 75 %", "the bottom of the slider is Fit ({shows})");
-        } else {
-            assert_eq!(shown, shows, "slider at {set}");
-        }
-    }
-    b.set.set_zoom(0, AREA, 1.0, 0.0);
+fn clicking_the_zoom_chip_goes_back_to_fit() {
+    let b = Bench::new("clean-zoom-click-fit");
+    let fit = b.render();
+    wheel_to(&b, "300 %");
+    assert_eq!(b.chip(), "300 %");
+    b.set.zoom_to_fit(0, AREA, 1.0);
     assert_eq!(b.chip(), "Fit 75 %");
-    let mut shown = Menu::zoom(0, &b.set.zoom(0, AREA, 1.0).unwrap());
-    shown.show_value(scopecreep::zoom::ZOOM_KEY, 200.0);
-    assert!(matches!(shown.rows[0], MenuRow::Slider { value: 200.0, .. }));
+    assert_eq!(b.render(), fit, "drawn as at Fit");
 }
 
 #[test]

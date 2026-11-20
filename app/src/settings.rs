@@ -253,30 +253,6 @@ impl Menu {
         Some(Menu { panel, rows })
     }
 
-    /// The zoom popover of Panel `panel` (spec #163): one slider from Fit to the top of the range (whole percent),
-    /// and a way back to Fit. The zoom is applied by the window as the slider moves, never saved.
-    pub fn zoom(panel: usize, readout: &crate::zoom::Readout) -> Menu {
-        let amount = Amount { min: readout.fit.floor(), max: readout.max, step: 1.0, default: readout.fit.floor(), unit: " %", decimals: 0, legacy: &[] };
-        Menu {
-            panel,
-            rows: vec![
-                MenuRow::Slider { key: crate::zoom::ZOOM_KEY, amount, value: readout.percent },
-                MenuRow::Reset { key: crate::zoom::ZOOM_KEY, value: amount.default, text: format!("Fit ({} %)", readout.fit.round() as u32) },
-            ],
-        }
-    }
-
-    /// Show slider `key` at `value` (the zoom snapped, for one).
-    pub fn show_value(&mut self, key: &str, value: f32) {
-        for row in &mut self.rows {
-            if let MenuRow::Slider { key: k, value: v, .. } = row {
-                if *k == key {
-                    *v = value;
-                }
-            }
-        }
-    }
-
     /// Where the menu sits when opened at `at` in a window of `window` device pixels at `scale`: the whole menu
     /// stays inside the window. Left, top, width, height.
     pub fn rect(&self, at: [f32; 2], window: [f32; 2], scale: f32) -> [f32; 4] {
