@@ -105,6 +105,7 @@ What we learned by testing, kept in the repo so it isn't lost when an issue thre
 | [130](130-hue-vectors.md) | Does a Standard / Hue vectors graticule choice on the Vectorscope draw a neutral spoke to each of the six colour targets on both plots, follow graticule brightness, and leave the default, the trace, the clipping marks and the skin-tone line unchanged (Feed seam)? |
 | [204](204-layout-tree.md) | Does the Window draw from a layout tree that looks and behaves as the grid did, and do old and named layouts still recall (headless)? |
 | [206](206-add-close.md) | Does Add panel split the focused cell 50/50 along its longer side and focus the new Panel, is an add with no room refused with a notice naming the minimum, does Close give the space to its sibling and leave an empty page, and do closed Panels survive a restart (headless)? |
+| [207](207-undo-layout.md) | Does Ctrl+Z step back through add, close, swap and a divider drag one step each, 20 deep, without touching Panel settings, and is it greyed in the Layout menu when empty (headless)? |
 
 ## Adding findings
 

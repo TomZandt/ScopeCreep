@@ -59,8 +59,8 @@ fn every_slot_has_a_show_and_a_save_command() {
     let all = Command::all();
     assert_eq!(
         all.len(),
-        1 + 2 * SLOTS + 5,
-        "Default layout, show and save each slot, the Fit toggle, fill the Window, the legends, add and close a Panel"
+        1 + 2 * SLOTS + 6,
+        "Default layout, show and save each slot, the Fit toggle, fill the Window, the legends, add and close a Panel, undo a layout change"
     );
     for slot in 0..SLOTS {
         assert!(all.contains(&Command::RecallLayout(slot)));
@@ -290,7 +290,7 @@ fn z_is_the_fit_toggle_by_default_and_can_be_changed_like_any_hotkey() {
     hotkeys.reset(Command::ZoomFit);
     assert_eq!(hotkeys, Hotkeys::default());
     let mut saved = Hotkeys::default();
-    saved.assign(Command::ZoomFit, ctrl("Z")).unwrap();
+    saved.assign(Command::ZoomFit, ctrl("Y")).unwrap();
     assert_eq!(Hotkeys::from_text(&saved.to_text()), saved);
 }
 

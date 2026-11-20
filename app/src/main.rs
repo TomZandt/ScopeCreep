@@ -28,6 +28,7 @@ use scopecreep::flat_rects::FlatRects;
 use scopecreep::gpu_frame::FrameUploader;
 use scopecreep::hotkeys_panel::HotkeysPanel;
 use scopecreep::layout::MARGIN;
+use scopecreep::layout_history::LayoutHistory;
 use scopecreep::layout_tree::{Border, Dir, LayoutTree, Press};
 use scopecreep::layouts::{Layouts, Rename};
 use scopecreep::menu_bar::{self, AddEntry, BarState, Current, LayoutMode, MenuAction};
@@ -248,6 +249,8 @@ struct AppWindow {
     config: wgpu::SurfaceConfiguration,
     displays: DisplaySet,
     grid: LayoutTree,
+    /// The layout changes that can be undone (session only).
+    layout_history: LayoutHistory,
     /// Every Panel's settings, shared with the Feed thread (which gives them to the displays).
     settings: Arc<Mutex<PanelSettings>>,
     /// The right-click menu, while open, with where it opened.
@@ -505,6 +508,7 @@ impl AppWindow {
             config,
             displays,
             grid,
+            layout_history: LayoutHistory::default(),
             settings,
             menu: None,
             slider_drag: None,
@@ -802,12 +806,13 @@ impl AppWindow {
             menu_bar::LAYOUT if self.layout_mode == LayoutMode::Add => {
                 Some(menu_bar::add_menu(&self.add_entries()))
             }
-            menu_bar::LAYOUT => Some(menu_bar::layout_menu(
+            menu_bar::LAYOUT => Some(menu_bar::layout_menu_with_undo(
                 &self.layouts,
                 &self.hotkeys,
                 self.current_layout(),
                 self.layout_mode,
                 self.renaming.as_ref(),
+                self.layout_history.can_undo(),
             )),
             menu_bar::VIEW => Some(menu_bar::view_menu(
                 &self.hotkeys,
@@ -991,7 +996,10 @@ impl AppWindow {
         let keys = self.displays.keys();
         let names = as_strs(&keys);
         // Showing a layout or the default brings the grid back.
-        if matches!(command, Command::DefaultLayout | Command::RecallLayout(_)) {
+        if matches!(
+            command,
+            Command::DefaultLayout | Command::RecallLayout(_) | Command::UndoLayout
+        ) {
             self.full = None;
         }
         self.layout_notice = None;
@@ -1017,9 +1025,14 @@ impl AppWindow {
                 self.window.request_redraw();
                 return;
             }
-            Command::DefaultLayout => self.grid = LayoutTree::default_for(&names),
+            Command::DefaultLayout => self
+                .layout_history
+                .change(&mut self.grid, |g| *g = LayoutTree::default_for(&names)),
+            Command::UndoLayout => {
+                self.layout_history.undo(&mut self.grid);
+            }
             Command::RecallLayout(slot) => match self.layouts.recall(slot, &names) {
-                Some(grid) => self.grid = grid,
+                Some(grid) => self.layout_history.change(&mut self.grid, |g| *g = grid),
                 None => return,
             },
             Command::ZoomFit => {
@@ -1083,12 +1096,11 @@ impl AppWindow {
     /// and a notice names the least size of a Panel.
     fn add_panel(&mut self, panel: usize) {
         self.full = None;
-        match self.grid.add(
-            panel,
-            self.grid_area,
-            self.grid_gap,
-            min_panel_size(self.scale),
-        ) {
+        let (area, gap, min) = (self.grid_area, self.grid_gap, min_panel_size(self.scale));
+        match self
+            .layout_history
+            .change(&mut self.grid, |g| g.add(panel, area, gap, min))
+        {
             Ok(()) => {
                 self.layout_notice = None;
                 self.save_grid();
@@ -1102,7 +1114,8 @@ impl AppWindow {
     fn close_panel(&mut self, panel: usize) {
         self.full = None;
         self.layout_notice = None;
-        self.grid.close(panel);
+        self.layout_history
+            .change(&mut self.grid, |g| g.close(panel));
         self.save_grid();
         self.window.request_redraw();
     }
@@ -1240,6 +1253,7 @@ impl AppWindow {
                 self.display_pointer(panel, Pointer::Up);
             }
             if self.drag.take().is_some() {
+                self.layout_history.end_drag(&self.grid);
                 self.save_grid();
             }
             if let Some(from) = self.panel_drag.take() {
@@ -1249,7 +1263,8 @@ impl AppWindow {
                     .panel_at(self.grid_area, self.grid_gap, self.cursor)
                     .filter(|to| *to != from)
                 {
-                    self.grid.swap(from, to);
+                    self.layout_history
+                        .change(&mut self.grid, |g| g.swap(from, to));
                     self.save_grid();
                 }
                 self.window.set_cursor(CursorIcon::Default);
@@ -1348,7 +1363,10 @@ impl AppWindow {
                     return;
                 }
                 match self.press_under_pointer() {
-                    Some(Press::Border(border)) => self.drag = Some(border),
+                    Some(Press::Border(border)) => {
+                        self.layout_history.begin_drag(&self.grid);
+                        self.drag = Some(border);
+                    }
                     Some(Press::Panel(panel)) => {
                         self.panel_drag = Some(panel);
                         self.window.set_cursor(CursorIcon::Grabbing);

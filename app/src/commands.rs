@@ -29,6 +29,8 @@ pub enum Command {
     AddPanel,
     /// Close the focused Panel: its neighbour takes its space (ADR 0038, #206). No default hotkey.
     ClosePanel,
+    /// Step back through the last 20 layout changes (ADR 0038, #207). Ctrl+Z.
+    UndoLayout,
 }
 
 impl Command {
@@ -43,6 +45,7 @@ impl Command {
         all.push(Command::ToggleLegends);
         all.push(Command::AddPanel);
         all.push(Command::ClosePanel);
+        all.push(Command::UndoLayout);
         all
     }
 
@@ -57,6 +60,7 @@ impl Command {
             Command::ToggleLegends => "legends-toggle".to_string(),
             Command::AddPanel => "panel-add".to_string(),
             Command::ClosePanel => "panel-close".to_string(),
+            Command::UndoLayout => "layout-undo".to_string(),
         }
     }
 
@@ -71,11 +75,12 @@ impl Command {
             Command::ToggleLegends => "Legends: show / hide".to_string(),
             Command::AddPanel => "Panel: add".to_string(),
             Command::ClosePanel => "Panel: close".to_string(),
+            Command::UndoLayout => "Layout: undo change".to_string(),
         }
     }
 
     /// The hotkey the command has until the user changes it: Ctrl+1 to 9 to show a layout, Ctrl+Shift+1 to 9 to
-    /// save one, Z for the Fit toggle, Ctrl+F to fill the Window with a Panel. Default layout, the legends and
+    /// save one, Z for the Fit toggle, Ctrl+F to fill the Window with a Panel, Ctrl+Z to undo a layout change. Default layout, the legends and
     /// adding and closing a Panel have none.
     pub fn default_hotkey(self) -> Option<Hotkey> {
         let digit = |slot: usize| Key::named(&(slot + 1).to_string());
@@ -88,6 +93,7 @@ impl Command {
             Command::SaveLayout(slot) => digit(slot).map(|k| Hotkey::ctrl(k).with_shift()),
             Command::ZoomFit => Key::named("Z").map(Hotkey::new),
             Command::FillWindow => Key::named("F").map(Hotkey::ctrl),
+            Command::UndoLayout => Key::named("Z").map(Hotkey::ctrl),
         }
     }
 

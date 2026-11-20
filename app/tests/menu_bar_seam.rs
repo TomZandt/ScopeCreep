@@ -304,7 +304,8 @@ fn the_layout_menu_lists_default_layout_and_the_nine_slots_empty_or_by_name() {
             "Save current layout into…",
             "Rename layout…",
             "Add panel…",
-            "Close panel"
+            "Close panel",
+            "Undo layout change"
         ]
     );
 }
@@ -491,7 +492,7 @@ fn every_layout_menu_fits_a_small_window() {
         layouts.rename(slot, "A long layout name here");
     }
     for scale in SCALES {
-        let window = [480.0 * scale, 400.0 * scale];
+        let window = [480.0 * scale, 440.0 * scale];
         let title = menu_bar::bar().title_rects(0.0, 0.0, scale)[LAYOUT];
         for mode in [LayoutMode::Show, LayoutMode::Save, LayoutMode::Rename] {
             let menu = layout_menu(&layouts, &Hotkeys::default(), None, mode, None);

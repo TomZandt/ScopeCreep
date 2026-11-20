@@ -180,6 +180,10 @@ _Avoid_: Auto-arrange, tidy, auto mode (it is not a mode)
 A button beside Auto layout that only resizes splits on the current Page so picture cells match the Feed's aspect; no Panel changes place and the nesting is unchanged (ADR 0041).
 _Avoid_: Fit layout, auto fit
 
+**Undo layout change**:
+Ctrl+Z (a Command, also in the Layout menu, greyed when there is nothing to undo): steps back through the last 20 changes to the layout, one change at a time (a divider drag is one change). It holds the arrangement only, so it never touches a Panel's settings or state, and it is session only. Each layout tree keeps its own history, so each Page has its own (ADR 0041).
+_Avoid_: Revert, history (for the control)
+
 **View strip**:
 Fit, the shared zoom readout and Link, at the right end of the menu bar row: the Window-wide view controls, always in the same place. A picture Panel keeps a read-only zoom tag (ADR 0040).
 _Avoid_: View toolbar, zoom bar

@@ -146,6 +146,19 @@ pub fn layout_menu(
     mode: LayoutMode,
     renaming: Option<&Rename>,
 ) -> Menu {
+    layout_menu_with_undo(layouts, hotkeys, current, mode, renaming, true)
+}
+
+/// [`layout_menu`] that knows whether there is a layout change to undo: "Undo layout change" is greyed when not.
+/// ([`layout_menu`] itself shows it enabled, for the menus that only measure sizes.)
+pub fn layout_menu_with_undo(
+    layouts: &Layouts,
+    hotkeys: &Hotkeys,
+    current: Option<Current>,
+    mode: LayoutMode,
+    renaming: Option<&Rename>,
+    can_undo: bool,
+) -> Menu {
     let mut menu = Menu::new();
     let item = |label: String, command: Option<Command>, enabled: bool, on: bool| {
         MenuEntry::Item(MenuItem {
@@ -197,12 +210,13 @@ pub fn layout_menu(
                 Some(MenuAction::Mode(LayoutMode::Rename)),
             );
             menu.push(MenuEntry::Separator, None);
-            for (label, command) in [
-                ("Add panel…", Command::AddPanel),
-                ("Close panel", Command::ClosePanel),
+            for (label, command, enabled) in [
+                ("Add panel…", Command::AddPanel, true),
+                ("Close panel", Command::ClosePanel, true),
+                ("Undo layout change", Command::UndoLayout, can_undo),
             ] {
                 menu.push(
-                    item(label.to_string(), Some(command), true, false),
+                    item(label.to_string(), Some(command), enabled, false),
                     Some(MenuAction::Run(command)),
                 );
             }
