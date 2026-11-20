@@ -92,7 +92,7 @@ impl Bench {
     /// Close a Panel, then sweep as the Window does.
     fn close(&mut self, panel: usize) -> Vec<usize> {
         let mut settings = self.settings.lock().unwrap();
-        page_edit::close(&self.set, &mut self.tree, &mut settings, panel);
+        page_edit::close(&self.set, &mut self.tree, &mut settings, panel, |_| false);
         page_edit::sweep(&self.set, &mut self.tree, &mut settings)
     }
 
@@ -250,7 +250,15 @@ fn replace_keeps_place_and_size_and_starts_from_the_new_displays_defaults() {
     // Vectorscope is on the page, so replacing makes "Vectorscope 2" with defaults, not a copy.
     let new = {
         let mut settings = b.settings.lock().unwrap();
-        page_edit::replace(&b.set, &mut b.tree, &mut settings, panel, "Vectorscope").unwrap()
+        page_edit::replace(
+            &b.set,
+            &mut b.tree,
+            &mut settings,
+            panel,
+            "Vectorscope",
+            |_| false,
+        )
+        .unwrap()
     };
     assert_eq!(b.set.key(new), "Vectorscope 2");
     let settings = b.settings.lock().unwrap().clone();
@@ -276,7 +284,8 @@ fn replace_keeps_place_and_size_and_starts_from_the_new_displays_defaults() {
     let count = b.set.len();
     let new = {
         let mut settings = b.settings.lock().unwrap();
-        let new = page_edit::replace(&b.set, &mut b.tree, &mut settings, copy, CLEAN).unwrap();
+        let new =
+            page_edit::replace(&b.set, &mut b.tree, &mut settings, copy, CLEAN, |_| false).unwrap();
         assert_eq!(
             page_edit::sweep(&b.set, &mut b.tree, &mut settings),
             vec![copy]
@@ -291,6 +300,126 @@ fn replace_keeps_place_and_size_and_starts_from_the_new_displays_defaults() {
     assert_eq!(b.set.len(), count - 1, "the copy is gone");
     assert_eq!(b.tree.cells(ROOM.area, ROOM.gap)[new], place);
     assert!(b.tree.contains(new));
+}
+
+#[test]
+fn closing_a_panel_another_page_holds_keeps_its_settings() {
+    let mut b = Bench::new("instances-shared-close");
+    let vec = b.index("Vectorscope");
+    b.set_choice("Vectorscope", "targets", "75");
+    assert!(vectorscope_settings_kept(&b));
+    let mut settings = b.settings.lock().unwrap();
+    page_edit::close(&b.set, &mut b.tree, &mut settings, vec, |p| p == vec);
+    drop(settings);
+    assert!(vectorscope_settings_kept(&b), "another page still shows it");
+}
+
+#[test]
+fn replacing_a_panel_another_page_holds_keeps_its_settings() {
+    let mut b = Bench::new("instances-shared-replace");
+    let vec = b.index("Vectorscope");
+    b.set_choice("Vectorscope", "targets", "75");
+    let mut settings = b.settings.lock().unwrap();
+    page_edit::replace(&b.set, &mut b.tree, &mut settings, vec, "Skin tone", |p| {
+        p == vec
+    })
+    .unwrap();
+    drop(settings);
+    assert!(vectorscope_settings_kept(&b), "another page still shows it");
+}
+
+#[test]
+fn the_last_page_to_close_a_panel_forgets_its_settings() {
+    let mut b = Bench::new("instances-last-close");
+    let vec = b.index("Vectorscope");
+    b.set_choice("Vectorscope", "targets", "75");
+    let mut settings = b.settings.lock().unwrap();
+    page_edit::close(&b.set, &mut b.tree, &mut settings, vec, |_| false);
+    drop(settings);
+    assert!(!vectorscope_settings_kept(&b));
+}
+
+#[test]
+fn undoing_the_close_or_replace_of_a_duplicate_brings_it_back() {
+    use scopecreep::pages::Pages;
+    for replace in [false, true] {
+        let b = Bench::new("instances-undo-duplicate");
+        let mut pages = Pages::new(b.tree.clone());
+        let mut settings = PanelSettings::default();
+        let from = b.index(CLEAN);
+        let copy = pages
+            .change(|t| page_edit::duplicate(&b.set, t, &mut settings, from, Dir::Row, ROOM))
+            .unwrap();
+        let count = b.set.len();
+        pages.change(|t| {
+            if replace {
+                page_edit::replace(&b.set, t, &mut settings, copy, "Vectorscope", |_| false);
+            } else {
+                page_edit::close(&b.set, t, &mut settings, copy, |_| false);
+            }
+        });
+        // The Window sweeps after every change: the copy a step still names is not removed.
+        pages.sweep(&b.set, &mut settings);
+        assert!(pages.can_undo(), "replace={replace}");
+        assert!(pages.undo());
+        assert!(pages.tree().contains(copy), "replace={replace}: back");
+        pages.sweep(&b.set, &mut settings);
+        assert_eq!(b.set.key(copy), "Clean picture 2");
+        // Undo the duplicate too: nothing names the copy now, so it goes.
+        assert!(pages.undo());
+        pages.sweep(&b.set, &mut settings);
+        assert!(!pages.can_undo());
+        assert_eq!(
+            b.set.len(),
+            count - 1,
+            "replace={replace}: the copy is gone"
+        );
+    }
+}
+
+#[test]
+fn a_display_that_cannot_be_copied_is_refused_with_its_own_notice() {
+    use scopecreep::gamut_warning::GamutWarning;
+    use scopecreep::page_edit::DuplicateRefused;
+    let b = Bench::new("instances-no-copy");
+    let mut set = b.set.clone();
+    set.register(Arc::new(GamutWarning::new(
+        &b.rig.device,
+        &b.rig.queue,
+        TARGET,
+    )));
+    let only = set.len() - 1;
+    let mut tree = LayoutTree::empty(set.len());
+    tree.add(only, ROOM.area, ROOM.gap, ROOM.min);
+    let mut settings = PanelSettings::default();
+    let refused = page_edit::duplicate(&set, &mut tree, &mut settings, only, Dir::Row, ROOM)
+        .expect_err("no maker, no copy");
+    assert_eq!(refused, DuplicateRefused::NoCopy);
+    assert!(
+        !refused.notice().contains("No room"),
+        "{}",
+        refused.notice()
+    );
+    assert_eq!(tree.panels(), vec![only], "nothing changed");
+    assert_eq!(set.len(), only + 1, "no stray display");
+    // A Panel with no room still says so.
+    let tight = Room {
+        area: [0.0, 0.0, 200.0, 120.0],
+        ..ROOM
+    };
+    let mut tree =
+        LayoutTree::default_for(&b.set.keys().iter().map(String::as_str).collect::<Vec<_>>());
+    let refused = page_edit::duplicate(&b.set, &mut tree, &mut settings, 0, Dir::Row, tight)
+        .expect_err("no room");
+    assert!(matches!(refused, DuplicateRefused::NoRoom(_)));
+    assert!(refused.notice().contains("No room"));
+}
+
+/// Whether the Vectorscope's chosen settings are still kept.
+fn vectorscope_settings_kept(b: &Bench) -> bool {
+    let settings = b.settings.lock().unwrap().clone();
+    let defs = b.set.setting_defs(b.index("Vectorscope"));
+    settings.resolve("Vectorscope", defs) != settings.resolve("nothing", defs)
 }
 
 #[test]
@@ -367,7 +496,7 @@ fn duplicate_and_replace_are_one_undo_step_each() {
     {
         let mut settings = b.settings.lock().unwrap();
         history.change(&mut b.tree, |t| {
-            page_edit::replace(&b.set, t, &mut settings, panel, "Vectorscope").unwrap()
+            page_edit::replace(&b.set, t, &mut settings, panel, "Vectorscope", |_| false).unwrap()
         });
     }
     assert!(history.undo(&mut b.tree));

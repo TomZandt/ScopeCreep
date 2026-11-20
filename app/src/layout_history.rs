@@ -63,6 +63,15 @@ impl LayoutHistory {
         self.drag.iter_mut().for_each(forget);
     }
 
+    /// Whether an arrangement kept for undo holds Panel `panel`: undoing to it would put the Panel back, so the
+    /// Panel must not be removed yet.
+    pub fn names(&self, panel: usize) -> bool {
+        self.steps
+            .iter()
+            .chain(self.drag.iter())
+            .any(|t| t.contains(panel))
+    }
+
     /// Whether there is a change to undo.
     pub fn can_undo(&self) -> bool {
         !self.steps.is_empty()

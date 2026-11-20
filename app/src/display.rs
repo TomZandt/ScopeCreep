@@ -715,18 +715,19 @@ impl DisplaySet {
 
     /// The settings the display in Panel `index` leaves for the popover: those that are not chips on its title bar.
     pub fn popover_defs(&self, index: usize) -> Vec<SettingDef> {
-        crate::toolbar::popover_defs(
-            &self.read().displays[index].offered_defs(),
-            self.read().displays[index].toolbar_defs(),
-        )
+        let shared = self.read();
+        let display = &shared.displays[index];
+        crate::toolbar::popover_defs(&display.offered_defs(), display.toolbar_defs())
     }
 
     /// The popover of the display in Panel `index` under its title bar `toolbar`: the settings of the chips that
     /// did not fit the bar first (#171), then those that are never chips.
     pub fn popover_for(&self, index: usize, toolbar: &Toolbar) -> Vec<SettingDef> {
+        let shared = self.read();
+        let display = &shared.displays[index];
         crate::toolbar::popover_with(
-            &self.read().displays[index].offered_defs(),
-            self.read().displays[index].toolbar_defs(),
+            &display.offered_defs(),
+            display.toolbar_defs(),
             &toolbar.collapsed,
         )
     }

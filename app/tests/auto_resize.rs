@@ -195,3 +195,25 @@ fn it_is_one_undo_step_and_a_press_that_changes_nothing_is_none() {
         "a press that changes nothing adds no step"
     );
 }
+
+#[test]
+fn it_never_leaves_a_panel_under_its_least_size_near_the_windows_minimum() {
+    use scopecreep::panel_grid::min_panel_size;
+    for scale in [1.0, 2.0] {
+        let min = min_panel_size(scale);
+        // Just wide enough for two Panels at their least size, so the footage's share cannot be had.
+        let area = [0.0, 0.0, 2.0 * min[0] + GAP * scale + 30.0, 716.0 * scale];
+        for (first, second) in [
+            ("Clean picture", "Vectorscope"),
+            ("Vectorscope", "Luma waveform"),
+        ] {
+            let mut t = two("row", first, second);
+            t.auto_resize(&shapes(), 2.39, area, GAP * scale, scale);
+            let cells = t.cells(area, GAP * scale);
+            for cell in t.panels().into_iter().map(|p| cells[p]) {
+                assert!(cell[2] >= min[0] - 0.01, "{first}|{second}: {cell:?}");
+                assert!(cell[3] >= min[1] - 0.01, "{cell:?} under {min:?}");
+            }
+        }
+    }
+}

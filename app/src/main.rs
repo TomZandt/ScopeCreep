@@ -1012,17 +1012,31 @@ impl AppWindow {
         }
     }
 
+    /// Which Panels a page other than the shown one holds, by Panel.
+    fn held_elsewhere(&self) -> Vec<bool> {
+        (0..self.displays.len())
+            .map(|p| self.pages.holds_elsewhere(p))
+            .collect()
+    }
+
     /// The default layout's Panels, each its own: a first instance another page holds is not shared, a new
     /// instance of that display is made for this page.
     fn default_tree(&self) -> LayoutTree {
-        let held: Vec<bool> = (0..self.displays.len())
-            .map(|p| self.pages.holds_elsewhere(p))
-            .collect();
+        let held = self.held_elsewhere();
         pages::default_tree(&self.displays, |p| held.get(p).copied().unwrap_or(false))
     }
 
     /// A new page from a template, shown (ADR 0041). Past the limit nothing is made and a notice says so.
     fn new_page(&mut self, template: Template) {
+        // Past the limit, before any display is made for the page: a refused page leaves nothing behind.
+        if self.pages.is_full() {
+            self.layout_notice = Some(format!(
+                "A Window holds at most {} pages.",
+                pages::MAX_PAGES
+            ));
+            self.window.request_redraw();
+            return;
+        }
         let made = match template {
             Template::Empty => self.pages.new_empty(self.displays.len()),
             Template::Default => {
@@ -1352,8 +1366,12 @@ impl AppWindow {
         self.layout_notice = None;
         {
             let mut settings = self.settings.lock().unwrap();
-            self.pages
-                .change(|g| page_edit::close(&self.displays, g, &mut settings, panel));
+            let held = self.held_elsewhere();
+            self.pages.change(|g| {
+                page_edit::close(&self.displays, g, &mut settings, panel, |p| {
+                    held.get(p).copied().unwrap_or(false)
+                })
+            });
         }
         self.panels_changed();
     }
@@ -1383,8 +1401,8 @@ impl AppWindow {
                 self.layout_notice = None;
                 self.panels_changed();
             }
-            Err(no_room) => {
-                self.layout_notice = Some(no_room.notice());
+            Err(refused) => {
+                self.layout_notice = Some(refused.notice());
                 self.window.request_redraw();
             }
         }
@@ -1397,8 +1415,12 @@ impl AppWindow {
         self.layout_notice = None;
         let replaced = {
             let mut settings = self.settings.lock().unwrap();
-            self.pages
-                .change(|g| page_edit::replace(&self.displays, g, &mut settings, panel, name))
+            let held = self.held_elsewhere();
+            self.pages.change(|g| {
+                page_edit::replace(&self.displays, g, &mut settings, panel, name, |p| {
+                    held.get(p).copied().unwrap_or(false)
+                })
+            })
         };
         if replaced.is_some() {
             self.panels_changed();

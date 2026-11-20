@@ -196,6 +196,16 @@ fn there_is_a_limit_to_how_many_pages() {
 }
 
 #[test]
+fn the_window_can_ask_whether_another_page_fits_before_making_anything() {
+    let mut pages = Pages::new(default_tree());
+    while !pages.is_full() {
+        assert!(pages.new_empty(7));
+    }
+    assert_eq!(pages.len(), MAX_PAGES);
+    assert!(!pages.new_empty(7));
+}
+
+#[test]
 fn the_pages_and_the_current_page_are_remembered() {
     let mut pages = Pages::new(arranged());
     pages.new_empty(7);

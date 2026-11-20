@@ -71,6 +71,11 @@ impl Pages {
         self.pages.len()
     }
 
+    /// Whether the Window holds as many pages as it can ([`MAX_PAGES`]): a new page is refused.
+    pub fn is_full(&self) -> bool {
+        self.pages.len() >= MAX_PAGES
+    }
+
     /// There is always a page.
     pub fn is_empty(&self) -> bool {
         false
@@ -216,8 +221,14 @@ impl Pages {
         self.pages.iter().any(|p| p.tree.contains(panel))
     }
 
+    /// Whether any page's undo could put Panel `panel` back.
+    fn undo_names(&self, panel: usize) -> bool {
+        self.pages.iter().any(|p| p.history.names(panel))
+    }
+
     /// Remove every further instance ("Name 2") that no page holds (closed, replaced, or left behind by an undo or
-    /// another layout), forgetting its settings; a Panel on another page is kept. Every Panel after a removed one
+    /// another layout), forgetting its settings; a Panel on another page, or one an undo step on any page would
+    /// bring back, is kept until nothing names it. Every Panel after a removed one
     /// moves up an index in every page and in every page's undo. Returns the indices removed, highest first. The
     /// first instance of a display is never removed. Afterwards tell the displays which Panels are on the page shown
     /// ([`Pages::show_on`]).
@@ -228,7 +239,7 @@ impl Pages {
     ) -> Vec<usize> {
         let gone: Vec<usize> = (0..displays.len())
             .rev()
-            .filter(|i| displays.is_duplicate(*i) && !self.holds(*i))
+            .filter(|i| displays.is_duplicate(*i) && !self.holds(*i) && !self.undo_names(*i))
             .collect();
         for i in &gone {
             settings.forget_panel(&displays.key(*i));

@@ -668,7 +668,7 @@ impl LayoutTree {
             shapes,
             aspect,
             scale,
-            min: None,
+            min: Some(crate::panel_grid::min_panel_size(scale)),
         };
         self.root.fit(area, gap, &fit);
     }
