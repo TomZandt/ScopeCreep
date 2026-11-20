@@ -260,6 +260,10 @@ const TABLE_FLOATS: usize = 5 * aces2::TOTAL_TABLE_SIZE;
 /// 32-bit words in the parameter block (see `Params` in the shader).
 const PARAM_WORDS: usize = 4 + 4 + 5 * 24 + 6 * 4;
 
+/// The 1 in `encode.w` the shader multiplies by to keep the GPU's compiler from simplifying its error-free
+/// transformations away (`opaque` in the shader, #44): it must come from the parameters, not the source.
+const OPAQUE_ONE: f64 = 1.0;
+
 const SHADER_BODY: &str = include_str!("output_conversion.wgsl");
 
 /// The shader, with the published constants written in from the accuracy crate.
@@ -333,7 +337,7 @@ fn gpu_parameters(pipeline: &Pipeline, width: u32, height: u32) -> (Vec<u32>, Ve
     match pipeline {
         Pipeline::Identity => {
             words.extend([width, height, 0, 0]);
-            push4(&mut words, [1.0, 0.0, 0.0, 0.0]);
+            push4(&mut words, [1.0, 0.0, 0.0, OPAQUE_ONE]);
             for _ in 0..5 {
                 push_matrix(&mut words, &zero);
             }
@@ -345,8 +349,8 @@ fn gpu_parameters(pipeline: &Pipeline, width: u32, height: u32) -> (Vec<u32>, Ve
             matrix, encoding, ..
         } => {
             let (code, enc) = match *encoding {
-                Encoding::SignedGamma(g) => (0, [1.0 / g, 0.0, 0.0, 0.0]),
-                Encoding::Pq { nits_per_unit } => (1, [0.0, nits_per_unit, 0.0, 0.0]),
+                Encoding::SignedGamma(g) => (0, [1.0 / g, 0.0, 0.0, OPAQUE_ONE]),
+                Encoding::Pq { nits_per_unit } => (1, [0.0, nits_per_unit, 0.0, OPAQUE_ONE]),
             };
             words.extend([width, height, 1, code]);
             push4(&mut words, enc);
@@ -367,7 +371,7 @@ fn gpu_parameters(pipeline: &Pipeline, width: u32, height: u32) -> (Vec<u32>, Ve
                         0.0,
                         aces2::REF_LUMINANCE,
                         ot.peak_luminance / aces2::REF_LUMINANCE,
-                        0.0,
+                        OPAQUE_ONE,
                     ],
                 ),
                 Eotf::Gamma26 => (
@@ -376,7 +380,7 @@ fn gpu_parameters(pipeline: &Pipeline, width: u32, height: u32) -> (Vec<u32>, Ve
                         1.0 / 2.6,
                         0.0,
                         ot.peak_luminance / aces2::REF_LUMINANCE,
-                        0.0,
+                        OPAQUE_ONE,
                     ],
                 ),
                 Eotf::Bt1886Gamma24 => (
@@ -385,7 +389,7 @@ fn gpu_parameters(pipeline: &Pipeline, width: u32, height: u32) -> (Vec<u32>, Ve
                         1.0 / 2.4,
                         0.0,
                         ot.peak_luminance / aces2::REF_LUMINANCE,
-                        0.0,
+                        OPAQUE_ONE,
                     ],
                 ),
             };

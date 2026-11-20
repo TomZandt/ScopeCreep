@@ -300,6 +300,57 @@ fn acescct_to_aces_2_rec2100_pq_1000_nit_matches_the_reference_ctl_port() {
     );
 }
 
+/// Every mix of 31 ACEScct levels per channel from 0 to `top` (29,791 colours): far more dark saturated colours
+/// than `acescct_values`, which is where 32-bit float is weakest in ACES 2.0 (#44).
+fn dense_acescct_grid(top: f32) -> Vec<[f32; 3]> {
+    let level = |i: u32| i as f32 * top / 30.0;
+    let mut v = Vec::with_capacity(31 * 31 * 31);
+    for r in 0..31 {
+        for g in 0..31 {
+            for b in 0..31 {
+                v.push([level(r), level(g), level(b)]);
+            }
+        }
+    }
+    v
+}
+
+/// The dense grids that found #44: up to six values a grid in Rec.2100 PQ were over the tolerance (worst 0.55 of a
+/// 10-bit code), dark saturated colours, until the cone responses were carried in double-float and the hue's
+/// direction was taken from a and b.
+#[test]
+fn acescct_to_aces_2_rec2100_pq_1000_nit_matches_on_a_dense_grid() {
+    let mut b = Bench::new(
+        "aces-pq-dense",
+        "timeline=ACEScct\noutput=Rec.2100 ST2084 (1000 nit)\naces_version=2.0\n",
+    );
+    let reference = Pipeline::Aces2(Box::new(AcesOutputTransform::rec2100_pq_1000()));
+    for top in [1.0, 1.1, 1.2] {
+        assert_converted_like(&mut b, &reference, &dense_acescct_grid(top));
+    }
+}
+
+#[test]
+fn acescct_to_aces_2_p3_d65_and_rec709_match_on_a_dense_grid() {
+    for (name, output, reference) in [
+        ("aces-p3d65-dense", "P3-D65", AcesOutputTransform::p3_d65()),
+        (
+            "aces-rec709-dense",
+            "Rec.709 BT.1886",
+            AcesOutputTransform::rec709_bt1886(),
+        ),
+    ] {
+        let mut b = Bench::new(
+            name,
+            &format!("timeline=ACEScct\noutput={output}\naces_version=2.0\n"),
+        );
+        let reference = Pipeline::Aces2(Box::new(reference));
+        for top in [1.0, 1.1, 1.2] {
+            assert_converted_like(&mut b, &reference, &dense_acescct_grid(top));
+        }
+    }
+}
+
 // ------------------------------------------------------------------ approximated and unsupported
 
 #[test]

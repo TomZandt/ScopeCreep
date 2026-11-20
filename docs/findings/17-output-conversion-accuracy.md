@@ -35,7 +35,7 @@ The ACES samples over 1e-4 all sit in the darkest band (reference at most 0.037 
 
 Grey ramps from below 0 to above 1 plus every mix of 11 levels per channel, converted on the GPU and compared with the f64 reference within the same tolerance: DWG/DI to Rec.709 Gamma 2.4, P3-D65 (gamma 2.6), Rec.2100 PQ and Rec.2020 Gamma 2.4; ACEScct through ACES 2.0 Rec.709 BT.1886, P3-D65 and Rec.2100 ST2084 (1000 nit); YRGB unchanged. All pass. The waveform's bins are checked on the converted picture, at video levels (#18): DWG/DI 18 % grey at code 493 and 90 % at 902 (as sent they would be 358 and 497); ACES 2.0 18 % grey at code 400 (10.013 nit).
 
-On a denser grid (31 levels per channel, 29,791 colours) the ACES 2.0 conversion stays within tolerance except **2 channel values out of about 90,000 in Rec.2100 PQ (1000 nit), worst 4.2e-4 (0.43 of a 10-bit code)**, both saturated colours near black (encoded about 0.05). P3-D65 passes there only by the light rule (worst 6.7e-4 encoded, dark); Rec.709 worst 4.4e-5.
+On a denser grid (31 levels per channel, 29,791 colours) the ACES 2.0 conversion stays within tolerance except **2 channel values out of about 90,000 in Rec.2100 PQ (1000 nit), worst 4.2e-4 (0.43 of a 10-bit code)**, both saturated colours near black (encoded about 0.05). P3-D65 passes there only by the light rule (worst 6.7e-4 encoded, dark); Rec.709 worst 4.4e-5. #44 brought these inside: every value of three such grids now passes ([44](44-aces2-dark-saturated-precision.md)).
 
 ## What 32-bit float needed (ACES 2.0)
 
@@ -45,7 +45,7 @@ A plain port lost up to 1.7e-4 on bright saturated colours. The CAM16 steps in A
 - **Matrices:** each matrix is sent as 32-bit floats plus what they lose, and multiplied as a compensated dot product (`fma` and two-sum).
 - **ACEScct decode:** `17.52` and `9.72` are not exact in 32-bit float; their lost digits are added back.
 
-The remaining error comes from the 32-bit cone responses themselves (one unit in the last place times the Aab matrix's 15,000 scale): it cannot be removed without carrying them at higher precision. Range-reducing the hue before `sin`/`cos` and a cancellation-free form of the toe made no measurable difference on these tests; both are kept, being the same maths.
+The remaining error comes from the 32-bit cone responses themselves (one unit in the last place times the Aab matrix's 15,000 scale): it cannot be removed without carrying them at higher precision. #44 did that (double-float cone responses), took the hue's cos and sin from a and b, and found that the GPU's compiler had been simplifying the two-sum steps of the compensated dot product to 0: only its fma and lost-digit parts were working ([44](44-aces2-dark-saturated-precision.md)). Range-reducing the hue before `sin`/`cos` and a cancellation-free form of the toe made no measurable difference on these tests; both are kept, being the same maths.
 
 ## Labels
 

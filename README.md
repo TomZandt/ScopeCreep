@@ -108,6 +108,7 @@ DaVinci Resolve                                 scopecreep app (Rust + wgpu)
   - [0034](docs/adr/0034-the-clean-picture-carries-the-channel-and-the-loupe.md): The clean picture carries the channel and the Loupe, and the Channel view leaves the Window
   - [0035](docs/adr/0035-whole-panel-zoom-of-source-pixels.md): Whole-Panel zoom of source pixels, from Fit to 800 %: free below 100 %, whole steps above, display state never saved
   - [0036](docs/adr/0036-commands-and-hotkeys-in-one-table.md): Every app command is in one table, and the user's hotkeys are kept as changes from its defaults
+  - [0037](docs/adr/0037-aces-conversion-pays-gpu-time-for-exactness.md): The ACES 2.0 conversion pays about 1.4 ms of GPU time to stay inside the exact tolerance
 - [docs/findings/](docs/findings/): what testing showed, one file per ticket.
 - [docs/research/](docs/research/): what public sources say, with dates and links.
 
