@@ -15,7 +15,8 @@ OUT = os.path.expanduser("~/scopecreep-testdata/bench/uhd50-" + time.strftime("%
 os.makedirs(OUT, exist_ok=True)
 APP = "/home/tom/GitHub/scopecreep/target/release/scopecreep"
 WARM, MEASURE, SHOT_EVERY = 15, 60, 5
-INDICATOR = "1395,255 120x30"
+# Resolve's fps readout, in global screen coordinates (grim -g); set SCOPECREEP_BENCH_GRAB when Resolve sits elsewhere.
+INDICATOR = os.environ.get("SCOPECREEP_BENCH_GRAB", "1395,255 120x30")
 
 r = connect()
 project = r.GetProjectManager().GetCurrentProject()
