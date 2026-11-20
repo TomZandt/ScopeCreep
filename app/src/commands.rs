@@ -7,17 +7,22 @@
 use std::fmt;
 use winit::keyboard::KeyCode;
 
-use crate::layouts::SLOTS;
+use crate::pages::NUMBERED;
 
 /// Something the app does that a menu entry offers and a hotkey can trigger.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum Command {
-    /// Show the default layout.
+    /// Show the default layout on the current page.
     DefaultLayout,
-    /// Show the layout saved in a slot (0 to 8).
-    RecallLayout(usize),
-    /// Save the arrangement on screen into a slot (0 to 8).
-    SaveLayout(usize),
+    /// Go to page 1 to 9 (0 to 8): Ctrl+1 to 9 (ADR 0041, #212).
+    GoToPage(usize),
+    /// A new page with no Panel (ADR 0041). No default hotkey; the Page bar's **+** and the Layout menu offer the
+    /// other two templates.
+    NewPage,
+    /// A new page that is a copy of the current one (ADR 0041). No default hotkey.
+    DuplicatePage,
+    /// Delete the current page; one page always stays (ADR 0041). No default hotkey.
+    DeletePage,
     /// The picture Panel under the pointer to Fit and back to its last zoom and spot (every picture Panel while
     /// Link is on), like Resolve's Shift+Z (#169).
     ZoomFit,
@@ -38,8 +43,10 @@ impl Command {
     /// in each match below.
     pub fn all() -> Vec<Command> {
         let mut all = vec![Command::DefaultLayout];
-        all.extend((0..SLOTS).map(Command::RecallLayout));
-        all.extend((0..SLOTS).map(Command::SaveLayout));
+        all.extend((0..NUMBERED).map(Command::GoToPage));
+        all.push(Command::NewPage);
+        all.push(Command::DuplicatePage);
+        all.push(Command::DeletePage);
         all.push(Command::ZoomFit);
         all.push(Command::FillWindow);
         all.push(Command::ToggleLegends);
@@ -53,8 +60,10 @@ impl Command {
     pub fn id(self) -> String {
         match self {
             Command::DefaultLayout => "layout-default".to_string(),
-            Command::RecallLayout(slot) => format!("layout-recall-{}", slot + 1),
-            Command::SaveLayout(slot) => format!("layout-save-{}", slot + 1),
+            Command::GoToPage(page) => format!("page-go-{}", page + 1),
+            Command::NewPage => "page-new".to_string(),
+            Command::DuplicatePage => "page-duplicate".to_string(),
+            Command::DeletePage => "page-delete".to_string(),
             Command::ZoomFit => "zoom-fit".to_string(),
             Command::FillWindow => "panel-fill".to_string(),
             Command::ToggleLegends => "legends-toggle".to_string(),
@@ -68,8 +77,10 @@ impl Command {
     pub fn label(self) -> String {
         match self {
             Command::DefaultLayout => "Default layout".to_string(),
-            Command::RecallLayout(slot) => format!("Show layout {}", slot + 1),
-            Command::SaveLayout(slot) => format!("Save layout into slot {}", slot + 1),
+            Command::GoToPage(page) => format!("Go to page {}", page + 1),
+            Command::NewPage => "Page: new".to_string(),
+            Command::DuplicatePage => "Page: duplicate".to_string(),
+            Command::DeletePage => "Page: delete".to_string(),
             Command::ZoomFit => "Zoom: Fit / last zoom".to_string(),
             Command::FillWindow => "Panel: fill the Window".to_string(),
             Command::ToggleLegends => "Legends: show / hide".to_string(),
@@ -79,18 +90,19 @@ impl Command {
         }
     }
 
-    /// The hotkey the command has until the user changes it: Ctrl+1 to 9 to show a layout, Ctrl+Shift+1 to 9 to
-    /// save one, Z for the Fit toggle, Ctrl+F to fill the Window with a Panel, Ctrl+Z to undo a layout change. Default layout, the legends and
-    /// adding and closing a Panel have none.
+    /// The hotkey the command has until the user changes it: Ctrl+1 to 9 to go to a page, Z for the Fit toggle, Ctrl+F to fill the Window with a Panel, Ctrl+Z to undo a layout change. Default layout, the legends,
+    /// adding and closing a Panel and the page commands that make or remove a page have none.
     pub fn default_hotkey(self) -> Option<Hotkey> {
         let digit = |slot: usize| Key::named(&(slot + 1).to_string());
         match self {
             Command::DefaultLayout
             | Command::ToggleLegends
             | Command::AddPanel
-            | Command::ClosePanel => None,
-            Command::RecallLayout(slot) => digit(slot).map(Hotkey::ctrl),
-            Command::SaveLayout(slot) => digit(slot).map(|k| Hotkey::ctrl(k).with_shift()),
+            | Command::ClosePanel
+            | Command::NewPage
+            | Command::DuplicatePage
+            | Command::DeletePage => None,
+            Command::GoToPage(page) => digit(page).map(Hotkey::ctrl),
             Command::ZoomFit => Key::named("Z").map(Hotkey::new),
             Command::FillWindow => Key::named("F").map(Hotkey::ctrl),
             Command::UndoLayout => Key::named("Z").map(Hotkey::ctrl),

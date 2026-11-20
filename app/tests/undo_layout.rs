@@ -166,7 +166,6 @@ fn undo_leaves_the_focus_on_a_panel_that_is_on_the_page() {
 // The Command and the Layout menu entry.
 use scopecreep::commands::{Command, Hotkey, Hotkeys, Key};
 use scopecreep::components::MenuEntry;
-use scopecreep::layouts::Layouts;
 use scopecreep::menu_bar::{LayoutMode, MenuAction, layout_menu_with_undo};
 
 #[test]
@@ -184,11 +183,10 @@ fn undo_layout_change_is_ctrl_z_by_default_and_can_be_reassigned() {
 
 fn undo_entry(can_undo: bool) -> (Option<MenuAction>, bool, String) {
     let menu = layout_menu_with_undo(
-        &Layouts::default(),
+        &["Main".to_string()],
+        0,
         &Hotkeys::default(),
-        None,
         LayoutMode::Show,
-        None,
         can_undo,
     );
     let at = menu

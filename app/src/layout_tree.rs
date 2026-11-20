@@ -558,6 +558,25 @@ impl LayoutTree {
             )
     }
 
+    /// A page with no Panel, for a Window with `total` Panels.
+    pub fn empty(total: usize) -> LayoutTree {
+        LayoutTree::new(Node::EMPTY, total)
+    }
+
+    /// The Panels the page holds, in the order of the tree.
+    pub fn panels(&self) -> Vec<usize> {
+        self.panel_list()
+    }
+
+    /// Give every Panel on the page the number `f` says (a copy of a page holds copies of its Panels); the focus
+    /// follows its Panel.
+    pub fn remap(&mut self, f: impl Fn(usize) -> usize) {
+        self.root.map_panels(&f);
+        self.focus = self.focus.map(&f);
+        let most = self.panel_list().iter().map(|p| p + 1).max().unwrap_or(0);
+        self.total = self.total.max(most);
+    }
+
     fn panel_list(&self) -> Vec<usize> {
         let mut all = Vec::new();
         self.root.panels(&mut all);
@@ -1088,6 +1107,12 @@ impl LayoutTree {
     /// cannot be is rubbish.
     pub fn from_text(names: &[&str], text: &str) -> LayoutTree {
         Self::parse(names, text).unwrap_or_else(|| LayoutTree::default_for(names))
+    }
+
+    /// The layout `text` holds, or `None` when it is rubbish (where [`LayoutTree::from_text`] gives the default
+    /// layout): what a saved page or layout is checked with, so one that cannot be read can be dropped.
+    pub fn parse_text(names: &[&str], text: &str) -> Option<LayoutTree> {
+        Self::parse(names, text)
     }
 
     fn parse(names: &[&str], text: &str) -> Option<LayoutTree> {

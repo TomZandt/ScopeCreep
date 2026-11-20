@@ -4,14 +4,22 @@
 use scopecreep::commands::{Command, Hotkey, Hotkeys, Key};
 use scopecreep::components::*;
 use scopecreep::layout_tree::LayoutTree;
-use scopecreep::layouts::{Layouts, Rename, SLOTS};
 use scopecreep::menu_bar::{
-    self, BarState, Current, LAYOUT, LayoutMode, MenuAction, SETTINGS, VIEW, layout_menu, view_menu,
+    self, BarState, LAYOUT, LayoutMode, MenuAction, SETTINGS, Template, VIEW, layout_menu,
+    view_menu,
 };
 use scopecreep::style;
 
 const SCALES: [f32; 2] = [1.0, 2.0];
-const NAMES: [&str; 3] = ["Clean picture", "Luma waveform", "Vectorscope"];
+const NAMES: [&str; 7] = [
+    "Clean picture",
+    "Luma waveform",
+    "ARRI False Colour",
+    "Vectorscope",
+    "Saturation heatmap",
+    "Skin tone",
+    "Stops False Colour",
+];
 
 fn fills(prims: &[Prim]) -> Vec<[f32; 4]> {
     prims
@@ -50,12 +58,6 @@ fn item(menu: &menu_bar::Menu, label: &str) -> (usize, MenuItem) {
         .into_iter()
         .find(|(_, it)| it.label == label)
         .unwrap_or_else(|| panic!("no entry {label}"))
-}
-
-fn arranged() -> LayoutTree {
-    let mut grid = LayoutTree::default_for(&NAMES);
-    grid.swap(0, 1);
-    grid
 }
 
 fn centre(r: [f32; 4]) -> [f32; 2] {
@@ -287,150 +289,138 @@ fn a_long_hotkey_widens_the_menu_so_name_and_key_never_meet() {
 
 // ---- The Layout menu ----
 
+fn pages(names: &[&str]) -> Vec<String> {
+    names.iter().map(|n| n.to_string()).collect()
+}
+
 #[test]
-fn the_layout_menu_lists_default_layout_and_the_nine_slots_empty_or_by_name() {
-    let mut layouts = Layouts::default();
-    layouts.save(1, &arranged(), &NAMES);
-    layouts.rename(1, "Colour pass");
-    let menu = layout_menu(&layouts, &Hotkeys::default(), None, LayoutMode::Show, None);
+fn the_layout_menu_lists_the_pages_then_what_to_do_with_them() {
+    let menu = layout_menu(
+        &pages(&["Main", "Pictures", "Scopes"]),
+        1,
+        &Hotkeys::default(),
+        LayoutMode::Show,
+    );
     let labels: Vec<String> = items(&menu).into_iter().map(|(_, i)| i.label).collect();
-    assert_eq!(labels[0], "Default layout");
-    assert_eq!(labels[1], "1  empty");
-    assert_eq!(labels[2], "2  Colour pass");
-    assert_eq!(labels[9], "9  empty");
     assert_eq!(
-        &labels[10..],
+        labels,
         [
-            "Save current layout into…",
-            "Rename layout…",
+            "1  Main",
+            "2  Pictures",
+            "3  Scopes",
+            "New page from…",
+            "Duplicate page",
+            "Rename page",
+            "Delete page",
             "Add panel…",
             "Close panel",
-            "Undo layout change"
+            "Undo layout change",
+            "Default layout",
         ]
     );
 }
 
 #[test]
-fn a_saved_slot_shows_its_layout_and_an_empty_one_saves_into_it() {
-    let mut layouts = Layouts::default();
-    layouts.save(0, &arranged(), &NAMES);
-    let menu = layout_menu(&layouts, &Hotkeys::default(), None, LayoutMode::Show, None);
-    let (i, saved) = item(&menu, "1  Layout 1");
-    assert_eq!(
-        menu.action(i),
-        Some(MenuAction::Run(Command::RecallLayout(0)))
+fn a_page_goes_to_itself_and_shows_the_hotkey_that_does_the_same() {
+    let menu = layout_menu(
+        &pages(&["Main", "Pictures"]),
+        0,
+        &Hotkeys::default(),
+        LayoutMode::Show,
     );
-    assert_eq!(saved.hotkey, "Ctrl+1");
-    let (i, empty) = item(&menu, "2  empty");
-    assert_eq!(
-        menu.action(i),
-        Some(MenuAction::Run(Command::SaveLayout(1)))
-    );
-    assert_eq!(
-        empty.hotkey, "Ctrl+Shift+2",
-        "the key that does what the click does"
-    );
-    let (i, _) = item(&menu, "Default layout");
-    assert_eq!(
-        menu.action(i),
-        Some(MenuAction::Run(Command::DefaultLayout))
-    );
+    let (i, entry) = item(&menu, "2  Pictures");
+    assert_eq!(menu.action(i), Some(MenuAction::Page(1)));
+    assert_eq!(entry.hotkey, "Ctrl+2");
+    // A tenth page has no hotkey.
+    let many: Vec<String> = (1..=10).map(|n| format!("P{n}")).collect();
+    let menu = layout_menu(&many, 0, &Hotkeys::default(), LayoutMode::Show);
+    let (i, tenth) = item(&menu, "10  P10");
+    assert_eq!(tenth.hotkey, "");
+    assert_eq!(menu.action(i), Some(MenuAction::Page(9)));
 }
 
 #[test]
-fn the_layout_on_screen_is_marked() {
-    let mut layouts = Layouts::default();
-    layouts.save(2, &arranged(), &NAMES);
+fn the_current_page_is_marked() {
     let hk = Hotkeys::default();
     let marked = |current| {
-        items(&layout_menu(&layouts, &hk, current, LayoutMode::Show, None))
-            .into_iter()
-            .filter(|(_, i)| i.on)
-            .map(|(_, i)| i.label)
-            .collect::<Vec<_>>()
+        items(&layout_menu(
+            &pages(&["Main", "Pictures", "Scopes"]),
+            current,
+            &hk,
+            LayoutMode::Show,
+        ))
+        .into_iter()
+        .filter(|(_, i)| i.on)
+        .map(|(_, i)| i.label)
+        .collect::<Vec<_>>()
     };
-    assert_eq!(marked(Some(Current::Default)), ["Default layout"]);
-    assert_eq!(marked(Some(Current::Slot(2))), ["3  Layout 3"]);
-    assert!(
-        marked(None).is_empty(),
-        "an arrangement saved nowhere marks nothing"
-    );
+    assert_eq!(marked(0), ["1  Main"]);
+    assert_eq!(marked(2), ["3  Scopes"]);
 }
 
 #[test]
-fn rename_is_greyed_until_a_layout_is_saved() {
-    let empty = layout_menu(
-        &Layouts::default(),
+fn delete_is_greyed_with_one_page_and_the_page_entries_are_commands() {
+    let hk = Hotkeys::default();
+    let one = layout_menu(&pages(&["Main"]), 0, &hk, LayoutMode::Show);
+    let (i, delete) = item(&one, "Delete page");
+    assert!(!delete.enabled);
+    assert_eq!(one.action(i), None);
+    let two = layout_menu(&pages(&["Main", "B"]), 0, &hk, LayoutMode::Show);
+    let (i, delete) = item(&two, "Delete page");
+    assert!(delete.enabled);
+    assert_eq!(two.action(i), Some(MenuAction::Run(Command::DeletePage)));
+    let (i, _) = item(&two, "Duplicate page");
+    assert_eq!(two.action(i), Some(MenuAction::Run(Command::DuplicatePage)));
+    let (i, _) = item(&two, "Rename page");
+    assert_eq!(two.action(i), Some(MenuAction::RenamePage));
+    let (i, _) = item(&two, "Default layout");
+    assert_eq!(two.action(i), Some(MenuAction::Run(Command::DefaultLayout)));
+    let (i, _) = item(&two, "New page from…");
+    assert_eq!(two.action(i), Some(MenuAction::Mode(LayoutMode::NewFrom)));
+}
+
+#[test]
+fn undo_is_greyed_when_there_is_nothing_to_undo() {
+    let hk = Hotkeys::default();
+    let names = pages(&["Main"]);
+    let menu = menu_bar::layout_menu_with_undo(&names, 0, &hk, LayoutMode::Show, false);
+    let (i, undo) = item(&menu, "Undo layout change");
+    assert!(!undo.enabled);
+    assert_eq!(menu.action(i), None);
+}
+
+#[test]
+fn new_page_from_offers_the_three_templates_and_goes_back() {
+    let menu = layout_menu(
+        &pages(&["Main"]),
+        0,
         &Hotkeys::default(),
-        None,
-        LayoutMode::Show,
-        None,
+        LayoutMode::NewFrom,
     );
-    let (i, rename) = item(&empty, "Rename layout…");
-    assert!(!rename.enabled);
-    assert_eq!(empty.action(i), None);
-    let mut layouts = Layouts::default();
-    layouts.save(4, &arranged(), &NAMES);
-    let menu = layout_menu(&layouts, &Hotkeys::default(), None, LayoutMode::Show, None);
-    let (i, _) = item(&menu, "Rename layout…");
-    assert_eq!(menu.action(i), Some(MenuAction::Mode(LayoutMode::Rename)));
-}
-
-#[test]
-fn save_lists_every_slot_to_save_into_and_goes_back() {
-    let mut layouts = Layouts::default();
-    layouts.save(0, &arranged(), &NAMES);
-    let menu = layout_menu(&layouts, &Hotkeys::default(), None, LayoutMode::Save, None);
-    let all = items(&menu);
-    assert_eq!(all.len(), SLOTS + 1);
-    for slot in 0..SLOTS {
-        let (i, it) = &all[slot];
-        assert!(it.enabled, "a saved slot can be saved over, from here only");
-        assert_eq!(
-            menu.action(*i),
-            Some(MenuAction::Run(Command::SaveLayout(slot)))
-        );
-        assert_eq!(it.hotkey, format!("Ctrl+Shift+{}", slot + 1));
+    let labels: Vec<String> = items(&menu).into_iter().map(|(_, i)| i.label).collect();
+    assert_eq!(
+        labels,
+        [
+            "Empty page",
+            "Default layout (7 Panels)",
+            "Copy of this page",
+            "Back"
+        ]
+    );
+    for (label, template) in [
+        ("Empty page", Template::Empty),
+        ("Default layout (7 Panels)", Template::Default),
+        ("Copy of this page", Template::Copy),
+    ] {
+        let (i, _) = item(&menu, label);
+        assert_eq!(menu.action(i), Some(MenuAction::NewPage(template)));
     }
     let (i, _) = item(&menu, "Back");
     assert_eq!(menu.action(i), Some(MenuAction::Mode(LayoutMode::Show)));
 }
 
 #[test]
-fn rename_offers_only_saved_slots_and_shows_what_is_typed() {
-    let mut layouts = Layouts::default();
-    layouts.save(0, &arranged(), &NAMES);
-    let menu = layout_menu(
-        &layouts,
-        &Hotkeys::default(),
-        None,
-        LayoutMode::Rename,
-        None,
-    );
-    let (i, saved) = item(&menu, "1  Layout 1");
-    assert!(saved.enabled);
-    assert_eq!(menu.action(i), Some(MenuAction::Rename(0)));
-    let (i, empty) = item(&menu, "2  empty");
-    assert!(!empty.enabled);
-    assert_eq!(menu.action(i), None);
-    let mut typing = Rename::start(&layouts, 0).unwrap();
-    typing.text = "Gra".to_string();
-    let menu = layout_menu(
-        &layouts,
-        &Hotkeys::default(),
-        None,
-        LayoutMode::Rename,
-        Some(&typing),
-    );
-    item(&menu, "1  Gra|");
-}
-
-#[test]
 fn every_entry_runs_the_command_its_shown_hotkey_runs() {
-    let mut layouts = Layouts::default();
-    for slot in [0, 3, 8] {
-        layouts.save(slot, &arranged(), &NAMES);
-    }
     // With changed hotkeys too: the menu follows them at once.
     let mut changed = Hotkeys::default();
     changed
@@ -439,28 +429,37 @@ fn every_entry_runs_the_command_its_shown_hotkey_runs() {
             Hotkey::ctrl(Key::named("D").unwrap()),
         )
         .unwrap();
-    changed.clear(Command::RecallLayout(3));
+    changed.clear(Command::GoToPage(3));
     changed
         .replace(
-            Command::SaveLayout(0),
+            Command::DuplicatePage,
             Hotkey::new(Key::named("F9").unwrap()),
         )
         .unwrap();
+    let names = pages(&["A", "B", "C", "D", "E"]);
     for hotkeys in [Hotkeys::default(), changed] {
         let all_hotkeys: Vec<(String, Command)> = Command::all()
             .into_iter()
             .filter_map(|c| hotkeys.get(c).map(|h| (h.to_string(), c)))
             .collect();
-        for mode in [LayoutMode::Show, LayoutMode::Save] {
-            let menu = layout_menu(&layouts, &hotkeys, None, mode, None);
+        for mode in [LayoutMode::Show, LayoutMode::NewFrom] {
+            let menu = layout_menu(&names, 0, &hotkeys, mode);
             for (i, entry) in items(&menu) {
-                let Some(MenuAction::Run(command)) = menu.action(i) else {
-                    assert!(
-                        entry.hotkey.is_empty(),
-                        "{} shows a key but runs no command",
-                        entry.label
-                    );
-                    continue;
+                let command = match menu.action(i) {
+                    Some(MenuAction::Run(command)) => command,
+                    // A page entry goes to its page: the same as Go to page n.
+                    Some(MenuAction::Page(page)) if page < 9 => Command::GoToPage(page),
+                    // New page from: Empty and Copy are the commands of those names.
+                    Some(MenuAction::NewPage(Template::Empty)) => Command::NewPage,
+                    Some(MenuAction::NewPage(Template::Copy)) => Command::DuplicatePage,
+                    _ => {
+                        assert!(
+                            entry.hotkey.is_empty(),
+                            "{} shows a key but runs no command",
+                            entry.label
+                        );
+                        continue;
+                    }
                 };
                 let shown = hotkeys
                     .get(command)
@@ -485,17 +484,20 @@ fn every_entry_runs_the_command_its_shown_hotkey_runs() {
 }
 
 #[test]
-fn every_layout_menu_fits_a_small_window() {
-    let mut layouts = Layouts::default();
-    for slot in 0..SLOTS {
-        layouts.save(slot, &arranged(), &NAMES);
-        layouts.rename(slot, "A long layout name here");
-    }
+fn every_layout_menu_fits_the_smallest_window() {
+    // The smallest the Window can be made counts the Layout menu with the most pages.
+    let names: Vec<String> = (0..scopecreep::pages::MAX_PAGES)
+        .map(|_| "A long page name here".to_string())
+        .collect();
+    let [min_w, min_h] = scopecreep::layout::min_window(
+        &LayoutTree::default_for(&NAMES),
+        &menu_bar::largest_menus(),
+    );
     for scale in SCALES {
-        let window = [480.0 * scale, 440.0 * scale];
+        let window = [min_w * scale, min_h * scale];
         let title = menu_bar::bar().title_rects(0.0, 0.0, scale)[LAYOUT];
-        for mode in [LayoutMode::Show, LayoutMode::Save, LayoutMode::Rename] {
-            let menu = layout_menu(&layouts, &Hotkeys::default(), None, mode, None);
+        for mode in [LayoutMode::Show, LayoutMode::NewFrom] {
+            let menu = layout_menu(&names, 0, &Hotkeys::default(), mode);
             let r = menu.drop.rect(title, window, scale);
             assert!(
                 r[0] >= 0.0 && r[0] + r[2] <= window[0] + 0.01,

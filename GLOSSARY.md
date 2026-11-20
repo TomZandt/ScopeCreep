@@ -146,7 +146,7 @@ Since spec #196 (ADR 0038) the grid is replaced by the **Layout tree** below, bu
 An arrangement of the Panel grid saved in one of nine slots (Ctrl+Shift+1 to 9 by default), shown again with Ctrl+1 to 9 or from the Layout menu on the Menu bar, which also saves, renames layouts and restores the default layout. A layout names its Panels, so one still opens after Panels are added or removed.
 _Avoid_: Preset, workspace, profile
 
-Since spec #196 (ADR 0041) named layouts become **Pages**; this entry stays until they are built.
+Since spec #196 (ADR 0041, built in #212) named layouts are **Pages**: the nine slots and their hotkeys are gone, and a saved layout is read once on the first run to make a page. The Layout menu entry above is superseded.
 
 **Layout tree**:
 The arrangement of one Page: a binary tree whose leaves are Tab groups and whose inner nodes are splits, each side by side or stacked with the share of its space (net of the gap) that its first child takes. It always fills the Panel area, so no cell is empty, and a Panel can never be smaller than the minimum Panel size (ADR 0038). Decided in spec #196 and built in #204: the Window draws from it, one Panel per tab group for now, and a saved layout reads "layout 2" (an old grid converts when it is a sequence of cuts, otherwise the default layout is used).
@@ -169,7 +169,7 @@ Dragging a Panel's title or tab onto another tab group: the outer quarter neares
 _Avoid_: Snap, drop zone (for the overlay)
 
 **Page**:
-A saved layout shown as a tab in the Page bar under the Colour Setup line: its own Layout tree, focused tab group and undo. The pages and the current page are remembered; only the current page's Panels measure and draw. New pages come from a template (All 7 Panels, Picture views, Scopes, Picture only, Empty page) or as a copy of the current one; Ctrl+1 to 9 go to pages 1 to 9, and the first nine tabs show their number, "[1] Colour" (ADR 0041).
+A saved layout shown as a tab in the Page bar under the Colour Setup line: its own Layout tree, focused tab group and undo. The pages and the current page are remembered; only the current page's Panels measure and draw. New pages come from Empty page, Default layout (the 7 Panels) or a copy of the current one (each Panel's settings copied; more templates are later); there are at most 12; Ctrl+1 to 9 go to pages 1 to 9, and the first nine tabs show their number, "[1] Colour" (ADR 0041).
 _Avoid_: Workspace (Resolve's word for its page arrangement), slot, preset
 
 **Auto layout**:

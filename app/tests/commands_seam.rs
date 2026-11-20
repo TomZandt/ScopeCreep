@@ -1,7 +1,6 @@
 //! Commands and hotkeys at the pure seam (#146, ADR 0036): the defaults are the layout shortcuts as they were,
 //! assigning, clearing and resetting, conflicts and reserved keys, and the hotkeys file.
 use scopecreep::commands::{Command, Hotkey, Hotkeys, Key, Refused};
-use scopecreep::layouts::SLOTS;
 use winit::keyboard::KeyCode;
 
 fn key(name: &str) -> Key {
@@ -17,19 +16,14 @@ fn ctrl_shift(name: &str) -> Hotkey {
 }
 
 #[test]
-fn ctrl_digits_show_a_layout_and_ctrl_shift_digits_save_one() {
+fn ctrl_digits_go_to_a_page_and_ctrl_shift_digits_do_nothing_any_more() {
     let hotkeys = Hotkeys::default();
-    assert_eq!(
-        hotkeys.command_for(ctrl("1")),
-        Some(Command::RecallLayout(0))
-    );
-    assert_eq!(
-        hotkeys.command_for(ctrl("9")),
-        Some(Command::RecallLayout(8))
-    );
+    assert_eq!(hotkeys.command_for(ctrl("1")), Some(Command::GoToPage(0)));
+    assert_eq!(hotkeys.command_for(ctrl("9")), Some(Command::GoToPage(8)));
     assert_eq!(
         hotkeys.command_for(ctrl_shift("3")),
-        Some(Command::SaveLayout(2))
+        None,
+        "the save-into-slot Commands are gone"
     );
 }
 
@@ -55,18 +49,48 @@ fn other_keys_do_nothing_by_default() {
 }
 
 #[test]
-fn every_slot_has_a_show_and_a_save_command() {
+fn every_page_up_to_nine_has_a_go_to_command_and_the_save_commands_are_gone() {
     let all = Command::all();
     assert_eq!(
         all.len(),
-        1 + 2 * SLOTS + 6,
-        "Default layout, show and save each slot, the Fit toggle, fill the Window, the legends, add and close a Panel, undo a layout change"
+        1 + 9 + 3 + 6,
+        "Default layout, go to each of nine pages, new, duplicate and delete page, the Fit toggle, fill the Window, the legends, add and close a Panel, undo a layout change"
     );
-    for slot in 0..SLOTS {
-        assert!(all.contains(&Command::RecallLayout(slot)));
-        assert!(all.contains(&Command::SaveLayout(slot)));
+    for page in 0..9 {
+        assert!(all.contains(&Command::GoToPage(page)));
     }
-    assert_eq!(Command::RecallLayout(3).label(), "Show layout 4");
+    assert_eq!(Command::GoToPage(3).label(), "Go to page 4");
+    assert!(
+        all.iter()
+            .all(|c| !c.id().starts_with("layout-save") && !c.id().starts_with("layout-recall")),
+        "no slot commands"
+    );
+    for command in [
+        Command::NewPage,
+        Command::DuplicatePage,
+        Command::DeletePage,
+    ] {
+        assert!(all.contains(&command));
+        assert_eq!(Hotkeys::default().get(command), None, "no default hotkey");
+    }
+}
+
+#[test]
+fn a_saved_hotkey_line_that_names_a_removed_command_is_skipped() {
+    let hotkeys =
+        Hotkeys::from_text("hotkeys 1\nlayout-save-1 F2\nlayout-recall-2 F3\npage-go-3 F4\n");
+    assert_eq!(hotkeys.command_for(Hotkey::new(key("F2"))), None);
+    assert_eq!(hotkeys.command_for(Hotkey::new(key("F3"))), None);
+    assert_eq!(
+        hotkeys.get(Command::GoToPage(1)),
+        Some(ctrl("2")),
+        "the line for the removed command changed nothing"
+    );
+    assert_eq!(
+        hotkeys.get(Command::GoToPage(2)),
+        Some(Hotkey::new(key("F4"))),
+        "a line for a command that exists still applies"
+    );
 }
 
 #[test]
@@ -88,9 +112,9 @@ fn a_hotkey_is_shown_as_desktop_menus_show_it() {
 fn assigning_moves_the_command_to_the_new_hotkey() {
     let mut hotkeys = Hotkeys::default();
     let f5 = Hotkey::new(key("F5"));
-    assert_eq!(hotkeys.assign(Command::RecallLayout(0), f5), Ok(()));
-    assert_eq!(hotkeys.get(Command::RecallLayout(0)), Some(f5));
-    assert_eq!(hotkeys.command_for(f5), Some(Command::RecallLayout(0)));
+    assert_eq!(hotkeys.assign(Command::GoToPage(0), f5), Ok(()));
+    assert_eq!(hotkeys.get(Command::GoToPage(0)), Some(f5));
+    assert_eq!(hotkeys.command_for(f5), Some(Command::GoToPage(0)));
     assert_eq!(
         hotkeys.command_for(ctrl("1")),
         None,
@@ -111,8 +135,8 @@ fn a_conflict_names_the_other_command_and_cancel_changes_nothing() {
     let mut hotkeys = Hotkeys::default();
     let before = hotkeys.clone();
     assert_eq!(
-        hotkeys.assign(Command::RecallLayout(0), ctrl("2")),
-        Err(Refused::Conflict(Command::RecallLayout(1)))
+        hotkeys.assign(Command::GoToPage(0), ctrl("2")),
+        Err(Refused::Conflict(Command::GoToPage(1)))
     );
     assert_eq!(hotkeys, before, "cancelling leaves every hotkey as it was");
 }
@@ -120,18 +144,15 @@ fn a_conflict_names_the_other_command_and_cancel_changes_nothing() {
 #[test]
 fn replace_takes_the_hotkey_from_the_other_command() {
     let mut hotkeys = Hotkeys::default();
-    assert_eq!(hotkeys.replace(Command::RecallLayout(0), ctrl("2")), Ok(()));
-    assert_eq!(
-        hotkeys.command_for(ctrl("2")),
-        Some(Command::RecallLayout(0))
-    );
-    assert_eq!(hotkeys.get(Command::RecallLayout(1)), None);
+    assert_eq!(hotkeys.replace(Command::GoToPage(0), ctrl("2")), Ok(()));
+    assert_eq!(hotkeys.command_for(ctrl("2")), Some(Command::GoToPage(0)));
+    assert_eq!(hotkeys.get(Command::GoToPage(1)), None);
 }
 
 #[test]
 fn reassigning_the_same_hotkey_is_not_a_conflict() {
     let mut hotkeys = Hotkeys::default();
-    assert_eq!(hotkeys.assign(Command::RecallLayout(0), ctrl("1")), Ok(()));
+    assert_eq!(hotkeys.assign(Command::GoToPage(0), ctrl("1")), Ok(()));
     assert_eq!(hotkeys, Hotkeys::default());
 }
 
@@ -165,23 +186,20 @@ fn reserved_keys_are_refused() {
 #[test]
 fn clearing_leaves_the_command_without_a_hotkey() {
     let mut hotkeys = Hotkeys::default();
-    hotkeys.clear(Command::SaveLayout(4));
-    assert_eq!(hotkeys.get(Command::SaveLayout(4)), None);
-    assert_eq!(hotkeys.command_for(ctrl_shift("5")), None);
+    hotkeys.clear(Command::GoToPage(4));
+    assert_eq!(hotkeys.get(Command::GoToPage(4)), None);
+    assert_eq!(hotkeys.command_for(ctrl("5")), None);
 }
 
 #[test]
 fn reset_puts_one_command_back_and_takes_its_default_from_whoever_had_it() {
     let mut hotkeys = Hotkeys::default();
     hotkeys
-        .assign(Command::RecallLayout(0), Hotkey::new(key("F1")))
+        .assign(Command::GoToPage(0), Hotkey::new(key("F1")))
         .unwrap();
     hotkeys.assign(Command::DefaultLayout, ctrl("1")).unwrap();
-    hotkeys.reset(Command::RecallLayout(0));
-    assert_eq!(
-        hotkeys.command_for(ctrl("1")),
-        Some(Command::RecallLayout(0))
-    );
+    hotkeys.reset(Command::GoToPage(0));
+    assert_eq!(hotkeys.command_for(ctrl("1")), Some(Command::GoToPage(0)));
     assert_eq!(
         hotkeys.get(Command::DefaultLayout),
         None,
@@ -192,8 +210,8 @@ fn reset_puts_one_command_back_and_takes_its_default_from_whoever_had_it() {
 #[test]
 fn reset_all_puts_every_command_back() {
     let mut hotkeys = Hotkeys::default();
-    hotkeys.clear(Command::RecallLayout(0));
-    hotkeys.replace(Command::SaveLayout(0), ctrl("2")).unwrap();
+    hotkeys.clear(Command::GoToPage(0));
+    hotkeys.replace(Command::DuplicatePage, ctrl("2")).unwrap();
     hotkeys.reset_all();
     assert_eq!(hotkeys, Hotkeys::default());
 }
@@ -201,12 +219,12 @@ fn reset_all_puts_every_command_back() {
 #[test]
 fn the_file_round_trips() {
     let mut hotkeys = Hotkeys::default();
-    hotkeys.clear(Command::RecallLayout(2));
+    hotkeys.clear(Command::GoToPage(2));
     hotkeys
         .replace(Command::DefaultLayout, ctrl_shift("9").with_alt())
         .unwrap();
     hotkeys
-        .assign(Command::RecallLayout(0), Hotkey::new(key("Slash")))
+        .assign(Command::GoToPage(0), Hotkey::new(key("Slash")))
         .unwrap();
     assert_eq!(Hotkeys::from_text(&hotkeys.to_text()), hotkeys);
     assert_eq!(
@@ -218,31 +236,31 @@ fn the_file_round_trips() {
 #[test]
 fn a_damaged_line_falls_back_to_that_commands_default() {
     let text = "hotkeys 1\n\
-                layout-recall-1 F2\n\
-                layout-recall-2 Ctrl+Banana\n\
-                layout-recall-3\n\
+                page-go-1 F2\n\
+                page-go-2 Ctrl+Banana\n\
+                page-go-3\n\
                 no-such-command F3\n\
-                layout-recall-4 Escape\n\
-                layout-save-1 none\n";
+                page-go-4 Escape\n\
+                page-go-5 none\n";
     let hotkeys = Hotkeys::from_text(text);
     assert_eq!(
-        hotkeys.get(Command::RecallLayout(0)),
+        hotkeys.get(Command::GoToPage(0)),
         Some(Hotkey::new(key("F2")))
     );
-    assert_eq!(hotkeys.get(Command::RecallLayout(1)), Some(ctrl("2")));
-    assert_eq!(hotkeys.get(Command::RecallLayout(2)), Some(ctrl("3")));
+    assert_eq!(hotkeys.get(Command::GoToPage(1)), Some(ctrl("2")));
+    assert_eq!(hotkeys.get(Command::GoToPage(2)), Some(ctrl("3")));
     assert_eq!(
-        hotkeys.get(Command::RecallLayout(3)),
+        hotkeys.get(Command::GoToPage(3)),
         Some(ctrl("4")),
         "reserved"
     );
-    assert_eq!(hotkeys.get(Command::SaveLayout(0)), None);
+    assert_eq!(hotkeys.get(Command::GoToPage(4)), None);
 }
 
 #[test]
 fn a_file_of_another_version_or_rubbish_gives_the_defaults() {
     assert_eq!(
-        Hotkeys::from_text("hotkeys 2\nlayout-recall-1 F2\n"),
+        Hotkeys::from_text("hotkeys 2\npage-go-1 F2\n"),
         Hotkeys::default()
     );
     assert_eq!(Hotkeys::from_text("\u{0}\u{1}garbage"), Hotkeys::default());
@@ -251,22 +269,19 @@ fn a_file_of_another_version_or_rubbish_gives_the_defaults() {
 
 #[test]
 fn a_hand_edited_file_that_shares_a_hotkey_keeps_the_defaults_for_the_clash() {
-    // Show layout 1 is given Show layout 2's hotkey, which keeps it: the edit is dropped, not the default.
-    let hotkeys = Hotkeys::from_text("hotkeys 1\nlayout-recall-1 Ctrl+2\n");
-    assert_eq!(
-        hotkeys.command_for(ctrl("2")),
-        Some(Command::RecallLayout(1))
-    );
-    assert_eq!(hotkeys.get(Command::RecallLayout(0)), Some(ctrl("1")));
+    // Go to page 1 is given Go to page 2's hotkey, which keeps it: the edit is dropped, not the default.
+    let hotkeys = Hotkeys::from_text("hotkeys 1\npage-go-1 Ctrl+2\n");
+    assert_eq!(hotkeys.command_for(ctrl("2")), Some(Command::GoToPage(1)));
+    assert_eq!(hotkeys.get(Command::GoToPage(0)), Some(ctrl("1")));
     // Two edits on one hotkey: neither command takes it.
-    let hotkeys = Hotkeys::from_text("hotkeys 1\nlayout-recall-1 F4\nlayout-recall-2 F4\n");
+    let hotkeys = Hotkeys::from_text("hotkeys 1\npage-go-1 F4\npage-go-2 F4\n");
     assert_eq!(hotkeys, Hotkeys::default());
 }
 
 #[test]
 fn a_saved_replace_reads_back_whichever_order_the_lines_are_in() {
     let mut hotkeys = Hotkeys::default();
-    hotkeys.replace(Command::SaveLayout(8), ctrl("1")).unwrap();
+    hotkeys.replace(Command::DuplicatePage, ctrl("1")).unwrap();
     let text = hotkeys.to_text();
     let mut lines: Vec<&str> = text.lines().collect();
     lines[1..].reverse();

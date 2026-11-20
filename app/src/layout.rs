@@ -20,6 +20,7 @@ pub fn min_window(grid: &LayoutTree, menus: &[DropMenu]) -> [f32; 2] {
     let area = grid.min_area(MARGIN, min_panel_size(1.0));
     let chrome = MenuBar::height(1.0)
         + crate::components::BarKind::Top.height(1.0)
+        + crate::page_bar::PageBar::height(1.0)
         + MARGIN
         + 2.0 * style::SPACE_STATUS_ROW;
     let (menu_width, menu_height) = menus
@@ -38,6 +39,7 @@ pub fn min_window(grid: &LayoutTree, menus: &[DropMenu]) -> [f32; 2] {
         (area[0] + 2.0 * MARGIN)
             .max(menu_width)
             .max(bar_width)
+            .max(crate::page_bar::PageBar::min_width(1.0))
             .ceil(),
         (area[1] + chrome)
             .max(MenuBar::height(1.0) + menu_height)

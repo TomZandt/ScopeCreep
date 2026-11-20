@@ -4,7 +4,6 @@
 use scopecreep::commands::{Command, Hotkeys};
 use scopecreep::components::*;
 use scopecreep::hotkeys_panel::HotkeysPanel;
-use scopecreep::layouts::Layouts;
 use scopecreep::menu_bar::{self, AddEntry, LayoutMode, MenuAction, add_menu, layout_menu};
 use scopecreep::settings::{Menu, MenuRow, Settings};
 use scopecreep::style;
@@ -168,7 +167,7 @@ fn labels(menu: &menu_bar::Menu) -> Vec<(String, bool)> {
 #[test]
 fn the_layout_menu_has_add_panel_and_close_that_run_their_commands() {
     let hotkeys = Hotkeys::default();
-    let menu = layout_menu(&Layouts::default(), &hotkeys, None, LayoutMode::Show, None);
+    let menu = layout_menu(&["Main".to_string()], 0, &hotkeys, LayoutMode::Show);
     let find = |label: &str| {
         menu.drop
             .entries
@@ -194,7 +193,7 @@ fn a_hotkey_given_to_add_panel_shows_beside_its_entry() {
             .assign(Command::AddPanel, scopecreep::commands::Hotkey::ctrl(key))
             .is_ok()
     );
-    let menu = layout_menu(&Layouts::default(), &hotkeys, None, LayoutMode::Show, None);
+    let menu = layout_menu(&["Main".to_string()], 0, &hotkeys, LayoutMode::Show);
     let shown = menu.drop.entries.iter().find_map(|e| match e {
         MenuEntry::Item(i) if i.label == "Add panel…" => Some(i.hotkey.clone()),
         _ => None,

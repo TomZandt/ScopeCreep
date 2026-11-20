@@ -843,7 +843,11 @@ impl DisplaySet {
         surface: [f32; 2],
         scale: f32,
     ) {
-        self.read().displays[index].draw(pass, area, surface, scale);
+        let shared = self.read();
+        // A hidden Panel (another page, a closed Panel, a tab not shown) draws nothing.
+        if !shared.off.get(index).copied().unwrap_or(false) {
+            shared.displays[index].draw(pass, area, surface, scale);
+        }
     }
 
     pub fn scale_texts(&self, index: usize, area: [f32; 4], scale: f32) -> Vec<ScaleText> {

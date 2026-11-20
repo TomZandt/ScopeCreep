@@ -3,7 +3,6 @@
 //! something runs a [`Command`] from the command table, so it does what its hotkey does, and shows that hotkey.
 use crate::commands::{Command, Hotkeys};
 use crate::components::{DropMenu, MenuBar, MenuEntry, MenuItem};
-use crate::layouts::{Layouts, Rename, SLOTS};
 
 /// The menus on the bar, left to right.
 pub const LAYOUT: usize = 0;
@@ -50,16 +49,27 @@ impl BarState {
     }
 }
 
-/// What the Layout menu is showing: the layouts to show, or the slots to save into or rename (the menu's own
-/// entries switch between them, so no click needs a modifier).
+/// What the Layout menu is showing: the pages and what to do with them, or the templates a new page can start from
+/// (the menu's own entries switch between them, so no click needs a modifier), or the Add list.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum LayoutMode {
     #[default]
     Show,
-    Save,
-    Rename,
+    /// "New page from": Empty page, Default layout and Copy of this page (ADR 0041, #212).
+    NewFrom,
     /// The list of displays to add as a Panel (ADR 0038, #206).
     Add,
+}
+
+/// What a new page starts from (ADR 0041).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Template {
+    /// No Panel at all.
+    Empty,
+    /// The default layout: the 7 Panels.
+    Default,
+    /// A copy of the current page, with each Panel's settings.
+    Copy,
 }
 
 /// What a click on a menu entry does.
@@ -69,21 +79,18 @@ pub enum MenuAction {
     Run(Command),
     /// Switch the Layout menu to other entries; it stays open.
     Mode(LayoutMode),
-    /// Start typing a new name for the layout in a slot; the menu stays open.
-    Rename(usize),
+    /// Go to page `.0` and close the menu.
+    Page(usize),
+    /// A new page from a template.
+    NewPage(Template),
+    /// Start typing a new name for the current page in its tab, and close the menu.
+    RenamePage,
     /// Add Panel `.0` to the page.
     Add(usize),
     /// Show the Hotkeys panel in place of the Settings menu.
     OpenHotkeys,
     /// Something in the Hotkeys panel.
     Hotkeys(crate::hotkeys_panel::PanelAction),
-}
-
-/// What is on screen now: the default layout, or the arrangement saved in a slot.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum Current {
-    Default,
-    Slot(usize),
 }
 
 /// A menu with what each entry does (`None` for a separator, a heading or a disabled entry).
@@ -122,41 +129,23 @@ fn hotkey_text(hotkeys: &Hotkeys, command: Command) -> String {
         .map_or_else(String::new, |h| h.to_string())
 }
 
-fn slot_text(layouts: &Layouts, slot: usize, renaming: Option<&Rename>) -> String {
-    match renaming.filter(|r| r.slot == slot) {
-        Some(r) => format!("{}  {}|", slot + 1, r.text),
-        None => format!("{}  {}", slot + 1, layouts.name(slot).unwrap_or("empty")),
-    }
-}
-
-/// The Layout menu.
+/// The Layout menu (ADR 0041, #212).
 ///
-/// - Show: Default layout, then the nine slots. A saved slot shows its layout (with Ctrl+digit beside it); an
-///   empty one says so and saves the arrangement on screen into it (with Ctrl+Shift+digit beside it), so a slot
-///   is filled with one click. The layout on screen is marked. Under them, "Save current layout into…" and
-///   "Rename layout…" (greyed while no slot is saved).
-/// - Save: the nine slots, each saving into itself; a saved one is replaced but keeps its name.
-/// - Rename: the saved slots; a click starts typing the name into the row.
-///
-/// Save and Rename end with "Back".
-pub fn layout_menu(
-    layouts: &Layouts,
-    hotkeys: &Hotkeys,
-    current: Option<Current>,
-    mode: LayoutMode,
-    renaming: Option<&Rename>,
-) -> Menu {
-    layout_menu_with_undo(layouts, hotkeys, current, mode, renaming, true)
+/// - Show: every page (the current one marked, the first nine with their Ctrl+number beside them), then New page
+///   from, Duplicate page, Rename page and Delete page (greyed with one page), then Add panel, Close panel,
+///   Undo layout change and Default layout.
+/// - NewFrom: Empty page, Default layout (the 7 Panels) and Copy of this page, then "Back".
+pub fn layout_menu(names: &[String], current: usize, hotkeys: &Hotkeys, mode: LayoutMode) -> Menu {
+    layout_menu_with_undo(names, current, hotkeys, mode, true)
 }
 
 /// [`layout_menu`] that knows whether there is a layout change to undo: "Undo layout change" is greyed when not.
 /// ([`layout_menu`] itself shows it enabled, for the menus that only measure sizes.)
 pub fn layout_menu_with_undo(
-    layouts: &Layouts,
+    names: &[String],
+    current: usize,
     hotkeys: &Hotkeys,
-    current: Option<Current>,
     mode: LayoutMode,
-    renaming: Option<&Rename>,
     can_undo: bool,
 ) -> Menu {
     let mut menu = Menu::new();
@@ -168,52 +157,49 @@ pub fn layout_menu_with_undo(
             on,
         })
     };
-    let filled = |slot: usize| layouts.name(slot).is_some();
     match mode {
         // The Add list is [`add_menu`], which needs to know what is on the page; as a mode it opens as Show.
         LayoutMode::Show | LayoutMode::Add => {
-            let default = Command::DefaultLayout;
-            menu.push(
-                item(
-                    "Default layout".to_string(),
-                    Some(default),
-                    true,
-                    current == Some(Current::Default),
-                ),
-                Some(MenuAction::Run(default)),
-            );
-            menu.push(MenuEntry::Separator, None);
-            for slot in 0..SLOTS {
-                let command = if filled(slot) {
-                    Command::RecallLayout(slot)
-                } else {
-                    Command::SaveLayout(slot)
-                };
+            for (i, name) in names.iter().enumerate() {
+                let command = (i < crate::pages::NUMBERED).then_some(Command::GoToPage(i));
                 menu.push(
-                    item(
-                        slot_text(layouts, slot, None),
-                        Some(command),
-                        true,
-                        current == Some(Current::Slot(slot)),
-                    ),
-                    Some(MenuAction::Run(command)),
+                    item(format!("{}  {}", i + 1, name), command, true, i == current),
+                    Some(MenuAction::Page(i)),
                 );
             }
             menu.push(MenuEntry::Separator, None);
             menu.push(
-                item("Save current layout into…".to_string(), None, true, false),
-                Some(MenuAction::Mode(LayoutMode::Save)),
+                item("New page from…".to_string(), None, true, false),
+                Some(MenuAction::Mode(LayoutMode::NewFrom)),
             );
-            let any = (0..SLOTS).any(filled);
             menu.push(
-                item("Rename layout…".to_string(), None, any, false),
-                Some(MenuAction::Mode(LayoutMode::Rename)),
+                item(
+                    "Duplicate page".to_string(),
+                    Some(Command::DuplicatePage),
+                    true,
+                    false,
+                ),
+                Some(MenuAction::Run(Command::DuplicatePage)),
+            );
+            menu.push(
+                item("Rename page".to_string(), None, true, false),
+                Some(MenuAction::RenamePage),
+            );
+            menu.push(
+                item(
+                    "Delete page".to_string(),
+                    Some(Command::DeletePage),
+                    names.len() > 1,
+                    false,
+                ),
+                Some(MenuAction::Run(Command::DeletePage)),
             );
             menu.push(MenuEntry::Separator, None);
             for (label, command, enabled) in [
                 ("Add panel…", Command::AddPanel, true),
                 ("Close panel", Command::ClosePanel, true),
                 ("Undo layout change", Command::UndoLayout, can_undo),
+                ("Default layout", Command::DefaultLayout, true),
             ] {
                 menu.push(
                     item(label.to_string(), Some(command), enabled, false),
@@ -221,35 +207,28 @@ pub fn layout_menu_with_undo(
                 );
             }
         }
-        LayoutMode::Save => {
-            menu.push(
-                MenuEntry::Heading("Save current layout into".to_string()),
-                None,
+        LayoutMode::NewFrom => {
+            menu.push(MenuEntry::Heading("New page from".to_string()), None);
+            let default = format!(
+                "Default layout ({} Panels)",
+                crate::layout_tree::default_names().len()
             );
-            for slot in 0..SLOTS {
-                let command = Command::SaveLayout(slot);
+            for (label, template, command) in [
+                (
+                    "Empty page".to_string(),
+                    Template::Empty,
+                    Some(Command::NewPage),
+                ),
+                (default, Template::Default, None),
+                (
+                    "Copy of this page".to_string(),
+                    Template::Copy,
+                    Some(Command::DuplicatePage),
+                ),
+            ] {
                 menu.push(
-                    item(slot_text(layouts, slot, None), Some(command), true, false),
-                    Some(MenuAction::Run(command)),
-                );
-            }
-            menu.push(MenuEntry::Separator, None);
-            menu.push(
-                item("Back".to_string(), None, true, false),
-                Some(MenuAction::Mode(LayoutMode::Show)),
-            );
-        }
-        LayoutMode::Rename => {
-            menu.push(MenuEntry::Heading("Rename layout".to_string()), None);
-            for slot in 0..SLOTS {
-                menu.push(
-                    item(
-                        slot_text(layouts, slot, renaming),
-                        None,
-                        filled(slot),
-                        false,
-                    ),
-                    Some(MenuAction::Rename(slot)),
+                    item(label, command, true, false),
+                    Some(MenuAction::NewPage(template)),
                 );
             }
             menu.push(MenuEntry::Separator, None);
@@ -326,19 +305,13 @@ pub fn settings_menu() -> Menu {
 pub fn largest_menus() -> Vec<DropMenu> {
     use crate::commands::{Hotkey, Key};
     use crate::hotkeys_panel::{HotkeysPanel, State};
-    let mut layouts = Layouts::default();
-    let grid = crate::layout_tree::LayoutTree::automatic(1);
     let long = "W".repeat(crate::layouts::NAME_LENGTH);
-    for slot in 0..SLOTS {
-        layouts.save(slot, &grid, &["x"]);
-        layouts.rename(slot, &long);
-    }
-    let typing = Rename::start(&layouts, 0);
+    let names: Vec<String> = (0..crate::pages::MAX_PAGES).map(|_| long.clone()).collect();
     let mut hotkeys = Hotkeys::default();
     let widest = Key::named("PageDown").map(|k| Hotkey::ctrl(k).with_shift().with_alt());
-    let mut menus: Vec<DropMenu> = [LayoutMode::Show, LayoutMode::Save, LayoutMode::Rename]
+    let mut menus: Vec<DropMenu> = [LayoutMode::Show, LayoutMode::NewFrom]
         .into_iter()
-        .map(|mode| layout_menu(&layouts, &hotkeys, None, mode, typing.as_ref()).drop)
+        .map(|mode| layout_menu(&names, 0, &hotkeys, mode).drop)
         .collect();
     menus.push(settings_menu().drop);
     let names = crate::layout_tree::default_names();

@@ -293,6 +293,47 @@ fn when_the_gpu_has_no_memory_for_the_waveform_the_window_says_so_and_the_pictur
 }
 
 #[test]
+fn panels_on_a_page_that_is_not_current_are_not_measured_or_drawn() {
+    let mut b = Bench::new("loop-pages", Some(DWG_REC709));
+    b.play([0.5, 0.5, 0.5]);
+    let grey = b.shown();
+    assert_ne!(
+        grey,
+        [0, 0, 0],
+        "the Picture View draws while it is on the page"
+    );
+    // Only the counting display (Panel 1) is on the page shown.
+    b.set.set_shown(&[false, true]);
+    b.rig.step(&mut b.feed);
+    let before = b.counted();
+    b.play([0.8, 0.8, 0.8]);
+    assert_eq!(b.counted(), before + 1, "a Panel on the page is measured");
+    assert_eq!(b.shown(), [0, 0, 0], "the Picture View is not drawn");
+    // Nothing on the page: no display measures a new frame.
+    b.set.set_shown(&[false, false]);
+    b.rig.step(&mut b.feed);
+    let before = b.counted();
+    b.play([0.3, 0.3, 0.3]);
+    assert_eq!(
+        b.counted(),
+        before,
+        "a Panel on another page is not measured"
+    );
+    // The Picture View's page comes back: it measures the frame on screen again, so it shows the latest picture.
+    b.set.set_shown(&[true, true]);
+    let changed = b.rig.step(&mut b.feed);
+    assert!(changed.picture, "the Panels that came back measured");
+    let latest = b.shown();
+    assert_ne!(latest, [0, 0, 0]);
+    assert_ne!(
+        latest, grey,
+        "the picture is the 0.3 grey played while it was away"
+    );
+    b.play([0.3, 0.3, 0.3]);
+    assert_eq!(b.shown(), latest, "as a frame arriving would have made it");
+}
+
+#[test]
 fn a_sender_short_of_gpu_memory_is_shown_in_the_window() {
     let mut b = Bench::new("loop-short-sender", Some(DWG_REC709));
     b.play([0.5, 0.5, 0.5]);

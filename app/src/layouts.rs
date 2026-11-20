@@ -27,7 +27,7 @@ pub struct Layouts {
 }
 
 /// A name the user typed, made safe to keep: no control characters, at most [`NAME_LENGTH`] characters, trimmed.
-fn clean(name: &str) -> String {
+pub(crate) fn clean(name: &str) -> String {
     name.chars()
         .filter(|c| !c.is_control())
         .take(NAME_LENGTH)
@@ -59,6 +59,13 @@ impl Layouts {
     pub fn recall(&self, slot: usize, names: &[&str]) -> Option<LayoutTree> {
         let saved = self.slots.get(slot)?.as_ref()?;
         Some(LayoutTree::from_text(names, &saved.grid))
+    }
+
+    /// The arrangement saved in `slot`, or `None` when the slot is empty or what it holds cannot be read (where
+    /// [`Layouts::recall`] gives the default layout): the migration to pages drops such a layout.
+    pub fn recall_readable(&self, slot: usize, names: &[&str]) -> Option<LayoutTree> {
+        let saved = self.slots.get(slot)?.as_ref()?;
+        LayoutTree::parse_text(names, &saved.grid)
     }
 
     /// The name of the layout in `slot`, if it holds one.

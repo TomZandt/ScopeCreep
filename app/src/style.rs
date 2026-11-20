@@ -154,6 +154,8 @@ pub const SPACE_MENU_HOTKEY_GAP: f32 = 28.0;
 /// The settings button on a title bar (square), and the gap between a name and its tags.
 pub const SPACE_SETTINGS_BUTTON: f32 = 20.0;
 pub const SPACE_TAG_GAP: f32 = 10.0;
+/// The Page bar under the Colour Setup line (ADR 0041): its height. Its tabs, "+" and Add panel button are chips.
+pub const SPACE_PAGE_BAR: f32 = 28.0;
 /// A tab in a tab group's title bar (#211): side padding, least and greatest width, the gap between tabs, the
 /// active tab's underline, and the overflow chip's width when the tabs do not all fit.
 pub const SPACE_TAB_PAD: f32 = 8.0;

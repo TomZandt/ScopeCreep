@@ -29,13 +29,14 @@ use scopecreep::flat_rects::FlatRects;
 use scopecreep::gpu_frame::FrameUploader;
 use scopecreep::hotkeys_panel::HotkeysPanel;
 use scopecreep::layout::MARGIN;
-use scopecreep::layout_history::LayoutHistory;
 use scopecreep::layout_tree::{Border, Dir, Edge, LayoutTree, Press};
-use scopecreep::layouts::{Layouts, Rename};
-use scopecreep::menu_bar::{self, AddEntry, BarState, Current, LayoutMode, MenuAction};
+use scopecreep::layouts::Layouts;
+use scopecreep::menu_bar::{self, AddEntry, BarState, LayoutMode, MenuAction, Template};
 use scopecreep::monitor::Monitor;
 use scopecreep::output_conversion::OutputConversion;
+use scopecreep::page_bar::{self, BarPart, PageBar};
 use scopecreep::page_edit::{self, Room};
+use scopecreep::pages::{self, PageRename, Pages};
 use scopecreep::panel_grid::{self, PanelLayout, min_panel_size};
 use scopecreep::resolve_helper::ScriptHelper;
 use scopecreep::settings::{Amount, Menu, PanelAction, PanelSettings};
@@ -97,6 +98,21 @@ fn grid_file() -> Option<PathBuf> {
         .map(PathBuf::from)
         .or_else(|| std::env::var_os("HOME").map(|h| PathBuf::from(h).join(".config")))?;
     Some(base.join("scopecreep").join("panel-grid"))
+}
+
+/// Where the pages are remembered (ADR 0041): the layout of every page and which is shown. `panel-grid` and
+/// `layouts` (the nine named layouts) are only read, once, to make the first pages.
+fn pages_file() -> Option<PathBuf> {
+    grid_file().map(|p| p.with_file_name("pages"))
+}
+
+/// Remember the pages.
+fn write_pages(pages: &Pages, keys: &[String]) {
+    if let Some(path) = pages_file()
+        && let Err(e) = scopecreep::settings::save(&path, &pages.to_text(&as_strs(keys)))
+    {
+        eprintln!("scopecreep: cannot remember the pages: {e}");
+    }
 }
 
 /// Where the Panels' settings are remembered, next to the border positions.
@@ -251,17 +267,21 @@ struct AppWindow {
     surface: wgpu::Surface<'static>,
     config: wgpu::SurfaceConfiguration,
     displays: DisplaySet,
-    grid: LayoutTree,
-    /// The layout changes that can be undone (session only).
-    layout_history: LayoutHistory,
+    /// The pages: each its own layout tree, focus and undo (ADR 0041).
+    pages: Pages,
+    /// The page tab last clicked and when, for a double-click to rename it.
+    last_tab_click: Option<(usize, std::time::Instant)>,
+    /// Where the Page bar's **+** and Add panel button were last drawn (device pixels), and the one a bar menu drops
+    /// from instead of its title, while the menu was opened from it.
+    plus_rect: [f32; 4],
+    add_rect: [f32; 4],
+    bar_anchor: Option<[f32; 4]>,
     /// Every Panel's settings, shared with the Feed thread (which gives them to the displays).
     settings: Arc<Mutex<PanelSettings>>,
     /// The right-click menu, while open, with where it opened.
     menu: Option<(Menu, [f32; 2])>,
     /// The key of the slider being dragged in the menu, while the button is down.
     slider_drag: Option<&'static str>,
-    /// The saved layouts (#98).
-    layouts: Layouts,
     /// The menu bar (#147): which of its menus is open, the title under the pointer, and what the Layout menu
     /// shows. A bar menu and a Panel's popover are never open together.
     bar: BarState,
@@ -275,8 +295,8 @@ struct AppWindow {
     full: Option<usize>,
     /// The hotkey of each command (ADR 0036).
     hotkeys: Hotkeys,
-    /// A layout's name being typed in the Layout menu.
-    renaming: Option<Rename>,
+    /// A page's name being typed in its tab.
+    renaming: Option<PageRename>,
     modifiers: ModifiersState,
     flat: FlatRects,
     menu_renderer: TextRenderer,
@@ -421,14 +441,35 @@ impl AppWindow {
             scopecreep::zoom::link_remembered(&settings.lock().unwrap()),
             0,
         );
+        let read = |path: Option<PathBuf>| path.and_then(|p| std::fs::read_to_string(p).ok());
+        let (pages_text, layouts_text, grid_text) =
+            (read(pages_file()), read(layouts_file()), read(grid_file()));
+        // Further instances ("Clean picture 2") that a saved page names are made again before it is read.
+        let saved: Vec<&str> = [&pages_text, &layouts_text, &grid_text]
+            .into_iter()
+            .flatten()
+            .map(String::as_str)
+            .collect();
+        pages::recreate_saved_copies(&displays, &saved);
         let keys = displays.keys();
         let names = as_strs(&keys);
-        let grid = grid_file()
-            .and_then(|path| std::fs::read_to_string(path).ok())
-            .map_or_else(
-                || LayoutTree::default_for(&names),
-                |text| LayoutTree::from_text(&names, &text),
-            );
+        let mut pages = pages_text
+            .as_deref()
+            .and_then(|text| Pages::from_text(&names, text))
+            .unwrap_or_else(|| {
+                // The first run with pages: Main holds the arrangement there was, then the named layouts follow.
+                let main = grid_text.as_deref().map_or_else(
+                    || LayoutTree::default_for(&names),
+                    |text| LayoutTree::from_text(&names, text),
+                );
+                let layouts = layouts_text
+                    .as_deref()
+                    .map_or_else(Layouts::default, Layouts::from_text);
+                Pages::migrate(main, &layouts, &names)
+            });
+        pages.sweep(&displays, &mut settings.lock().unwrap());
+        pages.show_on(&displays);
+        write_pages(&pages, &displays.keys());
         let mut font_system = FontSystem::new();
         let cache = Cache::new(&device);
         let viewport = Viewport::new(&device, &cache);
@@ -521,14 +562,14 @@ impl AppWindow {
             surface,
             config,
             displays,
-            grid,
-            layout_history: LayoutHistory::default(),
+            pages,
+            last_tab_click: None,
+            plus_rect: [0.0; 4],
+            add_rect: [0.0; 4],
+            bar_anchor: None,
             settings,
             menu: None,
             slider_drag: None,
-            layouts: layouts_file()
-                .and_then(|path| std::fs::read_to_string(path).ok())
-                .map_or_else(Layouts::default, |text| Layouts::from_text(&text)),
             bar: BarState::default(),
             bar_hover: None,
             layout_mode: LayoutMode::Show,
@@ -602,7 +643,7 @@ impl AppWindow {
     fn tab_hit(&self) -> Option<(usize, tab_strip::TabHit)> {
         self.tab_strips.iter().enumerate().find_map(|(shown, s)| {
             let (strip, area) = s.as_ref()?;
-            let group = self.grid.tab_group(shown)?;
+            let group = self.pages.tree().tab_group(shown)?;
             Some((
                 shown,
                 match strip.hit(*area, self.cursor, self.scale)? {
@@ -618,7 +659,7 @@ impl AppWindow {
         if self.full.is_some() {
             return None;
         }
-        self.grid.press_at(
+        self.pages.tree().press_at(
             self.grid_area,
             self.grid_gap,
             self.cursor,
@@ -627,16 +668,9 @@ impl AppWindow {
         )
     }
 
-    /// Remember the layout.
+    /// Remember the pages.
     fn save_grid(&self) {
-        if let Some(path) = grid_file()
-            && let Err(e) = scopecreep::settings::save(
-                &path,
-                &self.grid.to_text(&as_strs(&self.displays.keys())),
-            )
-        {
-            eprintln!("scopecreep: cannot remember the Panel layout: {e}");
-        }
+        write_pages(&self.pages, &self.displays.keys());
     }
 
     /// Rest the hover on what is under the pointer: a Panel's title bar or the status line (never while a drag or
@@ -774,7 +808,7 @@ impl AppWindow {
         if let Some(panel) = self.pointer_panel.or(self.middle_panel) {
             self.display_pointer(panel, Pointer::Move(self.cursor));
         } else if let Some(border) = &self.drag {
-            self.grid.drag(
+            self.pages.tree_mut().drag(
                 border,
                 self.cursor,
                 self.grid_area,
@@ -820,27 +854,6 @@ impl AppWindow {
         }
     }
 
-    /// Remember the named layouts.
-    fn save_layouts(&self) {
-        if let Some(path) = layouts_file()
-            && let Err(e) = scopecreep::settings::save(&path, &self.layouts.to_text())
-        {
-            eprintln!("scopecreep: cannot remember the layouts: {e}");
-        }
-    }
-
-    /// What is on screen: the default layout, or the first slot whose saved arrangement it is.
-    fn current_layout(&self) -> Option<Current> {
-        let keys = self.displays.keys();
-        let names = as_strs(&keys);
-        if self.grid == LayoutTree::default_for(&names) {
-            return Some(Current::Default);
-        }
-        (0..scopecreep::layouts::SLOTS)
-            .find(|slot| self.layouts.recall(*slot, &names).as_ref() == Some(&self.grid))
-            .map(Current::Slot)
-    }
-
     /// The open bar menu, as it is now.
     fn bar_menu(&self) -> Option<menu_bar::Menu> {
         match self.bar.open? {
@@ -848,12 +861,11 @@ impl AppWindow {
                 Some(menu_bar::add_menu(&self.add_entries()))
             }
             menu_bar::LAYOUT => Some(menu_bar::layout_menu_with_undo(
-                &self.layouts,
+                &self.pages.names(),
+                self.pages.current(),
                 &self.hotkeys,
-                self.current_layout(),
                 self.layout_mode,
-                self.renaming.as_ref(),
-                self.layout_history.can_undo(),
+                self.pages.can_undo(),
             )),
             menu_bar::VIEW => Some(menu_bar::view_menu(
                 &self.hotkeys,
@@ -869,9 +881,12 @@ impl AppWindow {
 
     /// Where the open bar menu drops, under its title.
     fn bar_menu_rect(&self, menu: &menu_bar::Menu) -> Option<[f32; 4]> {
-        let title = *menu_bar::bar()
-            .title_rects(0.0, 0.0, self.scale)
-            .get(self.bar.open?)?;
+        let title = match self.bar_anchor {
+            Some(anchor) => anchor,
+            None => *menu_bar::bar()
+                .title_rects(0.0, 0.0, self.scale)
+                .get(self.bar.open?)?,
+        };
         Some(menu.drop.rect(
             title,
             [self.config.width as f32, self.config.height as f32],
@@ -894,6 +909,7 @@ impl AppWindow {
     /// menu opens as it first shows.
     fn reset_bar_menus(&mut self) {
         self.edge_add = None;
+        self.bar_anchor = None;
         self.finish_rename(true);
         self.layout_mode = LayoutMode::Show;
         self.hotkeys_panel = None;
@@ -946,7 +962,18 @@ impl AppWindow {
                 self.close_bar();
             }
             Some(MenuAction::Mode(mode)) => self.layout_mode = mode,
-            Some(MenuAction::Rename(slot)) => self.renaming = Rename::start(&self.layouts, slot),
+            Some(MenuAction::Page(page)) => {
+                self.close_bar();
+                self.go_to_page(page);
+            }
+            Some(MenuAction::NewPage(template)) => {
+                self.close_bar();
+                self.new_page(template);
+            }
+            Some(MenuAction::RenamePage) => {
+                self.close_bar();
+                self.renaming = PageRename::start(&self.pages, self.pages.current());
+            }
             Some(MenuAction::OpenHotkeys) => self.hotkeys_panel = Some(HotkeysPanel::default()),
             Some(MenuAction::Hotkeys(action)) => {
                 if let Some(panel) = self.hotkeys_panel.as_mut()
@@ -969,10 +996,121 @@ impl AppWindow {
     fn finish_rename(&mut self, accept: bool) {
         if let Some(rename) = self.renaming.take()
             && accept
-            && rename.accept(&mut self.layouts)
+            && rename.accept(&mut self.pages)
         {
-            self.save_layouts();
+            self.save_grid();
         }
+    }
+
+    /// Show page `page` (Ctrl+number, a tab or the Layout menu): its own tree, focus and undo; only its Panels
+    /// measure and draw.
+    fn go_to_page(&mut self, page: usize) {
+        if self.pages.go(page) {
+            self.full = None;
+            self.panels_changed();
+        }
+    }
+
+    /// The default layout's Panels, each its own: a first instance another page holds is not shared, a new
+    /// instance of that display is made for this page.
+    fn default_tree(&self) -> LayoutTree {
+        let held: Vec<bool> = (0..self.displays.len())
+            .map(|p| self.pages.holds_elsewhere(p))
+            .collect();
+        pages::default_tree(&self.displays, |p| held.get(p).copied().unwrap_or(false))
+    }
+
+    /// A new page from a template, shown (ADR 0041). Past the limit nothing is made and a notice says so.
+    fn new_page(&mut self, template: Template) {
+        let made = match template {
+            Template::Empty => self.pages.new_empty(self.displays.len()),
+            Template::Default => {
+                let tree = self.default_tree();
+                self.pages.new_with(tree)
+            }
+            Template::Copy => {
+                let mut settings = self.settings.lock().unwrap();
+                let displays = &self.displays;
+                self.pages.copy_current(|panel| {
+                    let Some(copy) = displays.duplicate(panel) else {
+                        return panel;
+                    };
+                    settings.copy_panel(&displays.key(panel), &displays.key(copy));
+                    copy
+                })
+            }
+        };
+        if made {
+            self.full = None;
+            self.layout_notice = None;
+            self.panels_changed();
+        } else {
+            self.layout_notice = Some(format!(
+                "A Window holds at most {} pages.",
+                pages::MAX_PAGES
+            ));
+            self.window.request_redraw();
+        }
+    }
+
+    /// Delete the current page (never the last); the Panels only it held are forgotten.
+    fn delete_page(&mut self) {
+        if self.pages.delete(self.pages.current()) {
+            self.full = None;
+            self.panels_changed();
+        }
+    }
+
+    /// The Page bar as it reads now.
+    fn page_bar(&self) -> PageBar {
+        PageBar {
+            names: self.pages.names(),
+            current: self.pages.current(),
+            rename: self.renaming.clone(),
+        }
+    }
+
+    /// The Page bar's part under the pointer.
+    fn page_bar_hit(&self) -> Option<BarPart> {
+        self.page_bar().hit(
+            page_bar::top(self.scale),
+            self.config.width as f32,
+            self.cursor,
+            self.scale,
+        )
+    }
+
+    /// A click on the Page bar: a tab goes to its page (a second click on it soon after renames it in place), **+**
+    /// offers New page from, Add panel opens the Add list.
+    fn page_bar_click(&mut self, part: BarPart) {
+        self.menu = None;
+        self.hover = None;
+        match part {
+            BarPart::Tab(page) => {
+                let double = self.last_tab_click.is_some_and(|(p, at)| {
+                    p == page && at.elapsed() < std::time::Duration::from_millis(400)
+                });
+                if double {
+                    self.last_tab_click = None;
+                    self.go_to_page(page);
+                    self.renaming = PageRename::start(&self.pages, page);
+                } else {
+                    self.last_tab_click = Some((page, std::time::Instant::now()));
+                    self.go_to_page(page);
+                }
+            }
+            BarPart::Plus => {
+                self.bar.open = Some(menu_bar::LAYOUT);
+                self.reset_bar_menus();
+                self.layout_mode = LayoutMode::NewFrom;
+                self.bar_anchor = Some(self.plus_rect);
+            }
+            BarPart::AddPanel => {
+                self.open_add_list();
+                self.bar_anchor = Some(self.add_rect);
+            }
+        }
+        self.window.request_redraw();
     }
 
     /// A key: a hotkey does its command (by default Ctrl+1 to 9 shows a layout and Ctrl+Shift+1 to 9 saves one;
@@ -1043,12 +1181,10 @@ impl AppWindow {
 
     /// Do a command, from its hotkey or its menu entry.
     fn run(&mut self, command: Command) {
-        let keys = self.displays.keys();
-        let names = as_strs(&keys);
-        // Showing a layout or the default brings the grid back.
+        // Showing a page, the default layout or an undone one brings the grid back.
         if matches!(
             command,
-            Command::DefaultLayout | Command::RecallLayout(_) | Command::UndoLayout
+            Command::DefaultLayout | Command::GoToPage(_) | Command::UndoLayout
         ) {
             self.full = None;
         }
@@ -1059,7 +1195,7 @@ impl AppWindow {
                 return;
             }
             Command::ClosePanel => {
-                if let Some(panel) = self.grid.focused() {
+                if let Some(panel) = self.pages.tree().focused() {
                     self.close_panel(panel);
                 }
                 return;
@@ -1075,16 +1211,29 @@ impl AppWindow {
                 self.window.request_redraw();
                 return;
             }
-            Command::DefaultLayout => self
-                .layout_history
-                .change(&mut self.grid, |g| *g = LayoutTree::default_for(&names)),
-            Command::UndoLayout => {
-                self.layout_history.undo(&mut self.grid);
+            Command::DefaultLayout => {
+                let tree = self.default_tree();
+                self.pages.change(|g| *g = tree);
             }
-            Command::RecallLayout(slot) => match self.layouts.recall(slot, &names) {
-                Some(grid) => self.layout_history.change(&mut self.grid, |g| *g = grid),
-                None => return,
-            },
+            Command::GoToPage(page) => {
+                self.go_to_page(page);
+                return;
+            }
+            Command::NewPage => {
+                self.new_page(Template::Empty);
+                return;
+            }
+            Command::DuplicatePage => {
+                self.new_page(Template::Copy);
+                return;
+            }
+            Command::DeletePage => {
+                self.delete_page();
+                return;
+            }
+            Command::UndoLayout => {
+                self.pages.undo();
+            }
             Command::ZoomFit => {
                 // The Panel under the pointer; over a Scope, or off the Panels, nothing.
                 if let Some(panel) = self
@@ -1106,12 +1255,6 @@ impl AppWindow {
                 self.window.request_redraw();
                 return;
             }
-            Command::SaveLayout(slot) => {
-                self.layouts.save(slot, &self.grid, &names);
-                self.save_layouts();
-                self.window.request_redraw();
-                return;
-            }
         }
         self.panels_changed();
     }
@@ -1125,7 +1268,7 @@ impl AppWindow {
             .map(|(panel, name)| AddEntry {
                 panel,
                 name: name.to_string(),
-                enabled: !self.grid.contains(panel),
+                enabled: !self.pages.tree().contains(panel),
             })
             .collect()
     }
@@ -1148,12 +1291,10 @@ impl AppWindow {
         self.full = None;
         let (area, gap, min) = (self.grid_area, self.grid_gap, min_panel_size(self.scale));
         let added = match self.edge_add.take() {
-            Some((target, edge)) => self.layout_history.change(&mut self.grid, |g| {
-                g.add_at_edge(panel, target, edge, area, gap, min)
-            }),
-            None => self
-                .layout_history
-                .change(&mut self.grid, |g| g.add(panel, area, gap, min)),
+            Some((target, edge)) => self
+                .pages
+                .change(|g| g.add_at_edge(panel, target, edge, area, gap, min)),
+            None => self.pages.change(|g| g.add(panel, area, gap, min)),
         };
         self.layout_notice = added.notice();
         self.save_grid();
@@ -1167,9 +1308,8 @@ impl AppWindow {
         self.layout_notice = None;
         {
             let mut settings = self.settings.lock().unwrap();
-            self.layout_history.change(&mut self.grid, |g| {
-                page_edit::close(&self.displays, g, &mut settings, panel)
-            });
+            self.pages
+                .change(|g| page_edit::close(&self.displays, g, &mut settings, panel));
         }
         self.panels_changed();
     }
@@ -1190,7 +1330,7 @@ impl AppWindow {
         let room = self.room();
         let result = {
             let mut settings = self.settings.lock().unwrap();
-            self.layout_history.change(&mut self.grid, |g| {
+            self.pages.change(|g| {
                 page_edit::duplicate(&self.displays, g, &mut settings, panel, dir, room)
             })
         };
@@ -1213,9 +1353,8 @@ impl AppWindow {
         self.layout_notice = None;
         let replaced = {
             let mut settings = self.settings.lock().unwrap();
-            self.layout_history.change(&mut self.grid, |g| {
-                page_edit::replace(&self.displays, g, &mut settings, panel, name)
-            })
+            self.pages
+                .change(|g| page_edit::replace(&self.displays, g, &mut settings, panel, name))
         };
         if replaced.is_some() {
             self.panels_changed();
@@ -1225,13 +1364,9 @@ impl AppWindow {
     /// Remove the further instances that are not on the page any more (closed, replaced, or left off by an undo or
     /// another layout), keeping the undo history's Panel indices right.
     fn sweep_panels(&mut self) {
-        let removed = {
-            let mut settings = self.settings.lock().unwrap();
-            page_edit::sweep(&self.displays, &mut self.grid, &mut settings)
-        };
-        for index in removed {
-            self.layout_history.forget_index(index);
-        }
+        let mut settings = self.settings.lock().unwrap();
+        self.pages.sweep(&self.displays, &mut settings);
+        self.pages.show_on(&self.displays);
     }
 
     /// The Panels changed (made, removed or replaced): whatever the window kept by Panel index is dropped or made
@@ -1416,44 +1551,47 @@ impl AppWindow {
                 self.display_pointer(panel, Pointer::Up);
             }
             if self.drag.take().is_some() {
-                self.layout_history.end_drag(&self.grid);
+                self.pages.end_drag();
                 self.save_grid();
             }
             if let Some(from) = self.panel_drag.take() {
                 let live = std::mem::take(&mut self.panel_drag_live);
                 // A drag let go on another Panel: Shift swaps the two, else the outer quarter of an edge docks on
                 // it. Anywhere else (or a press that never became a drag) changes nothing.
-                let tabs_of_from = self.grid.tab_group(from).map_or(0, |g| g.tabs.len());
+                let tabs_of_from = self
+                    .pages
+                    .tree()
+                    .tab_group(from)
+                    .map_or(0, |g| g.tabs.len());
                 let over = self
-                    .grid
+                    .pages
+                    .tree()
                     .panel_at(self.grid_area, self.grid_gap, self.cursor)
                     // A Panel dropped on itself does nothing, unless it is a tab: dragged out to an edge it docks.
                     .filter(|to| live && (*to != from || tabs_of_from > 1));
                 if !live && self.panel_drag_tab {
                     // A click on a tab shows that Panel.
                     self.layout_notice = None;
-                    self.grid.show(from);
+                    self.pages.tree_mut().show(from);
                 }
                 if let Some(to) = over {
                     self.layout_notice = None;
                     if self.modifiers.shift_key() {
-                        self.layout_history
-                            .change(&mut self.grid, |g| g.swap(from, to));
+                        self.pages.change(|g| g.swap(from, to));
                         self.save_grid();
                     } else {
                         match dock::zone_at(self.cells[to], self.cursor) {
                             Zone::Edge(edge) => {
                                 let (area, gap, min) =
                                     (self.grid_area, self.grid_gap, min_panel_size(self.scale));
-                                let placed = self.layout_history.change(&mut self.grid, |g| {
-                                    g.dock(from, to, edge, area, gap, min)
-                                });
+                                let placed = self
+                                    .pages
+                                    .change(|g| g.dock(from, to, edge, area, gap, min));
                                 self.layout_notice = placed.dock_notice();
                                 self.save_grid();
                             }
                             Zone::Middle => {
-                                self.layout_history
-                                    .change(&mut self.grid, |g| g.join_tab(from, to));
+                                self.pages.change(|g| g.join_tab(from, to));
                                 self.save_grid();
                             }
                         }
@@ -1486,6 +1624,18 @@ impl AppWindow {
             self.reset_bar_menus();
             return;
         }
+        // The Page bar: a click on the tab being renamed stays in it, any other ends the rename.
+        let page_part = self.page_bar_hit();
+        if let (Some(BarPart::Tab(page)), Some(rename)) = (page_part, &self.renaming)
+            && rename.page == page
+        {
+            return;
+        }
+        self.finish_rename(true);
+        if let Some(part) = page_part {
+            self.page_bar_click(part);
+            return;
+        }
         if let Some(part) = self.strip_hit() {
             self.menu = None;
             self.hover = None;
@@ -1512,7 +1662,8 @@ impl AppWindow {
                 // The + on a hovered Panel's edge opens the Add list for that side.
                 if self.full.is_none()
                     && let Some(panel) =
-                        self.grid
+                        self.pages
+                            .tree()
                             .panel_at(self.grid_area, self.grid_gap, self.cursor)
                     && let Some(edge) = self
                         .cells
@@ -1524,11 +1675,12 @@ impl AppWindow {
                     return;
                 }
                 // A click on any Panel focuses it.
-                if let Some(panel) = self
-                    .grid
-                    .panel_at(self.grid_area, self.grid_gap, self.cursor)
+                if let Some(panel) =
+                    self.pages
+                        .tree()
+                        .panel_at(self.grid_area, self.grid_gap, self.cursor)
                 {
-                    self.grid.set_focus(panel);
+                    self.pages.tree_mut().set_focus(panel);
                     self.window.request_redraw();
                 }
                 // A chip or the settings button on a title bar takes the press before the bar can be dragged.
@@ -1582,12 +1734,12 @@ impl AppWindow {
                         }
                         (shown, tab_strip::TabHit::Overflow) => {
                             if let Some(Some((strip, area))) = self.tab_strips.get(shown) {
-                                let group = self.grid.tab_group(shown);
+                                let group = self.pages.tree().tab_group(shown);
                                 let layout = strip.layout(*area, self.scale);
                                 if let (Some(group), Some(next)) =
                                     (group, strip.next_hidden(&layout.hidden))
                                 {
-                                    self.grid.show(group.tabs[next]);
+                                    self.pages.tree_mut().show(group.tabs[next]);
                                 }
                             }
                         }
@@ -1597,7 +1749,7 @@ impl AppWindow {
                 }
                 match self.press_under_pointer() {
                     Some(Press::Border(border)) => {
-                        self.layout_history.begin_drag(&self.grid);
+                        self.pages.begin_drag();
                         self.drag = Some(border);
                     }
                     Some(Press::Panel(panel)) => {
@@ -1632,14 +1784,15 @@ impl AppWindow {
         // Over it all, the thin menu bar (#147).
         let bar_height = MenuBar::height(scale);
         let top_height = BarKind::Top.height(scale);
-        let area_top = bar_height + top_height + margin;
+        let page_bar_height = PageBar::height(scale);
+        let area_top = bar_height + top_height + page_bar_height + margin;
         let area = [
             margin,
             area_top,
             (width - 2.0 * margin).max(1.0),
             (height - status_height - area_top).max(1.0),
         ];
-        let cells = panel_grid::cells_filled(&self.grid, area, margin, self.full);
+        let cells = panel_grid::cells_filled(self.pages.tree(), area, margin, self.full);
         self.cells = cells.clone();
         self.grid_area = area;
         self.grid_gap = margin;
@@ -1656,7 +1809,7 @@ impl AppWindow {
         let mut layouts: Vec<components::TitleLayout> = Vec::new();
         let mut tab_strips: Vec<Option<(tab_strip::TabStrip, [f32; 4])>> = Vec::new();
         // Only the shown Panel of each tab group measures and draws (ADR 0038).
-        self.displays.set_shown(&self.grid.shown_panels());
+        self.pages.show_on(&self.displays);
         let max_chars = ((width / (style::SPACE_CHAR_WIDTH * scale)) as usize)
             .saturating_sub(8)
             .clamp(40, 110);
@@ -1682,7 +1835,8 @@ impl AppWindow {
             toolbars.push(toolbar);
             // A tab group of more than one Panel shows its tabs where the name would be.
             let strip = self
-                .grid
+                .pages
+                .tree()
                 .tab_group(i)
                 .filter(|g| g.tabs.len() > 1 && panel_grid::shown(*cell) && g.tabs[g.active] == i)
                 .map(|g| {
@@ -2000,8 +2154,8 @@ impl AppWindow {
             }
         }
         // The focused Panel has a quiet outline.
-        if !self.grid.is_empty()
-            && let Some(focused) = self.grid.focused().filter(|f| *f < cells.len())
+        if !self.pages.tree().is_empty()
+            && let Some(focused) = self.pages.tree().focused().filter(|f| *f < cells.len())
             && panel_grid::shown(cells[focused])
         {
             for prim in components::focus_outline(cells[focused], scale) {
@@ -2012,7 +2166,8 @@ impl AppWindow {
         }
         // A page with no Panel: one large Add panel button.
         self.add_button = self
-            .grid
+            .pages
+            .tree()
             .is_empty()
             .then(|| components::add_panel_button_rect(area, scale));
         if self.add_button.is_some() {
@@ -2036,9 +2191,14 @@ impl AppWindow {
             .panel_drag
             .filter(|_| self.panel_drag_live)
             .and_then(|from| {
-                let tabs = self.grid.tab_group(from).map_or(0, |g| g.tabs.len());
+                let tabs = self
+                    .pages
+                    .tree()
+                    .tab_group(from)
+                    .map_or(0, |g| g.tabs.len());
                 let to = self
-                    .grid
+                    .pages
+                    .tree()
                     .panel_at(area, margin, self.cursor)
                     .filter(|to| *to != from || tabs > 1)?;
                 if self.modifiers.shift_key() {
@@ -2085,7 +2245,7 @@ impl AppWindow {
                     if s != shown {
                         return None;
                     }
-                    let group = self.grid.tab_group(shown)?;
+                    let group = self.pages.tree().tab_group(shown)?;
                     Some(match h {
                         tab_strip::TabHit::Tab(p) => {
                             tab_strip::TabHit::Tab(group.tabs.iter().position(|t| *t == p)?)
@@ -2102,7 +2262,7 @@ impl AppWindow {
             && self.bar.open.is_none()
             && self.drag.is_none()
             && self.panel_drag.is_none()
-            && let Some(hovered) = self.grid.panel_at(area, margin, self.cursor)
+            && let Some(hovered) = self.pages.tree().panel_at(area, margin, self.cursor)
             && let Some(frame) = cells
                 .get(hovered)
                 .copied()
@@ -2142,6 +2302,18 @@ impl AppWindow {
             }
         }
         over.extend(menu_bar::bar().draw(0.0, 0.0, width, self.bar.open, self.bar_hover, scale));
+        // The Page bar between the Colour Setup line and the Panels (ADR 0041).
+        let page_bar = self.page_bar();
+        let page_top = page_bar::top(scale);
+        let bar_layout = page_bar.layout(page_top, width, scale);
+        self.plus_rect = bar_layout.plus;
+        self.add_rect = bar_layout.add_panel;
+        let page_hover = if self.menu.is_some() || self.bar.open.is_some() {
+            None
+        } else {
+            page_bar.hit(page_top, width, self.cursor, scale)
+        };
+        over.extend(page_bar.draw(page_top, width, page_hover, scale));
         let strip_hover = if self.menu.is_some() || self.bar.open.is_some() {
             None
         } else {
