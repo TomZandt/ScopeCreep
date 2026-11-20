@@ -3,8 +3,8 @@
 //! that the Window's minimum width counts it.
 use scopecreep::components::{MenuBar, Prim};
 use scopecreep::layout::min_window;
+use scopecreep::layout_tree::LayoutTree;
 use scopecreep::menu_bar::{self, largest_menus};
-use scopecreep::panel_grid::PanelGrid;
 use scopecreep::style;
 use scopecreep::view_strip::{StripPart, ViewStrip};
 
@@ -129,7 +129,7 @@ fn the_link_chip_is_lit_while_link_is_on_and_a_disabled_strip_lights_nothing() {
 #[test]
 fn the_minimum_window_width_counts_the_strip_beside_the_menu_titles() {
     let names = ["Clean picture", "Luma waveform", "Vectorscope"];
-    let grid = PanelGrid::default_for(&names);
+    let grid = LayoutTree::default_for(&names);
     let [w, _] = min_window(&grid, &largest_menus());
     for scale in SCALES {
         let titles = menu_bar::bar().title_rects(0.0, 0.0, scale);
@@ -141,7 +141,7 @@ fn the_minimum_window_width_counts_the_strip_beside_the_menu_titles() {
         );
     }
     // With nothing else to set the width, the strip beside the titles does.
-    let one = PanelGrid::default_for(&["Clean picture"]);
+    let one = LayoutTree::default_for(&["Clean picture"]);
     let [narrow, _] = min_window(&one, &[]);
     let titles = menu_bar::bar().title_rects(0.0, 0.0, 1.0);
     let last = titles.last().unwrap();
