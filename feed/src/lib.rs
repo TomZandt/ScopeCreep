@@ -30,7 +30,7 @@ pub const READER_TIMEOUT_NS: u64 = 1_000_000_000;
 /// How often a reader must renew its heartbeat.
 pub const HEARTBEAT_INTERVAL_NS: u64 = 250_000_000;
 
-pub const SENDER_NAME: &str = "scopecreep Sender";
+pub const SENDER_NAME: &str = "ScopeCreep";
 
 /// Where the Feed lives: `SCOPECREEP_FEED` if set, else `/dev/shm/scopecreep-feed`.
 pub fn default_path() -> PathBuf {

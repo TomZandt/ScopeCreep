@@ -23,7 +23,7 @@ import time
 
 from . import paths, projects, render, setups, state
 from . import dump
-from .clone import SENDER_LABEL, _frame_to_tc
+from .clone import SENDER_LABEL, SENDER_TOOL, _frame_to_tc
 from .dump_feed import CLIP_ORDER, clip_offsets
 
 CONVERTED = os.path.join(paths.ROOT, "feed-converted")
@@ -33,8 +33,8 @@ CLIP_TIMEOUT = 25.0
 
 
 def is_sender_tool(tool):
-    """Any scopecreep Sender build (the real Sender, or the probe it stands in for)."""
-    return tool.startswith("OFX: scopecreep")
+    """The Sender's tool name."""
+    return tool == SENDER_TOOL
 
 
 def _sender_timeline(project):

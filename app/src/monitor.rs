@@ -309,9 +309,9 @@ impl Status {
     /// One sentence when there is something the user needs to know, else nothing.
     pub fn notice(&self) -> Option<String> {
         match &self.feed {
-            FeedState::NoSender => Some(
-                "No Sender. Put the scopecreep Sender on the last timeline node in Resolve.".into(),
-            ),
+            FeedState::NoSender => {
+                Some("No Sender. Put ScopeCreep on the last timeline node in Resolve.".into())
+            }
             FeedState::VersionMismatch { found, supported } => Some(format!(
                 "The Sender speaks Feed version {}.{} and this app reads version {}.x. Install the Sender and the app from the same release.",
                 found.0, found.1, supported.0

@@ -1,4 +1,4 @@
-# The scopecreep Sender: an OFX plugin for DaVinci Resolve (Linux, NVIDIA CUDA).
+# The ScopeCreep Sender: an OFX plugin for DaVinci Resolve (Linux, NVIDIA CUDA).
 #
 #   make            build build/scopecreep_sender.ofx.bundle
 #   make test       drive the built plugin with a fake CUDA host and check the Feed (needs an NVIDIA GPU, no Resolve)
@@ -9,10 +9,6 @@
 # Needs: g++, the CUDA toolkit (CUDA_HOME, default /opt/cuda) and Resolve's OpenFX headers (OFX_SDK).
 # The plugin links the CUDA runtime statically and nothing else: never add OpenEXR, Imath or any other library
 # Resolve bundles its own copy of (it crashed Resolve in Stage 0; ADR 0002).
-#
-# Development only: `make PROBE_ALIAS=1 install` builds a Sender that also answers to the Stage 0 probe's
-# identifier, so the scopecreep-test-* projects (probe on a timeline node) load the real Sender in its place.
-# Move the probe bundle out of OFX_PLUGIN_DIR first; two plugins must not share an identifier.
 
 CUDA_HOME      ?= /opt/cuda
 OFX_SDK        ?= /opt/resolve/Developer/OpenFX/OpenFX-1.4/include
@@ -26,9 +22,6 @@ PLUGIN := $(BUNDLE)/Contents/Linux-x86-64/$(NAME).ofx
 CXX      ?= g++
 CXXFLAGS := -std=c++17 -O2 -fPIC -fvisibility=hidden -Wall -Wextra -Wno-unused-parameter \
             -I$(OFX_SDK) -I$(CUDA_HOME)/include -I../feed/include -DSCOPECREEP_SENDER_VERSION='"$(VERSION)"'
-ifdef PROBE_ALIAS
-CXXFLAGS += -DSCOPECREEP_DEV_PROBE_ALIAS
-endif
 CUDA_LIBS := -L$(CUDA_HOME)/lib64 -lcudart_static -ldl -lrt -lpthread
 
 SOURCES := src/sender.cpp src/feed_copy.cpp
@@ -36,7 +29,7 @@ HEADERS := src/feed_copy.h ../feed/include/scopecreep_feed.h
 
 all: $(PLUGIN)
 
-# Rebuilt whenever PROBE_ALIAS changes.
+# Rebuilt whenever the flags change.
 build/flags: FORCE
 	@mkdir -p build
 	@echo '$(CXXFLAGS)' | cmp -s - $@ || echo '$(CXXFLAGS)' > $@

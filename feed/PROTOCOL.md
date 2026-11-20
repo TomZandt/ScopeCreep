@@ -38,7 +38,7 @@ A Feed with `slot_count = 0` is valid: it means "a Sender is loaded but has not 
 | 40 | 8 | `feed_id` | Sender | non-zero, different for every Feed file |
 | 48 | 8 | `sender_pid` | Sender | process id of the Sender's host |
 | 56 | 8 | reserved | | |
-| 64 | 64 | `sender_name` | Sender | UTF-8, NUL padded: `scopecreep Sender` |
+| 64 | 64 | `sender_name` | Sender | UTF-8, NUL padded: `ScopeCreep` |
 | 128 | 32 | `sender_version` | Sender | UTF-8, NUL padded |
 | 160 | 64 | `host_name` | Sender | UTF-8, NUL padded: host name and version as the host reports them |
 | 224 | 32 | reserved | | |

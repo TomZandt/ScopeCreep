@@ -25,7 +25,7 @@ A tool, not a sales pitch: sensible defaults read from the project, with a manua
 ## Gotchas
 
 - UI chrome draws only through style tokens in `app/src/style.rs`; `app/tests/style_check.rs` fails on a raw colour or size literal (ADR 0026). Measurement colours are exempt.
-- The `scopecreep-test-*` Resolve projects need `make -C sender PROBE_ALIAS=1 install`; a plain install doesn't load there. Claude can't restart Resolve, so ask the user to.
+- The `scopecreep-test-*` Resolve projects carry the old probe, not the Sender: the user puts ScopeCreep on each one's `sender` node once (README, "Test projects"). Claude can't restart Resolve, so ask the user to.
 - Keep Resolve checks as simple as the question: the UHD 50 loop with the Sender off, on, and on with the app (`harness/experiments/uhd50_bench`), driven by a short script. No long agent runs or new benchmark tooling.
 - Agent worktrees live in `.claude/worktrees/` (git-ignored, often locked); after merging, run `git worktree remove --force --force <path>` and delete the branch.
 

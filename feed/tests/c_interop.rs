@@ -84,7 +84,7 @@ fn frames_written_by_the_c_writer_are_read_by_the_rust_reader() {
     run(&["write", path.to_str().unwrap(), "4", "16", "9", "3"]);
     let mut reader = FeedReader::open(&path).unwrap();
     let sender = reader.sender();
-    assert_eq!(sender.name, "scopecreep Sender");
+    assert_eq!(sender.name, "ScopeCreep");
     assert_eq!(sender.version, "c-tool");
     assert_eq!(sender.host, "feed_c_tool");
     for f in 0..3u64 {
@@ -145,7 +145,7 @@ fn frames_written_by_the_rust_writer_are_read_by_the_c_reader() {
     // per frame: seq width height row_bytes row_order frame_time frame_rate instance first last sum
     let sum = |f: f64| (0..16 * 9 * 4).map(|i| f + i as f64).sum::<f64>();
     let want = format!(
-        "sender=scopecreep Sender slots=4\n1 16 9 256 0 50.000 23.976 2 0.0 575.0 {:.1}\n2 16 9 256 0 51.000 23.976 2 1.0 576.0 {:.1}\nframes=2\n",
+        "sender=ScopeCreep slots=4\n1 16 9 256 0 50.000 23.976 2 0.0 575.0 {:.1}\n2 16 9 256 0 51.000 23.976 2 1.0 576.0 {:.1}\nframes=2\n",
         sum(0.0),
         sum(1.0)
     );

@@ -10,7 +10,7 @@ EMPTY = {"numNodes": 1, "nodes": [{"index": 1, "label": "", "tools": [], "cacheM
 GRADED = {"numNodes": 1, "nodes": [{"index": 1, "label": "", "tools": ["Primary Balance", "Saturation, Hue & Lum Mix"],
                                     "cacheMode": -1}]}
 SENDER = {"numNodes": 1, "nodes": [{"index": 1, "label": "sender",
-                                    "tools": ["OFX: scopecreep Sender (standing in for the probe)"], "cacheMode": None}]}
+                                    "tools": ["OFX: ScopeCreep"], "cacheMode": None}]}
 SETTINGS = {"colorScienceMode": "davinciYRGBColorManagedv2", "colorSpaceOutput": "Rec.709", "unrelated": "x"}
 
 
@@ -26,7 +26,7 @@ class Describe(unittest.TestCase):
         self.assertIn("clip ramp grade = node 1: Primary Balance, Saturation, Hue & Lum Mix",
                       text([("ramp", GRADED)]).splitlines())
 
-    def test_the_sender_on_the_timeline_is_named_whatever_its_build(self):
+    def test_the_sender_on_the_timeline_is_recorded_as_just_sender(self):
         self.assertIn("timeline grade = node 1: Sender", text([]).splitlines())
 
     def test_only_colour_setup_keys_are_recorded(self):

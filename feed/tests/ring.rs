@@ -284,7 +284,7 @@ fn the_reader_can_tell_who_is_sending() {
     let writer = FeedWriter::create(&path, 1, 4096).unwrap();
     let reader = FeedReader::open(&path).unwrap();
     let sender = reader.sender();
-    assert_eq!(sender.name, "scopecreep Sender");
+    assert_eq!(sender.name, "ScopeCreep");
     assert_eq!(sender.pid, std::process::id() as u64);
     assert!(reader.sender_alive());
     assert_eq!(reader.sender_error(), None);

@@ -14,9 +14,9 @@ class CaptureArgs(unittest.TestCase):
                                 "--frame", "ramp=0", "--frame", "chart=24", "--frame", "outofrange=48",
                                 "--frame", "natural=72"])
 
-    def test_any_scopecreep_sender_build_counts(self):
-        self.assertTrue(feed_frames.is_sender_tool("OFX: scopecreep Sender (standing in for the probe)"))
-        self.assertTrue(feed_frames.is_sender_tool("OFX: scopecreep Probe Sender"))
+    def test_only_the_sender_counts(self):
+        self.assertTrue(feed_frames.is_sender_tool("OFX: ScopeCreep"))
+        self.assertFalse(feed_frames.is_sender_tool("OFX: scopecreep Probe Sender"))
         self.assertFalse(feed_frames.is_sender_tool("OFX: Gaussian Blur"))
 
 

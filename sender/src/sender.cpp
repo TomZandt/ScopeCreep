@@ -1,4 +1,4 @@
-// The scopecreep Sender: an OFX plugin for DaVinci Resolve (Linux, CUDA) that passes the picture through
+// The ScopeCreep Sender: an OFX plugin for DaVinci Resolve (Linux, CUDA) that passes the picture through
 // untouched and hands each frame Resolve renders to the scopecreep app through the Feed.
 //
 // What it does, in order of importance (ADR 0003: Resolve never waits for scopecreep):
@@ -34,8 +34,8 @@
 #include <time.h>
 
 #define SENDER_ID "com.scopecreep.sender"
-#define SENDER_LABEL "scopecreep Sender"
-#define SENDER_GROUP "scopecreep"
+#define SENDER_LABEL "ScopeCreep"
+#define SENDER_GROUP "ScopeCreep"
 
 namespace {
 
@@ -398,33 +398,16 @@ OfxStatus senderEntry(const char* action, const void* handle, OfxPropertySetHand
 }
 OfxPlugin gSender = {kOfxImageEffectPluginApi, 1, SENDER_ID, 0, 1, setHost, senderEntry};
 
-#ifdef SCOPECREEP_DEV_PROBE_ALIAS
-// Development only (make PROBE_ALIAS=1): also answer to the Stage 0 probe's identifier, so the test projects,
-// which have the probe on a timeline node that scripts cannot change, load the real Sender in its place.
-OfxStatus aliasEntry(const char* action, const void* handle, OfxPropertySetHandle inArgs, OfxPropertySetHandle outArgs)
-{
-    return mainEntry(action, handle, inArgs, outArgs, SENDER_LABEL " (standing in for the probe)");
-}
-OfxPlugin gAlias = {kOfxImageEffectPluginApi, 1, "com.scopecreep.probesender", 0, 1, setHost, aliasEntry};
-#endif
-
 }  // namespace
 
 extern "C" {
 __attribute__((visibility("default"))) int OfxGetNumberOfPlugins(void)
 {
-#ifdef SCOPECREEP_DEV_PROBE_ALIAS
-    return 2;
-#else
     return 1;
-#endif
 }
 __attribute__((visibility("default"))) OfxPlugin* OfxGetPlugin(int nth)
 {
     if (nth == 0) return &gSender;
-#ifdef SCOPECREEP_DEV_PROBE_ALIAS
-    if (nth == 1) return &gAlias;
-#endif
     return nullptr;
 }
 }

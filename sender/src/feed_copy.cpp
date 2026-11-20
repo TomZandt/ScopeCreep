@@ -91,7 +91,7 @@ bool publishEmptyFeed()
 {
     Ring* r = new Ring();
     if (scfeed_writer_create(&r->w, scfeed_path(), 0, 0, SCOPECREEP_SENDER_VERSION, gHostName.c_str()) != SCFEED_OK) {
-        std::fprintf(stderr, "scopecreep Sender: cannot create the Feed at %s: %s\n", scfeed_path(), std::strerror(errno));
+        std::fprintf(stderr, "ScopeCreep: cannot create the Feed at %s: %s\n", scfeed_path(), std::strerror(errno));
         delete r;
         return false;
     }

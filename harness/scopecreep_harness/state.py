@@ -4,7 +4,7 @@ measurement (ticket #43).
 
 The state is a short text file, `project-state.txt`, one `key = value` line each: the Colour Setup keys (as the
 Stage 0 dump reads them), and the grade on the timeline node graph and on every clip (node tools, as Resolve
-reports them). Any Sender build on the timeline counts as "Sender", so reinstalling it is not drift.
+reports them). The Sender on the timeline counts as "Sender", so reinstalling it is not drift.
 
 Written by `render` (into the renders directory) and `feed-frames` (into feed-converted). Checked by
 `check-state` (live project vs the renders), by `feed-frames` before it captures, and by the accuracy crate's
@@ -26,7 +26,7 @@ def clip_key(item_name):
 
 
 def _is_sender(tool):
-    return tool.startswith("OFX: scopecreep")
+    return tool == "OFX: ScopeCreep"
 
 
 def grade_text(graph):

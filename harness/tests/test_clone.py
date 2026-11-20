@@ -22,10 +22,9 @@ class Helpers(unittest.TestCase):
         self.assertEqual(len(clone.diff_settings({"a": "1"}, {})), 1)
 
     def test_has_sender_finds_the_real_sender(self):
-        for tool in ("OFX: scopecreep Sender", "OFX: scopecreep Sender (standing in for the probe)"):
-            self.assertTrue(clone.has_sender({"nodes": [{"label": "sender", "tools": [tool]}]}), tool)
+        self.assertTrue(clone.has_sender({"nodes": [{"label": "sender", "tools": ["OFX: ScopeCreep"]}]}))
         self.assertFalse(clone.has_sender({"nodes": [{"label": "sender", "tools": ["OFX: scopecreep Probe Sender"]}]}))
-        self.assertFalse(clone.has_sender({"nodes": [{"label": "other", "tools": ["OFX: scopecreep Sender"]}]}))
+        self.assertFalse(clone.has_sender({"nodes": [{"label": "other", "tools": ["OFX: ScopeCreep"]}]}))
         self.assertFalse(clone.has_sender({"nodes": [{"label": "", "tools": []}]}))
         self.assertFalse(clone.has_sender(None))
 

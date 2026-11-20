@@ -345,7 +345,8 @@ int main(int argc, char** argv)
     auto get = (OfxPlugin * (*)(int))dlsym(lib, "OfxGetPlugin");
 
     std::printf("the plugin identifies itself\n");
-    CHECK(count && count() >= 1, "the bundle exports a plugin");
+    CHECK(count && count() == 1, "the bundle exports exactly one plugin (no second entry)");
+    CHECK(get(1) == nullptr, "there is no second entry point");
     gPlugin = get(0);
     CHECK(std::string(gPlugin->pluginIdentifier) == "com.scopecreep.sender", "plugin identifier com.scopecreep.sender");
     Props hostProps;
@@ -361,7 +362,9 @@ int main(int argc, char** argv)
     }
     CHECK(gPlugin->mainEntry(kOfxActionLoad, nullptr, nullptr, nullptr) == kOfxStatOK, "load");
     CHECK(gPlugin->mainEntry(kOfxActionDescribe, gEffect, nullptr, nullptr) == kOfxStatOK, "describe");
-    CHECK(gEffectProps.m[kOfxPropLabel][0].s == "scopecreep Sender", "label is 'scopecreep Sender'");
+    CHECK(gEffectProps.m[kOfxPropLabel][0].s == "ScopeCreep", "label is 'ScopeCreep'");
+    CHECK(gEffectProps.m[kOfxImageEffectPluginPropGrouping][0].s == "ScopeCreep", "group is 'ScopeCreep'");
+
     CHECK(gEffectProps.m[kOfxImageEffectPropCudaRenderSupported][0].s == "true", "declares Resolve's CUDA render path");
     CHECK(gEffectProps.m[kOfxImageEffectPropCudaStreamSupported][0].s == "true", "declares CUDA stream support");
     Props ctx;
@@ -374,7 +377,7 @@ int main(int argc, char** argv)
     std::printf("with no app attached the Sender does no work\n");
     scfeed_header h = peek(feed);
     CHECK(h.magic == SCFEED_MAGIC && h.version_major == SCFEED_VERSION_MAJOR, "a Feed is published as soon as the Sender is loaded");
-    CHECK(std::string(h.sender_name) == "scopecreep Sender", "the Feed names the Sender");
+    CHECK(std::string(h.sender_name) == "ScopeCreep", "the Feed names the Sender");
     CHECK(std::string(h.host_name) == "MockHost 9.9", "the Feed names the host");
     CHECK(h.slot_count == 0, "no ring has been allocated");
     CHECK(isIdentity(), "the Sender reports itself as an identity");

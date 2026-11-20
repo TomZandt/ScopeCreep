@@ -8,7 +8,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 from scopecreep_harness import feed_header
 
 
-def header(renders_total=0, renders_thumbnail=0, registry=(), name=b"scopecreep Sender"):
+def header(renders_total=0, renders_thumbnail=0, registry=(), name=b"ScopeCreep"):
     """A Feed header laid out by hand from feed/PROTOCOL.md (version 1.2)."""
     b = bytearray(4096)
     b[0:8] = b"SCFEED\0\0"
@@ -25,7 +25,7 @@ def header(renders_total=0, renders_thumbnail=0, registry=(), name=b"scopecreep 
 class FeedHeader(unittest.TestCase):
     def test_reads_the_sender_name_and_pid(self):
         h = feed_header.parse(header())
-        self.assertEqual(h.sender_name, "scopecreep Sender")
+        self.assertEqual(h.sender_name, "ScopeCreep")
         self.assertEqual(h.sender_pid, 4242)
 
     def test_counts_non_thumbnail_renders_of_the_owner(self):

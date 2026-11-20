@@ -17,9 +17,9 @@ SOURCE_KEY = "dwg-p3d65"
 SOURCE = paths.PROJECT_PREFIX + SOURCE_KEY
 DRP_DIR = os.path.join(paths.ROOT, "drp")
 CLONE_RENDERS = os.path.join(paths.ROOT, "renders-clone")
-# The Sender's name in Timeline.GetNodeGraph().GetToolsInNode(); the dev probe-alias build appends
-# " (standing in for the probe)".
-SENDER_TOOL = "OFX: scopecreep Sender"
+# The Sender's name in Timeline.GetNodeGraph().GetToolsInNode(): "OFX: " plus its label (#223; before that
+# the label was "scopecreep Sender").
+SENDER_TOOL = "OFX: ScopeCreep"
 SENDER_LABEL = "sender"
 CANDIDATE_SUFFIX = "-clone"
 # Timelines in the source that are not the plain `sender` timeline.
@@ -39,8 +39,8 @@ def diff_settings(expected, actual, keys=None):
 
 
 def is_sender_tool(tool):
-    """True for the real Sender's tool name, including the probe-alias development build."""
-    return tool == SENDER_TOOL or tool.startswith(SENDER_TOOL + " (")
+    """True for the Sender's tool name."""
+    return tool == SENDER_TOOL
 
 
 def has_sender(tree, label=SENDER_LABEL):

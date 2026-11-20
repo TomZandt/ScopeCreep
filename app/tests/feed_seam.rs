@@ -189,7 +189,7 @@ fn with_no_sender_the_app_says_so_and_shows_nothing() {
     assert_eq!(b.monitor.status().feed, FeedState::NoSender);
     assert_eq!(
         b.notice(),
-        "No Sender. Put the scopecreep Sender on the last timeline node in Resolve."
+        "No Sender. Put ScopeCreep on the last timeline node in Resolve."
     );
     assert_eq!(b.label(), "Channel Viewer");
     assert!(b.shown.is_empty());

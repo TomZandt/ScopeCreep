@@ -1,5 +1,5 @@
 """Build the UHD 50 fps benchmark project in the scopecreep folder: one timeline with the Sender on its timeline
-node (from the s19 .drp; needs the probe-alias Sender, `make -C sender PROBE_ALIAS=1 install`) and a matching
+node (from the s19 .drp; needs the Sender on that node, see README "Test projects") and a matching
 timeline "no-sender" without it. Then turn on loop playback in Resolve and run run.py."""
 import os
 import sys

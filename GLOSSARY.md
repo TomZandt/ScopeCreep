@@ -17,7 +17,7 @@ Where the Feed comes from: either the Sender or a Capture.
 _Avoid_: Input, source type, tap
 
 **Sender**:
-The scopecreep OFX plugin placed in a Resolve project that hands each frame Resolve renders to scopecreep. When several Senders render the same frame, the last one in the frame (in practice the last timeline node) drives the Feed, and the app warns that more than one is active (ADR 0024).
+The OFX plugin placed in a Resolve project that hands each frame Resolve renders to scopecreep. In Resolve it is called **ScopeCreep** (Effects > OpenFX > ScopeCreep), the name of the app; its OFX identifier is `com.scopecreep.sender`. When several Senders render the same frame, the last one in the frame (in practice the last timeline node) drives the Feed, and the app warns that more than one is active (ADR 0024). Former label, in past findings and changelog entries: "scopecreep Sender" (group "scopecreep"); a development build once also listed a second entry standing in for the Stage 0 probe, now gone.
 _Avoid_: Connector, link, OFX node, tap
 
 **Viewer Frame**:

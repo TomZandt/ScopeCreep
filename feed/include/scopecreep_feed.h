@@ -30,7 +30,7 @@ extern "C" {
 #define SCFEED_SLOT_HEADER_BYTES 4096u
 #define SCFEED_DEFAULT_PATH "/dev/shm/scopecreep-feed"
 #define SCFEED_PATH_ENV "SCOPECREEP_FEED"
-#define SCFEED_SENDER_NAME "scopecreep Sender"
+#define SCFEED_SENDER_NAME "ScopeCreep"
 #define SCFEED_READER_TIMEOUT_NS 1000000000ull
 #define SCFEED_COLOUR_SETUP_BYTES 3064u
 #define SCFEED_REGISTRY_ENTRIES 24u
