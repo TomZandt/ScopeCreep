@@ -148,6 +148,17 @@ impl Rig {
         height: u32,
         draw: impl FnOnce(&mut wgpu::RenderPass<'_>),
     ) -> Vec<u8> {
+        self.render_over(width, height, wgpu::Color::BLACK, draw)
+    }
+
+    /// [`Rig::render`] into a target cleared to `clear` (the Window's surface, for a capture a person looks at).
+    pub fn render_over(
+        &self,
+        width: u32,
+        height: u32,
+        clear: wgpu::Color,
+        draw: impl FnOnce(&mut wgpu::RenderPass<'_>),
+    ) -> Vec<u8> {
         let target = self.device.create_texture(&wgpu::TextureDescriptor {
             label: None,
             size: wgpu::Extent3d {
@@ -172,7 +183,7 @@ impl Rig {
                     depth_slice: None,
                     resolve_target: None,
                     ops: wgpu::Operations {
-                        load: wgpu::LoadOp::Clear(wgpu::Color::BLACK),
+                        load: wgpu::LoadOp::Clear(clear),
                         store: wgpu::StoreOp::Store,
                     },
                 })],

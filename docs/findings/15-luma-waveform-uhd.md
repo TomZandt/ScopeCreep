@@ -31,6 +31,7 @@
 - One waveform column per picture column; 1026 counts per column.
 - Weights at 4 decimals, derived from primaries and white point: Rec.709 0.2126 / 0.7152 / 0.0722; P3-D65 0.2290 / 0.6917 / 0.0793; Rec.2020 (and Rec.2100) 0.2627 / 0.6780 / 0.0593. Match Resolve uses Rec.709 weights for Rec.709, P3-D65 and P3-DCI, and Rec.2020 weights for Rec.2020 and Rec.2100.
 - A single pixel out of range lights its edge row at no less than 80 % of full trace brightness; anywhere in the plot, any non-zero count shows at no less than 25 %.
+- Out-of-range values from the Feed light the edge rows on the drawn Panel at scale 1, 1.5 and 2, with `feed-synth --out-of-range` as the source (#32, [findings 32](32-out-of-range-edge-rows-hidpi.md)). Until #32 this was proven only by an offscreen draw of a hand-made frame, and text sizes only at scale 1.
 
 ## Limits
 

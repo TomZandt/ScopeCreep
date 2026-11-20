@@ -95,6 +95,7 @@ What we learned by testing, kept in the repo so it isn't lost when an issue thre
 | [179](179-saved-grid-repaired.md) | Does a grid or named layout saved with a border dragged to the minimum in a large window come back with its places, every Panel at its minimum in the default window, while rubbish still gives the default (pure seam)? |
 | [171](171-toolbar-at-minimum-panel-width.md) | Do a Panel's chips stay inside its title bar at the minimum Panel width (120 px) at 1x and 2x, and is every chip that does not fit still reachable in the popover (toolbar and picture Panel seams)? |
 | [35](35-gpu-memory-short.md) | When the Sender or the app can't get GPU memory, does Resolve carry on untouched, does the Window say which side ran short and roughly by how much, and does each side carry on by itself when memory frees up (fake CUDA host and Feed seam, with a cap on allocation size)? |
+| [32](32-out-of-range-edge-rows-hidpi.md) | Can `feed-synth` play values below 0 and above 1, and do they light the luma waveform's edge rows with legible text at scale 1, 1.5 and 2 (pure and Feed seam, offscreen draw)? |
 
 ## Adding findings
 

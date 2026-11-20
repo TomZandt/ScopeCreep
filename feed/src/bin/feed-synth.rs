@@ -2,12 +2,15 @@
 //! the app can be run and looked at with no Resolve.
 //!
 //!   feed-synth [--size 1920x1080] [--fps 24] [--frames N] [--path /dev/shm/scopecreep-feed]
-//!              [--instances N] [--host NAME]
+//!              [--instances N] [--host NAME] [--out-of-range]
 //!
 //! Like the Sender, it publishes a Feed with no ring, does nothing while no app is attached, and makes the ring
 //! the first time an app is listening. `--instances 2` plays two Sender instances rendering every frame in step
 //! (two Senders on one timeline). Started while another feed-synth (or Resolve) owns the Feed, it joins as a
-//! guest, as a second Resolve would: its renders are registered but no frames are sent.
+//! guest, as a second Resolve would: its renders are registered but no frames are sent. `--out-of-range` makes
+//! the bottom twelfth of the card a grey ramp from -0.25 to 1.25, so the left and right sixths of the columns are
+//! below 0 and above 1; on the video levels the app assumes without a Colour Setup, the waveform's edge rows
+//! light over about the left eighth and the right tenth.
 use scopecreep_feed::{
     FeedWriter, FrameMeta, SenderIdentity, WriteError, default_path, now_ns, synthetic,
 };
@@ -17,6 +20,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let (mut width, mut height, mut fps, mut frames, mut path) =
         (1920u32, 1080u32, 24.0f64, u64::MAX, default_path());
     let mut instances = 1u32;
+    let mut out_of_range = false;
     let mut identity = SenderIdentity::default();
     let mut args = std::env::args().skip(1);
     while let Some(arg) = args.next() {
@@ -32,6 +36,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             "--path" => path = value()?.into(),
             "--instances" => instances = value()?.parse::<u32>()?.max(1),
             "--host" => identity.host = value()?,
+            "--out-of-range" => out_of_range = true,
             _ => {
                 return Err(format!("unknown argument {arg}; see the top of feed-synth.rs").into());
             }
@@ -48,14 +53,23 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         "waiting for an app"
     };
     println!(
-        "synthetic Sender on {}: {width}x{height} at {fps} fps, {instances} instance(s) ({role})",
-        path.display()
+        "synthetic Sender on {}: {width}x{height} at {fps} fps, {instances} instance(s){} ({role})",
+        path.display(),
+        if out_of_range {
+            ", values out of range along the bottom"
+        } else {
+            ""
+        }
     );
     let start = Instant::now();
     let (mut frame, mut written, mut idle) = (0u64, 0u64, 0u64);
     let mut had_reader = false;
     let mut next_refresh = Instant::now();
-    let mut card = synthetic::test_card(width, height, 0);
+    let mut card = if out_of_range {
+        synthetic::test_card_out_of_range(width, height, 0)
+    } else {
+        synthetic::test_card(width, height, 0)
+    };
     while frame < frames {
         if Instant::now() >= next_refresh {
             next_refresh += Duration::from_secs(1);
