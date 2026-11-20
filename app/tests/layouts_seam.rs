@@ -1,6 +1,6 @@
 //! Named layouts at the pure seam (#98): saving into slots, recalling, renaming, and a layout surviving Panels being added or removed.
 use scopecreep::layouts::{Layouts, Rename, SLOTS};
-use scopecreep::panel_grid::{Border, PanelGrid};
+use scopecreep::panel_grid::{Border, PanelGrid, min_panel_size};
 
 const NAMES: [&str; 7] = [
     "Clean picture",
@@ -133,6 +133,31 @@ fn a_saved_arrangement_that_is_rubbish_recalls_the_default() {
         Layouts::from_text(text).recall(0, &NAMES),
         Some(default_grid())
     );
+}
+
+#[test]
+fn a_layout_saved_with_a_border_at_the_minimum_in_a_large_window_recalls_it() {
+    // A 2560 x 1440 window's Panel area: the row under the picture dragged down to the minimum there (#179).
+    let big = [12.0, 12.0, 2536.0, 1400.0];
+    let mut grid = arranged();
+    grid.drag(
+        Border::Row { after: 1 },
+        [300.0, 5000.0],
+        big,
+        GAP,
+        min_panel_size(1.0),
+    );
+    let mut layouts = Layouts::default();
+    layouts.save(3, &grid, &NAMES);
+    let recalled = Layouts::from_text(&layouts.to_text())
+        .recall(3, &NAMES)
+        .expect("the slot holds a layout");
+    assert_ne!(recalled, default_grid(), "not the default layout");
+    assert_eq!(recalled.places(), grid.places());
+    let min = min_panel_size(1.0);
+    for c in recalled.cells(AREA, GAP) {
+        assert!(c[2] >= min[0] - 0.01 && c[3] >= min[1] - 0.01, "{c:?}");
+    }
 }
 
 #[test]

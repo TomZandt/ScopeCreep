@@ -22,7 +22,7 @@ pub const MIN_DISPLAY: f32 = style::SPACE_MIN_DISPLAY;
 const MIN_PANEL: [f32; 2] = [style::SPACE_MIN_PANEL_WIDTH, style::SPACE_MIN_PANEL_HEIGHT];
 /// The window the saved border positions are checked against (logical pixels, the Panel area and the gap between
 /// Panels): the default window size. A saved position that would leave a column or row under its minimum here is
-/// rubbish.
+/// raised to that minimum (#179).
 const REFERENCE_AREA: [f32; 2] = style::SPACE_REFERENCE_AREA;
 const REFERENCE_GAP: f32 = style::SPACE_REFERENCE_GAP;
 /// The first line of a saved layout. A grid saved by v0.2.0 starts "panels" and is ignored.
@@ -374,7 +374,8 @@ impl PanelGrid {
     }
 
     /// The layout `text` holds for the displays called `names`. A saved layout that is not this version's (a
-    /// v0.2.0 grid), or does not make sense, is ignored: the default layout is used. A saved Panel that no longer
+    /// v0.2.0 grid), or does not make sense, is ignored: the default layout is used. A column or row saved under its
+    /// minimum size in the reference window is raised to it, the others giving way. A saved Panel that no longer
     /// exists is dropped and a neighbour fills its cell; a display missing from the saved layout is placed in the first free cell.
     pub fn from_text(names: &[&str], text: &str) -> PanelGrid {
         Self::parse(names, text).unwrap_or_else(|| PanelGrid::default_for(names))
@@ -385,8 +386,9 @@ impl PanelGrid {
         if lines.next()? != HEADER {
             return None;
         }
-        // Weights that add up to 1 (give or take rounding), none of which leaves a column or row under its
-        // minimum size in the reference window; they are scaled to add up to exactly 1.
+        // Weights that add up to 1 (give or take rounding), scaled to add up to exactly 1. A track they leave under
+        // its minimum size in the reference window (a border dragged to the minimum in a much larger window) is
+        // raised to it (#179).
         let weights = |line: &str, key: &str, total: f32, min: f32| -> Option<Vec<f32>> {
             let values: Vec<f32> = line
                 .strip_prefix(key)?
@@ -394,12 +396,11 @@ impl PanelGrid {
                 .map(|v| v.parse().ok())
                 .collect::<Option<_>>()?;
             let sum: f32 = values.iter().sum();
-            let usable = total - REFERENCE_GAP * values.len().saturating_sub(1) as f32;
             let sane = !values.is_empty()
                 && values.iter().all(|v| v.is_finite() && *v > 0.0)
-                && (sum - 1.0).abs() < 0.01
-                && values.iter().all(|v| v / sum * usable >= min);
-            sane.then(|| values.iter().map(|v| v / sum).collect())
+                && (sum - 1.0).abs() < 0.01;
+            let usable = total - REFERENCE_GAP * values.len().saturating_sub(1) as f32;
+            sane.then(|| raise_to(values.iter().map(|v| v / sum).collect(), min / usable))?
         };
         let columns = weights(lines.next()?, "columns ", REFERENCE_AREA[0], MIN_PANEL[0])?;
         let mut rows = weights(lines.next()?, "rows ", REFERENCE_AREA[1], MIN_PANEL[1])?;
@@ -478,6 +479,44 @@ impl PanelGrid {
             rows,
             places: placed.into_iter().flatten().collect(),
         })
+    }
+}
+
+/// `weights` (adding up to 1) with every track at least `floor`: each one under it is raised to it and the others
+/// are scaled down to make room, keeping their proportions, so the weights still add up to 1. Raising tracks is
+/// enough for Panels that span several, since a span only adds tracks. None if `floor` leaves no room for them all.
+fn raise_to(mut weights: Vec<f32>, floor: f32) -> Option<Vec<f32>> {
+    if floor * weights.len() as f32 > 1.0 {
+        return None;
+    }
+    let mut raised = vec![false; weights.len()];
+    // Scaling the others down can take one of them under the floor in turn, so repeat until none is.
+    loop {
+        let mut changed = false;
+        for (w, r) in weights.iter_mut().zip(&mut raised) {
+            if !*r && *w < floor {
+                (*w, *r, changed) = (floor, true, true);
+            }
+        }
+        if !changed {
+            return Some(weights);
+        }
+        let fixed = floor * raised.iter().filter(|r| **r).count() as f32;
+        let free: f32 = weights
+            .iter()
+            .zip(&raised)
+            .filter(|(_, r)| !**r)
+            .map(|(w, _)| w)
+            .sum();
+        if free <= 0.0 {
+            return Some(weights);
+        }
+        let scale = (1.0 - fixed) / free;
+        for (w, r) in weights.iter_mut().zip(&raised) {
+            if !*r {
+                *w *= scale;
+            }
+        }
     }
 }
 

@@ -344,22 +344,122 @@ fn rubbish_is_ignored_and_the_default_used() {
     );
 }
 
+/// Every Panel is at least the minimum size in the default window's Panel area.
+fn assert_every_panel_at_least_the_minimum(grid: &PanelGrid) {
+    let min = min_panel_size(1.0);
+    for (name, c) in NAMES.iter().zip(grid.cells(AREA, GAP)) {
+        assert!(
+            c[2] >= min[0] - 0.01 && c[3] >= min[1] - 0.01,
+            "{name} is {c:?}, under {min:?}"
+        );
+    }
+}
+
+/// #179 reverses #96's rule that such a saved grid is rubbish: the tracks are raised, the arrangement kept.
 #[test]
-fn saved_positions_that_leave_a_column_or_row_too_small_are_ignored() {
+fn saved_positions_that_leave_a_column_or_row_too_small_are_raised_to_the_minimum() {
     let good = default_grid().to_text(&NAMES);
     let columns = good.lines().nth(1).unwrap();
-    assert_eq!(
-        PanelGrid::from_text(
-            &NAMES,
-            &good.replace(columns, "columns 0.96 0.01 0.01 0.01 0.01")
-        ),
-        default_grid()
-    );
     let rows = good.lines().nth(2).unwrap();
-    assert_eq!(
-        PanelGrid::from_text(&NAMES, &good.replace(rows, "rows 0.97 0.01 0.01 0.01")),
-        default_grid()
+    for text in [
+        good.replace(columns, "columns 0.96 0.01 0.01 0.01 0.01"),
+        good.replace(rows, "rows 0.97 0.01 0.01 0.01"),
+    ] {
+        let grid = PanelGrid::from_text(&NAMES, &text);
+        assert_eq!(grid.places(), default_grid().places(), "{text}");
+        assert_ne!(grid, default_grid(), "the saved weights are kept, raised");
+        assert_fills(&grid);
+        assert_every_panel_at_least_the_minimum(&grid);
+    }
+    // The tracks that were already big enough keep their proportions to each other.
+    let grid = PanelGrid::from_text(
+        &NAMES,
+        &good.replace(columns, "columns 0.3 0.3 0.2 0.18 0.02"),
     );
+    let text = grid.to_text(&NAMES);
+    let w: Vec<f32> = text.lines().nth(1).unwrap()["columns ".len()..]
+        .split_whitespace()
+        .map(|v| v.parse().unwrap())
+        .collect();
+    assert!(w[4] > 0.02, "the last column is raised: {w:?}");
+    for (i, saved) in [0.3, 0.3, 0.2, 0.18].iter().enumerate() {
+        assert!(
+            (w[i] / w[0] - saved / 0.3).abs() < 0.001,
+            "column {i} keeps its share: {w:?}"
+        );
+    }
+    assert_every_panel_at_least_the_minimum(&grid);
+}
+
+#[test]
+fn a_grid_dragged_to_the_minimum_in_a_large_window_survives_a_restart() {
+    // A 2560 x 1440 window's Panel area.
+    let big = [12.0, 12.0, 2536.0, 1400.0];
+    let min = min_panel_size(1.0);
+    let mut grid = default_grid();
+    grid.drag(Border::Row { after: 1 }, [300.0, 5000.0], big, GAP, min);
+    grid.drag(Border::Column { after: 2 }, [5000.0, 1300.0], big, GAP, min);
+    grid.drag(Border::Column { after: 3 }, [5000.0, 1300.0], big, GAP, min);
+    grid.swap(0, 1);
+    let min_in_big = grid
+        .cells(big, GAP)
+        .iter()
+        .map(|c| c[3])
+        .fold(f32::MAX, f32::min);
+    assert!(
+        min_in_big < min[1] + 1.0,
+        "a row was dragged to the minimum: {min_in_big}"
+    );
+    let restored = PanelGrid::from_text(&NAMES, &grid.to_text(&NAMES));
+    assert_eq!(restored.places(), grid.places(), "the arrangement is kept");
+    assert_ne!(restored, default_grid());
+    assert_fills(&restored);
+    assert_every_panel_at_least_the_minimum(&restored);
+    // In the large window every Panel is still about where it was left, give or take the raise.
+    for (name, (b, a)) in NAMES
+        .iter()
+        .zip(grid.cells(big, GAP).iter().zip(&restored.cells(big, GAP)))
+    {
+        assert!(
+            (a[2] - b[2]).abs() < 0.2 * big[2] && (a[3] - b[3]).abs() < 0.2 * big[3],
+            "{name}: {b:?} became {a:?}"
+        );
+    }
+}
+
+#[test]
+fn saved_positions_that_cannot_all_fit_or_are_not_weights_are_ignored() {
+    // More columns at the minimum than the reference window holds.
+    let names: Vec<String> = (0..12).map(|i| format!("p{i}")).collect();
+    let names: Vec<&str> = names.iter().map(String::as_str).collect();
+    let mut text = format!(
+        "layout 1\ncolumns {}\nrows 1\n",
+        ["0.083333336"; 12].join(" ")
+    );
+    for (i, n) in names.iter().enumerate() {
+        text += &format!("panel {i} 0 1 1 {n}\n");
+    }
+    assert_eq!(
+        PanelGrid::from_text(&names, &text),
+        PanelGrid::default_for(&names)
+    );
+    let good = default_grid().to_text(&NAMES);
+    let columns = good.lines().nth(1).unwrap();
+    for bad in [
+        "columns 0.5 0.5 0.0 0.0 0.0",
+        "columns 1.2 -0.05 -0.05 -0.05 -0.05",
+        "columns 0.2 0.2 0.2 0.2 NaN",
+        "columns 0.2 0.2 0.2 0.2 inf",
+        "columns 0.3 0.3 0.3 0.3 0.3",
+        "columns 0.25 0.25 0.25 0.25",
+        "columns 0.2 0.2 0.2 0.2 x",
+    ] {
+        assert_eq!(
+            PanelGrid::from_text(&NAMES, &good.replace(columns, bad)),
+            default_grid(),
+            "{bad}"
+        );
+    }
 }
 
 #[test]

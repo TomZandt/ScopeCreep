@@ -1,0 +1,11 @@
+# #179: a saved Panel grid from a large window is repaired, not refused
+
+What ticket #179 showed on 2026-11-20, at the pure seam (`app/tests/panel_grid.rs`, `app/tests/layouts_seam.rs`), headless.
+
+- The bug was real: a row dragged to its minimum (105 px) in a 2560 x 1440 window's Panel area (2536 x 1400) has a weight of about 0.077, which is about 52 px in the reference area (1256 x 716, the default window). `PanelGrid::from_text` refused that, so the whole saved grid, and a named layout saved that way, came back as the default.
+- Saved weights are now repaired: a column or row under its minimum at the reference area is raised to the minimum and the others are scaled down, keeping their proportions to each other, so the weights still add up to 1. This repeats until no track is under the minimum (scaling one down can take it under in turn). Raising tracks is enough for Panels that span several, because a span only adds tracks and gaps.
+- Rubbish is still refused and the default used: weights that are not numbers, not finite, zero or negative, the wrong count for the Panels' places, or that do not add up to 1 within 0.01; and more tracks at the minimum than the reference area holds (12 columns, say).
+- A grid dragged to the minimum on three borders in the 2560 x 1440 area, with two Panels swapped, comes back with the same places, every Panel at least 120 x 105 at the reference area, and every Panel within 20 % of its size in the large area. The row dragged to the minimum there comes back taller (the reference minimum is 105/680 of the height, about 210 px in the large area), so the arrangement's shape is kept but a border dragged to the minimum does not come back exactly at the minimum in a larger window.
+- A named layout saved that way recalls it, not the default (`a_layout_saved_with_a_border_at_the_minimum_in_a_large_window_recalls_it`).
+- A reversal of #96's rule that such saved positions are rubbish: `saved_positions_that_leave_a_column_or_row_too_small_are_ignored` became `saved_positions_that_leave_a_column_or_row_too_small_are_raised_to_the_minimum`, with the same inputs. Noted in ADR 0012.
+- Not checked at the app (restarting it after a drag in a large window); reasoned and tested at the seam only.

@@ -92,6 +92,7 @@ What we learned by testing, kept in the repo so it isn't lost when an issue thre
 | [169](169-zoom-fit-hotkey.md) | Does Z take a picture Panel to Fit and back to its last zoom and spot (all of them with Link on, none over a Scope), and is it a reassignable hotkey (zoom model, Feed, command and Hotkeys panel seams)? |
 | [180](180-panel-fills-the-window.md) | Does Ctrl+F give the Panel under the pointer the whole Panel area and hide the others from drawing and hits, and is it a reassignable hotkey (Panel grid and command seams)? |
 | [172](172-minimum-window-size.md) | What is the least Window in which every Panel of the default layout keeps its minimum size and every menu fits, and does it hold at 1x, 1.5x and 2x (pure seam)? |
+| [179](179-saved-grid-repaired.md) | Does a grid or named layout saved with a border dragged to the minimum in a large window come back with its places, every Panel at its minimum in the default window, while rubbish still gives the default (pure seam)? |
 
 ## Adding findings
 
