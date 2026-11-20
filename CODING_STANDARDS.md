@@ -8,7 +8,7 @@ A change that alters an earlier behaviour (how a Panel treats the footage's shap
 
 ## Deferred work
 
-Anything a ticket leaves out (a refactor, an edge case, a check) is a GitHub issue linked from the PR or commit body. A summary line such as "left out the larger refactors" without an issue number is a finding.
+Anything a ticket leaves out (a refactor, an edge case, a check) has a home from "Loose ends" in `CONTRIBUTING.md` (an issue, a queue box or a findings line), named in the PR or commit body. A summary line such as "left out the larger refactors" with no home is a finding. A new issue that duplicates an open one or a queue box is a finding.
 
 ## Panel UI
 

@@ -38,5 +38,24 @@ if [ -z "${CI:-}" ]; then
   fi
 fi
 
+# Checks waiting for a person: open ready-for-human issues plus unticked boxes on the queue issues.
+# Past the cap, finish checks before starting another spec. Skipped in CI and without gh.
+if [ -z "${CI:-}" ] && command -v gh >/dev/null; then
+  cap=${MAX_HUMAN_CHECKS:-25}
+  waiting=$(gh issue list --state open --label ready-for-human --limit 300 --json labels,body 2>/dev/null | python3 -c '
+import json, sys
+n = 0
+for i in json.load(sys.stdin):
+    if any(l["name"] == "queue" for l in i["labels"]):
+        n += sum(1 for l in i["body"].splitlines() if l.lstrip().startswith("- [ ]"))
+    else:
+        n += 1
+print(n)' 2>/dev/null || true)
+  if [ -n "$waiting" ]; then
+    echo "Checks waiting for a person: $waiting (cap $cap)"
+    [ "$waiting" -le "$cap" ] || open "$waiting checks wait for a person (cap $cap): tick or drop some before the next spec"
+  fi
+fi
+
 [ "$fail" -eq 0 ] && echo "Definition-of-done checks pass."
 exit "$fail"

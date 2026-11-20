@@ -59,7 +59,7 @@ Anything learned by testing (how Resolve behaves, what a measurement showed) is 
 
 ## Keeping the repo clean
 
-- **Work to do lives in GitHub issues, never in repo files.** No to-do lists, "open checks" or TODO sections in docs. Anything a ticket can't verify becomes an issue labelled `ready-for-human` or `ready-for-agent` (or a comment on the planned ticket that will cover it). Code comments may say `TODO(#n)` only with an issue number.
+- **Work to do lives in GitHub issues, never in repo files.** No to-do lists, "open checks" or TODO sections in docs. Leftover work follows "Loose ends" below. Code comments may say `TODO(#n)` only with an issue number.
 - **The repo holds records:** findings (`docs/findings/`), research from public sources (`docs/research/`), decisions (`docs/adr/`), vocabulary (`GLOSSARY.md`), the changelog. Records state what is true; they don't track work.
 - **Known limitations** a user would care about go in the changelog and README at each release.
 - **One commit per ticket on the integration branch:** ticket branches are squash-merged with a Conventional Commit message (`feat(app): luma waveform (#15)`).
@@ -69,6 +69,19 @@ Anything learned by testing (how Resolve behaves, what a measurement showed) is 
 - **`main` is always releasable:** it only receives finished, reviewed work, with the changelog up to date.
 
 
+## Loose ends
+
+Anything a ticket leaves unverified or undone goes to exactly one home. Search first: `scripts/file-loose-end.sh` lists open issues and queue boxes that match, and refuses to create a duplicate.
+
+| Leftover | Home |
+|---|---|
+| A bug, or work an agent can do | Its own issue (`bug` or `ready-for-agent`), only if the search finds no match. If it matches, add a comment there. |
+| A check at the app (look, feel, HiDPI, UHD 50 cost) | A box on the standing queue #219: "standard app check (`docs/checks/app-check.md`), plus <the specifics>". |
+| A check that needs Resolve (Project Settings, caches, Sender controls) | A box on the standing queue #120. |
+| A minor note nobody needs to act on | A line in the ticket's findings file. |
+
+The queues carry the `queue` label and never close. A box is ticked, with what was seen, when its check is done; a box untouched after about three specs is done or dropped as `wontfix`. A spec has no check tickets of its own beyond what its slices need to build.
+
 ## Definition of done
 
 Finish every item, unprompted. Work is not done while any item is open.
@@ -76,8 +89,8 @@ Finish every item, unprompted. Work is not done while any item is open.
 ### A ticket
 
 1. **Tests green:** `cargo test --workspace` (plain `cargo test` skips the accuracy crate), `make -C sender test`, and `cd harness && python3 -m unittest discover -s tests`.
-2. **Records written** (ADR list, findings index and changelog are checked by `scripts/check-done.sh`): what testing showed in `docs/findings/<ticket>-*.md` with a row in its README; every decision that is hard to reverse, surprising or a real trade-off as an ADR in `docs/adr/`, listed in `README.md` under Documentation; new terms in `GLOSSARY.md`; a line under `## [Unreleased]` in `CHANGELOG.md` for anything a user can see.
-3. **Loose ends filed:** anything unverified is a GitHub issue (`ready-for-human` when it needs a person at Resolve), linked from the findings.
+2. **Records written** where the ticket produces them (a ticket with no visible change and no test findings needs no findings file, ADR or changelog line; the close comment names the records skipped). ADR list, findings index and changelog are checked by `scripts/check-done.sh`. What testing showed in `docs/findings/<ticket>-*.md` with a row in its README; every decision that is hard to reverse, surprising or a real trade-off as an ADR in `docs/adr/`, listed in `README.md` under Documentation; new terms in `GLOSSARY.md`; a line under `## [Unreleased]` in `CHANGELOG.md` for anything a user can see.
+3. **Loose ends filed:** every leftover has one home, chosen as in "Loose ends" below, and the findings link to it.
 4. **Merged and closed:** squash-merged with one Conventional Commit, pushed, the issue closed with a comment pointing at the commit and findings.
 5. **Clean:** the ticket's branches (local and on GitHub) and worktrees deleted; Resolve left on the project that was open, with no scratch projects.
 
