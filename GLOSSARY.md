@@ -169,7 +169,7 @@ Dragging a Panel's title or tab onto another tab group: the outer quarter neares
 _Avoid_: Snap, drop zone (for the overlay)
 
 **Page**:
-A saved layout shown as a tab in the Page bar under the Colour Setup line: its own Layout tree, focused tab group and undo. The pages and the current page are remembered; only the current page's Panels measure and draw. New pages come from Empty page, Default layout (the 7 Panels) or a copy of the current one (each Panel's settings copied; more templates are later); there are at most 12; Ctrl+1 to 9 go to pages 1 to 9, and the first nine tabs show their number, "[1] Colour" (ADR 0041).
+A saved layout shown as a tab in the Page bar under the Colour Setup line: its own Layout tree, focused tab group and undo. The pages and the current page are remembered; only the current page's Panels measure and draw. New pages come from Empty page, Default layout (the 7 Panels), a copy of the current one (each Panel's settings copied) or a template, arranged once with Auto layout for the Feed's aspect (16:9 with no Feed) and named after it: All 7 Panels, Picture views (clean picture, ARRI False Colour, Stops False Colour, Saturation heatmap, Skin tone), Scopes (clean picture, luma waveform, Vectorscope) and Picture only (the clean picture); there are at most 12; Ctrl+1 to 9 go to pages 1 to 9, and the first nine tabs show their number, "[1] Colour" (ADR 0041).
 _Avoid_: Workspace (Resolve's word for its page arrangement), slot, preset
 
 **Auto layout**:

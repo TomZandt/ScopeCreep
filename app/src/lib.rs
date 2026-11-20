@@ -30,6 +30,7 @@ pub mod muted_palette;
 pub mod output_conversion;
 pub mod page_bar;
 pub mod page_edit;
+pub mod page_templates;
 pub mod pages;
 pub mod panel_grid;
 pub mod picture_stage;

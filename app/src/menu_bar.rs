@@ -70,6 +70,8 @@ pub enum Template {
     Default,
     /// A copy of the current page, with each Panel's settings.
     Copy,
+    /// A page template, arranged for the footage (#215).
+    From(crate::page_templates::PageTemplate),
 }
 
 /// What a click on a menu entry does.
@@ -134,7 +136,7 @@ fn hotkey_text(hotkeys: &Hotkeys, command: Command) -> String {
 /// - Show: every page (the current one marked, the first nine with their Ctrl+number beside them), then New page
 ///   from, Duplicate page, Rename page and Delete page (greyed with one page), then Add panel, Close panel,
 ///   Undo layout change and Default layout.
-/// - NewFrom: Empty page, Default layout (the 7 Panels) and Copy of this page, then "Back".
+/// - NewFrom: Empty page, Default layout (the 7 Panels), Copy of this page and each page template, then "Back".
 pub fn layout_menu(names: &[String], current: usize, hotkeys: &Hotkeys, mode: LayoutMode) -> Menu {
     layout_menu_with_undo(names, current, hotkeys, mode, true)
 }
@@ -231,6 +233,12 @@ pub fn layout_menu_with_undo(
                 menu.push(
                     item(label, command, true, false),
                     Some(MenuAction::NewPage(template)),
+                );
+            }
+            for t in crate::page_templates::PageTemplate::ALL {
+                menu.push(
+                    item(t.name().to_string(), None, true, false),
+                    Some(MenuAction::NewPage(Template::From(t))),
                 );
             }
             menu.push(MenuEntry::Separator, None);

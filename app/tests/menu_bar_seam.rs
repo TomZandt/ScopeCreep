@@ -417,7 +417,8 @@ fn undo_is_greyed_when_there_is_nothing_to_undo() {
 }
 
 #[test]
-fn new_page_from_offers_the_three_templates_and_goes_back() {
+fn new_page_from_lists_every_template_and_goes_back_at_both_scales() {
+    use scopecreep::page_templates::PageTemplate;
     let menu = layout_menu(
         &pages(&["Main"]),
         0,
@@ -431,6 +432,10 @@ fn new_page_from_offers_the_three_templates_and_goes_back() {
             "Empty page",
             "Default layout (7 Panels)",
             "Copy of this page",
+            "All 7 Panels",
+            "Picture views",
+            "Scopes",
+            "Picture only",
             "Back"
         ]
     );
@@ -442,8 +447,23 @@ fn new_page_from_offers_the_three_templates_and_goes_back() {
         let (i, _) = item(&menu, label);
         assert_eq!(menu.action(i), Some(MenuAction::NewPage(template)));
     }
+    for t in PageTemplate::ALL {
+        let (i, _) = item(&menu, t.name());
+        assert_eq!(menu.action(i), Some(MenuAction::NewPage(Template::From(t))));
+    }
     let (i, _) = item(&menu, "Back");
     assert_eq!(menu.action(i), Some(MenuAction::Mode(LayoutMode::Show)));
+    // At 1x and 2x the menu fits under the bar of the smallest Window (which counts the largest menus).
+    let [min_w, min_h] = scopecreep::layout::min_window(
+        &LayoutTree::default_for(&NAMES),
+        &menu_bar::largest_menus(),
+    );
+    for scale in SCALES {
+        let title = menu_bar::bar().title_rects(0.0, 0.0, scale)[LAYOUT];
+        let window = [min_w * scale, min_h * scale];
+        let r = menu.drop.rect(title, window, scale);
+        assert!(r[1] + r[3] <= window[1] + 0.01, "fits at {scale}x");
+    }
 }
 
 #[test]

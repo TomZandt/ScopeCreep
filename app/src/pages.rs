@@ -134,6 +134,11 @@ impl Pages {
         self.push(Page::new(name, tree))
     }
 
+    /// [`Self::new_with`] with a name of its own (a page from a template is named after it).
+    pub fn new_named(&mut self, name: &str, tree: LayoutTree) -> bool {
+        self.push(Page::new(clean(name), tree))
+    }
+
     /// A copy of the shown page, at the end and shown. `copy_panel` is asked once for each Panel on the page and
     /// answers the Panel the copy holds in its place (so the Panel's settings can be copied with it). The copy
     /// starts with nothing to undo. False at the limit (and `copy_panel` is not asked).

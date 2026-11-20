@@ -1029,6 +1029,28 @@ impl AppWindow {
                 let tree = self.default_tree();
                 self.pages.new_with(tree)
             }
+            Template::From(t) => {
+                // Each Panel its own: the display's first instance unless another page holds it, then a new one.
+                let keys = self.displays.keys();
+                let names = self.displays.names();
+                let panels: Vec<usize> = t
+                    .displays()
+                    .iter()
+                    .filter_map(|d| {
+                        let first = (0..keys.len()).find(|&i| keys[i] == *d && names[i] == *d)?;
+                        if self.pages.holds_elsewhere(first) {
+                            self.displays.make_named(d).or(Some(first))
+                        } else {
+                            Some(first)
+                        }
+                    })
+                    .collect();
+                let items = self.displays.items();
+                let aspect = auto_resize::aspect_of(self.texts.lock().unwrap().frame);
+                let (area, gap, scale) = (self.grid_area, self.grid_gap, self.scale);
+                let tree = t.tree(&panels, &items, aspect, area, gap, scale);
+                self.pages.new_named(t.name(), tree)
+            }
             Template::Copy => {
                 let mut settings = self.settings.lock().unwrap();
                 let displays = &self.displays;
