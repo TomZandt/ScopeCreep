@@ -9,7 +9,6 @@ The zoom chip and the Link chip share a right-anchored row with each Panel's own
 - A **view strip** at the right end of the menu bar row holds **Fit**, the shared zoom readout and **Link**. Fit takes every picture Panel to Fit. The readout shows the shared zoom while Link is on ("Fit" or "200 %") and "Mixed" when Link is off and Panels differ. The strip is disabled when the page has no picture Panel, never moves into a popover, and counts in the minimum Window width.
 - A picture Panel's title bar loses its zoom and Link chips and keeps a **read-only zoom tag** (such as "Fit 17 %") with its other tags. The wheel, middle-drag pan and Z behave as ADR 0035 and ADR 0036 say, and Link keeps its saved state and its on-by-default rule.
 - Every title bar is **three zones**: label and tags on the left, the Panel's own chips, then the settings button fixed at the right edge. On a narrow Panel only the chips give way to the popover, the leftmost first (#171's rule). The gap between chip groups is at least twice the gap within a group, so the Vectorscope's eight chips become three groups (plots, mono, tonal range).
-- The luma waveform's edge-row labels are drawn whole inside the Panel and a label that would touch another is left out (940, 64 and 512 first), which closes #183.
 
 ## Considered and rejected
 
@@ -21,3 +20,4 @@ The zoom chip and the Link chip share a right-anchored row with each Panel's own
 
 - ADR 0035's "zoom chip" and "link chip on every picture Panel" become the view strip; its zoom model, Link rules and Fit behaviour are unchanged.
 - The menu bar row is no longer only menus; its height and the minimum Window width must hold the strip.
+- Spec #192 adds a View menu (legends on and off) to the same row and owns the waveform's edge labels (#183). The two do not clash, but both count in the minimum Window width and in the menu bar tests; whichever is built second adjusts to the first.

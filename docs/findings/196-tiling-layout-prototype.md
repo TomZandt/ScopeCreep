@@ -7,7 +7,7 @@ What spec #196 learned on 2026-11-20 from a critical look at the running app (UH
 - **Wasted room on the picture rows.** The default layout's bottom two rows give each picture Panel a cell about 2,280 px wide; the 16:9 picture in it is about 670 px wide, under a third. The luma waveform's plot (aspect-true since #151) sits in the middle of a wide Panel with wide empty sides.
 - **View controls move.** The zoom and Link chips sit on the same right-anchored row as each Panel's own chips, so Link's x differs on every Panel (after the zoom on the clean picture, before B/W on ARRI False Colour, before Zones on Stops False Colour) and is absent on the waveform and Vectorscope. #171 sends the chips that do not fit to the popover, so Link can vanish on a narrow Panel.
 - **Chip groups run together.** The Vectorscope's eight chips (plots, Mono, tonal range) are separated only by small gaps.
-- **The waveform's scale labels clip.** "> 1023" and "< 0" are cut by the title bar and Panel border (already #183). In the prototype's small waveform Panel, "1023" and "940" (and "64" and "0") drew on top of each other too, so a label that would touch another has to be left out.
+- **The waveform's scale labels clip.** "> 1023" and "< 0" are cut by the title bar and Panel border (already #183, owned by spec #192). In the prototype's small waveform Panel, "1023" and "940" (and "64" and "0") drew on top of each other too, so a label that would touch another has to be left out; noted on #183.
 - **Legend strips run the full Panel width** while the picture is narrower.
 - **Small text and low-contrast numbers.** Scale numbers are 11 logical px and labels 12.5, with no UI scale preference; `TEXT_MUTED` on the window surface works out at about 3.8:1 (calculated, not measured). Filed as #195.
 
@@ -26,4 +26,4 @@ A single HTML page with a pure layout module (a binary tree of tab groups and sp
 
 ## What it did not show
 
-The prototype measured layout behaviour only, on a stand-in frame: no GPU time, no real Feed, no HiDPI, none of the app's own input handling, and no view strip (decided afterwards). The cost of copies of a display at UHD 50 is #197; the help page idea is #194; readability is #195; the waveform edge labels are #183.
+The prototype measured layout behaviour only, on a stand-in frame: no GPU time, no real Feed, no HiDPI, none of the app's own input handling, and no view strip (decided afterwards). The cost of copies of a display at UHD 50 is #197; the help page idea is #194; readability is #195; the waveform edge labels are #183 (spec #192).
