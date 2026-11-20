@@ -6,32 +6,11 @@ The format follows [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/
 
 ## [Unreleased]
 
-### Changed
+## [0.3.0] - 2026-11-20
 
-- Zoom: Link is on in a first session (a saved choice, on or off, still wins), and zoom goes up to 800 % instead of 400 %: free below 100 %, landing on 100 %, then whole steps 200 to 800 %, each picture pixel an exact square. The zoom chip no longer opens a slider: a click on it goes back to Fit (every picture Panel while Link is on), and the wheel is the way to zoom (#176, ADR 0035).
-
-- Vectorscope: Colour targets gains 75 % and 100 %, which draws both sets of target boxes on each plot at once, the 75 % box inside the 100 % one in the same colour. It is the default for a Panel with no stored choice; a saved 75 % or 100 % keeps its meaning, and the label reads "75 % and 100 % targets" when both show (#175, supersedes #129).
-
-- Vectorscope: with both plots shown, the 100 % and 200 % plots are joined into one scope. They touch with no gap on one continuous background, with a faint divider at the join that follows graticule brightness; the pair is sized and centred as a unit, so resizing the Panel or Window scales it like one instrument and spare room sits outside it, never between the plots. 100 % only and 200 % only fill the Panel as before (#174, ADR 0011).
-
-- The Channel view is out of the Window now the clean picture's Y R G B chips and Loupe do its job: the Window shows 7 Panels, and the default layout gives ARRI False Colour three columns and Stops False Colour two, the Saturation heatmap three and Skin tone two, every cell used. A saved layout that names the Channel view still recalls. Its code, tests and saved settings are kept (#162, ADR 0034).
-
-- Clean picture: Y R G B chips on its title bar replace the B/W chip. None lit is colour, the default; click a chip to see that channel as grey, click it again for colour, click another to switch. Y is Luma grey with the waveform's weights, exactly what B/W showed; mattes stay black. The title tags the channel when it is not colour and the choice is remembered per Panel. A saved B/W "on" opens as Y, "off" as colour. ARRI False Colour, Stops False Colour and Skin Tone keep their B/W chip (#160, ADR 0013).
-
-- Clean picture: a Loupe chip on its title bar, off by default. On, the Loupe works as on the Channel view: drag it anywhere in the Panel, scroll over it to zoom 100 to 800 % in exact whole-pixel blocks, and it magnifies whatever the chips show (colour or one channel). Its size (small, medium, large) is in the popover; on/off, position, zoom and size are remembered per Panel, and "Loupe N %" is a tag while it is on (a remembered zoom that makes no sense reads as 200 %). The five chips and the settings button need about 190 px, so on the narrowest Panels some chips can run over (#171). With it off the clean picture takes no pointer or wheel events (#161).
-
-- Vectorscope: the soft spread slider moves in steps of 0.25 pixel, as on the waveforms (it was 0.1), and shows two decimals; a saved value reads as before.
-
-- Legends: ARRI False Colour's legend is a proportional 0 to 100 % scale bar under the picture instead of six equal swatches. Tick numbers run along its top (every 5 % where they fit, thinning to 10, 20, 25 or 50 % on a narrower Panel), each band sits at its true position and width, the gaps are the same greys the picture draws there, and short marks under it name "near black clip", "18 % grey" and "near white clip" (and the clip ends where there is room), dropped rather than overlapped. The saturation heatmap's legend is the same scale bar from 0 % to its scale's top. The legend can still be turned off; labels and the ADR 0010 wording are unchanged (#122).
-
-- Luma waveform: the plot takes the footage's aspect ratio again (16:9 footage gives a 16:9 plot), scaled to fit its Panel and centred with its scale numbers beside it and the rest of the Panel left empty, and follows a change of resolution without a restart. Counts, traces, edge rows and Colorise are unchanged (#151, ADR 0012).
-
-- The Colour Waveform is out of the Window, as Colorise on the luma waveform does its job: the Window shows 8 Panels, the Channel view now 2 x 2 at the bottom left and ARRI False Colour three columns wide in the default layout. A saved layout that names the Colour Waveform still recalls. Its code, tests and saved settings are kept (#145, ADR 0032).
-
-- Viewer gate: while the playhead is dragged in Resolve, every Panel follows the picture (the newest frame is shown at least every frame period) and lands on the stop frame at once, where before nothing was shown until the drag stopped. Cache fills stay hidden. Fast drags, which the gate used to mistake for a cache fill, are told apart by the time each render takes, not by how many frame numbers it jumps (#104, ADR 0031).
+Milestone 3 so far: a colourist's Window. The Window is 7 Panels with the clean picture as the hero, named layouts, Panel toolbars and sliders, zoom and pan with Link, and a joined 100 % and 200 % Vectorscope. Milestone 3 is not finished (see [#113](https://github.com/TomZandt/scopecreep/issues/113)); this is a checkpoint.
 
 ### Added
-
 - Clean picture: it zooms like Resolve's Viewer. The scroll wheel over it zooms toward the pointer from Fit to 400 % of source pixels, free below 100 %, landing on 100 %, then whole steps (200, 300, 400 %), so above 100 % every picture pixel is an exact square. A zoom chip, first on the title bar, says "Fit 23 %" or "200 %" (lit while zoomed in); click it for a slider from Fit to 400 % that snaps to whole steps above 100 %. Mattes stay black and the legend strip does not move. Zoom is not saved: every session starts at Fit. With the Loupe on, the wheel over the Loupe is still its zoom (#165, ADR 0035).
 - Clean picture: drag with the middle mouse button to pan the zoomed picture. It follows the pointer exactly, its edge stops at the Panel's edge so the Panel is never left empty, and a picture smaller than the Panel stays centred. Zooming after a pan still zooms toward the pointer. The left button and right-click are unchanged (#166, ADR 0035).
 - Link: a link chip beside the zoom chip on every picture Panel (ARRI False Colour, Stops False Colour, Skin Tone, the saturation heatmap and the clean picture), unlit by default. Click it on any of them and it lights on all of them: they then share one zoom and look at the same pixels, so scroll, middle-drag and the slider on any one move all of them, and at Fit each fits its own Panel. Turning Link on brings every Panel to the zoom and spot of the Panel you clicked it on; turning it off leaves each where it is. Link is remembered between sessions; zoom and pan are not. The title bar now has one more chip, so the narrowest Panels run over sooner (#168, ADR 0035).
@@ -69,6 +48,27 @@ The format follows [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/
 - Named layouts: Ctrl+Shift+1 to 9 saves the arrangement of the Panels into a slot and Ctrl+1 to 9 shows it. Right-click the status line for a small menu of the slots by name: click a saved layout to show it (or an empty slot to save into it), Shift-click saves over a layout, right-click renames it, and "Default layout" restores the default. Layouts are remembered in `~/.config/scopecreep/layouts`, and a layout still opens after Panels are added or removed. Nothing about layouts is on screen until you use it (#98, ADR 0030).
 
 ### Changed
+- Zoom: Link is on in a first session (a saved choice, on or off, still wins), and zoom goes up to 800 % instead of 400 %: free below 100 %, landing on 100 %, then whole steps 200 to 800 %, each picture pixel an exact square. The zoom chip no longer opens a slider: a click on it goes back to Fit (every picture Panel while Link is on), and the wheel is the way to zoom (#176, ADR 0035).
+
+- Vectorscope: Colour targets gains 75 % and 100 %, which draws both sets of target boxes on each plot at once, the 75 % box inside the 100 % one in the same colour. It is the default for a Panel with no stored choice; a saved 75 % or 100 % keeps its meaning, and the label reads "75 % and 100 % targets" when both show (#175, supersedes #129).
+
+- Vectorscope: with both plots shown, the 100 % and 200 % plots are joined into one scope. They touch with no gap on one continuous background, with a faint divider at the join that follows graticule brightness; the pair is sized and centred as a unit, so resizing the Panel or Window scales it like one instrument and spare room sits outside it, never between the plots. 100 % only and 200 % only fill the Panel as before (#174, ADR 0011).
+
+- The Channel view is out of the Window now the clean picture's Y R G B chips and Loupe do its job: the Window shows 7 Panels, and the default layout gives ARRI False Colour three columns and Stops False Colour two, the Saturation heatmap three and Skin tone two, every cell used. A saved layout that names the Channel view still recalls. Its code, tests and saved settings are kept (#162, ADR 0034).
+
+- Clean picture: Y R G B chips on its title bar replace the B/W chip. None lit is colour, the default; click a chip to see that channel as grey, click it again for colour, click another to switch. Y is Luma grey with the waveform's weights, exactly what B/W showed; mattes stay black. The title tags the channel when it is not colour and the choice is remembered per Panel. A saved B/W "on" opens as Y, "off" as colour. ARRI False Colour, Stops False Colour and Skin Tone keep their B/W chip (#160, ADR 0013).
+
+- Clean picture: a Loupe chip on its title bar, off by default. On, the Loupe works as on the Channel view: drag it anywhere in the Panel, scroll over it to zoom 100 to 800 % in exact whole-pixel blocks, and it magnifies whatever the chips show (colour or one channel). Its size (small, medium, large) is in the popover; on/off, position, zoom and size are remembered per Panel, and "Loupe N %" is a tag while it is on (a remembered zoom that makes no sense reads as 200 %). The five chips and the settings button need about 190 px, so on the narrowest Panels some chips can run over (#171). With it off the clean picture takes no pointer or wheel events (#161).
+
+- Vectorscope: the soft spread slider moves in steps of 0.25 pixel, as on the waveforms (it was 0.1), and shows two decimals; a saved value reads as before.
+
+- Legends: ARRI False Colour's legend is a proportional 0 to 100 % scale bar under the picture instead of six equal swatches. Tick numbers run along its top (every 5 % where they fit, thinning to 10, 20, 25 or 50 % on a narrower Panel), each band sits at its true position and width, the gaps are the same greys the picture draws there, and short marks under it name "near black clip", "18 % grey" and "near white clip" (and the clip ends where there is room), dropped rather than overlapped. The saturation heatmap's legend is the same scale bar from 0 % to its scale's top. The legend can still be turned off; labels and the ADR 0010 wording are unchanged (#122).
+
+- Luma waveform: the plot takes the footage's aspect ratio again (16:9 footage gives a 16:9 plot), scaled to fit its Panel and centred with its scale numbers beside it and the rest of the Panel left empty, and follows a change of resolution without a restart. Counts, traces, edge rows and Colorise are unchanged (#151, ADR 0012).
+
+- The Colour Waveform is out of the Window, as Colorise on the luma waveform does its job: the Window shows 8 Panels, the Channel view now 2 x 2 at the bottom left and ARRI False Colour three columns wide in the default layout. A saved layout that names the Colour Waveform still recalls. Its code, tests and saved settings are kept (#145, ADR 0032).
+
+- Viewer gate: while the playhead is dragged in Resolve, every Panel follows the picture (the newest frame is shown at least every frame period) and lands on the stop frame at once, where before nothing was shown until the drag stopped. Cache fills stay hidden. Fast drags, which the gate used to mistake for a cache fill, are told apart by the time each render takes, not by how many frame numbers it jumps (#104, ADR 0031).
 
 - A saved layout still opens when a Panel has gone: a neighbour fills its cell (#98).
 - The Black and white Panel is out of the Window, as the clean picture's B/W toggle does its job: the Window shows 9 Panels, ARRI False Colour now spanning two columns in the default layout. Its code and tests are kept (#118).
@@ -89,6 +89,13 @@ The format follows [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/
 - The vectorscopes' outer ring is a hue wheel: each point of it is the colour that lands there, muted so it does not compete with the trace. The inner ring, crosshair and skin-tone line stay neutral grey.
 - The skin-tone line on the vectorscopes and the Skin Tone Panel is at 123°, the angle Resolve 21.2's own vectorscope draws its line at (measured, #60), not the 134.5° first assumed. Skin now sits on it: the ColorChecker's dark skin is 2° and light skin 5° from the line.
 - The vectorscopes' trace is tinted by the colour that put each spot there (blue sky draws blue, the middle is white), and each of the six colour-target boxes is drawn in its own colour (red, yellow, green, cyan, magenta, blue). The plot, grid and skin-tone line stay neutral grey.
+
+### Known limitations
+
+- Nothing new in milestone 3 has been compared by eye with Resolve's own scopes or checked on a real monitor, on HiDPI, or with a real mouse; those checks are open as `ready-for-human` issues (for example #132-#137, #149, #152-#155, #170, #177, #178).
+- The UHD 50 performance check (`harness/experiments/uhd50_bench`) was not re-run on this build. The last run, on v0.2.0's 14 Panels, kept Resolve at 50 fps (#67); the Window now has 7 Panels and the Vectorscope draws more per frame (the 75 % and 100 % targets together, #177), so treat playback at UHD 50 as unchecked until #133 and #178 are done.
+- What alpha reaches the Sender from Resolve has not been checked (#156).
+
 
 ## [0.2.0] - 2026-11-17
 
