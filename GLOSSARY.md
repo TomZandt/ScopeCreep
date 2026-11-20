@@ -169,7 +169,7 @@ Dragging a Panel's title or tab onto another tab group: the outer quarter neares
 _Avoid_: Snap, drop zone (for the overlay)
 
 **Page**:
-A saved layout shown as a tab in the Page bar under the Colour Setup line: its own Layout tree, focused tab group and undo. The pages and the current page are remembered; only the current page's Panels measure and draw. New pages come from a template (All 7 Panels, Picture views, Scopes, Picture only, Empty page) or as a copy of the current one; Ctrl+1 to 9 go to pages 1 to 9 (ADR 0041).
+A saved layout shown as a tab in the Page bar under the Colour Setup line: its own Layout tree, focused tab group and undo. The pages and the current page are remembered; only the current page's Panels measure and draw. New pages come from a template (All 7 Panels, Picture views, Scopes, Picture only, Empty page) or as a copy of the current one; Ctrl+1 to 9 go to pages 1 to 9, and the first nine tabs show their number, "[1] Colour" (ADR 0041).
 _Avoid_: Workspace (Resolve's word for its page arrangement), slot, preset
 
 **Auto layout**:
