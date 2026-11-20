@@ -21,6 +21,8 @@ pub enum Command {
     /// The picture Panel under the pointer to Fit and back to its last zoom and spot (every picture Panel while
     /// Link is on), like Resolve's Shift+Z (#169).
     ZoomFit,
+    /// The Panel under the pointer fills the Window, or the grid comes back (#180).
+    FillWindow,
 }
 
 impl Command {
@@ -31,6 +33,7 @@ impl Command {
         all.extend((0..SLOTS).map(Command::RecallLayout));
         all.extend((0..SLOTS).map(Command::SaveLayout));
         all.push(Command::ZoomFit);
+        all.push(Command::FillWindow);
         all
     }
 
@@ -41,6 +44,7 @@ impl Command {
             Command::RecallLayout(slot) => format!("layout-recall-{}", slot + 1),
             Command::SaveLayout(slot) => format!("layout-save-{}", slot + 1),
             Command::ZoomFit => "zoom-fit".to_string(),
+            Command::FillWindow => "panel-fill".to_string(),
         }
     }
 
@@ -51,11 +55,12 @@ impl Command {
             Command::RecallLayout(slot) => format!("Show layout {}", slot + 1),
             Command::SaveLayout(slot) => format!("Save layout into slot {}", slot + 1),
             Command::ZoomFit => "Zoom: Fit / last zoom".to_string(),
+            Command::FillWindow => "Panel: fill the Window".to_string(),
         }
     }
 
     /// The hotkey the command has until the user changes it: Ctrl+1 to 9 to show a layout, Ctrl+Shift+1 to 9 to
-    /// save one, Z for the Fit toggle. Default layout has none.
+    /// save one, Z for the Fit toggle, Ctrl+F to fill the Window with a Panel. Default layout has none.
     pub fn default_hotkey(self) -> Option<Hotkey> {
         let digit = |slot: usize| Key::named(&(slot + 1).to_string());
         match self {
@@ -63,6 +68,7 @@ impl Command {
             Command::RecallLayout(slot) => digit(slot).map(Hotkey::ctrl),
             Command::SaveLayout(slot) => digit(slot).map(|k| Hotkey::ctrl(k).with_shift()),
             Command::ZoomFit => Key::named("Z").map(Hotkey::new),
+            Command::FillWindow => Key::named("F").map(Hotkey::ctrl),
         }
     }
 

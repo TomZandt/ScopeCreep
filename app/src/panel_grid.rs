@@ -532,6 +532,34 @@ pub struct PanelLayout {
     pub content: [f32; 4],
 }
 
+/// The cells while Panel `full` fills the Window (Ctrl+F, #180): it has the whole `area`, and every other Panel an
+/// empty cell far off screen, so it is never drawn or hit. `None` gives the grid's own cells.
+pub fn cells_filled(
+    grid: &PanelGrid,
+    area: [f32; 4],
+    gap: f32,
+    full: Option<usize>,
+) -> Vec<[f32; 4]> {
+    let cells = grid.cells(area, gap);
+    match full.filter(|f| *f < cells.len()) {
+        None => cells,
+        Some(full) => (0..cells.len())
+            .map(|i| if i == full { area } else { off_screen() })
+            .collect(),
+    }
+}
+
+/// Where a Panel that is not shown is: no size, far outside any window.
+fn off_screen() -> [f32; 4] {
+    let far = -f32::from(u16::MAX);
+    [far, far, 0.0, 0.0]
+}
+
+/// Whether a cell from [`cells_filled`] is shown.
+pub fn shown(cell: [f32; 4]) -> bool {
+    cell[2] > 0.0 && cell[3] > 0.0
+}
+
 impl PanelLayout {
     /// The layout inside `cell` at `scale` device pixels per logical pixel. The title bar is one line high and the
     /// label is clipped to it, so a long label never takes room from the display.

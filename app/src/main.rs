@@ -32,7 +32,7 @@ use scopecreep::layouts::{Layouts, Rename};
 use scopecreep::menu_bar::{self, BarState, Current, LayoutMode, MenuAction};
 use scopecreep::monitor::Monitor;
 use scopecreep::output_conversion::OutputConversion;
-use scopecreep::panel_grid::{Border, PanelGrid, PanelLayout, Press, min_panel_size};
+use scopecreep::panel_grid::{self, Border, PanelGrid, PanelLayout, Press, min_panel_size};
 use scopecreep::resolve_helper::ScriptHelper;
 use scopecreep::settings::{Amount, Menu, PanelSettings};
 use scopecreep::style;
@@ -255,6 +255,8 @@ struct AppWindow {
     hotkeys_panel: Option<HotkeysPanel>,
     /// The left button is down (a menu entry under it shows pressed).
     left_down: bool,
+    /// The Panel filling the Window (Ctrl+F, #180), if any. Display state: never saved.
+    full: Option<usize>,
     /// The hotkey of each command (ADR 0036).
     hotkeys: Hotkeys,
     /// A layout's name being typed in the Layout menu.
@@ -491,6 +493,7 @@ impl AppWindow {
             layout_mode: LayoutMode::Show,
             hotkeys_panel: None,
             left_down: false,
+            full: None,
             hotkeys: hotkeys_file()
                 .and_then(|path| std::fs::read_to_string(path).ok())
                 .map_or_else(Hotkeys::default, |text| Hotkeys::from_text(&text)),
@@ -542,6 +545,10 @@ impl AppWindow {
 
     /// What a press at the pointer would start: a border drag or a Panel drag.
     fn press_under_pointer(&self) -> Option<Press> {
+        // A Panel filling the Window has no borders to drag and nothing to swap with.
+        if self.full.is_some() {
+            return None;
+        }
         self.grid.press_at(
             self.grid_area,
             self.grid_gap,
@@ -914,6 +921,8 @@ impl AppWindow {
                 self.close_bar();
             } else if self.menu.is_some() {
                 self.close_menu();
+            } else if self.full.take().is_some() {
+                self.window.request_redraw();
             }
             return;
         }
@@ -925,7 +934,22 @@ impl AppWindow {
     /// Do a command, from its hotkey or its menu entry.
     fn run(&mut self, command: Command) {
         let names = self.displays.names();
+        // Showing a layout or the default brings the grid back.
+        if matches!(command, Command::DefaultLayout | Command::RecallLayout(_)) {
+            self.full = None;
+        }
         match command {
+            Command::FillWindow => {
+                self.full = match self.full {
+                    Some(_) => None,
+                    None => self
+                        .cells
+                        .iter()
+                        .position(|c| Menu::contains(*c, self.cursor)),
+                };
+                self.window.request_redraw();
+                return;
+            }
             Command::DefaultLayout => self.grid = PanelGrid::default_for(&names),
             Command::RecallLayout(slot) => match self.layouts.recall(slot, &names) {
                 Some(grid) => self.grid = grid,
@@ -1204,7 +1228,7 @@ impl AppWindow {
             (width - 2.0 * margin).max(1.0),
             (height - status_height - area_top).max(1.0),
         ];
-        let cells = self.grid.cells(area, margin);
+        let cells = panel_grid::cells_filled(&self.grid, area, margin, self.full);
         self.cells = cells.clone();
         self.grid_area = area;
         self.grid_gap = margin;
@@ -1309,7 +1333,12 @@ impl AppWindow {
         } else {
             (
                 TextStyle::NOTICE,
-                (panels.first().map_or(1.0, |p| p.content[2]) - 2.0 * margin).max(1.0),
+                (panels
+                    .iter()
+                    .find(|p| panel_grid::shown(p.frame))
+                    .map_or(1.0, |p| p.content[2])
+                    - 2.0 * margin)
+                    .max(1.0),
             )
         };
         self.notice.set(
@@ -1337,7 +1366,8 @@ impl AppWindow {
             (margin, status_top - row)
         } else {
             let [left, top, _, height] = panels
-                .first()
+                .iter()
+                .find(|p| panel_grid::shown(p.frame))
                 .map_or([margin, margin, 1.0, 1.0], |p| p.content);
             (
                 left + margin,
@@ -1349,6 +1379,9 @@ impl AppWindow {
         let mut marks: Vec<(usize, scopecreep::display::ScaleText)> = Vec::new();
         if texts.has_picture {
             for (i, panel) in panels.iter().enumerate() {
+                if !panel_grid::shown(panel.frame) {
+                    continue;
+                }
                 for mark in self.displays.scale_texts(i, panel.content, scale) {
                     marks.push((i, mark));
                 }
@@ -1419,6 +1452,9 @@ impl AppWindow {
         let tags_line = style::TYPE_SCALE * scale * style::TYPE_SCALE_LINE;
         for ((panel, text), (name, tags)) in panels.iter().zip(&self.panel_texts).zip(&title_parts)
         {
+            if !panel_grid::shown(panel.frame) {
+                continue;
+            }
             let [left, top, w, h] = panel.title;
             // A label never spills out of its title bar.
             let bounds = TextBounds {
@@ -1504,7 +1540,7 @@ impl AppWindow {
             style::rgba(style::LINE_BORDER),
         ));
         // Each Panel's thin border and the line under its title bar.
-        for panel in &panels {
+        for panel in panels.iter().filter(|p| panel_grid::shown(p.frame)) {
             for edge in panel.lines((style::LINE_WEIGHT * scale).max(1.0)) {
                 rects.push((edge, style::rgba(style::LINE_BORDER)));
             }
@@ -1534,6 +1570,9 @@ impl AppWindow {
             self.toolbar_hit()
         };
         for (i, (toolbar, l)) in self.toolbars.iter().zip(&self.title_layouts).enumerate() {
+            if !self.cells.get(i).is_some_and(|c| panel_grid::shown(*c)) {
+                continue;
+            }
             for (c, (chip, r)) in toolbar.chips.iter().zip(&l.chips).enumerate() {
                 let state = if pointer_over == Some(ToolbarHit::Chip(i, c)) {
                     State::Hover
@@ -1680,6 +1719,10 @@ impl AppWindow {
                 multiview_mask: None,
             });
             for (i, panel) in panels.iter().enumerate() {
+                // A Panel hidden while another fills the Window is not drawn (its cell is off screen).
+                if !panel_grid::shown(panel.frame) {
+                    continue;
+                }
                 self.displays
                     .draw(&mut pass, i, panel.content, [width, height], scale);
             }

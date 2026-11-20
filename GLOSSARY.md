@@ -149,12 +149,16 @@ Something the app does that a menu entry offers and a Hotkey can trigger, such a
 _Avoid_: Action, shortcut
 
 **Hotkey**:
-A key, by its position on the keyboard, with Ctrl, Shift or Alt held, that triggers a Command while the app's window has focus. Each Command has at most one and no two share one; the defaults are Ctrl+1 to 9 (show a layout), Ctrl+Shift+1 to 9 (save one) and Z (the Fit toggle). Assigned, cleared and reset in the Hotkeys panel (Settings, then Hotkeys…) by pressing the combination. Changes are kept in the config folder beside the layouts. Escape, and plain Enter, Backspace and Delete are reserved.
+A key, by its position on the keyboard, with Ctrl, Shift or Alt held, that triggers a Command while the app's window has focus. Each Command has at most one and no two share one; the defaults are Ctrl+1 to 9 (show a layout), Ctrl+Shift+1 to 9 (save one), Z (the Fit toggle) and Ctrl+F (fill the Window). Assigned, cleared and reset in the Hotkeys panel (Settings, then Hotkeys…) by pressing the combination. Changes are kept in the config folder beside the layouts. Escape, and plain Enter, Backspace and Delete are reserved.
 _Avoid_: Shortcut, keybinding, accelerator
 
 **Menu bar**:
 The thin bar across the very top of the Window, above the Colour Setup line, drawn by the app in the style system's quiet chrome. It holds the app's own Commands in menus (Layout), each entry with its Hotkey beside it. A menu opens on a click on its title and closes on a second click, a click elsewhere or Escape. Panel settings stay in each Panel's popover.
 _Avoid_: Toolbar (that is a Panel's title bar chips), main menu
+
+**Filling the Window**:
+Ctrl+F (a Hotkey) makes the Panel under the pointer take the whole Panel area, with the menu bar, Colour Setup line and status line still there; Ctrl+F again or Escape brings the Panel grid back, and so does showing a Layout. Display state, never saved; while a Panel fills the Window, borders and title bars can't be dragged.
+_Avoid_: Fullscreen (the window itself never changes), maximise, solo
 
 **Panel settings**:
 What a display offers in its Panel's right-click menu (and chips on its title bar). Each is either a short list of choices or an Amount set with a Slider, so a display can't be set up to mislead. Kept per Panel between sessions. A setting that changes what is measured is named in the Panel's label.

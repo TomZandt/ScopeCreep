@@ -59,8 +59,8 @@ fn every_slot_has_a_show_and_a_save_command() {
     let all = Command::all();
     assert_eq!(
         all.len(),
-        1 + 2 * SLOTS + 1,
-        "Default layout, show and save each slot, the Fit toggle"
+        1 + 2 * SLOTS + 2,
+        "Default layout, show and save each slot, the Fit toggle, fill the Window"
     );
     for slot in 0..SLOTS {
         assert!(all.contains(&Command::RecallLayout(slot)));
@@ -291,5 +291,28 @@ fn z_is_the_fit_toggle_by_default_and_can_be_changed_like_any_hotkey() {
     assert_eq!(hotkeys, Hotkeys::default());
     let mut saved = Hotkeys::default();
     saved.assign(Command::ZoomFit, ctrl("Z")).unwrap();
+    assert_eq!(Hotkeys::from_text(&saved.to_text()), saved);
+}
+
+#[test]
+fn ctrl_f_fills_the_window_by_default_and_can_be_changed_like_any_hotkey() {
+    let mut hotkeys = Hotkeys::default();
+    assert_eq!(hotkeys.command_for(ctrl("F")), Some(Command::FillWindow));
+    assert_eq!(Command::FillWindow.label(), "Panel: fill the Window");
+    assert_eq!(
+        hotkeys.command_for(Hotkey::new(key("F"))),
+        None,
+        "F alone is not it"
+    );
+    hotkeys
+        .assign(Command::FillWindow, Hotkey::new(key("F11")))
+        .unwrap();
+    assert_eq!(hotkeys.command_for(ctrl("F")), None);
+    hotkeys.clear(Command::FillWindow);
+    assert_eq!(hotkeys.get(Command::FillWindow), None);
+    hotkeys.reset(Command::FillWindow);
+    assert_eq!(hotkeys, Hotkeys::default());
+    let mut saved = Hotkeys::default();
+    saved.assign(Command::FillWindow, ctrl("Enter")).unwrap();
     assert_eq!(Hotkeys::from_text(&saved.to_text()), saved);
 }

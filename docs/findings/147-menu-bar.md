@@ -9,4 +9,4 @@ What ticket #147 showed on 2026-11-20, at the pure UI seam (`app/tests/menu_bar_
 - Every entry that runs a command shows exactly the hotkey that runs the same command, with the default hotkeys and with changed, cleared and replaced ones; an entry that runs no command shows none.
 - Every Layout menu mode, with nine long names, fits under the bar in a 480 x 400 window at 1x and 2x.
 - The layout area starts under both bars; the saved-grid reference size (ADR 0012, #96) is unchanged, because the real area at the default window was already below it. Saved grids from a window much taller than the default can be refused at the next start; that is older than this ticket (#179).
-- Not verified at the app: the bar on a real monitor and HiDPI, opening, switching and closing with a real mouse, and that the app takes no keys while Resolve has focus (#149).
+- Checked at the app by the product owner on 2026-11-20: the bar, its menus and the Layout menu work with a real mouse, and the app takes no keys while Resolve has focus (#149).

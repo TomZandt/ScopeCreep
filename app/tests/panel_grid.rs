@@ -1,7 +1,9 @@
 //! The Panel layout at the pure seam (#96): where each Panel goes (cells and spans), the default layout, dragging
 //! the borders between columns and rows, remembering the layout, and what sits inside a Panel (border, title bar,
 //! display) at small sizes and on a HiDPI screen. Rectangles are left, top, width, height in device pixels.
-use scopecreep::panel_grid::{Border, PanelGrid, PanelLayout, Press, min_panel_size};
+use scopecreep::panel_grid::{
+    Border, PanelGrid, PanelLayout, Press, cells_filled, min_panel_size, shown,
+};
 
 /// The Window's Panel area at 1280 x 760: a 12 px margin all round, 20 px of status line under it.
 const AREA: [f32; 4] = [12.0, 12.0, 1256.0, 716.0];
@@ -647,5 +649,43 @@ fn a_layout_saved_with_the_channel_view_still_recalls_without_it() {
     assert_eq!(
         (clean.column, clean.row, clean.columns, clean.rows),
         (0, 0, 3, 2)
+    );
+}
+
+// ---- A Panel filling the Window (Ctrl+F, #180)
+
+#[test]
+fn a_filling_panel_takes_the_whole_area_and_the_others_none() {
+    let grid = default_grid();
+    for full in 0..NAMES.len() {
+        let cells = cells_filled(&grid, AREA, GAP, Some(full));
+        assert_eq!(cells.len(), NAMES.len());
+        for (i, cell) in cells.iter().enumerate() {
+            if i == full {
+                assert_eq!(*cell, AREA);
+                assert!(shown(*cell));
+            } else {
+                assert!(!shown(*cell), "Panel {i} is hidden");
+                let layout = PanelLayout::new(*cell, 1.0);
+                for rect in [layout.title, layout.content] {
+                    assert!(
+                        rect[0] + rect[2] < 0.0 && rect[1] + rect[3] < 0.0,
+                        "Panel {i} can never be hit inside the window"
+                    );
+                }
+            }
+        }
+    }
+}
+
+#[test]
+fn with_no_panel_filling_the_window_the_grid_is_as_it_was() {
+    let grid = default_grid();
+    assert_eq!(cells_filled(&grid, AREA, GAP, None), grid.cells(AREA, GAP));
+    assert!(grid.cells(AREA, GAP).iter().all(|c| shown(*c)));
+    assert_eq!(
+        cells_filled(&grid, AREA, GAP, Some(99)),
+        grid.cells(AREA, GAP),
+        "a Panel that is not there fills nothing"
     );
 }

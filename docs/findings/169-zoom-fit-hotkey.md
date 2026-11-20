@@ -7,4 +7,4 @@ What ticket #169 showed on 2026-11-20, at the zoom model seam (`app/tests/zoom_l
 - Over a Scope (the luma waveform) Z does nothing. In the window it acts on the Panel under the pointer, so off the Panels it does nothing too.
 - The command "Zoom: Fit / last zoom" has Z by default, is listed in the Hotkeys panel, and can be reassigned, cleared, reset and saved like the others. No menu lists it yet: it acts on the Panel under the pointer, which a menu entry has no way to name.
 - The remembered zoom is display state and is never saved (ADR 0035).
-- Not verified at the app: Z beside Resolve on a real picture, and that Z typed in Resolve never reaches the app (#170, #149).
+- Checked at the app beside Resolve by the product owner on 2026-11-20: zoom, pan, Link and Z all work, and keys typed in Resolve never reach the app (#170, #149).
