@@ -20,3 +20,11 @@ Stage 0 check 5 (Resolve 21.2.0.6 Studio, probe on the timeline-level node `send
 **Unverified / needs a human:** a clip/timeline-level Color Output render cache hiding the probe; setting the timeline node's cache to Off and its effect; a real adjustment clip and a strong grade on an earlier timeline node; Shift-D or scrubbing on the Edit/Cut pages; a screenshot of the bypassed viewer.
 
 
+
+## Shift-D and scrubbing on the Edit and Cut pages (#27, checked 2026-11-20)
+
+With the app running on `scopecreep-test-bench50` (Sender on the last timeline node), counting the Sender's renders from the Feed header around each action, on the Color, Edit and Cut pages alike:
+
+- **Scrubbing** (moving the playhead to a new frame while paused) gives the Sender exactly one render per frame, and the app shows that frame.
+- **Shift-D (bypass colour grades) gives the Sender no frames** (0 renders when scrubbing with it on); Resolve's own viewer shows the bypassed picture. The app keeps showing the last frame it had, and its status line (`paused · 0 dropped · <project>`) says nothing about it: from the app alone a colourist can't tell the scopes are stale. Shift-D again brings the Sender back on the next scrub (1 render).
+- Screenshots of Resolve's bypassed viewer next to the app: `~/scopecreep-testdata/screenshots/27-shift-d-{color,edit,cut}.png` (not in git).
