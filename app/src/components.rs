@@ -552,6 +552,19 @@ pub fn popover(menu: &Menu, area: [f32; 4], cursor: [f32; 2], scale: f32) -> Vec
                     Align::Left,
                 ));
             }
+            MenuRow::Panel(action) => {
+                if contains(row_rect, cursor) {
+                    prims.push(rect(row_rect, style::STATE_HOVER));
+                }
+                let left = area[0] + style::SPACE_MENU_TEXT_LEFT * scale;
+                prims.push(text(
+                    &action.text(),
+                    [left, top, text_width, row_rect[3]],
+                    Face::Label,
+                    style::TEXT_PRIMARY,
+                    Align::Left,
+                ));
+            }
             MenuRow::Close => {
                 if contains(row_rect, cursor) {
                     prims.push(rect(row_rect, style::STATE_HOVER));

@@ -35,9 +35,10 @@ use scopecreep::layouts::{Layouts, Rename};
 use scopecreep::menu_bar::{self, AddEntry, BarState, Current, LayoutMode, MenuAction};
 use scopecreep::monitor::Monitor;
 use scopecreep::output_conversion::OutputConversion;
+use scopecreep::page_edit::{self, Room};
 use scopecreep::panel_grid::{self, PanelLayout, min_panel_size};
 use scopecreep::resolve_helper::ScriptHelper;
-use scopecreep::settings::{Amount, Menu, PanelSettings};
+use scopecreep::settings::{Amount, Menu, PanelAction, PanelSettings};
 use scopecreep::style;
 use scopecreep::toolbar::{ChipAction, Toolbar};
 use scopecreep::view_strip::{self, StripPart, ViewStrip};
@@ -707,7 +708,7 @@ impl AppWindow {
             let mut settings = self.settings.lock().unwrap();
             let before = settings.version();
             let value = self.displays.stored_value(panel, &settings, key, value);
-            settings.set(name, key, &value);
+            settings.set(&name, key, &value);
             settings.version() != before
         };
         if changed {
@@ -1088,8 +1089,7 @@ impl AppWindow {
                 return;
             }
         }
-        self.save_grid();
-        self.window.request_redraw();
+        self.panels_changed();
     }
 
     /// What the Add list offers: every display, those not on the page now enabled (ADR 0038, #206).
@@ -1141,13 +1141,100 @@ impl AppWindow {
         self.window.request_redraw();
     }
 
-    /// Close Panel `panel`: its sibling takes the space. The layout is remembered.
+    /// Close Panel `panel`: its sibling takes the space and everything kept for it is forgotten. The layout is
+    /// remembered.
     fn close_panel(&mut self, panel: usize) {
         self.full = None;
         self.layout_notice = None;
-        self.layout_history
-            .change(&mut self.grid, |g| g.close(panel));
+        {
+            let mut settings = self.settings.lock().unwrap();
+            self.layout_history.change(&mut self.grid, |g| {
+                page_edit::close(&self.displays, g, &mut settings, panel)
+            });
+        }
+        self.panels_changed();
+    }
+
+    /// The space the Panels were last laid out in, for Duplicate's room check.
+    fn room(&self) -> Room {
+        Room {
+            area: self.grid_area,
+            gap: self.grid_gap,
+            min: min_panel_size(self.scale),
+        }
+    }
+
+    /// Duplicate Panel `panel` to its right or below, with a copy of its settings: one undo step. With no room the
+    /// layout stays as it was and a notice names the least size of a Panel.
+    fn duplicate_panel(&mut self, panel: usize, dir: Dir) {
+        self.full = None;
+        let room = self.room();
+        let result = {
+            let mut settings = self.settings.lock().unwrap();
+            self.layout_history.change(&mut self.grid, |g| {
+                page_edit::duplicate(&self.displays, g, &mut settings, panel, dir, room)
+            })
+        };
+        match result {
+            Ok(_) => {
+                self.layout_notice = None;
+                self.panels_changed();
+            }
+            Err(no_room) => {
+                self.layout_notice = Some(no_room.notice());
+                self.window.request_redraw();
+            }
+        }
+    }
+
+    /// Replace Panel `panel` with the display called `name`, in its place and size, on that display's defaults: one
+    /// undo step.
+    fn replace_panel(&mut self, panel: usize, name: &str) {
+        self.full = None;
+        self.layout_notice = None;
+        let replaced = {
+            let mut settings = self.settings.lock().unwrap();
+            self.layout_history.change(&mut self.grid, |g| {
+                page_edit::replace(&self.displays, g, &mut settings, panel, name)
+            })
+        };
+        if replaced.is_some() {
+            self.panels_changed();
+        }
+    }
+
+    /// Remove the further instances that are not on the page any more (closed, replaced, or left off by an undo or
+    /// another layout), keeping the undo history's Panel indices right.
+    fn sweep_panels(&mut self) {
+        let removed = {
+            let mut settings = self.settings.lock().unwrap();
+            page_edit::sweep(&self.displays, &mut self.grid, &mut settings)
+        };
+        for index in removed {
+            self.layout_history.forget_index(index);
+        }
+    }
+
+    /// The Panels changed (made, removed or replaced): whatever the window kept by Panel index is dropped or made
+    /// again for the new set, and the layout and settings are remembered.
+    fn panels_changed(&mut self) {
+        self.sweep_panels();
+        let count = self.displays.len();
+        while self.panel_texts.len() < count {
+            self.panel_texts.push(PanelText {
+                label: Text::new(&mut self.font_system),
+                tags: Text::new(&mut self.font_system),
+                scale: Vec::new(),
+            });
+        }
+        self.panel_texts.truncate(count);
+        self.pointer_panel = None;
+        self.middle_panel = None;
+        self.panel_drag = None;
+        self.drag = None;
+        self.hover = None;
         self.save_grid();
+        self.save_settings();
         self.window.request_redraw();
     }
 
@@ -1180,6 +1267,32 @@ impl AppWindow {
         if menu.close_at(rect, cursor, scale) {
             self.menu = None;
             self.close_panel(panel);
+            return;
+        }
+        if let Some(action) = menu.panel_action_at(rect, cursor, scale) {
+            let at = self.menu.as_ref().map_or(cursor, |(_, at)| *at);
+            match action {
+                PanelAction::ReplaceWith => {
+                    let names = page_edit::replace_choices(&self.displays, panel);
+                    self.menu = Some((Menu::replace_list(panel, &names), at));
+                    self.window.request_redraw();
+                    return;
+                }
+                PanelAction::Back => self.open_popover(panel, at),
+                PanelAction::ReplaceBy(name) => {
+                    self.menu = None;
+                    self.replace_panel(panel, &name);
+                }
+                PanelAction::DuplicateRight => {
+                    self.menu = None;
+                    self.duplicate_panel(panel, Dir::Row);
+                }
+                PanelAction::DuplicateBelow => {
+                    self.menu = None;
+                    self.duplicate_panel(panel, Dir::Col);
+                }
+            }
+            self.window.request_redraw();
             return;
         }
         let choice = menu.choice_at(rect, cursor, scale);
@@ -1215,7 +1328,7 @@ impl AppWindow {
             {
                 let mut settings = self.settings.lock().unwrap();
                 for (key, value) in &result.remember {
-                    self.state_unsaved |= settings.set_state(name, key, value);
+                    self.state_unsaved |= settings.set_state(&name, key, value);
                 }
             }
             // A movement is written once it is done, and only if something changed.

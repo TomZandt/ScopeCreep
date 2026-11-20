@@ -52,6 +52,17 @@ impl LayoutHistory {
         }
     }
 
+    /// The display of index `removed` is gone for good (a closed duplicate, ADR 0039): drop its Panel from every
+    /// arrangement kept and move the Panels after it up one index, so each still names the Panel it did.
+    pub fn forget_index(&mut self, removed: usize) {
+        let forget = |tree: &mut LayoutTree| {
+            tree.close(removed);
+            tree.forget_index(removed);
+        };
+        self.steps.iter_mut().for_each(forget);
+        self.drag.iter_mut().for_each(forget);
+    }
+
     /// Whether there is a change to undo.
     pub fn can_undo(&self) -> bool {
         !self.steps.is_empty()

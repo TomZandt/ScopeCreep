@@ -481,3 +481,25 @@ fn the_clean_picture_loupe_position_and_zoom_round_trip_beside_its_settings() {
         "state is per Panel"
     );
 }
+
+#[test]
+fn copying_a_panel_copies_settings_and_state_and_forgetting_it_removes_them() {
+    let mut s = PanelSettings::default();
+    s.set("Clean picture", "channel", "red");
+    s.set_state("Clean picture", "loupe_zoom", "300");
+    s.copy_panel("Clean picture", "Clean picture 2");
+    assert!(s.to_text().contains("Clean picture 2\tchannel\tred"));
+    assert!(
+        s.to_text()
+            .contains("Clean picture 2\tstate:loupe_zoom\t300")
+    );
+    // Independent afterwards.
+    s.set("Clean picture 2", "channel", "blue");
+    assert!(s.to_text().contains("Clean picture\tchannel\tred"));
+    s.forget_panel("Clean picture 2");
+    assert!(!s.to_text().contains("Clean picture 2"));
+    assert!(s.to_text().contains("Clean picture\tchannel\tred"));
+    // Copying from a Panel with nothing set leaves the target on defaults.
+    s.copy_panel("Nothing", "Clean picture");
+    assert!(!s.to_text().contains("Clean picture"));
+}

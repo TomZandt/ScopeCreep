@@ -263,3 +263,80 @@ fn the_add_list_fits_the_menu_sizes_at_1x_and_2x() {
     }
     assert!(menu_bar::largest_menus().len() > 5);
 }
+
+// ---- The Panel section: Replace with, Duplicate right and below, Close (#208, ADR 0039) ----
+
+#[test]
+fn the_panel_section_lists_replace_with_duplicate_right_duplicate_below_then_close() {
+    use scopecreep::settings::PanelAction;
+    for with_settings in [false, true] {
+        let menu = menu_of(with_settings);
+        let n = menu.rows.len();
+        assert_eq!(menu.rows[n - 5], MenuRow::Heading("Panel".to_string()));
+        assert_eq!(menu.rows[n - 4], MenuRow::Panel(PanelAction::ReplaceWith));
+        assert_eq!(
+            menu.rows[n - 3],
+            MenuRow::Panel(PanelAction::DuplicateRight)
+        );
+        assert_eq!(
+            menu.rows[n - 2],
+            MenuRow::Panel(PanelAction::DuplicateBelow)
+        );
+        assert_eq!(menu.rows[n - 1], MenuRow::Close);
+        for scale in SCALES {
+            let rect = menu.rect([40.0, 40.0], [1000.0, 800.0], scale);
+            for (row, action) in [
+                (n - 4, PanelAction::ReplaceWith),
+                (n - 3, PanelAction::DuplicateRight),
+                (n - 2, PanelAction::DuplicateBelow),
+            ] {
+                let top = Menu::row_top(rect, row, scale);
+                let on = [rect[0] + 20.0 * scale, top + 4.0 * scale];
+                assert_eq!(menu.panel_action_at(rect, on, scale), Some(action));
+                assert!(!menu.close_at(rect, on, scale));
+                assert_eq!(menu.choice_at(rect, on, scale), None);
+            }
+            let heading = Menu::row_top(rect, n - 5, scale) + 4.0 * scale;
+            assert_eq!(
+                menu.panel_action_at(rect, [rect[0] + 20.0 * scale, heading], scale),
+                None
+            );
+            let said = texts(&popover(&menu, rect, [0.0, 0.0], scale));
+            for text in [
+                "Replace with\u{2026}",
+                "Duplicate right",
+                "Duplicate below",
+                "Close",
+            ] {
+                assert!(said.contains(&text.to_string()), "{text}");
+            }
+        }
+    }
+}
+
+#[test]
+fn the_replace_list_names_each_display_then_goes_back() {
+    use scopecreep::settings::PanelAction;
+    let names = ["Vectorscope".to_string(), "Skin tone".to_string()];
+    let menu = Menu::replace_list(3, &names);
+    assert_eq!(menu.panel, 3);
+    assert_eq!(
+        menu.rows,
+        vec![
+            MenuRow::Heading("Replace with".to_string()),
+            MenuRow::Panel(PanelAction::ReplaceBy("Vectorscope".to_string())),
+            MenuRow::Panel(PanelAction::ReplaceBy("Skin tone".to_string())),
+            MenuRow::Panel(PanelAction::Back),
+        ]
+    );
+    for scale in SCALES {
+        let rect = menu.rect([40.0, 40.0], [1000.0, 800.0], scale);
+        let top = Menu::row_top(rect, 2, scale);
+        assert_eq!(
+            menu.panel_action_at(rect, [rect[0] + 20.0 * scale, top + 4.0 * scale], scale),
+            Some(PanelAction::ReplaceBy("Skin tone".to_string()))
+        );
+        let said = texts(&popover(&menu, rect, [0.0, 0.0], scale));
+        assert!(said.contains(&"Skin tone".to_string()) && said.contains(&"Back".to_string()));
+    }
+}

@@ -769,6 +769,50 @@ impl LayoutTree {
         self.split_beside(panel, target, dir, first, area, gap, min)
     }
 
+    /// Whether Panel `target` has room for a second Panel beside it in `dir` (right for [`Dir::Row`], below for
+    /// [`Dir::Col`]): half of its cell, net of the gap, holds one Panel's least size `min`.
+    pub fn has_room_beside(
+        &self,
+        target: usize,
+        dir: Dir,
+        area: [f32; 4],
+        gap: f32,
+        min: [f32; 2],
+    ) -> bool {
+        let edge = match dir {
+            Dir::Row => Edge::Right,
+            Dir::Col => Edge::Bottom,
+        };
+        self.clone()
+            .add_at_edge(usize::MAX - 1, target, edge, area, gap, min)
+            .is_ok()
+    }
+
+    /// Replace (ADR 0039): Panel `new` takes Panel `old`'s place and size in the tree (and its focus). Nothing
+    /// happens when `old` is not on the page or `new` already is.
+    pub fn replace(&mut self, old: usize, new: usize) {
+        if !self.contains(old) || self.contains(new) {
+            return;
+        }
+        self.root.map_panels(&|p| if p == old { new } else { p });
+        if self.focus == Some(old) {
+            self.focus = Some(new);
+        }
+        self.total = self.total.max(new + 1);
+    }
+
+    /// The display of index `removed` is gone for good (a closed duplicate): every Panel after it moves up one
+    /// index, here and in the focus. `removed` is not on the page.
+    pub fn forget_index(&mut self, removed: usize) {
+        self.root
+            .map_panels(&|p| if p > removed { p - 1 } else { p });
+        self.focus = self
+            .focus
+            .filter(|f| *f != removed)
+            .map(|f| if f > removed { f - 1 } else { f });
+        self.total = self.total.saturating_sub(1);
+    }
+
     /// The longer side of the tab group holding `panel`.
     fn long_side(&self, panel: usize, area: [f32; 4], gap: f32) -> Option<Dir> {
         let mut found = None;

@@ -16,7 +16,7 @@ use crate::measurement::LumaWeights;
 use crate::settings::{PanelSettings, SettingDef, Settings};
 use crate::toolbar::{Toolbar, ToolbarDef};
 use crate::waveform::Waveform;
-use std::sync::Arc;
+use std::sync::{Arc, RwLock, RwLockReadGuard};
 
 /// What a display needs to know besides the frame: the Colour Setup and the user's settings.
 #[derive(Clone, Debug, PartialEq)]
@@ -234,11 +234,16 @@ pub struct PanelId(pub u64);
 
 /// What makes a Panel an instance of a display (ADR 0039): its id, and its key, under which its settings,
 /// remembered state and place in a saved layout are kept.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone)]
 struct Instance {
     id: PanelId,
     key: String,
+    /// Makes another display of the same kind, for Duplicate (none for a display that cannot be copied).
+    make: Option<Maker>,
 }
+
+/// Makes a new display of one kind, with its own state.
+pub type Maker = Arc<dyn Fn() -> Arc<dyn Display> + Send + Sync>;
 
 /// The key of the next instance of the display called `name`, given the instances in use (ADR 0039). The first
 /// instance keeps the display's name, so everything saved before still applies; further ones are "Name 2",
@@ -254,18 +259,50 @@ fn instance_key(name: &str, taken: &[Instance]) -> String {
         .expect("an unused number")
 }
 
+fn borrowed<'a>(
+    panels: &'a [(String, &'static [SettingDef])],
+) -> Vec<(&'a str, &'static [SettingDef])> {
+    panels.iter().map(|(k, d)| (k.as_str(), *d)).collect()
+}
+
+/// Register the display `make` makes, with `make` to make another of it.
+fn add(
+    set: &mut DisplaySet,
+    device: &wgpu::Device,
+    queue: &wgpu::Queue,
+    make: Box<dyn Fn(&wgpu::Device, &wgpu::Queue) -> Arc<dyn Display> + Send + Sync>,
+) {
+    let first = make(device, queue);
+    let (d, q) = (device.clone(), queue.clone());
+    set.register_with(first, Arc::new(move || make(&d, &q)));
+}
+
 /// Every display, in Panel order (the order of the grid, left to right then down).
+///
+/// Shared by clone, so the Window and the Feed thread always see the same Panels: a Panel made or removed from the
+/// Window is measured by the Feed thread from the next frame on (see [`DisplaySet::generation`]).
 #[derive(Clone, Default)]
 pub struct DisplaySet {
-    displays: Vec<Arc<dyn Display>>,
-    /// The instance each display is, in the same order as `displays`.
-    instances: Vec<Instance>,
-    next_id: u64,
+    shared: Arc<RwLock<Shared>>,
     /// The Window's one Link: picture Panels zoom and pan together while it is on (#168).
     link: crate::zoom::Link,
 }
 
+#[derive(Default)]
+struct Shared {
+    displays: Vec<Arc<dyn Display>>,
+    /// The instance each display is, in the same order as `displays`.
+    instances: Vec<Instance>,
+    next_id: u64,
+    /// Goes up whenever a Panel is made or removed.
+    generation: u64,
+}
+
 impl DisplaySet {
+    fn read(&self) -> RwLockReadGuard<'_, Shared> {
+        self.shared.read().unwrap()
+    }
+
     /// The displays the app shows, in Panel order. A new display is one module that implements [`Display`], and
     /// one line here.
     pub fn standard(
@@ -285,47 +322,124 @@ impl DisplaySet {
         filterable: bool,
     ) -> (DisplaySet, ScopeHandles) {
         let mut set = DisplaySet::default();
-        set.register(Arc::new(crate::picture_view::PictureView::new(
-            device, queue, target, filterable,
-        )));
-        let luma_waveform = Waveform::new(device, queue, target);
-        set.register(Arc::new(luma_waveform.clone()));
+        add(
+            &mut set,
+            device,
+            queue,
+            Box::new(move |d, q| {
+                Arc::new(crate::picture_view::PictureView::new(
+                    d, q, target, filterable,
+                ))
+            }),
+        );
+        let luma_waveform = {
+            let first = Waveform::new(device, queue, target);
+            let (d, q) = (device.clone(), queue.clone());
+            set.register_with(
+                Arc::new(first.clone()),
+                Arc::new(move || Arc::new(Waveform::new(&d, &q, target))),
+            );
+            first
+        };
         if IN_WINDOW.gamut_legal_warning {
-            set.register(Arc::new(crate::gamut_warning::GamutWarning::new(
-                device, queue, target,
-            )));
+            add(
+                &mut set,
+                device,
+                queue,
+                Box::new(move |d, q| {
+                    Arc::new(crate::gamut_warning::GamutWarning::new(d, q, target))
+                }),
+            );
         }
         if IN_WINDOW.highlight_neutrals {
-            set.register(Arc::new(crate::highlight_neutrals::HighlightNeutrals::new(
-                device, queue, target, filterable,
-            )));
+            add(
+                &mut set,
+                device,
+                queue,
+                Box::new(move |d, q| {
+                    Arc::new(crate::highlight_neutrals::HighlightNeutrals::new(
+                        d, q, target, filterable,
+                    ))
+                }),
+            );
         }
         if IN_WINDOW.channel_view {
-            set.register(Arc::new(crate::channel_view::ChannelView::new(
-                device, queue, target, filterable,
-            )));
+            add(
+                &mut set,
+                device,
+                queue,
+                Box::new(move |d, q| {
+                    Arc::new(crate::channel_view::ChannelView::new(
+                        d, q, target, filterable,
+                    ))
+                }),
+            );
         }
-        set.register(Arc::new(crate::arri_false_colour::ArriFalseColour::new(
-            device, queue, target,
-        )));
+        add(
+            &mut set,
+            device,
+            queue,
+            Box::new(move |d, q| {
+                Arc::new(crate::arri_false_colour::ArriFalseColour::new(d, q, target))
+            }),
+        );
         if IN_WINDOW.black_and_white {
-            set.register(Arc::new(crate::black_and_white::BlackAndWhite::new(
-                device, queue, target, filterable,
-            )));
+            add(
+                &mut set,
+                device,
+                queue,
+                Box::new(move |d, q| {
+                    Arc::new(crate::black_and_white::BlackAndWhite::new(
+                        d, q, target, filterable,
+                    ))
+                }),
+            );
         }
         let vectorscope = Arc::new(crate::vectorscope::Vectorscope::new(device, queue, target));
-        set.register(vectorscope.clone());
-        set.register(Arc::new(crate::saturation_heatmap::SaturationHeatmap::new(
-            device, queue, target,
-        )));
-        set.register(Arc::new(crate::skin_tone_view::SkinTone::new(
-            device, queue, target, filterable,
-        )));
-        set.register(Arc::new(crate::stops_false_colour::StopsFalseColour::new(
-            device, queue, target,
-        )));
+        {
+            let (d, q) = (device.clone(), queue.clone());
+            set.register_with(
+                vectorscope.clone(),
+                Arc::new(move || Arc::new(crate::vectorscope::Vectorscope::new(&d, &q, target))),
+            );
+        }
+        add(
+            &mut set,
+            device,
+            queue,
+            Box::new(move |d, q| {
+                Arc::new(crate::saturation_heatmap::SaturationHeatmap::new(
+                    d, q, target,
+                ))
+            }),
+        );
+        add(
+            &mut set,
+            device,
+            queue,
+            Box::new(move |d, q| {
+                Arc::new(crate::skin_tone_view::SkinTone::new(
+                    d, q, target, filterable,
+                ))
+            }),
+        );
+        add(
+            &mut set,
+            device,
+            queue,
+            Box::new(move |d, q| {
+                Arc::new(crate::stops_false_colour::StopsFalseColour::new(
+                    d, q, target,
+                ))
+            }),
+        );
         if IN_WINDOW.cie_plot {
-            set.register(Arc::new(crate::cie::CiePlot::new(device, queue, target)));
+            add(
+                &mut set,
+                device,
+                queue,
+                Box::new(move |d, q| Arc::new(crate::cie::CiePlot::new(d, q, target))),
+            );
         }
         if IN_WINDOW.colour_waveform {
             set.register(Arc::new(Waveform::new_colour(
@@ -345,25 +459,80 @@ impl DisplaySet {
     }
 
     /// Add a display after the others, as a new Panel: it gets an id of its own, and the key of its settings and
-    /// state (the display's name for the first of its kind, "Name 2" and on for the next, ADR 0039).
+    /// state (the display's name for the first of its kind, "Name 2" and on for the next, ADR 0039). It cannot be
+    /// duplicated; see [`DisplaySet::register_with`].
     pub fn register(&mut self, display: Arc<dyn Display>) -> PanelId {
+        self.push(display, None)
+    }
+
+    /// [`DisplaySet::register`] for a display that `make` can make another of, which is what Duplicate and Replace
+    /// use.
+    pub fn register_with(&mut self, display: Arc<dyn Display>, make: Maker) -> PanelId {
+        self.push(display, Some(make))
+    }
+
+    fn push(&self, display: Arc<dyn Display>, make: Option<Maker>) -> PanelId {
         display.link_to(&self.link);
-        let id = PanelId(self.next_id);
-        self.next_id += 1;
-        let key = instance_key(display.name(), &self.instances);
-        self.instances.push(Instance { id, key });
-        self.displays.push(display);
+        let mut shared = self.shared.write().unwrap();
+        let id = PanelId(shared.next_id);
+        shared.next_id += 1;
+        let key = instance_key(display.name(), &shared.instances);
+        shared.instances.push(Instance { id, key, make });
+        shared.displays.push(display);
+        shared.generation += 1;
         id
+    }
+
+    /// Another Panel of the same display as Panel `index`, after the others: its own display, with its own id and
+    /// the next free number in its key ("Name 2"). Returns its index, or `None` for a display that cannot be copied.
+    /// Its settings are the caller's to copy ([`PanelSettings::copy_panel`]).
+    pub fn duplicate(&self, index: usize) -> Option<usize> {
+        let make = self.read().instances.get(index)?.make.clone()?;
+        let display = make();
+        self.push(display, Some(make));
+        Some(self.len() - 1)
+    }
+
+    /// A new Panel of the display called `name`, made like the first of its kind (for Replace with and Add when
+    /// that display is already on the page). Returns its index, or `None` when there is no such display.
+    pub fn make_named(&self, name: &str) -> Option<usize> {
+        let template = self.read().displays.iter().position(|d| d.name() == name)?;
+        self.duplicate(template)
+    }
+
+    /// Remove Panel `index`'s display for good (a duplicate that was closed): every Panel after it moves up one
+    /// index, and its number is free again. Its settings are the caller's to forget.
+    pub fn remove(&self, index: usize) {
+        let mut shared = self.shared.write().unwrap();
+        shared.displays.remove(index);
+        shared.instances.remove(index);
+        shared.generation += 1;
+    }
+
+    /// Whether Panel `index` is a further instance ("Name 2"), which is removed when closed; the first instance of
+    /// a display stays, closed, so the Add list can bring it back.
+    pub fn is_duplicate(&self, index: usize) -> bool {
+        let shared = self.read();
+        shared.instances[index].key != shared.displays[index].name()
+    }
+
+    /// Goes up whenever a Panel is made or removed, so the Feed thread knows to configure and measure again.
+    pub fn generation(&self) -> u64 {
+        self.read().generation
     }
 
     /// Panel `index`'s stable id.
     pub fn id(&self, index: usize) -> PanelId {
-        self.instances[index].id
+        self.read().instances[index].id
     }
 
     /// Every Panel's key, in Panel order: what settings, state and saved layouts name it by.
     pub fn keys(&self) -> Vec<String> {
-        self.instances.iter().map(|i| i.key.clone()).collect()
+        self.read()
+            .instances
+            .iter()
+            .map(|i| i.key.clone())
+            .collect()
     }
 
     /// Whether Link is on.
@@ -374,25 +543,27 @@ impl DisplaySet {
     /// Switch the Window's Link. Turning it on from Panel `from` brings every picture Panel to that Panel's zoom
     /// and spot; turning it off leaves each where it is.
     pub fn set_link(&self, on: bool, from: usize) {
-        self.link
-            .set(on, self.displays.get(from).and_then(|d| d.zoom_model()));
+        self.link.set(
+            on,
+            self.read().displays.get(from).and_then(|d| d.zoom_model()),
+        );
     }
 
     pub fn len(&self) -> usize {
-        self.displays.len()
+        self.read().displays.len()
     }
 
     pub fn is_empty(&self) -> bool {
-        self.displays.is_empty()
+        self.read().displays.is_empty()
     }
 
     /// What each Panel's display is called (not its key: see [`DisplaySet::keys`]).
     pub fn names(&self) -> Vec<&'static str> {
-        self.displays.iter().map(|d| d.name()).collect()
+        self.read().displays.iter().map(|d| d.name()).collect()
     }
 
     pub fn labels(&self) -> Vec<String> {
-        self.displays.iter().map(|d| d.label()).collect()
+        self.read().displays.iter().map(|d| d.label()).collect()
     }
 
     /// Every Panel's title bar: its name and short tags (only state that changes how to read it), with the full
@@ -405,9 +576,11 @@ impl DisplaySet {
         let luma = crate::measurement::luma_weights_of(
             &settings.resolve(crate::waveform::NAME, &crate::waveform::SETTINGS),
         );
-        self.displays
+        let shared = self.read();
+        shared
+            .displays
             .iter()
-            .zip(&self.instances)
+            .zip(&shared.instances)
             .map(|(display, instance)| {
                 let mut own = DisplayContext {
                     settings: settings.resolve(&instance.key, display.setting_defs()),
@@ -416,21 +589,27 @@ impl DisplaySet {
                 };
                 own.settings
                     .extend(settings.state_of(&instance.key, display.state_keys()));
-                crate::window_text::panel_title(display.name(), &own, display.label())
+                let mut title =
+                    crate::window_text::panel_title(display.name(), &own, display.label());
+                // A further instance shows its number ("Vectorscope 2").
+                if let Some(number) = instance.key.strip_prefix(display.name()) {
+                    title.name.push_str(number);
+                }
+                title
             })
             .collect()
     }
 
     /// Hand `frame` to every display.
     pub fn on_frame(&self, encoder: &mut wgpu::CommandEncoder, frame: &GpuFrame) {
-        for display in &self.displays {
+        for display in &self.read().displays {
             display.on_frame(encoder, frame);
         }
     }
 
     /// Hand the Timeline Colour Space frame (before Output Conversion) to every display.
     pub fn on_timeline_frame(&self, encoder: &mut wgpu::CommandEncoder, frame: &GpuFrame) {
-        for display in &self.displays {
+        for display in &self.read().displays {
             display.on_timeline_frame(encoder, frame);
         }
     }
@@ -440,7 +619,8 @@ impl DisplaySet {
         let luma = crate::measurement::luma_weights_of(
             &settings.resolve(crate::waveform::NAME, &crate::waveform::SETTINGS),
         );
-        for (display, instance) in self.displays.iter().zip(&self.instances) {
+        let shared = self.read();
+        for (display, instance) in shared.displays.iter().zip(&shared.instances) {
             let mut own = DisplayContext {
                 settings: settings.resolve(&instance.key, display.setting_defs()),
                 luma,
@@ -452,22 +632,26 @@ impl DisplaySet {
         }
     }
 
-    fn setting_panels(&self) -> Vec<(&str, &'static [SettingDef])> {
-        self.displays
+    fn setting_panels(&self) -> Vec<(String, &'static [SettingDef])> {
+        let shared = self.read();
+        shared
+            .displays
             .iter()
-            .zip(&self.instances)
-            .map(|(d, i)| (i.key.as_str(), d.setting_defs()))
+            .zip(&shared.instances)
+            .map(|(d, i)| (i.key.clone(), d.setting_defs()))
             .collect()
     }
 
     /// Whether every Panel's legend is on (the View menu's entry is marked, #191).
     pub fn legends_on(&self, settings: &PanelSettings) -> bool {
-        settings.legends_on(&self.setting_panels())
+        let panels = self.setting_panels();
+        settings.legends_on(&borrowed(&panels))
     }
 
     /// Set the legend of every Panel that has one, on or off, through its own Panel setting (#191).
     pub fn set_legends(&self, settings: &mut PanelSettings, on: bool) {
-        settings.set_legends(&self.setting_panels(), on);
+        let panels = self.setting_panels();
+        settings.set_legends(&borrowed(&panels), on);
     }
 
     /// The View menu's entry and its hotkey: every legend off if they are all on, else every legend on.
@@ -478,14 +662,14 @@ impl DisplaySet {
 
     /// The settings the display in Panel `index` offers.
     pub fn setting_defs(&self, index: usize) -> &'static [SettingDef] {
-        self.displays[index].setting_defs()
+        self.read().displays[index].setting_defs()
     }
 
     /// The settings the display in Panel `index` leaves for the popover: those that are not chips on its title bar.
     pub fn popover_defs(&self, index: usize) -> Vec<SettingDef> {
         crate::toolbar::popover_defs(
-            &self.displays[index].offered_defs(),
-            self.displays[index].toolbar_defs(),
+            &self.read().displays[index].offered_defs(),
+            self.read().displays[index].toolbar_defs(),
         )
     }
 
@@ -493,8 +677,8 @@ impl DisplaySet {
     /// did not fit the bar first (#171), then those that are never chips.
     pub fn popover_for(&self, index: usize, toolbar: &Toolbar) -> Vec<SettingDef> {
         crate::toolbar::popover_with(
-            &self.displays[index].offered_defs(),
-            self.displays[index].toolbar_defs(),
+            &self.read().displays[index].offered_defs(),
+            self.read().displays[index].toolbar_defs(),
             &toolbar.collapsed,
         )
     }
@@ -503,12 +687,12 @@ impl DisplaySet {
     /// chips: they are in the view strip ([`DisplaySet::view_strip`], ADR 0040).
     pub fn toolbar(&self, index: usize, settings: &PanelSettings) -> Toolbar {
         let own = self.settings_of(index, settings);
-        Toolbar::new(self.displays[index].toolbar_defs_for(&own), &own)
+        Toolbar::new(self.read().displays[index].toolbar_defs_for(&own), &own)
     }
 
     /// What the zoom chip of the display in Panel `index` says, with its content in `area`.
     pub fn zoom(&self, index: usize, area: [f32; 4], scale: f32) -> Option<crate::zoom::Readout> {
-        self.displays[index].zoom(area, scale)
+        self.read().displays[index].zoom(area, scale)
     }
 
     /// The read-only zoom tag a picture Panel shows with its other tags ("Fit 17 %"); `None` for a Scope.
@@ -521,7 +705,7 @@ impl DisplaySet {
     pub fn first_picture_panel(&self, contents: &[[f32; 4]], scale: f32) -> Option<usize> {
         let readouts: Vec<_> = contents
             .iter()
-            .zip(&self.displays)
+            .zip(&self.read().displays)
             .map(|(area, d)| d.zoom(*area, scale))
             .collect();
         readouts
@@ -537,7 +721,7 @@ impl DisplaySet {
         // Fit, or the zoom rounded to a percent: what the readout can say about one Panel.
         let says: Vec<String> = contents
             .iter()
-            .zip(&self.displays)
+            .zip(&self.read().displays)
             .filter_map(|(area, d)| d.zoom(*area, scale))
             .map(|r| {
                 if r.percent > r.fit + 0.01 {
@@ -567,7 +751,7 @@ impl DisplaySet {
 
     /// The strip's Fit: every picture Panel back to Fit (`contents` is each Panel's content area, in Panel order).
     pub fn fit_all(&self, contents: &[[f32; 4]], scale: f32) {
-        for (area, d) in contents.iter().zip(&self.displays) {
+        for (area, d) in contents.iter().zip(&self.read().displays) {
             d.set_zoom(*area, scale, 0.0);
         }
     }
@@ -575,17 +759,18 @@ impl DisplaySet {
     /// The Fit toggle (Z, #169) on the display in Panel `index`: Fit and back to the last zoom and spot; every
     /// picture Panel while Link is on, nothing over a Scope. Returns whether anything changed.
     pub fn toggle_fit(&self, index: usize, area: [f32; 4], scale: f32) -> bool {
-        self.displays[index].toggle_fit(area, scale)
+        self.read().displays[index].toggle_fit(area, scale)
     }
 
     /// Set the zoom of the display in Panel `index` to `percent` (tests set a zoom this way; 0 is Fit).
     pub fn set_zoom(&self, index: usize, area: [f32; 4], scale: f32, percent: f32) {
-        self.displays[index].set_zoom(area, scale, percent);
+        self.read().displays[index].set_zoom(area, scale, percent);
     }
 
     /// The settings of the display in Panel `index` as its popover shows them.
     pub fn popover_settings(&self, index: usize, settings: &PanelSettings) -> Settings {
-        self.displays[index].popover_settings(&self.settings_of(index, settings))
+        let own = self.settings_of(index, settings);
+        self.read().displays[index].popover_settings(&own)
     }
 
     /// What to keep for Panel `index`'s `key` set to `value` from the popover or a chip.
@@ -596,26 +781,28 @@ impl DisplaySet {
         key: &str,
         value: &str,
     ) -> String {
-        self.displays[index].stored_value(&self.settings_of(index, settings), key, value)
+        let own = self.settings_of(index, settings);
+        self.read().displays[index].stored_value(&own, key, value)
     }
 
     /// The settings the display in Panel `index` is using, given everyone's choices.
     pub fn settings_of(&self, index: usize, settings: &PanelSettings) -> Settings {
+        let shared = self.read();
         settings.resolve(
-            &self.instances[index].key,
-            self.displays[index].setting_defs(),
+            &shared.instances[index].key,
+            shared.displays[index].setting_defs(),
         )
     }
 
     /// What the display in Panel `index` is called.
     pub fn name(&self, index: usize) -> &'static str {
-        self.displays[index].name()
+        self.read().displays[index].name()
     }
 
     /// Panel `index`'s key: what its settings and remembered state are kept under (the display's name for the
     /// first of its kind, "Name 2" and on for the next, ADR 0039).
-    pub fn key(&self, index: usize) -> &str {
-        &self.instances[index].key
+    pub fn key(&self, index: usize) -> String {
+        self.read().instances[index].key.clone()
     }
 
     pub fn draw(
@@ -626,11 +813,11 @@ impl DisplaySet {
         surface: [f32; 2],
         scale: f32,
     ) {
-        self.displays[index].draw(pass, area, surface, scale);
+        self.read().displays[index].draw(pass, area, surface, scale);
     }
 
     pub fn scale_texts(&self, index: usize, area: [f32; 4], scale: f32) -> Vec<ScaleText> {
-        self.displays[index].scale_texts(area, scale)
+        self.read().displays[index].scale_texts(area, scale)
     }
 
     /// The pointer over the display in Panel `index`.
@@ -641,7 +828,7 @@ impl DisplaySet {
         scale: f32,
         event: Pointer,
     ) -> PointerResult {
-        self.displays[index].pointer(area, scale, event)
+        self.read().displays[index].pointer(area, scale, event)
     }
 
     /// Whether the display in Panel `index`, with its content in `area`, wants the scroll wheel: it has state to move
@@ -652,6 +839,6 @@ impl DisplaySet {
 
     /// Whether the display in Panel `index` wants the pointer (it has state to move).
     pub fn takes_pointer(&self, index: usize) -> bool {
-        !self.displays[index].state_keys().is_empty()
+        !self.read().displays[index].state_keys().is_empty()
     }
 }

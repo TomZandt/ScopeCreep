@@ -26,6 +26,7 @@ pub mod menu_bar;
 pub mod monitor;
 pub mod muted_palette;
 pub mod output_conversion;
+pub mod page_edit;
 pub mod panel_grid;
 pub mod picture_stage;
 pub mod picture_view;

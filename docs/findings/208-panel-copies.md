@@ -1,0 +1,20 @@
+# #208: copies of a display: Replace with, Duplicate right and below
+
+What ticket #208 showed on 2026-11-20, at the Feed seam (`app/tests/instances_seam.rs`, GPU, synthetic frames through the app's Feed loop), the pure layout seam (`app/tests/add_close.rs`), the settings seam (`app/tests/settings.rs`) and the pure UI seam (`app/tests/panel_add_ui.rs`). Nothing was checked at the app or in Resolve: how the popover's Panel section and the "Replace with" list look and feel on a real monitor is still to be seen by a person.
+
+- Two clean pictures set to the red and the blue channel draw different pictures (a red, green and blue test frame: the red Panel is bright on the left third, the blue one on the right), and each keeps its own choice. A duplicate starts with the same resolved settings and the same remembered state (a Loupe zoom) as the original, and changing either afterwards leaves the other alone.
+- The Window and the Feed thread now share one display set (clones of a `DisplaySet` see the same Panels). A Panel made after the Feed loop started is configured and measured by it on its next step and draws the frame already on screen; a Panel removed is no longer measured. The set has a generation counter the Feed loop watches.
+- Numbers: copies are "Name 2", "Name 3", the lowest number not held by a living Panel. Swapping Panels and closing another copy never renumbers a living one (its id and key stay; only its index moves). A number is free again once its Panel is closed, and an id is never reused.
+- Close forgets every setting and remembered value kept under the Panel's key. A further instance is removed from the set when closed (its index disappears and later Panels move up one, in the layout tree too); the first instance of a display stays in the set, closed, so the Add list can bring it back, with its settings forgotten.
+- Replace puts the new Panel in the old one's cell with its exact rectangle and its focus, on the new display's defaults. If the display's first instance is closed it comes back, else a further instance is made ("Vectorscope 2" when the Vectorscope is on the page). Replacing a copy removes it.
+- Duplicate right or below splits the cell in half (net of the gap), the copy on the right or below and focused. With no room, nothing is made or changed and the Window gives the same notice as Add panel.
+- Zoom and Link: with Link on, a zoom set on one clean picture reaches its copy, the view strip reads the shared zoom, and Fit takes both back to Fit.
+- A copy's title shows its number ("Clean picture 2"); the first instance's does not.
+- The popover's Panel section lists Replace with…, Duplicate right, Duplicate below and Close; Replace with… turns the popover into a list of the other displays and Back.
+
+- Undo: Duplicate and Replace are one step each through the layout history (`app/tests/instances_seam.rs`); undoing a Duplicate takes the copy off the page and it is then removed, undoing a Replace puts the old Panel back in its place. A further instance that is off the page for any reason (closed, replaced, undone, or left out of a recalled layout) is removed by `page_edit::sweep`, which also tells the history so every kept arrangement keeps naming the same Panels. Undo never touches settings (ADR 0038 and #207), so undoing a Close or a Replace brings the first instance back on its defaults, and a closed copy cannot be brought back by undo (it is gone).
+
+Not done here:
+- **Copies after a restart.** The layout text names instances ("Clean picture 2"), but at start-up only the seven first instances exist, so a copy saved in the layout is dropped on the next start and its settings stay in the settings file. Making the copies again at start-up belongs with the pages ticket that saves layouts as pages.
+- **The Add list** still greys a display that is on the page; offering a second instance from it was not asked for.
+- **Closed Panels still measure.** A closed first instance stays in the display set and is measured each frame (as before this ticket); not measuring Panels that are off the page is a later ticket of the spec.

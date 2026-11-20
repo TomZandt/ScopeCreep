@@ -157,7 +157,7 @@ A leaf of the Layout tree: one or more Panels sharing one area, one shown (its t
 _Avoid_: Pane, stack, container
 
 **Panel instance**:
-A Panel is one instance of a display with a stable id, so a display can be on the Window more than once. The first instance keeps the display's name as its settings key; further ones are "Name 2", "Name 3", numbered when created and never by position (ADR 0039).
+A Panel is one instance of a display with a stable id, so a display can be on the Window more than once. The first instance keeps the display's name as its settings key; further ones are "Name 2", "Name 3", numbered when created and never by position (ADR 0039). **Duplicate right** and **Duplicate below** (the Panel section of a popover) make a new instance that takes half of the Panel's cell and starts with a copy of its settings and remembered state; **Replace with** keeps a Panel's place and size and gives it another display on that display's defaults (a display's closed first instance comes back, else a further instance is made). Closing a Panel forgets its settings, and a closed further instance is removed so its number is free again. Zoom and Link reach every picture instance (built in #208).
 _Avoid_: Copy (for the id), clone
 
 **Add panel**:

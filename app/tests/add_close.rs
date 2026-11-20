@@ -253,3 +253,74 @@ fn a_panel_closed_and_added_again_is_in_the_text_where_it_went() {
     assert_eq!(restored, tree);
     assert_eq!(restored.len(), 7);
 }
+
+// ---- Duplicate, Replace and forgetting a removed display (#208, ADR 0039) ----
+
+use scopecreep::layout_tree::{Dir, Edge};
+
+#[test]
+fn duplicate_right_and_below_split_the_cell_in_half_beside_the_original() {
+    let min = min_panel_size(1.0);
+    for check in [0usize, 1usize] {
+        let mut tree = default_tree();
+        let (target, new) = (index("Clean picture"), 7);
+        let before = tree.cells(AREA, GAP)[target];
+        let edge = if check == 0 {
+            Edge::Right
+        } else {
+            Edge::Bottom
+        };
+        tree.add_at_edge(new, target, edge, AREA, GAP, min).unwrap();
+        let cells = tree.cells(AREA, GAP);
+        let (a, b) = (cells[target], cells[new]);
+        if check == 0 {
+            let half = (before[2] - GAP) / 2.0;
+            assert!(near(a, [before[0], before[1], half, before[3]]), "{a:?}");
+            assert!(
+                near(b, [before[0] + half + GAP, before[1], half, before[3]]),
+                "{b:?}"
+            );
+        } else {
+            let half = (before[3] - GAP) / 2.0;
+            assert!(near(a, [before[0], before[1], before[2], half]), "{a:?}");
+            assert!(
+                near(b, [before[0], before[1] + half + GAP, before[2], half]),
+                "{b:?}"
+            );
+        }
+        assert_eq!(tree.focused(), Some(new));
+    }
+}
+
+#[test]
+fn a_duplicate_with_no_room_leaves_the_tree_alone() {
+    let mut tree = LayoutTree::automatic(1);
+    let before = tree.clone();
+    let tiny = [0.0, 0.0, 200.0, 150.0];
+    let min = min_panel_size(1.0);
+    assert!(!tree.has_room_beside(0, Dir::Row, tiny, GAP, min));
+    assert!(tree.add_at_edge(1, 0, Edge::Right, tiny, GAP, min).is_err());
+    assert_eq!(tree, before);
+    assert_eq!(tree.len(), before.len());
+}
+
+#[test]
+fn replace_takes_the_place_and_the_focus_and_forget_index_moves_later_panels_up() {
+    let mut tree = default_tree();
+    let (old, before) = (index("Skin tone"), tree.cells(AREA, GAP));
+    tree.set_focus(old);
+    tree.replace(old, 7);
+    let cells = tree.cells(AREA, GAP);
+    assert!(near(cells[7], before[old]));
+    assert!(!tree.contains(old));
+    assert_eq!(tree.focused(), Some(7));
+    // Display 5 (Skin tone, closed now) is gone for good: 6 and 7 become 5 and 6, nothing else moves.
+    tree.forget_index(old);
+    assert!(tree.contains(6) && !tree.contains(7));
+    assert!(near(tree.cells(AREA, GAP)[6], before[old]));
+    assert_eq!(tree.focused(), Some(6));
+    assert!(near(
+        tree.cells(AREA, GAP)[5],
+        before[index("Stops False Colour")]
+    ));
+}

@@ -121,6 +121,31 @@ impl PanelSettings {
         }
     }
 
+    /// Give Panel `to` a copy of Panel `from`'s settings and remembered state, replacing whatever it had (Duplicate,
+    /// ADR 0039). The settings count as changed when there is anything to copy.
+    pub fn copy_panel(&mut self, from: &str, to: &str) {
+        self.forget_panel(to);
+        if let Some(own) = self.panels.get(from).cloned() {
+            self.panels.insert(to.to_string(), own);
+            self.version += 1;
+        }
+        if let Some(own) = self.state.get(from).cloned() {
+            self.state.insert(to.to_string(), own);
+            self.state_version += 1;
+        }
+    }
+
+    /// Forget everything kept for Panel `panel` (it was closed, or replaced, ADR 0039): it starts from the defaults
+    /// if it is ever made again.
+    pub fn forget_panel(&mut self, panel: &str) {
+        if self.panels.remove(panel).is_some() {
+            self.version += 1;
+        }
+        if self.state.remove(panel).is_some() {
+            self.state_version += 1;
+        }
+    }
+
     /// Goes up whenever a menu choice changes (not remembered state): equal versions of the same settings are equal.
     pub fn version(&self) -> u64 {
         self.version
@@ -299,12 +324,42 @@ pub enum MenuRow {
     },
     /// Closes the Panel (ADR 0038, #206): the last row of every Panel's popover.
     Close,
+    /// One of the Panel section's other entries (ADR 0039, #208).
+    Panel(PanelAction),
     /// The way back to an amount's default, under its slider.
     Reset {
         key: &'static str,
         value: f32,
         text: String,
     },
+}
+
+/// What the Panel section of a popover does besides Close (ADR 0039, #208).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum PanelAction {
+    /// Opens the list of displays to replace this Panel's display with.
+    ReplaceWith,
+    /// A new Panel of the same display to the right of this one, with a copy of its settings.
+    DuplicateRight,
+    /// The same, below.
+    DuplicateBelow,
+    /// In the Replace with list: replace this Panel with the display called so.
+    ReplaceBy(String),
+    /// In the Replace with list: back to the popover.
+    Back,
+}
+
+impl PanelAction {
+    /// What the row says.
+    pub fn text(&self) -> String {
+        match self {
+            PanelAction::ReplaceWith => "Replace with\u{2026}".to_string(),
+            PanelAction::DuplicateRight => "Duplicate right".to_string(),
+            PanelAction::DuplicateBelow => "Duplicate below".to_string(),
+            PanelAction::ReplaceBy(name) => name.clone(),
+            PanelAction::Back => "Back".to_string(),
+        }
+    }
 }
 
 /// The right-click menu of one Panel.
@@ -359,8 +414,37 @@ impl Menu {
             rows: Vec::new(),
         });
         menu.rows.push(MenuRow::Heading("Panel".to_string()));
+        menu.rows.push(MenuRow::Panel(PanelAction::ReplaceWith));
+        menu.rows.push(MenuRow::Panel(PanelAction::DuplicateRight));
+        menu.rows.push(MenuRow::Panel(PanelAction::DuplicateBelow));
         menu.rows.push(MenuRow::Close);
         menu
+    }
+
+    /// The Replace with list of Panel `panel`'s popover: one row for each of `names` (the displays to choose from),
+    /// then Back.
+    pub fn replace_list(panel: usize, names: &[String]) -> Menu {
+        let mut rows = vec![MenuRow::Heading("Replace with".to_string())];
+        rows.extend(
+            names
+                .iter()
+                .map(|n| MenuRow::Panel(PanelAction::ReplaceBy(n.clone()))),
+        );
+        rows.push(MenuRow::Panel(PanelAction::Back));
+        Menu { panel, rows }
+    }
+
+    /// The Panel section's entry under `point`, if it is on one.
+    pub fn panel_action_at(
+        &self,
+        rect: [f32; 4],
+        point: [f32; 2],
+        scale: f32,
+    ) -> Option<PanelAction> {
+        match self.rows.get(self.row_at(rect, point, scale)?)? {
+            MenuRow::Panel(action) => Some(action.clone()),
+            _ => None,
+        }
     }
 
     /// Whether `point` is on the Close row.

@@ -55,6 +55,8 @@ pub struct FeedLoop {
     chosen: PanelSettings,
     seen_version: u64,
     seen_state_version: u64,
+    /// The displays' generation when last looked at: a Panel made or removed configures and measures again.
+    seen_generation: u64,
     /// What the Feed's status said when last looked at, and the texts made from it.
     seen: Option<Status>,
     status_text: Vec<String>,
@@ -78,6 +80,7 @@ impl FeedLoop {
         let chosen = settings.lock().unwrap().clone();
         // Before any frame: every display has its settings, and measures in the default Measured Space.
         displays.configure(&DisplayContext::default(), &chosen);
+        let seen_generation = displays.generation();
         FeedLoop {
             displays,
             conversion,
@@ -85,6 +88,7 @@ impl FeedLoop {
             context: DisplayContext::default(),
             seen_version: chosen.version(),
             seen_state_version: chosen.state_version(),
+            seen_generation,
             chosen,
             settings,
             seen: None,
@@ -168,8 +172,10 @@ impl FeedLoop {
             self.seen_state_version = state_version;
             labels_stale = true;
         }
-        if version != self.seen_version {
+        let generation = self.displays.generation();
+        if version != self.seen_version || generation != self.seen_generation {
             self.seen_version = version;
+            self.seen_generation = generation;
             self.chosen = self.settings.lock().unwrap().clone();
             self.displays.configure(&self.context, &self.chosen);
             let displays = &self.displays;
