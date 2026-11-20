@@ -407,6 +407,16 @@ impl DisplaySet {
         )
     }
 
+    /// The popover of the display in Panel `index` under its title bar `toolbar`: the settings of the chips that
+    /// did not fit the bar first (#171), then those that are never chips.
+    pub fn popover_for(&self, index: usize, toolbar: &Toolbar) -> Vec<SettingDef> {
+        crate::toolbar::popover_with(
+            &self.displays[index].offered_defs(),
+            self.displays[index].toolbar_defs(),
+            &toolbar.collapsed,
+        )
+    }
+
     /// The chips on the title bar of the display in Panel `index`, given everyone's choices: a picture Panel
     /// whose content is `area` starts with its zoom chip.
     pub fn toolbar(

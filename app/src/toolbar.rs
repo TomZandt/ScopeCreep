@@ -220,6 +220,9 @@ pub struct Toolbar {
     pub tooltips: Vec<String>,
     /// What a click on chip `i` does.
     pub picks: Vec<ChipAction>,
+    /// The settings whose chips did not fit the title bar ([`Toolbar::fit_to`]), in bar order, by
+    /// [`ChipAction::key`]: the popover offers them instead ([`popover_with`]).
+    pub collapsed: Vec<&'static str>,
 }
 
 /// What a click on a title-bar chip does.
@@ -232,6 +235,35 @@ pub enum ChipAction {
     /// Switch the Window's Link to this state.
     Link(bool),
 }
+
+impl ChipAction {
+    /// The setting the chip belongs to: the chips of one setting leave the bar together.
+    pub fn key(&self) -> &'static str {
+        match self {
+            ChipAction::Set(key, _) => key,
+            ChipAction::Zoom { .. } => crate::zoom::ZOOM_KEY,
+            ChipAction::Link(_) => crate::zoom::LINK_KEY,
+        }
+    }
+}
+
+/// The link chip as a popover row, for a bar too small for the chip (#171). Link is Window state, not a Panel
+/// setting: the Window switches it ([`crate::zoom::LINK_KEY`]) rather than storing the choice for the Panel.
+pub const LINK_DEF: SettingDef = SettingDef {
+    key: crate::zoom::LINK_KEY,
+    label: "Link zoom across Panels",
+    amount: None,
+    choices: &[
+        Choice {
+            value: "on",
+            text: "On",
+        },
+        Choice {
+            value: TOGGLE_OFF,
+            text: "Off",
+        },
+    ],
+};
 
 /// The tip on a picture Panel's zoom chip.
 pub const ZOOM_TOOLTIP: &str = "Zoom: scroll, or click for Fit";
@@ -271,22 +303,40 @@ impl Toolbar {
         self
     }
 
-    /// On a title bar `bar_width` wide (device pixels), shorten the zoom chip to its number ("23 %" for "Fit 23 %")
-    /// when the chips and the settings button would not fit with it long. It stays first, so it stays on the bar.
+    /// Fit the chips on a title bar `bar_width` wide (device pixels) beside the settings button, never past it
+    /// (#171). First the zoom chip shortens to its number ("23 %" for "Fit 23 %"); then whole settings leave the
+    /// bar from the right, the least used first by the toolbar's own order, into [`Toolbar::collapsed`] for the
+    /// popover to offer. Once any has left the settings button is counted, as the popover now holds them. The
+    /// zoom chip is first, so it is the last to go.
     pub fn fit_to(&mut self, bar_width: f32, settings_button: bool, scale: f32) {
-        let Some(ChipAction::Zoom { short }) = self.picks.first() else {
+        let needed = |chips: &[Chip], button: bool| {
+            let button = if button {
+                (crate::style::SPACE_SETTINGS_BUTTON + crate::style::SPACE_CHIP_GAP) * scale
+            } else {
+                0.0
+            };
+            crate::components::chip_row_width(chips, scale)
+                + button
+                + 2.0 * crate::style::SPACE_BAR_PAD * scale
+        };
+        if needed(&self.chips, settings_button) <= bar_width {
             return;
-        };
-        let button = if settings_button {
-            (crate::style::SPACE_SETTINGS_BUTTON + crate::style::SPACE_CHIP_GAP) * scale
-        } else {
-            0.0
-        };
-        let needed = crate::components::chip_row_width(&self.chips, scale)
-            + button
-            + 2.0 * crate::style::SPACE_BAR_PAD * scale;
-        if needed > bar_width {
+        }
+        if let Some(ChipAction::Zoom { short }) = self.picks.first() {
             self.chips[0].text = short.clone();
+            if needed(&self.chips, settings_button) <= bar_width {
+                return;
+            }
+        }
+        while !self.chips.is_empty() && needed(&self.chips, true) > bar_width {
+            let key = self.picks.last().map(ChipAction::key);
+            while self.picks.last().map(ChipAction::key) == key {
+                self.chips.pop();
+                self.on.pop();
+                self.tooltips.pop();
+                self.picks.pop();
+            }
+            self.collapsed.splice(0..0, key);
         }
     }
 
@@ -358,5 +408,26 @@ pub fn popover_defs(defs: &[SettingDef], toolbar: &[ToolbarDef]) -> Vec<SettingD
     defs.iter()
         .filter(|d| !toolbar.iter().any(|t| t.key == d.key))
         .copied()
+        .collect()
+}
+
+/// The popover of a Panel whose title bar is `toolbar`: the settings of the chips that did not fit
+/// ([`Toolbar::collapsed`]) first, in bar order, then those that are never chips. Link becomes its own row
+/// ([`LINK_DEF`]); the zoom chip none, as the wheel and the Fit toggle (Z) reach it.
+pub fn popover_with(
+    defs: &[SettingDef],
+    toolbar_defs: &[ToolbarDef],
+    collapsed: &[&str],
+) -> Vec<SettingDef> {
+    collapsed
+        .iter()
+        .filter_map(|key| {
+            if *key == crate::zoom::LINK_KEY {
+                Some(LINK_DEF)
+            } else {
+                defs.iter().find(|d| d.key == *key).copied()
+            }
+        })
+        .chain(popover_defs(defs, toolbar_defs))
         .collect()
 }

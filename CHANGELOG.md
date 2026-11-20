@@ -11,6 +11,7 @@ The format follows [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/
 
 ### Fixed
 - A Panel arrangement saved with a border dragged close to its minimum in a large Window, or a layout saved that way, came back as the default layout at the next start. It now comes back as arranged: a column or row too small for the default Window is widened to its minimum there and the others give way (#179, ADR 0012).
+- A narrow Panel's chips no longer run past its title bar. Chips that don't fit leave the bar from the right, a whole setting at a time (the zoom chip stays longest), and its settings button opens a popover that offers them first, Link included. On the clean picture at its smallest only the zoom chip stays; all of Y R G B and L show from 192 px wide (#171).
 
 ## [0.3.1] - 2026-11-20
 

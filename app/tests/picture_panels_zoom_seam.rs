@@ -369,6 +369,59 @@ fn every_picture_panel_has_a_zoom_chip_before_its_own_chips_that_reads_fit_and_s
 }
 
 #[test]
+fn at_the_minimum_panel_width_every_picture_panel_keeps_its_chips_inside_and_the_rest_in_its_popover()
+ {
+    let b = Bench::new("panels-zoom-min-width", "off");
+    for (i, name) in NAMES.iter().enumerate() {
+        let title = panel_title(name, &Default::default(), String::new());
+        for scale in [1.0f32, 2.0] {
+            let small = PanelLayout::new(
+                [
+                    0.0,
+                    0.0,
+                    scopecreep::style::SPACE_MIN_PANEL_WIDTH * scale,
+                    200.0 * scale,
+                ],
+                scale,
+            )
+            .title;
+            let mut t = b.set.toolbar(i, &b.settings, AREA, scale);
+            t.fit_to(small[2], !b.set.popover_defs(i).is_empty(), scale);
+            let popover: Vec<&str> = b.set.popover_for(i, &t).iter().map(|d| d.key).collect();
+            let (l, _, _) = window_text::lay_out_toolbar_title(
+                &title,
+                &t.chips,
+                !popover.is_empty(),
+                small,
+                scale,
+            );
+            let inside =
+                |r: [f32; 4]| r[0] >= small[0] && r[0] + r[2] <= small[0] + small[2] + 0.01;
+            assert_eq!(
+                t.chips[0].text, "50 %",
+                "{name}: the zoom chip stays, short"
+            );
+            for chip in l.chips.iter().chain(&l.settings) {
+                assert!(inside(*chip), "{name}: {chip:?} stays inside {small:?}");
+            }
+            if let (Some(last), Some(button)) = (l.chips.last(), l.settings) {
+                assert!(
+                    last[0] + last[2] <= button[0],
+                    "{name}: no chip runs under the settings button"
+                );
+            }
+            for key in t
+                .collapsed
+                .iter()
+                .filter(|k| **k != scopecreep::zoom::ZOOM_KEY)
+            {
+                assert!(popover.contains(key), "{name}: {key} is in the popover");
+            }
+        }
+    }
+}
+
+#[test]
 fn clicking_the_zoom_chip_takes_each_picture_panel_back_to_fit_and_a_scope_has_none() {
     let b = Bench::new("panels-zoom-slider", "off");
     for (i, name) in NAMES.iter().enumerate() {

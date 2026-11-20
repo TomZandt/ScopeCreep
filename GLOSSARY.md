@@ -98,7 +98,7 @@ _Avoid_: Widget, control (for the whole set)
 A small toggle on a title bar: a letter or short word, grey when off, the accent (or its channel's colour for R, G, B, Y) when on. A row of chips behaves in one of four ways: single (one always on), multiple (any combination, at least one on), toggle (free to be off) or one or none (at most one on; clicking the lit one turns it off).
 
 **Toolbar**:
-The settings a display marks to show as chips on its Panel's title bar (the Channel view's Y R G B, one at a time (out of the Window); the luma waveform's Y R G B, any combination with at least one on; the clean picture's Y R G B, one or none, none being colour, the default, with the channel named as a tag when lit). The popover holds the settings that are not on the toolbar.
+The settings a display marks to show as chips on its Panel's title bar (the Channel view's Y R G B, one at a time (out of the Window); the luma waveform's Y R G B, any combination with at least one on; the clean picture's Y R G B, one or none, none being colour, the default, with the channel named as a tag when lit). The popover holds the settings that are not on the toolbar. On a title bar too narrow for every chip, whole settings leave the bar from the right (the zoom chip, first, last) and the popover offers them first, Link included; the settings button always stays and nothing runs past the bar.
 
 **Legend strip**:
 The colour scale of a display, always horizontal: under the picture, full width, read left to right.

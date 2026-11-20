@@ -623,11 +623,21 @@ impl AppWindow {
 
     /// Open Panel `panel`'s popover at `at` (none when every setting of the Panel is a chip, or it has none).
     fn open_popover(&mut self, panel: usize, at: [f32; 2]) {
-        let current = self
+        let mut current = self
             .displays
             .settings_of(panel, &self.settings.lock().unwrap());
-        self.menu =
-            Menu::new(panel, &self.displays.popover_defs(panel), &current).map(|menu| (menu, at));
+        // Link is Window state: its row, there when its chip did not fit (#171), shows it as it is.
+        let link = if self.displays.link_on() {
+            "on"
+        } else {
+            scopecreep::toolbar::TOGGLE_OFF
+        };
+        current.insert(scopecreep::zoom::LINK_KEY.to_string(), link.to_string());
+        let defs = match self.toolbars.get(panel) {
+            Some(toolbar) => self.displays.popover_for(panel, toolbar),
+            None => self.displays.popover_defs(panel),
+        };
+        self.menu = Menu::new(panel, &defs, &current).map(|menu| (menu, at));
     }
 
     /// Take Panel `panel`'s zoom chip click: back to Fit (every picture Panel while Link is on). Zoom is display
@@ -1013,8 +1023,10 @@ impl AppWindow {
             return;
         }
         let choice = menu.choice_at(rect, cursor, scale);
-        if let Some((key, value)) = choice {
-            self.choose(panel, key, value);
+        match choice {
+            Some((scopecreep::zoom::LINK_KEY, value)) => self.set_link(panel, value == "on"),
+            Some((key, value)) => self.choose(panel, key, value),
+            None => {}
         }
         if choice.is_none() && Menu::contains(rect, cursor) {
             return;
@@ -1258,8 +1270,13 @@ impl AppWindow {
             let mut toolbar = self
                 .displays
                 .toolbar(i, &settings_now, panel.content, scale);
-            let has_popover = !self.displays.popover_defs(i).is_empty();
-            toolbar.fit_to(panel.title[2], has_popover, scale);
+            toolbar.fit_to(
+                panel.title[2],
+                !self.displays.popover_defs(i).is_empty(),
+                scale,
+            );
+            // Chips that did not fit are in the popover, so the settings button is there for them too.
+            let has_popover = !self.displays.popover_for(i, &toolbar).is_empty();
             let (l, tags, all_shown) = window_text::lay_out_toolbar_title(
                 &title,
                 &toolbar.chips,

@@ -310,32 +310,259 @@ fn the_clean_picture_channel_chips_switch_turn_off_on_a_second_click_and_are_rem
     assert_eq!(on(&s), [false; 5], "a second click is colour again");
 }
 
+// ---- small Panels (#171): chips that do not fit go to the popover, never past the title bar
+
+/// A zoom chip as a picture Panel shows it at Fit.
+fn fit_readout() -> scopecreep::zoom::Readout {
+    scopecreep::zoom::Readout {
+        text: "Fit 75 %".into(),
+        short: "75 %".into(),
+        percent: 75.0,
+        fit: 75.0,
+        max: 800.0,
+    }
+}
+
+/// The title bar of a Panel `width` logical pixels wide at `scale`.
+fn bar(width: f32, scale: f32) -> [f32; 4] {
+    PanelLayout::new([0.0, 0.0, width * scale, 200.0 * scale], scale).title
+}
+
+/// Lay `toolbar` out on `bar` after fitting it, and check every chip and the settings button lie inside the bar.
+/// Returns the layout and the popover's setting keys.
+fn fit_inside(
+    toolbar: &mut Toolbar,
+    defs: &[scopecreep::settings::SettingDef],
+    toolbar_defs: &[scopecreep::toolbar::ToolbarDef],
+    bar: [f32; 4],
+    scale: f32,
+    what: &str,
+) -> (components::TitleLayout, Vec<&'static str>) {
+    toolbar.fit_to(bar[2], !popover_defs(defs, toolbar_defs).is_empty(), scale);
+    let popover = scopecreep::toolbar::popover_with(defs, toolbar_defs, &toolbar.collapsed);
+    let title = panel_title(what, &DisplayContext::default(), String::new());
+    let (l, _, _) =
+        window_text::lay_out_toolbar_title(&title, &toolbar.chips, !popover.is_empty(), bar, scale);
+    let inside = |r: [f32; 4]| r[0] >= bar[0] && r[0] + r[2] <= bar[0] + bar[2] + 0.01;
+    assert_eq!(l.chips.len(), toolbar.chips.len(), "{what}");
+    for chip in &l.chips {
+        assert!(inside(*chip), "{what}: {chip:?} stays inside {bar:?}");
+    }
+    let button = l.settings.expect("the settings button always stays");
+    assert!(inside(button), "{what}: {button:?} stays inside {bar:?}");
+    if let Some(last) = l.chips.last() {
+        assert!(
+            last[0] + last[2] <= button[0],
+            "{what}: no chip runs under the settings button"
+        );
+    }
+    (l, popover.iter().map(|d| d.key).collect())
+}
+
+fn clean_picture(set: &[(&str, &str)]) -> Settings {
+    let mut s = PanelSettings::default();
+    for (k, v) in set {
+        s.set("Clean picture", k, v);
+    }
+    s.resolve("Clean picture", &picture_view::SETTINGS)
+}
+
 #[test]
-fn the_clean_picture_chips_stay_on_a_small_panel() {
-    let toolbar = Toolbar::new(
-        &picture_view::TOOLBAR,
-        &PanelSettings::default().resolve("Clean picture", &picture_view::SETTINGS),
-    );
-    let settings: Settings = [("channel".to_string(), "blue".to_string())].into();
-    let title = panel_title(
-        "Clean picture",
-        &DisplayContext {
-            settings,
-            ..DisplayContext::default()
-        },
-        String::new(),
-    );
+fn at_the_minimum_panel_width_the_clean_picture_chips_go_to_the_popover_and_stay_reachable() {
+    let own = clean_picture(&[("channel", "blue"), ("loupe", "on")]);
     for scale in [1.0, 2.0] {
-        let small = PanelLayout::new([0.0, 0.0, 190.0 * scale, 200.0 * scale], scale).title;
-        let (l, _, all) =
-            window_text::lay_out_toolbar_title(&title, &toolbar.chips, true, small, scale);
-        assert_eq!(l.chips.len(), 5);
-        assert!(!all, "the tag goes to the hover");
-        for chip in &l.chips {
-            assert!(
-                chip[0] >= small[0] && chip[0] + chip[2] <= small[0] + small[2] + 0.01,
-                "{chip:?} stays inside {small:?}"
+        let small = bar(scopecreep::style::SPACE_MIN_PANEL_WIDTH, scale);
+        let mut toolbar = Toolbar::new(&picture_view::TOOLBAR, &own)
+            .with_zoom(Some(&fit_readout()))
+            .with_link(true);
+        let (_, popover) = fit_inside(
+            &mut toolbar,
+            &picture_view::SETTINGS,
+            &picture_view::TOOLBAR,
+            small,
+            scale,
+            "Clean picture",
+        );
+        assert_eq!(
+            toolbar
+                .chips
+                .iter()
+                .map(|c| c.text.as_str())
+                .collect::<Vec<_>>(),
+            ["75 %"],
+            "the zoom chip, first, stays; the rest leave from the right"
+        );
+        assert_eq!(toolbar.collapsed, ["link", "channel", "loupe"]);
+        assert_eq!(
+            popover,
+            ["link", "channel", "loupe", "size"],
+            "every collapsed choice is in the popover, before the Loupe size"
+        );
+        // The popover shows each choice as it is, and its rows are what the chips would set.
+        let mut current = own.clone();
+        current.insert("link".into(), "on".into());
+        let defs = scopecreep::toolbar::popover_with(
+            &picture_view::SETTINGS,
+            &picture_view::TOOLBAR,
+            &toolbar.collapsed,
+        );
+        let menu = Menu::new(0, &defs, &current).unwrap();
+        let lit: Vec<(&str, &str)> = menu
+            .rows
+            .iter()
+            .filter_map(|r| match r {
+                MenuRow::Choice {
+                    key,
+                    value,
+                    on: true,
+                    ..
+                } => Some((*key, *value)),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(
+            lit,
+            [
+                ("link", "on"),
+                ("channel", "blue"),
+                ("loupe", "on"),
+                ("size", "medium")
+            ]
+        );
+    }
+}
+
+#[test]
+fn chips_leave_a_setting_at_a_time_so_a_lit_channel_is_never_hidden_beside_its_neighbours() {
+    // Without a zoom chip (as the toolbar is built on its own), the Loupe leaves first, then all of Y R G B.
+    let own = clean_picture(&[("channel", "blue")]);
+    for scale in [1.0, 2.0] {
+        let mut toolbar = Toolbar::new(&picture_view::TOOLBAR, &own);
+        fit_inside(
+            &mut toolbar,
+            &picture_view::SETTINGS,
+            &picture_view::TOOLBAR,
+            bar(170.0, scale),
+            scale,
+            "Clean picture",
+        );
+        assert_eq!(
+            toolbar
+                .chips
+                .iter()
+                .map(|c| c.text.as_str())
+                .collect::<Vec<_>>(),
+            ["Y", "R", "G", "B"]
+        );
+        assert_eq!(toolbar.on, [false, false, false, true]);
+        assert_eq!(toolbar.collapsed, ["loupe"]);
+        let mut toolbar = Toolbar::new(&picture_view::TOOLBAR, &own);
+        fit_inside(
+            &mut toolbar,
+            &picture_view::SETTINGS,
+            &picture_view::TOOLBAR,
+            bar(scopecreep::style::SPACE_MIN_PANEL_WIDTH, scale),
+            scale,
+            "Clean picture",
+        );
+        assert!(toolbar.chips.is_empty(), "never a part of the channel row");
+        assert_eq!(toolbar.collapsed, ["channel", "loupe"]);
+    }
+}
+
+#[test]
+fn with_room_the_clean_picture_shows_every_chip_as_before() {
+    let own = clean_picture(&[("channel", "blue")]);
+    for scale in [1.0, 2.0] {
+        let mut toolbar = Toolbar::new(&picture_view::TOOLBAR, &own);
+        let (_, popover) = fit_inside(
+            &mut toolbar,
+            &picture_view::SETTINGS,
+            &picture_view::TOOLBAR,
+            // Five chips, the settings button and the pads take 190 px; the Panel's border takes 2 more.
+            bar(192.0, scale),
+            scale,
+            "Clean picture",
+        );
+        assert_eq!(
+            toolbar
+                .chips
+                .iter()
+                .map(|c| c.text.as_str())
+                .collect::<Vec<_>>(),
+            ["Y", "R", "G", "B", "L"]
+        );
+        assert!(toolbar.collapsed.is_empty());
+        assert_eq!(popover, ["size"], "the popover is as before");
+        let mut toolbar = Toolbar::new(&picture_view::TOOLBAR, &own)
+            .with_zoom(Some(&fit_readout()))
+            .with_link(true);
+        fit_inside(
+            &mut toolbar,
+            &picture_view::SETTINGS,
+            &picture_view::TOOLBAR,
+            bar(400.0, scale),
+            scale,
+            "Clean picture",
+        );
+        assert_eq!(
+            toolbar
+                .chips
+                .iter()
+                .map(|c| c.text.as_str())
+                .collect::<Vec<_>>(),
+            ["Fit 75 %", "Link", "Y", "R", "G", "B", "L"]
+        );
+        assert!(toolbar.collapsed.is_empty());
+    }
+}
+
+#[test]
+fn the_zoom_and_link_chips_of_the_other_picture_panels_obey_the_minimum_panel_width() {
+    let grey: Settings = [("mode".to_string(), "grey-plus-one".to_string())].into();
+    let panels: [(
+        &str,
+        &[scopecreep::settings::SettingDef],
+        &[scopecreep::toolbar::ToolbarDef],
+        Settings,
+    ); 3] = [
+        (
+            "ARRI False Colour",
+            &arri_false_colour::SETTINGS,
+            &arri_false_colour::TOOLBAR,
+            Settings::default(),
+        ),
+        (
+            "Skin tone",
+            &skin_tone_view::SETTINGS,
+            &skin_tone_view::TOOLBAR,
+            Settings::default(),
+        ),
+        (
+            "Stops False Colour",
+            &stops_false_colour::SETTINGS,
+            stops_false_colour::toolbar_for(&grey),
+            grey.clone(),
+        ),
+    ];
+    for (name, defs, toolbar_defs, own) in panels {
+        for scale in [1.0, 2.0] {
+            let mut toolbar = Toolbar::new(toolbar_defs, &own)
+                .with_zoom(Some(&fit_readout()))
+                .with_link(false);
+            let (_, popover) = fit_inside(
+                &mut toolbar,
+                defs,
+                toolbar_defs,
+                bar(scopecreep::style::SPACE_MIN_PANEL_WIDTH, scale),
+                scale,
+                name,
             );
+            assert_eq!(toolbar.chips[0].text, "75 %", "{name}: the zoom chip stays");
+            assert!(toolbar.collapsed.contains(&"link"), "{name}");
+            for key in &toolbar.collapsed {
+                assert!(popover.contains(key), "{name}: {key} is in the popover");
+            }
         }
     }
 }

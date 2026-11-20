@@ -1,0 +1,12 @@
+# #171: the toolbar at the minimum Panel width
+
+What ticket #171 showed on 2026-11-20, at the pure toolbar seam (`app/tests/toolbar.rs`) and the picture Panel seam (`app/tests/picture_panels_zoom_seam.rs`, GPU, headless).
+
+- Before: `Toolbar::fit_to` only shortened the zoom chip ("Fit 75 %" to "75 %"), and the title bar's layout pinned the chip row to the left pad when it was too wide, so on a narrow Panel the chips ran under the settings button and past the bar. The old test checked 190 px, where the clean picture's five chips just about fit without its zoom and link chips; in the app, with them, the clean picture needs about 290 px.
+- Now `fit_to` goes on where it stopped: after shortening the zoom chip, whole settings leave the bar from the right (the toolbar's order puts the least used last) into `Toolbar::collapsed`, and the settings button is counted once any has left. A setting leaves whole, never a part of a chip row, so a lit channel (B) is never hidden while Y R still show. The zoom chip is first, so it is the last to go; it has no popover row, as the wheel and Z reach it.
+- The popover (`toolbar::popover_with`, `DisplaySet::popover_for`) offers the collapsed settings first, in bar order, then the usual rows. Link, which is Window state and not a Panel setting, gets its own row ("Link zoom across Panels", On / Off) that switches Link as the chip does. The title bar shows the settings button whenever the popover has anything, so a Panel whose settings were all chips gets one when they collapse.
+- At 120 px, at 1x and 2x, every chip and the settings button lie inside the title bar and no chip runs under the button, on the clean picture, ARRI False Colour, Skin tone, Stops False Colour (Grey +1 mode, with B/W) and the Saturation heatmap. On the clean picture only the short zoom chip stays; Link, the channel and the Loupe are in the popover with their current choice lit.
+- With room nothing changes: all five clean picture chips show from 192 px (190 for the chips, the button and the pads, 2 for the Panel's border), all seven with zoom and Link at 400 px, and the popover is just the Loupe size.
+- The same fit applies to every Panel's toolbar, Scopes included, since the Window now fits each one, not only those with a zoom chip.
+
+Not verified (a person at the app): how a narrow Panel looks and feels with its chips in the popover, and that the Link row switches Link on every picture Panel as the chip does.

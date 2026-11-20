@@ -93,6 +93,7 @@ What we learned by testing, kept in the repo so it isn't lost when an issue thre
 | [180](180-panel-fills-the-window.md) | Does Ctrl+F give the Panel under the pointer the whole Panel area and hide the others from drawing and hits, and is it a reassignable hotkey (Panel grid and command seams)? |
 | [172](172-minimum-window-size.md) | What is the least Window in which every Panel of the default layout keeps its minimum size and every menu fits, and does it hold at 1x, 1.5x and 2x (pure seam)? |
 | [179](179-saved-grid-repaired.md) | Does a grid or named layout saved with a border dragged to the minimum in a large window come back with its places, every Panel at its minimum in the default window, while rubbish still gives the default (pure seam)? |
+| [171](171-toolbar-at-minimum-panel-width.md) | Do a Panel's chips stay inside its title bar at the minimum Panel width (120 px) at 1x and 2x, and is every chip that does not fit still reachable in the popover (toolbar and picture Panel seams)? |
 
 ## Adding findings
 
