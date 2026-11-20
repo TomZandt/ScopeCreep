@@ -595,6 +595,15 @@ impl DisplaySet {
             .collect()
     }
 
+    /// What each Panel's display weighs and how it uses its cell, for Auto layout, in Panel order.
+    pub fn items(&self) -> Vec<crate::auto_layout::Item> {
+        self.read()
+            .displays
+            .iter()
+            .map(|d| crate::auto_layout::item_of(d.name()))
+            .collect()
+    }
+
     pub fn labels(&self) -> Vec<String> {
         self.read().displays.iter().map(|d| d.label()).collect()
     }

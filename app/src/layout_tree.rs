@@ -6,7 +6,10 @@
 //! A Panel is named here by its index (the display's place in the display order). Rectangles are left, top, width,
 //! height in device pixels. What sits inside one Panel (border, title bar, display) is [`crate::panel_grid`].
 
+use crate::auto_layout::Item;
 use crate::auto_resize::{self, Shape};
+
+mod arrange;
 use crate::panel_grid::{MIN_PANEL, PanelLayout, off_screen};
 use crate::style;
 
@@ -183,9 +186,35 @@ impl Node {
                 *ratio = new;
             }
         }
+        // Auto layout holds every share where neither side goes under its minimum.
+        if let Some(min) = fit.min {
+            let (fa, fb) = (a.floor(gap, min), b.floor(gap, min));
+            let (total, lo, hi) = match dir {
+                Dir::Row => (rect[2] - gap, fa[0], fb[0]),
+                Dir::Col => (rect[3] - gap, fa[1], fb[1]),
+            };
+            if total > 0.0 && lo + hi <= total {
+                *ratio = ratio.min(1.0 - hi / total).max(lo / total);
+            }
+        }
         let [ra, rb] = halves(*dir, rect, gap, *ratio);
         a.fit(ra, gap, fit);
         b.fit(rb, gap, fit);
+    }
+
+    /// The least size this node needs for every Panel in it to be at least `min`, whatever its shares: the Panels'
+    /// minimums side by side with the gaps, or the larger when stacked.
+    fn floor(&self, gap: f32, min: [f32; 2]) -> [f32; 2] {
+        match self {
+            Node::Leaf { .. } => min,
+            Node::Split { dir, a, b, .. } => {
+                let (na, nb) = (a.floor(gap, min), b.floor(gap, min));
+                match dir {
+                    Dir::Row => [na[0] + gap + nb[0], na[1].max(nb[1])],
+                    Dir::Col => [na[0].max(nb[0]), na[1] + gap + nb[1]],
+                }
+            }
+        }
     }
 
     fn panels(&self, out: &mut Vec<usize>) {
@@ -316,6 +345,8 @@ struct Fit<'a> {
     shapes: &'a [Shape],
     aspect: f32,
     scale: f32,
+    /// Auto layout: the least size of a Panel, which no share may break.
+    min: Option<[f32; 2]>,
 }
 
 /// The two sides of a split of `rect`: the first takes `ratio` of the space net of `gap`.
@@ -534,6 +565,20 @@ impl NoRoom {
     }
 }
 
+/// Auto layout with no arrangement that keeps every Panel at its least size: the page is left as it was.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct NoFit;
+
+impl NoFit {
+    /// What the Window tells the colourist: names the least size a Panel can be (logical pixels).
+    pub fn notice(&self) -> String {
+        format!(
+            "Auto layout left the page as it was, nothing fits: a Panel needs at least {} x {}.",
+            MIN_PANEL[0], MIN_PANEL[1]
+        )
+    }
+}
+
 /// A tab group as the title bar shows it: its Panels in tab order and the index of the shown one.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct TabGroup {
@@ -623,8 +668,28 @@ impl LayoutTree {
             shapes,
             aspect,
             scale,
+            min: None,
         };
         self.root.fit(area, gap, &fit);
+    }
+
+    /// Auto layout (#214): re-arrange the page once. The tab groups keep their reading order and stay whole; the
+    /// search cuts that list into splits, fits picture cells as Auto resize does, drops any cut that breaks the
+    /// least size of a Panel and keeps the best score ([`crate::auto_layout`]). `items` are by Panel, in Panel
+    /// order. With no cut that fits the tree is left as it was and the error names the minimum. Focus and tabs
+    /// are kept.
+    pub fn auto_layout(
+        &mut self,
+        items: &[Item],
+        aspect: f32,
+        area: [f32; 4],
+        gap: f32,
+        scale: f32,
+    ) -> Result<(), NoFit> {
+        if let Some(root) = arrange::arrange(&self.root, items, aspect, area, gap, scale)? {
+            self.root = root;
+        }
+        Ok(())
     }
 
     /// A page with no Panel, for a Window with `total` Panels.

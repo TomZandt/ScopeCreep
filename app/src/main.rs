@@ -1111,6 +1111,7 @@ impl AppWindow {
                 self.bar_anchor = Some(self.add_rect);
             }
             BarPart::AutoResize => self.run(Command::AutoResize),
+            BarPart::AutoLayout => self.run(Command::AutoLayout),
         }
         self.window.request_redraw();
     }
@@ -1235,6 +1236,17 @@ impl AppWindow {
             }
             Command::UndoLayout => {
                 self.pages.undo();
+            }
+            Command::AutoLayout => {
+                // The current page only, once, for the footage on screen (16:9 with no Feed): one undo step. With
+                // no arrangement that fits, the page stays as it was and a notice names the least size.
+                let items = self.displays.items();
+                let aspect = auto_resize::aspect_of(self.texts.lock().unwrap().frame);
+                let (area, gap, scale) = (self.grid_area, self.grid_gap, self.scale);
+                let mut result = Ok(());
+                self.pages
+                    .change(|g| result = g.auto_layout(&items, aspect, area, gap, scale));
+                self.layout_notice = result.err().map(|no_fit| no_fit.notice());
             }
             Command::AutoResize => {
                 // The current page only, once, for the footage on screen (16:9 with no Feed): one undo step.

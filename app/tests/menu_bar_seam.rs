@@ -314,6 +314,7 @@ fn the_layout_menu_lists_the_pages_then_what_to_do_with_them() {
             "Delete page",
             "Add panel…",
             "Close panel",
+            "Auto layout",
             "Auto resize",
             "Undo layout change",
             "Default layout",
@@ -331,6 +332,19 @@ fn auto_resize_is_a_command_in_the_layout_menu_with_no_default_hotkey() {
     assert_eq!(menu.action(i), Some(MenuAction::Run(Command::AutoResize)));
     assert!(Command::all().contains(&Command::AutoResize));
     assert_eq!(hk.get(Command::AutoResize), None);
+}
+
+#[test]
+fn auto_layout_is_a_command_in_the_layout_menu_with_no_default_hotkey() {
+    let hk = Hotkeys::default();
+    let menu = layout_menu(&pages(&["Main"]), 0, &hk, LayoutMode::Show);
+    let (i, layout) = item(&menu, "Auto layout");
+    assert!(layout.enabled);
+    assert_eq!(layout.hotkey, "");
+    assert_eq!(menu.action(i), Some(MenuAction::Run(Command::AutoLayout)));
+    assert!(Command::all().contains(&Command::AutoLayout));
+    assert_eq!(hk.get(Command::AutoLayout), None);
+    assert_eq!(Command::AutoLayout.label(), "Page: auto layout");
 }
 
 #[test]

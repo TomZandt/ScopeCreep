@@ -173,7 +173,7 @@ A saved layout shown as a tab in the Page bar under the Colour Setup line: its o
 _Avoid_: Workspace (Resolve's word for its page arrangement), slot, preset
 
 **Auto layout**:
-A button on the Page bar that re-arranges every Panel on the current Page once, for the Feed's aspect and the Window: it keeps the Panels in reading order and picks the cutting of them into splits that gives the most useful area, with the clean picture weighted most. It never runs by itself, and Undo brings the old layout back (ADR 0041).
+A button on the Page bar that re-arranges every Panel on the current Page once, for the Feed's aspect and the Window: it keeps the Panels in reading order and picks the cutting of them into splits that gives the most useful area (weights: clean picture 3, luma waveform 1.6, Vectorscope 1.2, anything else 1; a tab group counts as its shown Panel), with no change and a notice when no cutting keeps every Panel at its least size. Above 9 Panels it halves the list instead of searching. It never runs by itself, and Undo brings the old layout back (ADR 0041).
 _Avoid_: Auto-arrange, tidy, auto mode (it is not a mode)
 
 **Auto resize**:

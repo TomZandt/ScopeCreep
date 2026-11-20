@@ -25,6 +25,9 @@ pub enum Command {
     DeletePage,
     /// Resize the current page's splits so picture cells match the footage's aspect (ADR 0041, #213). No default hotkey.
     AutoResize,
+    /// Re-arrange the current page once: the best cutting of its Panels into splits for the footage and the Window
+    /// (ADR 0041, #214). No default hotkey.
+    AutoLayout,
     /// The picture Panel under the pointer to Fit and back to its last zoom and spot (every picture Panel while
     /// Link is on), like Resolve's Shift+Z (#169).
     ZoomFit,
@@ -49,6 +52,7 @@ impl Command {
         all.push(Command::NewPage);
         all.push(Command::DuplicatePage);
         all.push(Command::DeletePage);
+        all.push(Command::AutoLayout);
         all.push(Command::AutoResize);
         all.push(Command::ZoomFit);
         all.push(Command::FillWindow);
@@ -67,6 +71,7 @@ impl Command {
             Command::NewPage => "page-new".to_string(),
             Command::DuplicatePage => "page-duplicate".to_string(),
             Command::DeletePage => "page-delete".to_string(),
+            Command::AutoLayout => "page-auto-layout".to_string(),
             Command::AutoResize => "page-auto-resize".to_string(),
             Command::ZoomFit => "zoom-fit".to_string(),
             Command::FillWindow => "panel-fill".to_string(),
@@ -85,6 +90,7 @@ impl Command {
             Command::NewPage => "Page: new".to_string(),
             Command::DuplicatePage => "Page: duplicate".to_string(),
             Command::DeletePage => "Page: delete".to_string(),
+            Command::AutoLayout => "Page: auto layout".to_string(),
             Command::AutoResize => "Page: auto resize".to_string(),
             Command::ZoomFit => "Zoom: Fit / last zoom".to_string(),
             Command::FillWindow => "Panel: fill the Window".to_string(),
@@ -107,6 +113,7 @@ impl Command {
             | Command::NewPage
             | Command::DuplicatePage
             | Command::DeletePage
+            | Command::AutoLayout
             | Command::AutoResize => None,
             Command::GoToPage(page) => digit(page).map(Hotkey::ctrl),
             Command::ZoomFit => Key::named("Z").map(Hotkey::new),

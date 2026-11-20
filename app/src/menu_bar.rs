@@ -198,6 +198,7 @@ pub fn layout_menu_with_undo(
             for (label, command, enabled) in [
                 ("Add panel…", Command::AddPanel, true),
                 ("Close panel", Command::ClosePanel, true),
+                ("Auto layout", Command::AutoLayout, true),
                 ("Auto resize", Command::AutoResize, true),
                 ("Undo layout change", Command::UndoLayout, can_undo),
                 ("Default layout", Command::DefaultLayout, true),
