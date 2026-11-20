@@ -33,6 +33,15 @@ pub enum Dir {
     Col,
 }
 
+/// The edge of a tab group a Panel is docked on (ADR 0038).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Edge {
+    Left,
+    Right,
+    Top,
+    Bottom,
+}
+
 /// A divider between the two sides of one split that can be dragged. Names the split by its path from the root.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Border {
@@ -415,6 +424,14 @@ impl NoRoom {
             MIN_PANEL[0], MIN_PANEL[1]
         )
     }
+
+    /// The same, for a dock that does not fit.
+    pub fn dock_notice(&self) -> String {
+        format!(
+            "No room to dock here: a Panel needs at least {} x {}.",
+            MIN_PANEL[0], MIN_PANEL[1]
+        )
+    }
 }
 
 impl LayoutTree {
@@ -608,6 +625,76 @@ impl LayoutTree {
             p if p == b => a,
             p => p,
         });
+    }
+
+    /// Dock Panel `dragged` on `edge` of the tab group that shows Panel `target` (#210): that edge is split 50/50
+    /// with the dragged Panel taking the half on `edge`, and the dragged Panel's old tab group gives up its space to
+    /// its neighbour (or just loses the tab). A drop on the Panel's own single-Panel tab group does nothing. When
+    /// half of the target would be under `min` the tree is left as it was and [`NoRoom`] says so. The dragged Panel
+    /// has the focus after.
+    pub fn dock(
+        &mut self,
+        dragged: usize,
+        target: usize,
+        edge: Edge,
+        area: [f32; 4],
+        gap: f32,
+        min: [f32; 2],
+    ) -> Result<(), NoRoom> {
+        if !self.contains(dragged) || !self.contains(target) {
+            return Ok(());
+        }
+        // A Panel of the target tab group that stays put, to find it again once the dragged Panel has left.
+        let mut group = Vec::new();
+        self.root
+            .walk(area, gap, &mut Vec::new(), &mut |node, _, _| {
+                if let Node::Leaf { tabs, .. } = node
+                    && tabs.contains(&target)
+                {
+                    group = tabs.clone();
+                }
+            });
+        let Some(anchor) = group.iter().copied().find(|p| *p != dragged) else {
+            return Ok(());
+        };
+        let active_target = group.contains(&target) && target != dragged;
+        let mut next = self.clone();
+        let root = std::mem::replace(&mut next.root, Node::EMPTY);
+        next.root = root.pruned(&|p| p == dragged).unwrap_or(Node::EMPTY);
+        let anchor = if active_target { target } else { anchor };
+        let mut found = None;
+        next.root
+            .walk(area, gap, &mut Vec::new(), &mut |node, rect, path| {
+                if let Node::Leaf { tabs, .. } = node
+                    && tabs.contains(&anchor)
+                {
+                    found = Some((path.to_vec(), rect));
+                }
+            });
+        let (path, rect) = found.ok_or(NoRoom)?;
+        let (dir, along, least) = match edge {
+            Edge::Left | Edge::Right => (Dir::Row, rect[2], min[0]),
+            Edge::Top | Edge::Bottom => (Dir::Col, rect[3], min[1]),
+        };
+        if (along - gap) / 2.0 < least - 0.001 {
+            return Err(NoRoom);
+        }
+        let node = next.root.at_mut(&path).ok_or(NoRoom)?;
+        let old = std::mem::replace(node, Node::EMPTY);
+        let new = Box::new(Node::leaf(dragged));
+        let (a, b) = match edge {
+            Edge::Left | Edge::Top => (new, Box::new(old)),
+            Edge::Right | Edge::Bottom => (Box::new(old), new),
+        };
+        *node = Node::Split {
+            dir,
+            ratio: 0.5,
+            a,
+            b,
+        };
+        next.focus = Some(dragged);
+        *self = next;
+        Ok(())
     }
 
     /// Whether the page holds Panel `panel` (a Panel that is not on it is closed).

@@ -58,6 +58,10 @@ pub const SPACE_TITLE_PAD: f32 = 8.0;
 pub const SPACE_STATUS_ROW: f32 = 20.0;
 /// How far from a Panel border's gap a click still grabs it.
 pub const SPACE_GRAB: f32 = 3.0;
+/// How far a pressed title must move before it is a drag and not a click (logical pixels).
+pub const SPACE_DRAG_START: f32 = 4.0;
+/// The share of a tab group, from each edge, where a dropped Panel docks on that edge.
+pub const SPACE_DOCK_EDGE: f32 = 0.25;
 /// The least height a display keeps under the title bar, the least width of a Panel, and the least height of a
 /// Panel (the display, the title bar and the border's three lines).
 pub const SPACE_MIN_DISPLAY: f32 = 80.0;

@@ -23,6 +23,7 @@ use glyphon::{
 use scopecreep::commands::{Command, Hotkey, Hotkeys, Key};
 use scopecreep::components::{self, Align, BarKind, MenuBar, Prim, State, Tooltip};
 use scopecreep::display::{DisplaySet, Pointer};
+use scopecreep::dock::{self, Zone};
 use scopecreep::feed_loop::{FeedLoop, Texts};
 use scopecreep::flat_rects::FlatRects;
 use scopecreep::gpu_frame::FrameUploader;
@@ -294,6 +295,10 @@ struct AppWindow {
     drag: Option<Border>,
     /// The Panel being dragged by its title bar, to swap with the one it is let go on.
     panel_drag: Option<usize>,
+    /// Where the title press behind `panel_drag` began, and whether the pointer has moved far enough since for it to
+    /// be a drag (a press that never does is a click and changes nothing).
+    panel_drag_start: [f32; 2],
+    panel_drag_live: bool,
     /// Remembered display state (a Loupe's position) changed and is not written yet.
     state_unsaved: bool,
     cursor: [f32; 2],
@@ -537,6 +542,8 @@ impl AppWindow {
             add_button: None,
             drag: None,
             panel_drag: None,
+            panel_drag_start: [0.0; 2],
+            panel_drag_live: false,
             state_unsaved: false,
             cursor: [0.0, 0.0],
             grid_area: [0.0; 4],
@@ -748,6 +755,10 @@ impl AppWindow {
             );
             self.window.request_redraw();
         } else if self.panel_drag.is_some() {
+            if !self.panel_drag_live {
+                self.panel_drag_live =
+                    dock::is_drag(self.panel_drag_start, self.cursor, self.scale);
+            }
             self.window.request_redraw();
         } else {
             self.window.set_cursor(match self.press_under_pointer() {
@@ -977,7 +988,12 @@ impl AppWindow {
             return;
         }
         if event.logical_key == LogicalKey::Named(NamedKey::Escape) {
-            if self.bar.open.is_some() {
+            if self.panel_drag.take().is_some() {
+                // Escape cancels a drag: the layout is as it was.
+                self.panel_drag_live = false;
+                self.window.set_cursor(CursorIcon::Default);
+                self.window.request_redraw();
+            } else if self.bar.open.is_some() {
                 self.close_bar();
             } else if self.menu.is_some() {
                 self.close_menu();
@@ -1257,15 +1273,30 @@ impl AppWindow {
                 self.save_grid();
             }
             if let Some(from) = self.panel_drag.take() {
-                // Let go on another Panel to swap; anywhere else cancels.
-                if let Some(to) = self
+                let live = std::mem::take(&mut self.panel_drag_live);
+                // A drag let go on another Panel: Shift swaps the two, else the outer quarter of an edge docks on
+                // it. Anywhere else (or a press that never became a drag) changes nothing.
+                let over = self
                     .grid
                     .panel_at(self.grid_area, self.grid_gap, self.cursor)
-                    .filter(|to| *to != from)
-                {
-                    self.layout_history
-                        .change(&mut self.grid, |g| g.swap(from, to));
-                    self.save_grid();
+                    .filter(|to| live && *to != from);
+                if let Some(to) = over {
+                    self.layout_notice = None;
+                    if self.modifiers.shift_key() {
+                        self.layout_history
+                            .change(&mut self.grid, |g| g.swap(from, to));
+                        self.save_grid();
+                    } else if let Zone::Edge(edge) = dock::zone_at(self.cells[to], self.cursor) {
+                        let (area, gap, min) =
+                            (self.grid_area, self.grid_gap, min_panel_size(self.scale));
+                        match self
+                            .layout_history
+                            .change(&mut self.grid, |g| g.dock(from, to, edge, area, gap, min))
+                        {
+                            Ok(()) => self.save_grid(),
+                            Err(no_room) => self.layout_notice = Some(no_room.dock_notice()),
+                        }
+                    }
                 }
                 self.window.set_cursor(CursorIcon::Default);
                 self.window.request_redraw();
@@ -1369,6 +1400,8 @@ impl AppWindow {
                     }
                     Some(Press::Panel(panel)) => {
                         self.panel_drag = Some(panel);
+                        self.panel_drag_start = self.cursor;
+                        self.panel_drag_live = false;
                         self.window.set_cursor(CursorIcon::Grabbing);
                     }
                     None => {}
@@ -1756,14 +1789,27 @@ impl AppWindow {
             };
             over_empty = components::add_panel_button(area, state, scale);
         }
-        // While a Panel is dragged, the Panel it would swap with is outlined, quietly.
-        if let Some(target) = self.panel_drag.and_then(|from| {
-            self.grid
-                .panel_at(area, margin, self.cursor)
-                .filter(|to| *to != from)
-        }) {
+        // While a Panel is dragged, the drop is shown before release, quietly: with Shift the Panel it would swap
+        // with is outlined, else the exact half an edge dock would give the dragged Panel.
+        if let Some(outline) = self
+            .panel_drag
+            .filter(|_| self.panel_drag_live)
+            .and_then(|from| {
+                let to = self
+                    .grid
+                    .panel_at(area, margin, self.cursor)
+                    .filter(|to| *to != from)?;
+                if self.modifiers.shift_key() {
+                    return Some(cells[to]);
+                }
+                match dock::zone_at(cells[to], self.cursor) {
+                    Zone::Middle => None,
+                    zone => Some(dock::overlay(cells[to], zone, margin)),
+                }
+            })
+        {
             let weight = (style::LINE_WEIGHT * scale).max(1.0);
-            for edge in PanelLayout::new(cells[target], scale)
+            for edge in PanelLayout::new(outline, scale)
                 .lines(weight)
                 .iter()
                 .take(4)

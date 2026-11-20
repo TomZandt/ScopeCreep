@@ -106,6 +106,7 @@ What we learned by testing, kept in the repo so it isn't lost when an issue thre
 | [204](204-layout-tree.md) | Does the Window draw from a layout tree that looks and behaves as the grid did, and do old and named layouts still recall (headless)? |
 | [206](206-add-close.md) | Does Add panel split the focused cell 50/50 along its longer side and focus the new Panel, is an add with no room refused with a notice naming the minimum, does Close give the space to its sibling and leave an empty page, and do closed Panels survive a restart (headless)? |
 | [207](207-undo-layout.md) | Does Ctrl+Z step back through add, close, swap and a divider drag one step each, 20 deep, without touching Panel settings, and is it greyed in the Layout menu when empty (headless)? |
+| [210](210-dock-by-dragging.md) | Does dragging a title dock on an edge with the exact half shown, cancel on Escape, do nothing on itself, swap with Shift, and refuse with a notice when a side dock breaks a minimum (headless)? |
 
 ## Adding findings
 

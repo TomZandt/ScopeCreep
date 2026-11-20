@@ -8,6 +8,7 @@ pub mod colour_setup;
 pub mod commands;
 pub mod components;
 pub mod display;
+pub mod dock;
 pub mod feed_loop;
 pub mod flat_rects;
 pub mod gamut_warning;
