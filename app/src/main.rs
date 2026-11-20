@@ -371,6 +371,12 @@ impl AppWindow {
         surface.configure(&device, &config);
 
         let displays = DisplaySet::standard(&device, &queue, format, filterable);
+        // The Window can't be made smaller than the default layout and every menu need (#172).
+        let [min_w, min_h] = scopecreep::layout::min_window(
+            &PanelGrid::default_for(&displays.names()),
+            &menu_bar::largest_menus(),
+        );
+        window.set_min_inner_size(Some(LogicalSize::new(min_w, min_h)));
         let settings = Arc::new(Mutex::new(
             settings_file()
                 .and_then(|path| std::fs::read_to_string(path).ok())

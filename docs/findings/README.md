@@ -91,6 +91,7 @@ What we learned by testing, kept in the repo so it isn't lost when an issue thre
 | [148](148-hotkeys-panel.md) | Does the Hotkeys panel capture, cancel, clear, refuse reserved keys, ask replace or cancel on a conflict and reset one or all, with the menus following at once and the change surviving a restart (panel and command seams)? |
 | [169](169-zoom-fit-hotkey.md) | Does Z take a picture Panel to Fit and back to its last zoom and spot (all of them with Link on, none over a Scope), and is it a reassignable hotkey (zoom model, Feed, command and Hotkeys panel seams)? |
 | [180](180-panel-fills-the-window.md) | Does Ctrl+F give the Panel under the pointer the whole Panel area and hide the others from drawing and hits, and is it a reassignable hotkey (Panel grid and command seams)? |
+| [172](172-minimum-window-size.md) | What is the least Window in which every Panel of the default layout keeps its minimum size and every menu fits, and does it hold at 1x, 1.5x and 2x (pure seam)? |
 
 ## Adding findings
 

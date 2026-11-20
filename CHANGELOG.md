@@ -6,6 +6,9 @@ The format follows [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/
 
 ## [Unreleased]
 
+### Changed
+- The Window can't be made smaller than 469 × 645 (logical pixels): the size at which every Panel of the default layout keeps its minimum size and every menu, including the Hotkeys panel, fits under the menu bar. A layout you dragged can still shrink its Panels below their minimum in a Window smaller than the one it was arranged in (#172).
+
 ## [0.3.1] - 2026-11-20
 
 A menu bar and hotkeys you can change: the Layout menu replaces the right-click on the status line, Settings holds the Hotkeys panel, Z toggles a picture Panel between Fit and its last zoom, and Ctrl+F lets one Panel fill the Window.

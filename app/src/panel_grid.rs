@@ -162,6 +162,28 @@ impl PanelGrid {
         }
     }
 
+    /// The least area (width, height, with `gap` between columns and rows) in which every Panel is at least `min`:
+    /// each Panel's cell grows in step with the area, so the largest need over the Panels is the answer.
+    pub fn min_area(&self, gap: f32, min: [f32; 2]) -> [f32; 2] {
+        let need = |weights: &[f32], start: fn(&Place) -> (usize, usize), min: f32| {
+            let gaps = gap * weights.len().saturating_sub(1) as f32;
+            self.places
+                .iter()
+                .map(|p| {
+                    let (first, span) = start(p);
+                    let share: f32 = weights[first..first + span].iter().sum();
+                    // share * usable + gap * (span - 1) >= min
+                    let usable = (min - gap * (span - 1) as f32).max(0.0) / share.max(f32::EPSILON);
+                    usable + gaps
+                })
+                .fold(0.0, f32::max)
+        };
+        [
+            need(&self.columns, |p| (p.column, p.columns), min[0]),
+            need(&self.rows, |p| (p.row, p.rows), min[1]),
+        ]
+    }
+
     /// Where each Panel sits, in display order.
     pub fn places(&self) -> &[Place] {
         &self.places

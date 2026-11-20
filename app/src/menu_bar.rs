@@ -237,3 +237,52 @@ pub fn settings_menu() -> Menu {
     );
     menu
 }
+
+/// Every menu at its largest, for the Window's minimum size (#172): the Layout menu in each mode with nine names of
+/// the longest length and one being typed, the Settings menu, and the Hotkeys panel asking about the longest
+/// conflict.
+pub fn largest_menus() -> Vec<DropMenu> {
+    use crate::commands::{Hotkey, Key};
+    use crate::hotkeys_panel::{HotkeysPanel, State};
+    let mut layouts = Layouts::default();
+    let grid = crate::panel_grid::PanelGrid::automatic(1);
+    let long = "W".repeat(crate::layouts::NAME_LENGTH);
+    for slot in 0..SLOTS {
+        layouts.save(slot, &grid, &["x"]);
+        layouts.rename(slot, &long);
+    }
+    let typing = Rename::start(&layouts, 0);
+    let mut hotkeys = Hotkeys::default();
+    let widest = Key::named("PageDown").map(|k| Hotkey::ctrl(k).with_shift().with_alt());
+    let mut menus: Vec<DropMenu> = [LayoutMode::Show, LayoutMode::Save, LayoutMode::Rename]
+        .into_iter()
+        .map(|mode| layout_menu(&layouts, &hotkeys, None, mode, typing.as_ref()).drop)
+        .collect();
+    menus.push(settings_menu().drop);
+    // The longest name with the widest hotkey beside it is the widest row.
+    let longest = Command::all()
+        .into_iter()
+        .max_by_key(|c| c.label().chars().count())
+        .unwrap_or(Command::DefaultLayout);
+    if let Some(hotkey) = widest {
+        let _ = hotkeys.replace(longest, hotkey);
+    }
+    if let Some(hotkey) = widest {
+        let panel = HotkeysPanel {
+            state: State::Conflict {
+                command: Command::DefaultLayout,
+                hotkey,
+                other: longest,
+            },
+        };
+        menus.push(panel.menu(&hotkeys).drop);
+        let panel = HotkeysPanel {
+            state: State::Capturing {
+                command: longest,
+                refused: true,
+            },
+        };
+        menus.push(panel.menu(&hotkeys).drop);
+    }
+    menus
+}
