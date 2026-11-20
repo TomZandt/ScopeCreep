@@ -123,6 +123,8 @@ _Avoid_: Renderer, canvas
 How much of a picture Panel's frame is shown, in percent of source pixels: 100 % is one picture pixel to one device pixel. It runs from Fit to 800 %, free below 100 % and in whole steps (200, 300 ... 800 %) above, so every picture pixel is an exact square. The scroll wheel zooms toward the pointer and the zoom chip on the title bar says it, and a click on it goes back to Fit (every picture Panel while Link is on). It is not a setting: it is not saved and every session starts at Fit (ADR 0035). On every picture Panel in the Window, each on its own, or all together while Link is on.
 _Avoid_: Magnify (that is the Loupe), scale
 
+Since spec #196 (ADR 0040) the zoom is read on a Panel's title bar as a read-only tag and set from the view strip; this entry stays until it is built.
+
 **Pan**:
 Moving a zoomed picture inside its Panel by dragging with the middle mouse button, as in Resolve's Viewer. The picture moves exactly as far as the pointer; its edge stops at the Panel's edge, so the Panel is never left empty, and an axis on which the picture is smaller than the Panel stays centred. Nothing to pan at Fit. Not saved.
 
@@ -131,6 +133,8 @@ The zoom that shows the whole frame in the Panel, as a picture Panel always did.
 
 **Link**:
 One Window-wide switch, a link chip beside the zoom chip on every picture Panel (lit on all of them while on). It is on in a first session; a saved choice wins. With Link on, every picture Panel shares one zoom and one centre point in picture coordinates, so Panels of different sizes look at the same pixels and each fits its own Panel at Fit; scroll, middle-drag and the zoom chip's Fit on any of them move all of them. Turning it on brings every Panel to the zoom and spot of the Panel it was clicked on; turning it off leaves each where it is. Link is remembered between sessions; zoom and pan are not (ADR 0035, 0015).
+
+Since spec #196 (ADR 0040) the link chip on every picture Panel becomes the Link switch in the view strip; this entry stays until it is built.
 
 **Matte**:
 A black bar around the picture: whole rows at the top and bottom, or whole columns at the sides, in which every pixel is exactly black. The Picture stage finds them once per frame and draws them black on every Picture View. A black pixel inside the picture is not a matte.
@@ -191,6 +195,8 @@ _Avoid_: Action, shortcut
 **Hotkey**:
 A key, by its position on the keyboard, with Ctrl, Shift or Alt held, that triggers a Command while the app's window has focus. Each Command has at most one and no two share one; the defaults are Ctrl+1 to 9 (show a layout), Ctrl+Shift+1 to 9 (save one), Z (the Fit toggle) and Ctrl+F (fill the Window). Assigned, cleared and reset in the Hotkeys panel (Settings, then Hotkeys…) by pressing the combination. Changes are kept in the config folder beside the layouts. Escape, and plain Enter, Backspace and Delete are reserved.
 _Avoid_: Shortcut, keybinding, accelerator
+
+Since spec #196 (ADR 0041) Ctrl+1 to 9 go to pages 1 to 9 and Ctrl+Shift+1 to 9 (save into a slot) are removed; Ctrl+Z (Undo layout change) is added.
 
 **Menu bar**:
 The thin bar across the very top of the Window, above the Colour Setup line, drawn by the app in the style system's quiet chrome. It holds the app's own Commands in menus (Layout, View, Settings), each entry with its Hotkey beside it. A menu opens on a click on its title and closes on a second click, a click elsewhere or Escape. Panel settings stay in each Panel's popover.
