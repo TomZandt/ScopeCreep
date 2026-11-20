@@ -40,7 +40,9 @@ fn configure(rig: &Rig, plot: &CiePlot, settings: &[(&str, &str)]) {
 /// to it, and the conversion following the Colour Setup.
 fn poll(rig: &mut Rig, conversion: &mut OutputConversion, plot: &CiePlot) {
     rig.poll(|encoder, gpu_frame| {
-        let shown = conversion.convert(encoder, gpu_frame);
+        let shown = conversion
+            .convert(encoder, gpu_frame)
+            .expect("GPU memory for the converted picture");
         plot.on_frame(encoder, shown);
     });
     configure(rig, plot, &[]);

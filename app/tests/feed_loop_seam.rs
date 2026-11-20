@@ -10,6 +10,7 @@ use scopecreep::output_conversion::OutputConversion;
 use scopecreep::picture_view::PictureView;
 use scopecreep::project::{Answer, ProjectReader};
 use scopecreep::settings::PanelSettings;
+use scopecreep::waveform::Waveform;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 
@@ -65,7 +66,12 @@ impl Bench {
     /// The Picture View (index 0) and a counting display, behind the app's Feed loop. `colour_setup`: the Sender's
     /// manual Colour Setup, or none.
     fn new(name: &str, colour_setup: Option<&str>) -> Bench {
-        Bench::make(Rig::with_colour_setup(name, colour_setup))
+        Bench::make(Rig::with_colour_setup(name, colour_setup), false)
+    }
+
+    /// As [`Bench::new`] with a luma waveform as a third display.
+    fn with_waveform(name: &str) -> Bench {
+        Bench::make(Rig::with_colour_setup(name, Some(DWG_REC709)), true)
     }
 
     /// No manual Colour Setup; the project, read by script once Resolve stops, is Rec.709 from DaVinci WG.
@@ -82,15 +88,13 @@ impl Bench {
         ] {
             answer.push((format!("setting.{k}"), v.to_string()));
         }
-        Bench::make(Rig::build(
-            name,
-            1024 * 64 * 16,
-            None,
-            Some(Box::new(Helper(answer))),
-        ))
+        Bench::make(
+            Rig::build(name, 1024 * 64 * 16, None, Some(Box::new(Helper(answer)))),
+            false,
+        )
     }
 
-    fn make(mut rig: Rig) -> Bench {
+    fn make(mut rig: Rig, waveform: bool) -> Bench {
         let frames = Arc::new(AtomicUsize::new(0));
         let mut set = DisplaySet::default();
         set.register(Arc::new(PictureView::new(
@@ -100,6 +104,9 @@ impl Bench {
             false,
         )));
         set.register(Arc::new(Counter(frames.clone())));
+        if waveform {
+            set.register(Arc::new(Waveform::new(&rig.device, &rig.queue, TARGET)));
+        }
         let settings = Arc::new(Mutex::new(PanelSettings::default()));
         let mut feed = FeedLoop::new(
             set.clone(),
@@ -118,9 +125,14 @@ impl Bench {
 
     /// Resolve plays one frame of one colour, and the app has a moment to take it.
     fn play(&mut self, rgb: [f32; 3]) {
-        let pixels = common::solid(W, H, rgb);
+        self.play_wide(W, rgb);
+    }
+
+    /// As [`Bench::play`], with a frame `width` pixels wide.
+    fn play_wide(&mut self, width: u32, rgb: [f32; 3]) {
+        let pixels = common::solid(width, H, rgb);
         let feed = &mut self.feed;
-        self.rig.play(W, H, &pixels, |rig| {
+        self.rig.play(width, H, &pixels, |rig| {
             rig.step(feed);
         });
     }
@@ -213,5 +225,85 @@ fn an_idle_poll_does_no_work() {
         (b.counted(), b.feed.scope_frames),
         (frames, scope_frames),
         "no display measured anything"
+    );
+}
+
+/// The notice the Window shows.
+fn notice(b: &Bench) -> Option<String> {
+    b.feed.texts().lock().unwrap().notice.clone()
+}
+
+// The GPU memory cap (`gpu_memory::set_limit`) is per thread, and every test runs on its own thread.
+
+#[test]
+fn when_the_gpu_has_no_memory_for_the_picture_the_window_says_so_and_carries_on_when_it_frees_up() {
+    let mut b = Bench::new("loop-short-picture", Some(DWG_REC709));
+    b.play([0.5, 0.5, 0.5]);
+    let before = (b.counted(), b.shown());
+    scopecreep::gpu_memory::set_limit(Some(1_000)); // smaller than any frame-sized allocation
+    // A frame of another size: the picture needs new textures.
+    b.play_wide(W * 2, [0.8, 0.8, 0.8]);
+    assert_eq!(
+        notice(&b).as_deref(),
+        Some(
+            "Not enough GPU memory for the picture (needs about 1 MB). Close another GPU app; scopecreep will carry on when memory frees up."
+        ),
+    );
+    assert_eq!(
+        (b.counted(), b.shown()),
+        before,
+        "nothing was measured, and the last picture stays"
+    );
+    scopecreep::gpu_memory::set_limit(None); // memory frees up
+    b.play_wide(W * 2, [0.8, 0.8, 0.8]);
+    assert_eq!(notice(&b), None, "the notice goes with the next frame");
+    assert_eq!(b.counted(), before.0 + 1, "and the displays measure it");
+    assert_ne!(b.shown(), before.1, "the new picture is shown");
+}
+
+#[test]
+fn when_the_gpu_has_no_memory_for_the_waveform_the_window_says_so_and_the_picture_carries_on() {
+    let mut b = Bench::with_waveform("loop-short-scopes");
+    b.play([0.5, 0.5, 0.5]);
+    assert_eq!(notice(&b), None);
+    let before = b.shown();
+    // Room for the picture (a few KB at 16 × 9) but not the waveform's counts (16 columns × 1026 rows × 4 bytes).
+    scopecreep::gpu_memory::set_limit(Some(20_000));
+    b.play([0.8, 0.8, 0.8]);
+    assert_eq!(
+        notice(&b),
+        None,
+        "the waveform's buffers were made before: nothing new is needed"
+    );
+    // A frame of another width needs new buffers.
+    b.play_wide(W * 2, [0.8, 0.8, 0.8]);
+    let said = notice(&b).unwrap_or_default();
+    assert!(
+        said.starts_with("Not enough GPU memory for the scopes (needs about "),
+        "{said}"
+    );
+    assert_ne!(b.shown(), before, "the picture still follows the Feed");
+    scopecreep::gpu_memory::set_limit(None);
+    b.play([0.3, 0.3, 0.3]);
+    assert_eq!(
+        notice(&b),
+        None,
+        "the next frame makes the buffers and the notice goes"
+    );
+}
+
+#[test]
+fn a_sender_short_of_gpu_memory_is_shown_in_the_window() {
+    let mut b = Bench::new("loop-short-sender", Some(DWG_REC709));
+    b.play([0.5, 0.5, 0.5]);
+    b.rig.writer.set_sender_error(
+        "Not enough GPU memory in Resolve to send frames (needs about 133 MB). Close another GPU app; the Sender tries again every few seconds.",
+    );
+    b.stopped(300);
+    assert_eq!(
+        notice(&b).as_deref(),
+        Some(
+            "Sender: Not enough GPU memory in Resolve to send frames (needs about 133 MB). Close another GPU app; the Sender tries again every few seconds."
+        )
     );
 }

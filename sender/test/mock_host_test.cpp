@@ -566,6 +566,36 @@ int main(int argc, char** argv)
     CHECK(i >= 0 && r.hdr->sender_error[0] == 0, "the message clears when frames flow again");
     if (i >= 0) scfeed_reader_release(&r, i);
 
+    std::printf("the GPU has no memory for a larger frame's staging buffer\n");
+    {
+        GpuFrame huge(512, 288);  // 2.4 MB a frame
+        setenv("SCOPECREEP_SENDER_GPU_LIMIT_MB", "1", 1);
+        huge.fill(60);
+        const double call = render(huge, 450.0);
+        CHECK(call < 5.0, "the render call returns at once");
+        CHECK(huge.passedThrough(), "the picture passes through unchanged: Resolve is unaffected");
+        CHECK(waitFor([&] { return std::strstr(r.hdr->sender_error, "Not enough GPU memory") != nullptr; }), "the Feed says the Sender is short of GPU memory");
+        CHECK(std::strstr(r.hdr->sender_error, "needs about 3 MB") != nullptr, "and roughly how much it needs");
+        CHECK(scfeed_load32(&r.hdr->retired) == 0, "the Feed it had stays in place");
+        for (int k = 0; k < 5; ++k) render(huge, 451.0 + k);
+        CHECK(huge.passedThrough() && scfeed_reader_claim(&r) < 0, "later frames pass through, unfed, and no ring is tried within the retry time");
+        unsetenv("SCOPECREEP_SENDER_GPU_LIMIT_MB");  // memory frees up
+        for (int k = 0; k < 51; ++k) {  // the app stays attached meanwhile
+            scfeed_reader_heartbeat(&r, scfeed_now_ns());
+            std::this_thread::sleep_for(std::chrono::milliseconds(100));
+        }
+        huge.fill(61);
+        render(huge, 460.0);
+        CHECK(waitFor([&] { return scfeed_load32(&r.hdr->retired) == 1; }), "after a few seconds the Sender tries again and makes the ring");
+        CHECK(reopen(r, feed) && r.hdr->sender_error[0] == 0, "the new Feed has no error");
+        waitFor([&] { return scfeed_load64(&r.hdr->renders_total) > 0; });
+        huge.fill(62);
+        render(huge, 461.0);
+        i = nextFrame(r);
+        CHECK(i >= 0 && std::memcmp(scfeed_slot_pixels(r.hdr, (uint32_t)i), huge.host.data(), huge.host.size() * 4) == 0, "and frames flow again, bit for bit");
+        if (i >= 0) scfeed_reader_release(&r, i);
+    }
+
     std::printf("the app quits\n");
     scfeed_reader_close(&r);
     CHECK(isIdentity(), "the Sender reports identity again");

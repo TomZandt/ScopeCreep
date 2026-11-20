@@ -5,6 +5,10 @@
 //! frames, so the only CPU work per frame is one copy out of the Feed. At most two frames are on their way to
 //! the GPU: if the GPU is further behind than that, [`FrameUploader::upload`] waits, the app stops taking frames
 //! from the Feed for that moment, and the Feed drops (and counts) frames instead. The Sender never waits.
+//!
+//! When the GPU has no memory for the staging buffers or the frame texture, the frame is left out and the next one
+//! tries again ([`crate::gpu_memory`]).
+use crate::gpu_memory::{self, Part};
 use scopecreep_feed::Frame;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
@@ -77,18 +81,28 @@ impl FrameUploader {
         let padded_row = row_bytes.next_multiple_of(wgpu::COPY_BYTES_PER_ROW_ALIGNMENT as usize);
         let size = (padded_row * height as usize) as u64;
         if self.staging.first().is_none_or(|s| s.buffer.size() != size) {
-            self.staging = (0..STAGING_BUFFERS)
-                .map(|_| Staging {
-                    buffer: self.device.create_buffer(&wgpu::BufferDescriptor {
-                        label: Some("feed frame staging"),
-                        size,
-                        usage: wgpu::BufferUsages::MAP_WRITE | wgpu::BufferUsages::COPY_SRC,
-                        mapped_at_creation: true,
-                    }),
-                    ready: Arc::new(AtomicBool::new(true)),
-                    submission: None,
-                })
-                .collect();
+            // The old buffers go first: their memory may be what the new ones need.
+            self.staging.clear();
+            let device = &self.device;
+            let made =
+                gpu_memory::allocate(device, Part::Picture, size * STAGING_BUFFERS as u64, || {
+                    (0..STAGING_BUFFERS)
+                        .map(|_| Staging {
+                            buffer: device.create_buffer(&wgpu::BufferDescriptor {
+                                label: Some("feed frame staging"),
+                                size,
+                                usage: wgpu::BufferUsages::MAP_WRITE | wgpu::BufferUsages::COPY_SRC,
+                                mapped_at_creation: true,
+                            }),
+                            ready: Arc::new(AtomicBool::new(true)),
+                            submission: None,
+                        })
+                        .collect()
+                });
+            let Some(staging) = made else {
+                return; // short of GPU memory: this frame is left out, the next one tries again
+            };
+            self.staging = staging;
             self.next = 0;
         }
         if self
@@ -96,8 +110,11 @@ impl FrameUploader {
             .as_ref()
             .is_none_or(|f| f.width != width || f.height != height)
         {
-            self.frame = Some(GpuFrame {
-                texture: self.device.create_texture(&wgpu::TextureDescriptor {
+            self.frame = None;
+            let device = &self.device;
+            let bytes = width as u64 * height as u64 * 16;
+            let made = gpu_memory::allocate(device, Part::Picture, bytes, || {
+                device.create_texture(&wgpu::TextureDescriptor {
                     label: Some("feed frame"),
                     size: wgpu::Extent3d {
                         width,
@@ -112,7 +129,13 @@ impl FrameUploader {
                         | wgpu::TextureUsages::COPY_DST
                         | wgpu::TextureUsages::COPY_SRC,
                     view_formats: &[],
-                }),
+                })
+            });
+            let Some(texture) = made else {
+                return;
+            };
+            self.frame = Some(GpuFrame {
+                texture,
                 width,
                 height,
                 bottom_up: frame.bottom_up(),

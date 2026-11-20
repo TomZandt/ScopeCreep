@@ -42,7 +42,9 @@ fn poll(
     settings: &PanelSettings,
 ) {
     rig.poll(|encoder, gpu_frame| {
-        let shown = conversion.convert(encoder, gpu_frame);
+        let shown = conversion
+            .convert(encoder, gpu_frame)
+            .expect("GPU memory for the converted picture");
         set.on_frame(encoder, shown);
         set.on_timeline_frame(encoder, gpu_frame);
     });

@@ -28,7 +28,9 @@ struct Bench {
 /// Colour Setup.
 fn poll(rig: &mut Rig, conversion: &mut OutputConversion, waveform: &Waveform) {
     rig.poll(|encoder, gpu_frame| {
-        let shown = conversion.convert(encoder, gpu_frame);
+        let shown = conversion
+            .convert(encoder, gpu_frame)
+            .expect("GPU memory for the converted picture");
         waveform.measure(encoder, shown);
     });
     let setup = rig.monitor.status().colour_setup().map(|c| c.setup);

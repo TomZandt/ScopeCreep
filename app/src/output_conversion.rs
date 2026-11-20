@@ -13,6 +13,7 @@
 //! handed over, and the tests taste every dish against the book (app/tests/output_conversion_seam.rs).
 use crate::colour_setup::{ColourSetup, KnownColourSetup, OutputSpace, Science, TimelineSpace};
 use crate::gpu_frame::{GpuFrame, new_texture_id};
+use crate::gpu_memory::{self, Part};
 use crate::measurement::{LumaWeights, MeasuredSpace, Measurement};
 use scopecreep_accuracy::aces2::{self, AcesOutputTransform, Eotf};
 use scopecreep_accuracy::colour::{M3, REC2020, mmul};
@@ -525,9 +526,10 @@ impl OutputConversion {
                 .create_command_encoder(&wgpu::CommandEncoderDescriptor {
                     label: Some("output conversion again"),
                 });
-            let shown = self.convert(&mut encoder, frame);
-            then(&mut encoder, shown);
-            self.queue.submit([encoder.finish()]);
+            if let Some(shown) = self.convert(&mut encoder, frame) {
+                then(&mut encoder, shown);
+                self.queue.submit([encoder.finish()]);
+            }
         }
     }
 
@@ -541,14 +543,15 @@ impl OutputConversion {
     }
 
     /// Record the conversion of `frame` into `encoder` and return the picture to show and measure: the converted
-    /// one, or `frame` itself when there is nothing to convert.
+    /// one, or `frame` itself when there is nothing to convert. None when the GPU has no memory for the converted
+    /// picture ([`crate::gpu_memory`]): nothing should be measured then, and the next frame tries again.
     pub fn convert<'a>(
         &'a mut self,
         encoder: &mut wgpu::CommandEncoder,
         frame: &'a GpuFrame,
-    ) -> &'a GpuFrame {
+    ) -> Option<&'a GpuFrame> {
         let Some(method) = self.plan.method().filter(|m| *m != Method::Unchanged) else {
-            return frame;
+            return Some(frame);
         };
         let (width, height) = (frame.width, frame.height);
         if self
@@ -556,8 +559,11 @@ impl OutputConversion {
             .as_ref()
             .is_none_or(|o| o.width != width || o.height != height)
         {
-            self.out = Some(GpuFrame {
-                texture: self.device.create_texture(&wgpu::TextureDescriptor {
+            self.out = None;
+            let device = &self.device;
+            let bytes = width as u64 * height as u64 * 16;
+            let texture = gpu_memory::allocate(device, Part::Picture, bytes, || {
+                device.create_texture(&wgpu::TextureDescriptor {
                     label: Some("converted frame"),
                     size: wgpu::Extent3d {
                         width,
@@ -572,7 +578,10 @@ impl OutputConversion {
                         | wgpu::TextureUsages::TEXTURE_BINDING
                         | wgpu::TextureUsages::COPY_SRC,
                     view_formats: &[],
-                }),
+                })
+            })?;
+            self.out = Some(GpuFrame {
+                texture,
                 width,
                 height,
                 bottom_up: frame.bottom_up,
@@ -635,7 +644,7 @@ impl OutputConversion {
             pass.set_bind_group(0, &self.bound.as_ref().unwrap().2, &[]);
             pass.dispatch_workgroups(width.div_ceil(8), height.div_ceil(8), 1);
         }
-        self.out.as_ref().unwrap()
+        self.out.as_ref()
     }
 
     /// The picture shown for `frame` (converted or as sent), read back from the GPU, top row first, RGB. Waits for

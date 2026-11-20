@@ -6,6 +6,9 @@ The format follows [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/
 
 ## [Unreleased]
 
+### Added
+- When GPU memory runs out, the Window says so in one sentence: which side ran short (the Sender in Resolve, or the app's picture or scopes), about how much it needs, and to close another GPU app. Resolve is never affected (the Sender passes the picture through and tries again every few seconds), and the app shows the last picture and carries on by itself with the next frame once memory frees up (#35).
+
 ### Changed
 - The Window can't be made smaller than 469 × 645 (logical pixels): the size at which every Panel of the default layout keeps its minimum size and every menu, including the Hotkeys panel, fits under the menu bar. A layout you dragged can still shrink its Panels below their minimum in a Window smaller than the one it was arranged in (#172).
 

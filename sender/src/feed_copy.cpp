@@ -112,6 +112,21 @@ int stagingCount()
 
 std::string cudaError(const char* what, cudaError_t e) { return std::string(what) + ": " + cudaGetErrorString(e); }
 
+// Test hook: a staging buffer bigger than SCOPECREEP_SENDER_GPU_LIMIT_MB fails as if the GPU were full, so running
+// short can be checked without filling the GPU Resolve is using. Read on the worker thread only.
+bool overGpuLimit(size_t bytes)
+{
+    const char* v = std::getenv("SCOPECREEP_SENDER_GPU_LIMIT_MB");
+    return v && *v && bytes > (size_t)std::strtoull(v, nullptr, 10) * 1000000ull;
+}
+
+// What the app shows (after "Sender: ") when a staging buffer of `bytes` could not be had.
+std::string outOfGpuMemory(size_t bytes)
+{
+    return "Not enough GPU memory in Resolve to send frames (needs about " + std::to_string((bytes + 999999) / 1000000) +
+           " MB). Close another GPU app; the Sender tries again every few seconds.";
+}
+
 void setError(Ring* r, const std::string& text)
 {
     if (!r || !r->w.hdr) return;
@@ -153,7 +168,7 @@ Ring* buildRing(size_t frameBytes, std::string& err)
     for (int i = 0; i < stagingCount(); ++i) {
         void* p = nullptr;
         cudaEvent_t ev = nullptr;
-        lastErr = cudaMalloc(&p, capacity);
+        lastErr = overGpuLimit(capacity) ? cudaErrorMemoryAllocation : cudaMalloc(&p, capacity);
         if (lastErr != cudaSuccess) break;
         lastErr = cudaEventCreateWithFlags(&ev, cudaEventDisableTiming);
         if (lastErr != cudaSuccess) { cudaFree(p); break; }
@@ -162,7 +177,9 @@ Ring* buildRing(size_t frameBytes, std::string& err)
         r->stagingFree.push_back(ev);
     }
     if (r->staging.empty()) {
-        err = "not enough graphics memory for the Feed (" + cudaError("cudaMalloc", lastErr) + ")";
+        // The picture has already passed through on Resolve's stream; only the Feed goes without.
+        err = lastErr == cudaErrorMemoryAllocation ? outOfGpuMemory(capacity)
+                                                   : "cannot make a staging buffer for the Feed (" + cudaError("cudaMalloc", lastErr) + ")";
         cudaGetLastError();  // clear the sticky error so it is not blamed on Resolve
         freeRing(r);
         return nullptr;

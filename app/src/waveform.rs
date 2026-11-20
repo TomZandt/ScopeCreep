@@ -10,6 +10,7 @@
 //! and white (1.0) at 940, full (data) levels at 0 and 1023. Resolve hands the Sender the same values either way.
 use crate::colour_setup::Levels;
 use crate::gpu_frame::GpuFrame;
+use crate::gpu_memory::{self, Part};
 use crate::measurement::{LUMA_SETTING, MeasuredSpace, Measurement, luma_weights_of};
 use crate::scope_shader::{GRATICULE_AMOUNT, GRATICULE_SETTING, graticule_gain};
 use crate::settings::{Amount, Choice, SettingDef};
@@ -678,6 +679,19 @@ struct State {
     rgb_bound: Option<(u64, wgpu::BindGroup)>,
 }
 
+/// Short of GPU memory: let every frame-sized buffer go, so the waveform draws nothing (the notice says why) and
+/// the next frame makes them all again.
+fn forget(state: &mut State) {
+    state.counts = None;
+    state.sums = None;
+    state.rgb = None;
+    state.bound = None;
+    state.bound_colour = None;
+    state.rgb_bound = None;
+    state.draw_bound = None;
+    state.trace_bound = None;
+}
+
 /// The waveform's GPU state. Cheap to clone: the Feed thread measures through one clone while the window thread
 /// draws through another.
 #[derive(Clone)]
@@ -921,6 +935,18 @@ impl Waveform {
         self.measurement().label()
     }
 
+    /// One of the waveform's frame-sized buffers, or None when the GPU has no memory for it ([`gpu_memory`]).
+    fn buffer(&self, label: &str, size: u64, usage: wgpu::BufferUsages) -> Option<wgpu::Buffer> {
+        gpu_memory::allocate(&self.device, Part::Scopes, size, || {
+            self.device.create_buffer(&wgpu::BufferDescriptor {
+                label: Some(label),
+                size,
+                usage,
+                mapped_at_creation: false,
+            })
+        })
+    }
+
     /// Record the measurement of `frame` into `encoder` (see [`crate::gpu_frame::FrameUploader::upload`]).
     pub fn measure(&self, encoder: &mut wgpu::CommandEncoder, frame: &GpuFrame) {
         let measurement = self.measurement();
@@ -952,16 +978,22 @@ impl Waveform {
             .as_ref()
             .is_none_or(|c| c.columns != frame.width)
         {
-            state.counts = Some(shared.clone().unwrap_or_else(|| Counts {
-                buffer: self.device.create_buffer(&wgpu::BufferDescriptor {
-                    label: Some("waveform counts"),
-                    size: frame.width as u64 * ROWS as u64 * 4,
-                    usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_SRC,
-                    mapped_at_creation: false,
-                }),
-                columns: frame.width,
-                picture_height: frame.height,
-            }));
+            let counts = match shared.clone() {
+                Some(counts) => counts,
+                None => {
+                    let size = frame.width as u64 * ROWS as u64 * 4;
+                    let usage = wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_SRC;
+                    let Some(buffer) = self.buffer("waveform counts", size, usage) else {
+                        return forget(&mut state);
+                    };
+                    Counts {
+                        buffer,
+                        columns: frame.width,
+                        picture_height: frame.height,
+                    }
+                }
+            };
+            state.counts = Some(counts);
             state.bound = None;
             state.draw_bound = None;
             state.trace_bound = None;
@@ -975,12 +1007,11 @@ impl Waveform {
             16
         };
         if state.sums.as_ref().is_none_or(|b| b.size() != sums_size) {
-            state.sums = Some(self.device.create_buffer(&wgpu::BufferDescriptor {
-                label: Some("waveform colour sums"),
-                size: sums_size,
-                usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
-                mapped_at_creation: false,
-            }));
+            let usage = wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST;
+            let Some(sums) = self.buffer("waveform colour sums", sums_size, usage) else {
+                return forget(&mut state);
+            };
+            state.sums = Some(sums);
             state.bound_colour = None;
             state.draw_bound = None;
             state.trace_bound = None;
@@ -1049,12 +1080,11 @@ impl Waveform {
         }
         let size = frame.width as u64 * ROWS as u64 * 3 * 4;
         if state.rgb.as_ref().is_none_or(|b| b.size() != size) {
-            state.rgb = Some(self.device.create_buffer(&wgpu::BufferDescriptor {
-                label: Some("waveform channel counts"),
-                size,
-                usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_SRC,
-                mapped_at_creation: false,
-            }));
+            let usage = wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_SRC;
+            let Some(rgb) = self.buffer("waveform channel counts", size, usage) else {
+                return forget(state);
+            };
+            state.rgb = Some(rgb);
             state.rgb_bound = None;
             state.draw_bound = None;
             state.trace_bound = None;

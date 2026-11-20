@@ -8,6 +8,7 @@
 //! Feed's status, the settings or a frame changed.
 use crate::display::{DisplayContext, DisplaySet};
 use crate::gpu_frame::FrameUploader;
+use crate::gpu_memory;
 use crate::monitor::{FeedState, Monitor, Status};
 use crate::output_conversion::OutputConversion;
 use crate::settings::PanelSettings;
@@ -60,6 +61,8 @@ pub struct FeedLoop {
     status_hover: String,
     top_bar: String,
     notice: Option<String>,
+    /// Said while the last frame measured could not get all the GPU memory it needed; it comes before the Feed's.
+    memory_notice: Option<String>,
     has_picture: bool,
     last: Texts,
     /// Frames put on the GPU and handed to the displays.
@@ -89,6 +92,7 @@ impl FeedLoop {
             status_hover: String::new(),
             top_bar: String::new(),
             notice: None,
+            memory_notice: None,
             has_picture: false,
             last: Texts::default(),
             scope_frames: 0,
@@ -117,7 +121,9 @@ impl FeedLoop {
         monitor.poll(now_ns, &mut |frame| {
             uploader.upload(frame, |encoder, gpu_frame| {
                 // Every display sees the picture after Output Conversion: one upload, one conversion.
-                let picture = conversion.convert(encoder, gpu_frame);
+                let Some(picture) = conversion.convert(encoder, gpu_frame) else {
+                    return; // short of GPU memory: said in the notice, tried again with the next frame
+                };
                 displays.on_frame(encoder, picture);
                 // Stops False Colour measures scene light: the frame before Output Conversion.
                 displays.on_timeline_frame(encoder, gpu_frame);
@@ -187,6 +193,14 @@ impl FeedLoop {
                 labels_stale = true;
             }
         }
+        // Whatever measured a frame this step made the GPU memory it needed, or says how much it could not get.
+        if shown {
+            let short = gpu_memory::take().notice();
+            if short != self.memory_notice {
+                self.memory_notice = short;
+                labels_stale = true;
+            }
+        }
         let mut labels = false;
         if labels_stale {
             let now = Texts {
@@ -194,7 +208,7 @@ impl FeedLoop {
                 top_bar: self.top_bar.clone(),
                 status: self.status_text.clone(),
                 status_hover: self.status_hover.clone(),
-                notice: self.notice.clone(),
+                notice: self.memory_notice.clone().or_else(|| self.notice.clone()),
                 has_picture: self.has_picture,
             };
             if now != self.last {

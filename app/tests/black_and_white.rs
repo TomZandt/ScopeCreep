@@ -37,7 +37,9 @@ fn poll(
     settings: &PanelSettings,
 ) {
     rig.poll(|encoder, gpu_frame| {
-        let shown = conversion.convert(encoder, gpu_frame);
+        let shown = conversion
+            .convert(encoder, gpu_frame)
+            .expect("GPU memory for the converted picture");
         set.on_frame(encoder, shown);
     });
     let setup = rig.monitor.status().colour_setup().map(|c| c.setup);
