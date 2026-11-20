@@ -182,7 +182,7 @@ pub const SETTINGS: [SettingDef; 8] = [
     SettingDef { key: BRIGHTNESS_SETTING, label: "Trace brightness", amount: Some(BRIGHTNESS_AMOUNT), choices: &[] },
     SettingDef { key: SPREAD_SETTING, label: "Soft spread", amount: Some(SPREAD_AMOUNT), choices: &[] },
     SettingDef { key: crate::scope_shader::GRATICULE_SETTING, label: "Graticule brightness", amount: Some(crate::scope_shader::GRATICULE_AMOUNT), choices: &[] },
-    SettingDef { key: TARGETS_SETTING, label: "Colour targets", amount: None, choices: &[Choice { value: "75", text: "75 % bars" }, Choice { value: "100", text: "100 % bars" }] },
+    SettingDef { key: TARGETS_SETTING, label: "Colour targets", amount: None, choices: &[Choice { value: "both", text: "75 % and 100 %" }, Choice { value: "75", text: "75 % bars" }, Choice { value: "100", text: "100 % bars" }] },
     SettingDef { key: SKIN_LINE_SETTING, label: "Skin-tone line", amount: None, choices: &[Choice { value: "on", text: "On" }, Choice { value: "off", text: "Off" }] },
     SettingDef {
         key: PLOTS_SETTING,
@@ -232,7 +232,8 @@ pub static TOOLBAR: [ToolbarDef; 3] = [
 struct Config {
     measurement: Measurement,
     /// 0.75 or 1.0.
-    bars: f64,
+    /// The levels of the two target boxes per hue (0.75 and/or 1.0); the same twice when one set shows.
+    bars: [f64; 2],
     skin_line: bool,
     gain: f32,
     /// The graticule gain (1 is the normal look).
@@ -404,7 +405,7 @@ struct Placement {
     info: vec4<f32>,      // half extent (Cb/Cr), trace gain, pixels counted, device pixels per logical pixel
     opts: vec4<f32>,      // skin line on, its cos and sin, target box half size (Cb/Cr)
     rings: vec4<f32>,     // the outer ring as a fraction of the plot's radius, soft spread in device pixels (0 off), where this plot's bins start, mono trace on
-    targets: array<vec4<f32>, 6>,   // Cb, Cr of each colour target
+    targets: array<vec4<f32>, 6>,   // Cb, Cr of each colour target, then Cb, Cr of its second box (the same again when there is one set)
     weights: vec4<f32>,   // luma weights for R, G, B, to turn a position back into a colour, the graticule gain
 };
 @group(0) @binding(0) var<uniform> placement: Placement;
@@ -532,10 +533,13 @@ fn fs(@builtin(position) position: vec4<f32>) -> @location(0) vec4<f32> {
     let k = radius / placement.info.x;
     let half_box = placement.opts.w * k;
     for (var i = 0u; i < 6u; i++) {
-        let c = vec2<f32>(placement.targets[i].x * k, -placement.targets[i].y * k);
-        let d = max(abs(q.x - c.x), abs(q.y - c.y));
-        if (d <= half_box + half_line && d > half_box - half_line) {
-            base = BARS[i] * min(0.7 * placement.weights.w, 0.9);
+        for (var s = 0u; s < 2u; s++) {
+            let t = select(placement.targets[i].xy, placement.targets[i].zw, s == 1u);
+            let c = vec2<f32>(t.x * k, -t.y * k);
+            let d = max(abs(q.x - c.x), abs(q.y - c.y));
+            if (d <= half_box + half_line && d > half_box - half_line) {
+                base = BARS[i] * min(0.7 * placement.weights.w, 0.9);
+            }
         }
     }
     let rel = p - plot.xy;
@@ -618,7 +622,7 @@ impl Vectorscope {
             params: uniform("vectorscope params", PARAMS_BYTES),
             draw,
             placement: [uniform("vectorscope placement 100 %", DRAW_UNIFORM_BYTES), uniform("vectorscope placement 200 %", DRAW_UNIFORM_BYTES)],
-            config: Arc::new(Mutex::new(Config { measurement: Measurement::default(), bars: 0.75, skin_line: true, gain: 1.0, graticule: 1.0, spread: SPREAD_AMOUNT.default, plots: Plots::Both, mono: false, tonal: Tonal::All })),
+            config: Arc::new(Mutex::new(Config { measurement: Measurement::default(), bars: [0.75, 1.0], skin_line: true, gain: 1.0, graticule: 1.0, spread: SPREAD_AMOUNT.default, plots: Plots::Both, mono: false, tonal: Tonal::All })),
             state: Arc::new(Mutex::new(State { bins, pixels: 0, bound: None, draw_bound: None, measured: false })),
         }
     }
@@ -660,10 +664,11 @@ impl Vectorscope {
             Plots::Only(Zoom::X1) => "100 %",
             Plots::Only(Zoom::X2) => "200 %",
         };
+        let percent = |level: f64| format!("{} %", (level * 100.0).round());
+        let targets = if config.bars[0] == config.bars[1] { percent(config.bars[0]) } else { format!("{} and {}", percent(config.bars[0]), percent(config.bars[1])) };
         let mut label = format!(
-            "Vectorscope {shown}  ·  Cb/Cr  ·  {space}  ·  Y = {r:.4} R + {g:.4} G + {b:.4} B {}  ·  {} % targets  ·  colours beyond the 100 % bars mark the ring",
-            m.weights_how(),
-            (config.bars * 100.0).round()
+            "Vectorscope {shown}  ·  Cb/Cr  ·  {space}  ·  Y = {r:.4} R + {g:.4} G + {b:.4} B {}  ·  {targets} targets  ·  colours beyond the 100 % bars mark the ring",
+            m.weights_how()
         );
         if let Some(tonal) = config.tonal.tag() {
             label += &format!("  ·  {tonal}: Luma below 30 % (shadows), 30 % to below 70 % (mids), 70 % and up (highlights); clipping counts only these pixels");
@@ -721,7 +726,11 @@ impl Display for Vectorscope {
         let get = |key: &str| context.settings.get(key).map(String::as_str);
         *self.config.lock().unwrap() = Config {
             measurement: crate::output_conversion::measurement(context.colour_setup.clone(), context.luma),
-            bars: if get(TARGETS_SETTING) == Some("100") { 1.0 } else { 0.75 },
+            bars: match get(TARGETS_SETTING) {
+                Some("75") => [0.75; 2],
+                Some("100") => [1.0; 2],
+                _ => [0.75, 1.0],
+            },
             skin_line: get(SKIN_LINE_SETTING) != Some("off"),
             spread: SPREAD_AMOUNT.read(get(SPREAD_SETTING)),
             plots: Plots::from_setting(get(PLOTS_SETTING)),
@@ -780,9 +789,12 @@ impl Display for Vectorscope {
             placement[17] = config.spread;
             placement[18] = zoom.first_bin() as f32;
             placement[19] = if config.mono { 1.0 } else { 0.0 };
-            for (t, [cb, cr]) in bar_targets(config.measurement.weights(), config.bars).iter().enumerate() {
-                placement[20 + t * 4] = *cb as f32;
-                placement[21 + t * 4] = *cr as f32;
+            let weights = config.measurement.weights();
+            for (set, level) in config.bars.iter().enumerate() {
+                for (t, [cb, cr]) in bar_targets(weights, *level).iter().enumerate() {
+                    placement[20 + t * 4 + set * 2] = *cb as f32;
+                    placement[21 + t * 4 + set * 2] = *cr as f32;
+                }
             }
             let w = config.measurement.weights();
             placement[44..48].copy_from_slice(&[w[0] as f32, w[1] as f32, w[2] as f32, config.graticule]);

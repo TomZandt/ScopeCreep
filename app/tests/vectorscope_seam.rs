@@ -237,13 +237,18 @@ fn the_colour_targets_are_drawn_where_the_chosen_bars_land() {
         brightest_near(image, width, [x, y])
     };
     assert!(on_box(&image, 0.75) > 60, "a target box at the 75 % red position: {}", on_box(&image, 0.75));
-    assert!(on_box(&image, 1.0) <= 40, "not at the 100 % red position: {}", on_box(&image, 1.0));
+    assert!(on_box(&image, 1.0) > 60, "and at the 100 % red position, by default: {}", on_box(&image, 1.0));
 
     let panel = V;
     b.choose(panel, "targets", "100");
     let (image, _, _) = black_frame_and_render(&mut b);
     assert!(on_box(&image, 1.0) > 60, "100 % targets: a box at the 100 % red position: {}", on_box(&image, 1.0));
     assert!(on_box(&image, 0.75) <= 40, "and no longer at the 75 % position: {}", on_box(&image, 0.75));
+
+    b.choose(panel, "targets", "75");
+    let (image, _, _) = black_frame_and_render(&mut b);
+    assert!(on_box(&image, 0.75) > 60, "75 % targets: a box at the 75 % red position: {}", on_box(&image, 0.75));
+    assert!(on_box(&image, 1.0) <= 40, "and not at the 100 % position: {}", on_box(&image, 1.0));
 }
 
 #[test]
@@ -446,7 +451,7 @@ fn the_label_names_the_measured_space_the_weights_the_targets_and_the_angle() {
     assert!(assumed.starts_with("Vectorscope 100 % and 200 %  ·  Cb/Cr"), "one label names both zooms: {assumed}");
     assert!(assumed.contains("Rec.709 assumed, measured as sent, unconverted"), "{assumed}");
     assert!(assumed.contains("Y = 0.2126 R + 0.7152 G + 0.0722 B"), "{assumed}");
-    assert!(assumed.contains("75 % targets"), "{assumed}");
+    assert!(assumed.contains("75 % and 100 % targets"), "{assumed}");
     assert!(assumed.contains("123° (as Resolve 21.2 draws it)"), "{assumed}");
 
     let setup = ColourSetup::new(Some(Science::Yrgb), "P3-D65".into(), "P3-D65".into(), None, None, None, Some(Levels::Video));
@@ -457,7 +462,9 @@ fn the_label_names_the_measured_space_the_weights_the_targets_and_the_angle() {
     let p3 = b.label(V);
     assert!(p3.contains("P3-D65") && !p3.contains("assumed"), "{p3}");
     assert!(p3.contains("Y = 0.2290 R + 0.6917 G + 0.0793 B"), "the same weights as the Luma waveform for this space: {p3}");
-    assert!(p3.contains("100 % targets"), "{p3}");
+    assert!(p3.contains("  ·  100 % targets"), "{p3}");
+    b.choose(panel, "targets", "75");
+    assert!(b.label(V).contains("  ·  75 % targets"), "75 alone is named as before");
     assert!(!p3.contains("skin-tone"), "no angle is stated when the line is off: {p3}");
 }
 
@@ -468,7 +475,7 @@ fn the_menu_offers_trace_brightness_targets_and_the_skin_tone_line_with_sensible
     let keys: Vec<_> = defs.iter().map(|d| (d.key, d.choices.iter().map(|c| c.value).collect::<Vec<_>>())).collect();
     assert!(defs[0].amount.is_some() && defs[1].amount.is_some(), "brightness and spread are sliders");
     assert!(defs[0].amount.is_some() && defs[1].amount.is_some(), "brightness and spread are sliders");
-    assert_eq!(keys, [("brightness", vec![]), ("spread", vec![]), ("graticule", vec![]), ("targets", vec!["75", "100"]), ("skin-line", vec!["on", "off"]), ("plots", vec!["both", "100", "200"]), ("tonal", vec!["all", "shadows", "mids", "highlights"]), ("mono", vec!["off", "on"])]);
+    assert_eq!(keys, [("brightness", vec![]), ("spread", vec![]), ("graticule", vec![]), ("targets", vec!["both", "75", "100"]), ("skin-line", vec!["on", "off"]), ("plots", vec!["both", "100", "200"]), ("tonal", vec!["all", "shadows", "mids", "highlights"]), ("mono", vec!["off", "on"])]);
 }
 
 #[test]

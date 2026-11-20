@@ -181,7 +181,7 @@ A Picture View of the Output picture in its own colours in which pixels whose hu
 _Avoid_: Skin tone indicator (Resolve's and others' name for their own tools)
 
 **Colour targets**:
-The six boxes on a vectorscope where red, yellow, green, cyan, magenta and blue colour bars land, for 75 % or 100 % bars (the user's choice).
+The six boxes on a vectorscope where red, yellow, green, cyan, magenta and blue colour bars land, for 75 % bars, 100 % bars or both at once (the user's choice; both is the default, with a hue's 75 % box inside its 100 % box in the same colour).
 _Avoid_: Graticule (that is all the scale marks), boxes
 
 **Luma**:

@@ -10,6 +10,8 @@ The format follows [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/
 
 - Zoom: Link is on in a first session (a saved choice, on or off, still wins), and zoom goes up to 800 % instead of 400 %: free below 100 %, landing on 100 %, then whole steps 200 to 800 %, each picture pixel an exact square. The zoom chip no longer opens a slider: a click on it goes back to Fit (every picture Panel while Link is on), and the wheel is the way to zoom (#176, ADR 0035).
 
+- Vectorscope: Colour targets gains 75 % and 100 %, which draws both sets of target boxes on each plot at once, the 75 % box inside the 100 % one in the same colour. It is the default for a Panel with no stored choice; a saved 75 % or 100 % keeps its meaning, and the label reads "75 % and 100 % targets" when both show (#175, supersedes #129).
+
 - The Channel view is out of the Window now the clean picture's Y R G B chips and Loupe do its job: the Window shows 7 Panels, and the default layout gives ARRI False Colour three columns and Stops False Colour two, the Saturation heatmap three and Skin tone two, every cell used. A saved layout that names the Channel view still recalls. Its code, tests and saved settings are kept (#162, ADR 0034).
 
 - Clean picture: Y R G B chips on its title bar replace the B/W chip. None lit is colour, the default; click a chip to see that channel as grey, click it again for colour, click another to switch. Y is Luma grey with the waveform's weights, exactly what B/W showed; mattes stay black. The title tags the channel when it is not colour and the choice is remembered per Panel. A saved B/W "on" opens as Y, "off" as colour. ARRI False Colour, Stops False Colour and Skin Tone keep their B/W chip (#160, ADR 0013).
