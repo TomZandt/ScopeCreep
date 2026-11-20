@@ -9,3 +9,5 @@ What ticket #84 showed on 2026-11-19, at the pure settings seam (`app/tests/sett
 - The menu seam: the slider row maps a press to a step of the range at scale 1 and 2, a drag past either end of the track (or out of the menu) gives the end, a press on a heading or the row's left padding is not a slider press, the Reset row gives the default, and everything drawn stays inside the menu's width.
 - The menu stays open while dragging (the window keeps the slider being dragged until the button is let go) and the value is saved on every change; that part is window code and was not run headless.
 - Not verified: how the slider feels in the real Window beside Resolve, and its drawing on a HiDPI display (#91).
+
+**Checked at the app by the product owner, 2026-11-20 (#91):** the sliders work (the Panel follows the drag, the menu stays open, Reset to default works), and they are sharp and usable on HiDPI and small Panels, leave UHD 50 playback undisturbed, and come back after a restart. One fault: the slider's handle and number do not move while dragging (#220).
