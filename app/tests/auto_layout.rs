@@ -18,6 +18,8 @@ const NAMES: [&str; 7] = [
     "Stops False Colour",
 ];
 const GAP: f32 = 12.0;
+/// How many variations a page steps through before it wraps.
+const REROLLS: usize = 8;
 const WINDOW: [f32; 4] = [0.0, 0.0, 1256.0, 716.0];
 
 fn items(names: &[&str]) -> Vec<Item> {
@@ -89,13 +91,169 @@ fn it_is_deterministic() {
     assert_eq!(a, laid(2.39, WINDOW, 1.0).to_text(&NAMES));
 }
 
-#[test]
-fn a_second_press_changes_nothing() {
-    let mut t = laid(16.0 / 9.0, WINDOW, 1.0);
-    let once = t.clone();
-    t.auto_layout(&items(&NAMES), 16.0 / 9.0, WINDOW, GAP, 1.0)
+const ASPECT: f32 = 16.0 / 9.0;
+
+fn press(t: &mut LayoutTree) {
+    t.auto_layout(&items(&NAMES), ASPECT, WINDOW, GAP, 1.0)
         .expect("fits");
-    assert_eq!(t, once);
+}
+
+/// The arrangements a run of `n` presses on a fresh default page gives, as text.
+fn presses(n: usize) -> Vec<String> {
+    let mut t = default_tree();
+    (0..n)
+        .map(|_| {
+            press(&mut t);
+            t.to_text(&NAMES)
+        })
+        .collect()
+}
+
+#[test]
+fn successive_presses_give_distinct_arrangements_in_a_fixed_order() {
+    let run = presses(REROLLS);
+    for (i, a) in run.iter().enumerate() {
+        for b in &run[i + 1..] {
+            assert_ne!(a, b, "two presses gave the same arrangement");
+        }
+    }
+    assert_eq!(
+        run[0],
+        laid(ASPECT, WINDOW, 1.0).to_text(&NAMES),
+        "first is the best"
+    );
+    assert_eq!(
+        run,
+        presses(REROLLS),
+        "the order is the same on another run"
+    );
+}
+
+#[test]
+fn every_variation_keeps_minimums_reading_order_and_tab_groups() {
+    let names = ["Clean picture", "Vectorscope", "Skin tone", "Luma waveform"];
+    let text = "layout 2\nsplit row 0.5\nleaf 0 Clean picture\nsplit col 0.5\nleaf 1 Vectorscope|Skin tone\nleaf 0 Luma waveform\n";
+    let mut t = LayoutTree::parse_text(&names, text).expect("a layout");
+    let mut seen = Vec::new();
+    for _ in 0..REROLLS {
+        t.auto_layout(&items(&names), ASPECT, WINDOW, GAP, 1.0)
+            .expect("fits");
+        assert_eq!(t.panels(), vec![0, 1, 2, 3]);
+        assert_eq!(t.tab_group(1).expect("a group").tabs, vec![1, 2]);
+        for c in t.cells(WINDOW, GAP).into_iter().filter(|c| shown(*c)) {
+            assert!(
+                c[2] >= MIN_PANEL[0] - 0.5 && c[3] >= MIN_PANEL[1] - 0.5,
+                "{c:?} in {}",
+                t.to_text(&names)
+            );
+        }
+        seen.push(t.to_text(&names));
+    }
+    seen.dedup();
+    assert!(seen.len() > 1, "four items have more than one arrangement");
+
+    let mut seven = default_tree();
+    for _ in 0..REROLLS {
+        press(&mut seven);
+        assert_eq!(seven.panels(), default_tree().panels());
+        assert_minimums(&seven, WINDOW, 1.0);
+    }
+}
+
+#[test]
+fn the_press_after_the_last_variation_returns_to_the_best() {
+    let run = presses(REROLLS + 2);
+    assert_eq!(run[REROLLS], run[0]);
+    assert_eq!(run[REROLLS + 1], run[1]);
+}
+
+#[test]
+fn any_other_change_restarts_at_the_best() {
+    let mut t = default_tree();
+    press(&mut t);
+    press(&mut t);
+    // A Panel closed and added back is another arrangement, so the next press is a first press of that tree.
+    t.close(5);
+    t.add(5, WINDOW, GAP, min_panel_size(1.0));
+    // The same arrangement in a tree that has never been pressed: both give the same first press.
+    let mut reference = LayoutTree::parse_text(&NAMES, &t.to_text(&NAMES)).expect("a layout");
+    press(&mut t);
+    press(&mut reference);
+    assert_eq!(t.to_text(&NAMES), reference.to_text(&NAMES));
+}
+
+#[test]
+fn a_press_after_a_hand_change_is_the_best_again() {
+    let mut t = default_tree();
+    for _ in 0..3 {
+        press(&mut t);
+    }
+    let result = t.to_text(&NAMES);
+    let mut moved = LayoutTree::parse_text(&NAMES, &result).expect("a layout");
+    moved.swap(0, 1);
+    moved.swap(0, 1);
+    assert_eq!(moved.to_text(&NAMES), result);
+    // Same arrangement, parsed fresh: a first press, so it gives the best.
+    press(&mut moved);
+    assert_eq!(moved.to_text(&NAMES), presses(1).remove(0));
+}
+
+#[test]
+fn a_change_of_footage_aspect_restarts_at_the_best() {
+    let mut t = default_tree();
+    press(&mut t);
+    press(&mut t);
+    t.auto_layout(&items(&NAMES), 2.39, WINDOW, GAP, 1.0)
+        .expect("fits");
+    assert_eq!(t.to_text(&NAMES), laid(2.39, WINDOW, 1.0).to_text(&NAMES));
+}
+
+#[test]
+fn undo_steps_back_one_variation_and_each_press_is_one_step() {
+    let mut pages = Pages::new(default_tree());
+    let mut texts = vec![pages.tree().to_text(&NAMES)];
+    for _ in 0..3 {
+        pages.change(press);
+        texts.push(pages.tree().to_text(&NAMES));
+    }
+    for want in texts.iter().rev().skip(1) {
+        assert!(pages.undo());
+        assert_eq!(&pages.tree().to_text(&NAMES), want);
+    }
+    assert!(!pages.can_undo());
+}
+
+#[test]
+fn a_press_after_an_undo_shows_the_variation_it_undid() {
+    let mut pages = Pages::new(default_tree());
+    for _ in 0..3 {
+        pages.change(press);
+    }
+    let third = pages.tree().to_text(&NAMES);
+    pages.undo();
+    pages.change(press);
+    assert_eq!(pages.tree().to_text(&NAMES), third);
+}
+
+#[test]
+fn above_nine_panels_a_repeat_press_changes_nothing() {
+    let refs: Vec<&str> = std::iter::once("Clean picture")
+        .chain(std::iter::repeat_n("Skin tone", 11))
+        .collect();
+    let area = [0.0, 0.0, 3840.0, 2160.0];
+    let mut pages = Pages::new(LayoutTree::automatic(12));
+    pages.change(|t| {
+        t.auto_layout(&items(&refs), ASPECT, area, GAP, 1.0)
+            .expect("fits")
+    });
+    let once = pages.tree().to_text(&refs);
+    pages.change(|t| {
+        t.auto_layout(&items(&refs), ASPECT, area, GAP, 1.0)
+            .expect("fits")
+    });
+    assert_eq!(pages.tree().to_text(&refs), once);
+    assert!(pages.undo());
+    assert!(!pages.can_undo(), "the repeat press was no undo step");
 }
 
 #[test]

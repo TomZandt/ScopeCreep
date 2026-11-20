@@ -193,7 +193,9 @@ impl Node {
                 Dir::Row => (rect[2] - gap, fa[0], fb[0]),
                 Dir::Col => (rect[3] - gap, fa[1], fb[1]),
             };
-            if total > 0.0 && lo + hi <= total {
+            // Within a hair counts as fitting: a split held exactly at its parent's limit hands down a room that
+            // float rounding can leave a hair short of the floor, and must still be held.
+            if total > 0.0 && lo + hi <= total + 0.01 {
                 *ratio = ratio.min(1.0 - hi / total).max(lo / total);
             }
         }
@@ -509,6 +511,17 @@ pub struct LayoutTree {
     focus: Option<usize>,
     /// How many Panels the Window has, closed ones included: [`LayoutTree::cells`] has a cell for each.
     total: usize,
+    /// What the last Auto layout press gave, for the next press to step on from. Session only, like the focus.
+    auto: Option<AutoResult>,
+}
+
+/// An Auto layout result: which rank of the search it was, the arrangement it made and the footage aspect it was
+/// made for. A press steps to the next rank only while the page still holds exactly that arrangement.
+#[derive(Clone, Debug)]
+struct AutoResult {
+    rank: usize,
+    root: Node,
+    aspect: f32,
 }
 
 impl PartialEq for LayoutTree {
@@ -622,6 +635,7 @@ impl LayoutTree {
             root,
             focus: None,
             total,
+            auto: None,
         }
     }
 
@@ -675,9 +689,11 @@ impl LayoutTree {
 
     /// Auto layout (#214): re-arrange the page once. The tab groups keep their reading order and stay whole; the
     /// search cuts that list into splits, fits picture cells as Auto resize does, drops any cut that breaks the
-    /// least size of a Panel and keeps the best score ([`crate::auto_layout`]). `items` are by Panel, in Panel
-    /// order. With no cut that fits the tree is left as it was and the error names the minimum. Focus and tabs
-    /// are kept.
+    /// least size of a Panel and ranks the rest by score ([`crate::auto_layout`]). The first press takes the best;
+    /// a press while the page still holds the last press's result, for the same aspect, takes the next rank, and
+    /// wraps after the best [`arrange::VARIATIONS`]. Any other change to the page starts again at the best.
+    /// `items` are by Panel, in Panel order. With no cut that fits the tree is left as it was and the error names
+    /// the minimum. Focus and tabs are kept.
     pub fn auto_layout(
         &mut self,
         items: &[Item],
@@ -686,7 +702,18 @@ impl LayoutTree {
         gap: f32,
         scale: f32,
     ) -> Result<(), NoFit> {
-        if let Some(root) = arrange::arrange(&self.root, items, aspect, area, gap, scale)? {
+        let rank = match &self.auto {
+            Some(last) if last.root == self.root && last.aspect == aspect => last.rank + 1,
+            _ => 0,
+        };
+        if let Some((root, rank)) =
+            arrange::arrange(&self.root, items, aspect, area, gap, scale, rank)?
+        {
+            self.auto = Some(AutoResult {
+                rank,
+                root: root.clone(),
+                aspect,
+            });
             self.root = root;
         }
         Ok(())

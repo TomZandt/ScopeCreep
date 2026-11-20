@@ -3,7 +3,8 @@
 //! only the first cuts near the middle, up to [`SEARCH_MAX`]); above that a greedy halving replaces the search.
 //! Each candidate gets its shares from the items' weights, is fitted as Auto resize fits (picture cells get the
 //! footage's aspect), is dropped when a Panel would go under its least size, and the best score wins. Ties go to
-//! the candidate generated first, so the result is deterministic.
+//! the candidate generated first, so the result is deterministic. The candidates are ranked best first (ties in
+//! generation order) and a repeat press takes the next rank ([`VARIATIONS`] of them, then it wraps).
 
 use super::{Dir, Fit, NoFit, Node, halves};
 use crate::auto_layout::{self, FULL_SEARCH_MAX, Item, SEARCH_MAX};
@@ -24,7 +25,11 @@ struct Search<'a> {
     min: [f32; 2],
 }
 
-/// The best arrangement of `root`'s tab groups, `Ok(None)` when there is nothing to arrange (one tab group or
+/// How many distinct arrangements a page steps through with repeat presses before it wraps to the best.
+pub const VARIATIONS: usize = 8;
+
+/// The arrangement of `root`'s tab groups at `rank` (0 the best; wrapping after the best [`VARIATIONS`] distinct
+/// ones, or fewer if fewer fit) and the rank used. `Ok(None)` when there is nothing to arrange (one tab group or
 /// none), `Err` when no arrangement keeps every Panel at its least size.
 pub fn arrange(
     root: &Node,
@@ -33,7 +38,8 @@ pub fn arrange(
     area: [f32; 4],
     gap: f32,
     scale: f32,
-) -> Result<Option<Node>, NoFit> {
+    rank: usize,
+) -> Result<Option<(Node, usize)>, NoFit> {
     let mut leaves = Vec::new();
     collect(root, &mut leaves);
     if leaves.len() < 2 {
@@ -67,7 +73,12 @@ pub fn arrange(
         gap,
         min: min_panel_size(scale),
     };
-    search.run().map(Some).ok_or(NoFit)
+    let mut ranked = search.run();
+    if ranked.is_empty() {
+        return Err(NoFit);
+    }
+    let rank = rank % ranked.len();
+    Ok(Some((ranked.swap_remove(rank), rank)))
 }
 
 fn collect(node: &Node, out: &mut Vec<Node>) {
@@ -81,20 +92,32 @@ fn collect(node: &Node, out: &mut Vec<Node>) {
 }
 
 impl Search<'_> {
-    fn run(&self) -> Option<Node> {
+    /// The best [`VARIATIONS`] distinct arrangements, best first; empty when none fits.
+    fn run(&self) -> Vec<Node> {
         let n = self.leaves.len();
         if n > SEARCH_MAX {
-            return self.finish(self.greedy(0, n, self.area[2], self.area[3]));
+            return self
+                .finish(self.greedy(0, n, self.area[2], self.area[3]))
+                .into_iter()
+                .collect();
         }
-        let mut best: Option<(f32, Node)> = None;
-        for candidate in self.generate(0, n) {
-            if let Some((score, tree)) = self.evaluate(candidate)
-                && best.as_ref().is_none_or(|(b, _)| score > *b)
-            {
-                best = Some((score, tree));
+        let mut scored: Vec<(f32, Node)> = self
+            .generate(0, n)
+            .into_iter()
+            .filter_map(|candidate| self.evaluate(candidate))
+            .collect();
+        // A stable sort keeps generation order among equal scores.
+        scored.sort_by(|a, b| b.0.total_cmp(&a.0));
+        let mut out: Vec<Node> = Vec::new();
+        for (_, tree) in scored {
+            if !out.contains(&tree) {
+                out.push(tree);
+                if out.len() == VARIATIONS {
+                    break;
+                }
             }
         }
-        best.map(|(_, tree)| tree)
+        out
     }
 
     fn weight(&self, lo: usize, hi: usize) -> f32 {
