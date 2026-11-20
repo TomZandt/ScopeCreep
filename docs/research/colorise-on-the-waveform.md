@@ -12,7 +12,7 @@ Research of 2026-11-18 for the luma waveform and Colour Waveform (spec #113). Qu
 ## How sure this is
 
 - The Resolve 20 and 21 manuals were not read directly this time. The 18.6 manual pages could not be fetched (404); the wording came from search snippets of a mirror and from the repo's earlier reading of R20.
-- The two sources describe different colours for Colorize (image colour on Y, false RGB on channels). That fits one switch with a different colour source per trace, but it is an inference. Whether the product owner's reading ("colorise any combination of Y R G B") holds exactly in Resolve 21 is checked at the app (a ready-for-human issue).
+- The two sources describe different colours for Colorize (image colour on Y, false RGB on channels). That fits one switch with a different colour source per trace, but it is an inference. **Checked at Resolve 21 (#140, 2026-11-20):** it does not hold. Resolve's waveform is in one of three exclusive modes (Y, CbCr or RGB); Colorize is one switch inside whichever mode is chosen, and it stays set when the mode changes. scopecreep keeps its Colorise chip as a separate remembered switch and its Y R G B combinations, a superset of Resolve's (ADR 0032, #202).
 
 ## What follows for scopecreep
 

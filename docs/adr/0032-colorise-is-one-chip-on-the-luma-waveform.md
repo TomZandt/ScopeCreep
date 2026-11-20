@@ -1,6 +1,6 @@
 # Colorise is one chip on the luma waveform, and the Colour Waveform leaves the Window
 
-Resolve's waveform has one Colorize switch for any combination of Y, R, G and B (`docs/research/colorise-on-the-waveform.md`). scopecreep had two Panels for what is one drawing in two inks: the luma waveform and the Colour Waveform (ADR 0022). With the Y R G B chips (#117) the luma waveform can show any combination, which made a separate coloured Panel for Y alone the odd one out.
+Resolve's waveform has one Colorize switch, inside whichever of its three exclusive modes (Y, CbCr or RGB) is chosen (`docs/research/colorise-on-the-waveform.md`, checked at Resolve 21 in #140). scopecreep had two Panels for what is one drawing in two inks: the luma waveform and the Colour Waveform (ADR 0022). With the Y R G B chips (#117) the luma waveform can show any combination, which Resolve's exclusive modes do not allow; that made a separate coloured Panel for Y alone the odd one out.
 
 ## Decision
 
@@ -12,7 +12,8 @@ Resolve's waveform has one Colorize switch for any combination of Y, R, G and B 
 ## Considered and rejected
 
 - **Keep both Panels.** Two Panels, one measurement. It costs a cell and a second set of settings, for a view the chip gives.
-- **Colorise on Y only.** Simpler, but Resolve's switch is for the whole scope and the product owner expects it on any combination.
+- **Colorise on Y only.** Simpler, but Resolve's switch is for the whole scope and the product owner expects it on any combination of the chips.
+- **Follow Resolve's three exclusive modes (#202).** Colorise would apply only within Y, CbCr or RGB. Not taken: the chip is already a separate switch remembered per Panel, which is Resolve's sticky-across-modes behaviour, and combining Y with R, G and B is a superset of what Resolve offers.
 
 ## Consequences
 
