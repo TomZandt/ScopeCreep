@@ -28,3 +28,13 @@ With the app running on `scopecreep-test-bench50` (Sender on the last timeline n
 - **Scrubbing** (moving the playhead to a new frame while paused) gives the Sender exactly one render per frame, and the app shows that frame.
 - **Shift-D (bypass colour grades) gives the Sender no frames** (0 renders when scrubbing with it on); Resolve's own viewer shows the bypassed picture. The app keeps showing the last frame it had, and its status line (`paused · 0 dropped · <project>`) says nothing about it: from the app alone a colourist can't tell the scopes are stale. Shift-D again brings the Sender back on the next scrub (1 render).
 - Screenshots of Resolve's bypassed viewer next to the app: `~/scopecreep-testdata/screenshots/27-shift-d-{color,edit,cut}.png` (not in git).
+
+## Timeline-node grades before and after the Sender (#26, partly checked 2026-11-20)
+
+On a copy of the bench project (three timeline nodes: an empty node, the Sender, an empty node), a strong grade applied as a LUT to one node at a time (script `Graph.SetLUT`, after `Project.RefreshLUTList()` and with the .cube in Resolve's LUT folder), then the real Feed frame captured as the app converts it:
+
+- **Grade on a timeline node before the Sender:** the Feed frame changes (17 % of channel values differ; frame mean 0.570 to 0.398). The app shows it.
+- **Grade on a timeline node after the Sender:** the Feed frame is pixel-identical to the ungraded one. The app does not see it.
+- Both: same as the before-only case.
+
+So the guidance holds for timeline nodes: put the Sender in the last timeline node and every earlier grade is visible. **Not checked:** the Sender on an Edit-page adjustment clip above footage against the last timeline node (the script API cannot add the Sender to an adjustment clip's graph, and an adjustment clip's graph sits before the timeline graph, which is why a timeline-level grade should miss it). Tools used: Shift+S adds a serial node before the selected one, Alt+S after, on the Color page's Timeline graph.
