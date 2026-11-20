@@ -625,7 +625,7 @@ impl AppWindow {
     fn open_popover(&mut self, panel: usize, at: [f32; 2]) {
         let mut current = self
             .displays
-            .settings_of(panel, &self.settings.lock().unwrap());
+            .popover_settings(panel, &self.settings.lock().unwrap());
         // Link is Window state: its row, there when its chip did not fit (#171), shows it as it is.
         let link = if self.displays.link_on() {
             "on"
@@ -667,7 +667,8 @@ impl AppWindow {
         let changed = {
             let mut settings = self.settings.lock().unwrap();
             let before = settings.version();
-            settings.set(name, key, value);
+            let value = self.displays.stored_value(panel, &settings, key, value);
+            settings.set(name, key, &value);
             settings.version() != before
         };
         if changed {
@@ -778,6 +779,10 @@ impl AppWindow {
                 self.current_layout(),
                 self.layout_mode,
                 self.renaming.as_ref(),
+            )),
+            menu_bar::VIEW => Some(menu_bar::view_menu(
+                &self.hotkeys,
+                self.displays.legends_on(&self.settings.lock().unwrap()),
             )),
             menu_bar::SETTINGS => Some(match &self.hotkeys_panel {
                 Some(panel) => panel.menu(&self.hotkeys),
@@ -983,6 +988,13 @@ impl AppWindow {
                 {
                     self.window.request_redraw();
                 }
+                return;
+            }
+            Command::ToggleLegends => {
+                self.displays
+                    .toggle_legends(&mut self.settings.lock().unwrap());
+                self.save_settings();
+                self.window.request_redraw();
                 return;
             }
             Command::SaveLayout(slot) => {

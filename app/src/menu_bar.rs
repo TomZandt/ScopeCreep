@@ -7,12 +7,17 @@ use crate::layouts::{Layouts, Rename, SLOTS};
 
 /// The menus on the bar, left to right.
 pub const LAYOUT: usize = 0;
-pub const SETTINGS: usize = 1;
+pub const VIEW: usize = 1;
+pub const SETTINGS: usize = 2;
 
-/// The menu bar's titles. A View menu waits until there are window-wide display choices to put in it (spec #142).
+/// The menu bar's titles.
 pub fn bar() -> MenuBar {
     MenuBar {
-        titles: vec!["Layout".to_string(), "Settings".to_string()],
+        titles: vec![
+            "Layout".to_string(),
+            "View".to_string(),
+            "Settings".to_string(),
+        ],
     }
 }
 
@@ -228,6 +233,23 @@ pub fn layout_menu(
     menu
 }
 
+/// The View menu (#191): window-wide display choices. Its one entry shows or hides the legend strips of every
+/// Panel at once; it is marked when every legend is on (`legends_on`).
+pub fn view_menu(hotkeys: &Hotkeys, legends_on: bool) -> Menu {
+    let command = Command::ToggleLegends;
+    let mut menu = Menu::new();
+    menu.push(
+        MenuEntry::Item(MenuItem {
+            label: "Show legends".to_string(),
+            hotkey: hotkey_text(hotkeys, command),
+            enabled: true,
+            on: legends_on,
+        }),
+        Some(MenuAction::Run(command)),
+    );
+    menu
+}
+
 /// The Settings menu: Hotkeys, which opens the Hotkeys panel in its place.
 pub fn settings_menu() -> Menu {
     let mut menu = Menu::new();
@@ -239,7 +261,7 @@ pub fn settings_menu() -> Menu {
 }
 
 /// Every menu at its largest, for the Window's minimum size (#172): the Layout menu in each mode with nine names of
-/// the longest length and one being typed, the Settings menu, and the Hotkeys panel asking about the longest
+/// the longest length and one being typed, the View menu with the widest hotkey, the Settings menu, and the Hotkeys panel asking about the longest
 /// conflict.
 pub fn largest_menus() -> Vec<DropMenu> {
     use crate::commands::{Hotkey, Key};
@@ -264,9 +286,13 @@ pub fn largest_menus() -> Vec<DropMenu> {
         .into_iter()
         .max_by_key(|c| c.label().chars().count())
         .unwrap_or(Command::DefaultLayout);
+    // The View menu with the widest hotkey beside its entry (and without one, if there is no widest).
+    let mut view = Hotkeys::default();
     if let Some(hotkey) = widest {
         let _ = hotkeys.replace(longest, hotkey);
+        let _ = view.replace(Command::ToggleLegends, hotkey);
     }
+    menus.push(view_menu(&view, true).drop);
     if let Some(hotkey) = widest {
         let panel = HotkeysPanel {
             state: State::Conflict {

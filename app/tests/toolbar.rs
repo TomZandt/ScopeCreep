@@ -988,7 +988,14 @@ mod vectorscope_chips {
                 .iter()
                 .map(|d| d.key)
                 .collect::<Vec<_>>(),
-            ["brightness", "spread", "graticule", "targets", "skin-line"]
+            [
+                "brightness",
+                "spread",
+                "graticule",
+                "graticule-style",
+                "targets",
+                "skin-line"
+            ]
         );
     }
 

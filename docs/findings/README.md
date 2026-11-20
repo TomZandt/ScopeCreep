@@ -92,13 +92,17 @@ What we learned by testing, kept in the repo so it isn't lost when an issue thre
 | [169](169-zoom-fit-hotkey.md) | Does Z take a picture Panel to Fit and back to its last zoom and spot (all of them with Link on, none over a Scope), and is it a reassignable hotkey (zoom model, Feed, command and Hotkeys panel seams)? |
 | [180](180-panel-fills-the-window.md) | Does Ctrl+F give the Panel under the pointer the whole Panel area and hide the others from drawing and hits, and is it a reassignable hotkey (Panel grid and command seams)? |
 | [172](172-minimum-window-size.md) | What is the least Window in which every Panel of the default layout keeps its minimum size and every menu fits, and does it hold at 1x, 1.5x and 2x (pure seam)? |
+| [191](191-view-menu-legends.md) | Does the View menu sit between Layout and Settings, does its Show legends entry (a command with no default hotkey) set every Panel's legend through the Panel settings and show on only when all are on, and does the minimum Window still hold (pure UI, command and display seams)? |
 | [179](179-saved-grid-repaired.md) | Does a grid or named layout saved with a border dragged to the minimum in a large window come back with its places, every Panel at its minimum in the default window, while rubbish still gives the default (pure seam)? |
 | [171](171-toolbar-at-minimum-panel-width.md) | Do a Panel's chips stay inside its title bar at the minimum Panel width (120 px) at 1x and 2x, and is every chip that does not fit still reachable in the popover (toolbar and picture Panel seams)? |
 | [35](35-gpu-memory-short.md) | When the Sender or the app can't get GPU memory, does Resolve carry on untouched, does the Window say which side ran short and roughly by how much, and does each side carry on by itself when memory frees up (fake CUDA host and Feed seam, with a cap on allocation size)? |
 | [32](32-out-of-range-edge-rows-hidpi.md) | Can `feed-synth` play values below 0 and above 1, and do they light the luma waveform's edge rows with legible text at scale 1, 1.5 and 2 (pure and Feed seam, offscreen draw)? |
+| [183](183-edge-row-labels-whole.md) | Are the luma waveform's "> 1023" and "< 0" labels drawn whole at scale 1, 1.5 and 2 (drawing seam)? |
 | [82](82-panel-gpu-time.md) | How much GPU time does each Panel take per UHD frame (measure and draw, timestamp queries, headless), and is any Panel of the Window over its share of the UHD 50 frame? |
 | [44](44-aces2-dark-saturated-precision.md) | Can the GPU's 32-bit ACES 2.0 conversion keep dark saturated colours inside the exact tolerance on a dense grid, and at what GPU cost (Feed seam)? |
 | [196](196-tiling-layout-prototype.md) | Can the Window tile like a window manager (add, dock, tab, duplicate, Auto layout, pages)? What a critical look at the UHD Window and a throwaway prototype showed (prototype branch, pure layout module) |
+| [128](128-reference-level-lines.md) | Do the waveforms' Low and High reference-level sliders draw dashed lines at the right codes in each scale unit, off by default, Low never above High, without changing a count (headless)? |
+| [130](130-hue-vectors.md) | Does a Standard / Hue vectors graticule choice on the Vectorscope draw a neutral spoke to each of the six colour targets on both plots, follow graticule brightness, and leave the default, the trace, the clipping marks and the skin-tone line unchanged (Feed seam)? |
 
 ## Adding findings
 

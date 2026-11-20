@@ -193,8 +193,12 @@ A key, by its position on the keyboard, with Ctrl, Shift or Alt held, that trigg
 _Avoid_: Shortcut, keybinding, accelerator
 
 **Menu bar**:
-The thin bar across the very top of the Window, above the Colour Setup line, drawn by the app in the style system's quiet chrome. It holds the app's own Commands in menus (Layout), each entry with its Hotkey beside it. A menu opens on a click on its title and closes on a second click, a click elsewhere or Escape. Panel settings stay in each Panel's popover.
+The thin bar across the very top of the Window, above the Colour Setup line, drawn by the app in the style system's quiet chrome. It holds the app's own Commands in menus (Layout, View, Settings), each entry with its Hotkey beside it. A menu opens on a click on its title and closes on a second click, a click elsewhere or Escape. Panel settings stay in each Panel's popover.
 _Avoid_: Toolbar (that is a Panel's title bar chips), main menu
+
+**View menu**:
+The menu on the Menu bar between Layout and Settings for display choices that cover the whole Window. Its first entry, "Show legends", shows or hides the legend strip of every Panel that has one, by setting each Panel's own Legend setting (so a Panel can still differ afterwards); it is marked while every legend is on. It runs a Command with no default Hotkey.
+_Avoid_: Display menu, Window menu
 
 **Filling the Window**:
 Ctrl+F (a Hotkey) makes the Panel under the pointer take the whole Panel area, with the menu bar, Colour Setup line and status line still there; Ctrl+F again or Escape brings the Panel grid back, and so does showing a Layout. Display state, never saved; while a Panel fills the Window, borders and title bars can't be dragged.
@@ -235,6 +239,10 @@ _Avoid_: I-line (that is the composite-video name), flesh line
 **Skin Tone Panel**:
 A Picture View of the Output picture in its own colours in which pixels whose hue is near the Skin-tone line are painted solid flat yellow (on the line), green or magenta (either side, out to the outer band); other and near-neutral pixels keep their own colour. Only hue matters, not brightness.
 _Avoid_: Skin tone indicator (Resolve's and others' name for their own tools)
+
+**Hue vectors**:
+A choice of graticule on the Vectorscope, next to Standard (the default). It adds a quiet neutral spoke from the middle to each of the six Colour targets, at the angle of the target's boxes, so a colour that has drifted off its hue line is easy to see. A drawing aid only: it follows the graticule brightness and never changes the trace, the clipping marks or the Skin-tone line.
+_Avoid_: Hue lines, vector lines (Resolve's name for the setting is Scale Style)
 
 **Colour targets**:
 The six boxes on a vectorscope where red, yellow, green, cyan, magenta and blue colour bars land, for 75 % bars, 100 % bars or both at once (the user's choice; both is the default, with a hue's 75 % box inside its 100 % box in the same colour).
@@ -282,6 +290,10 @@ _Avoid_: Colourise (as a tag or setting that changes the measurement)
 **Scale units**:
 What the luma and Colour Waveforms' scale is written in: 10-bit codes (default), percent of the Levels' range (black 0 %, white 100 %), or nits (only for a PQ or HLG Output Colour Space; HLG means a 1000 nit display). A tag names the unit when it is not 10-bit codes. It renames positions only: the counts, the edge rows and where a trace lands never change.
 _Avoid_: Scale mode, IRE (a unit of analogue video)
+
+**Reference level lines**:
+Two dashed lines across the luma and Colour Waveforms' plot, Low and High, that mark a floor and a peak (a delivery's minimum black and maximum light). Two sliders in the Panel's settings, in the Panel's scale unit, off by default (Low at the bottom of its range, High at the top), Low never above High, drawn with the graticule brightness. One pair per Panel, kept as a signal level and shown in the Panel's scale unit, so a 1000 nit line stays on 1000 nits whichever unit reads it. Drawing only: they never change a count. Resolve's own waveform calls them Show Reference Levels.
+_Avoid_: Limits, peak lines (a peak is one of the two), safe levels
 
 **False Colour**:
 A Picture View that paints each pixel by the band its value falls in, leaving the rest of the picture in grey.

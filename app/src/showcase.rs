@@ -226,9 +226,7 @@ pub fn showcase(scale: f32) -> Showcase {
     y += style::SPACE_SHOWCASE_PANEL_STEP * scale;
 
     prims.push(caption("Menu bar", margin, y, label_w));
-    let menu_bar = MenuBar {
-        titles: vec!["Layout".to_string(), "Settings".to_string()],
-    };
+    let menu_bar = crate::menu_bar::bar();
     prims.extend(menu_bar.draw(margin + label_w, y, column * 4.0, Some(0), None, scale));
     let title = menu_bar.title_rects(margin + label_w, y, scale)[0];
     let mut on = MenuItem::new("1  Grade", "Ctrl+1");

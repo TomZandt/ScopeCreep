@@ -321,7 +321,9 @@ fn the_waveform_offers_luma_weights_and_the_first_is_from_primaries() {
             "graticule",
             "channels",
             "colorise",
-            "scale_units"
+            "scale_units",
+            "reference_low",
+            "reference_high"
         ]
     );
     assert_eq!(

@@ -28,6 +28,7 @@ pub mod picture_stage;
 pub mod picture_view;
 pub mod playback_rate;
 pub mod project;
+pub mod reference_levels;
 pub mod resolve_helper;
 pub mod saturation_heatmap;
 pub mod scale_bar;

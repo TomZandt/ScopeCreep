@@ -12,6 +12,7 @@ use crate::colour_setup::Levels;
 use crate::gpu_frame::GpuFrame;
 use crate::gpu_memory::{self, Part};
 use crate::measurement::{LUMA_SETTING, MeasuredSpace, Measurement, luma_weights_of};
+use crate::reference_levels::{DEFS as REFERENCE_DEFS, ReferenceLevels, line_unit};
 use crate::scope_shader::{GRATICULE_AMOUNT, GRATICULE_SETTING, graticule_gain};
 use crate::settings::{Amount, Choice, SettingDef};
 use crate::waveform_scale::{UNIT_SETTING, Unit};
@@ -411,7 +412,7 @@ pub fn marks_that_fit(marks: &[(f32, u32)], line: f32) -> Vec<bool> {
 
 const TRACE_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba16Float;
 
-const DRAW_UNIFORM_BYTES: u64 = 192;
+const DRAW_UNIFORM_BYTES: u64 = 208;
 
 /// The bit of `look.w` that says the traces are coloured (Colorise on, or the Colour Waveform). The shader's
 /// `COLORISE_BIT` is the same bit: change them together.
@@ -434,6 +435,7 @@ struct Placement {
     blue: vec4<f32>,
     grid_a: vec4<f32>,    // the codes of the scale's reference lines (the unit in use names them); -1000 for none
     grid_b: vec4<f32>,
+    reference: vec4<f32>, // the codes of the Low and High reference-level lines (#128); -1000 for none
 };
 @group(0) @binding(0) var<uniform> placement: Placement;
 @group(0) @binding(1) var<storage, read> counts: array<u32>;
@@ -445,6 +447,10 @@ const ROWS: u32 = 1026u;
 // The plot, grid and trace greys and the phosphor response are the scope shader library's.
 const EDGE: vec3<f32> = vec3<f32>(0.085, 0.085, 0.085);
 const LEGAL: vec3<f32> = vec3<f32>(0.30, 0.30, 0.30);
+// The reference-level lines: a quiet neutral grey, drawn dashed so they are never taken for a scale line.
+const REFERENCE: vec3<f32> = vec3<f32>(0.36, 0.36, 0.36);
+// A dash is this many device pixels on, then as many off.
+const REFERENCE_DASH: u32 = 4u;
 
 @vertex
 fn vs(@builtin(vertex_index) index: u32) -> @builtin(position) vec4<f32> {
@@ -631,6 +637,9 @@ fn fs(@builtin(position) position: vec4<f32>) -> @location(0) vec4<f32> {
         if (on_line(p.y, placement.legal.x) || on_line(p.y, placement.legal.y)) {
             base = graticule(LEGAL, placement.legal.z);
         }
+        if ((on_line(p.y, placement.reference.x) || on_line(p.y, placement.reference.y)) && (u32(p.x) / REFERENCE_DASH) % 2u == 0u) {
+            base = graticule(REFERENCE, placement.legal.z);
+        }
         // The codes under this screen row (bottom of the plot is code 0).
         let bottom = placement.plot.y + placement.plot.w;
         let first = u32(clamp(floor((bottom - p.y - 1.0) / placement.plot.w * 1024.0), 0.0, 1023.0));
@@ -720,6 +729,8 @@ pub struct Waveform {
     colorise: Arc<Mutex<bool>>,
     /// What the scale is written in, as chosen (#125); [`Waveform::unit`] is the one in use.
     unit: Arc<Mutex<Unit>>,
+    /// The Low and High reference-level lines (#128). Drawing only.
+    reference: Arc<Mutex<ReferenceLevels>>,
     state: Arc<Mutex<State>>,
 }
 
@@ -862,6 +873,7 @@ impl Waveform {
             channels: Arc::new(Mutex::new(Channels::default())),
             colorise: Arc::new(Mutex::new(false)),
             unit: Arc::new(Mutex::new(Unit::Codes)),
+            reference: Arc::new(Mutex::new(ReferenceLevels::default())),
             state: Arc::new(Mutex::new(State {
                 counts: None,
                 sums: None,
@@ -908,6 +920,26 @@ impl Waveform {
     /// The unit the scale is written in, as chosen (#125). Drawing only: nothing measured changes.
     pub fn set_unit(&self, unit: Unit) {
         *self.unit.lock().unwrap() = unit;
+    }
+
+    /// The Low and High reference-level lines (#128). Drawing only: nothing measured changes.
+    pub fn set_reference_levels(&self, levels: ReferenceLevels) {
+        *self.reference.lock().unwrap() = levels;
+    }
+
+    /// The codes of the Low and High lines now (`None` for one that is off): the one pair the Panel keeps, at the
+    /// codes the Levels give it (#128).
+    pub fn reference_codes(&self) -> [Option<u32>; 2] {
+        self.reference
+            .lock()
+            .unwrap()
+            .codes(self.measurement().levels)
+    }
+
+    /// The unit the reference-level sliders are read in: the scale's, with nits as codes where there is no light.
+    fn line_unit(&self) -> Unit {
+        let m = self.measurement();
+        line_unit(*self.unit.lock().unwrap(), m.space, m.assumed)
     }
 
     /// The unit in use: the chosen one, with nits falling back to 10-bit codes where the Output Colour Space has no light.
@@ -1335,6 +1367,10 @@ impl Waveform {
             *slot = code as f32;
         }
         placement[40..48].copy_from_slice(&lines);
+        let [low, high] = self
+            .reference_codes()
+            .map(|c| c.map_or(-1000.0, |c| c as f32));
+        placement[48..52].copy_from_slice(&[low, high, 0.0, 0.0]);
         self.queue
             .write_buffer(&self.placement, 0, bytemuck::cast_slice(&placement));
 
@@ -1437,7 +1473,7 @@ impl Waveform {
 pub const NAME: &str = "Luma waveform";
 
 /// The luma waveform's right-click menu: how Luma is weighted (ADR 0004). The label names the weights in use.
-pub const SETTINGS: [SettingDef; 7] = [
+pub const SETTINGS: [SettingDef; 9] = [
     SettingDef {
         key: LUMA_SETTING,
         label: "Luma weights",
@@ -1556,6 +1592,8 @@ pub const SETTINGS: [SettingDef; 7] = [
         ],
     },
     SCALE_DEF,
+    REFERENCE_DEFS[0],
+    REFERENCE_DEFS[1],
 ];
 
 /// The scale's units (#125): 10-bit codes by default, percent of the Levels' range, or nits (only offered for PQ and HLG).
@@ -1642,7 +1680,14 @@ pub const COLOUR_NAME: &str = "Colour waveform";
 
 /// The Colour Waveform's right-click menu: the luma waveform's drawing settings. It has no luma weights of its
 /// own: it follows the luma waveform's, so the two always place a trace at the same code.
-pub const COLOUR_SETTINGS: [SettingDef; 4] = [SETTINGS[1], SETTINGS[2], SETTINGS[3], SCALE_DEF];
+pub const COLOUR_SETTINGS: [SettingDef; 6] = [
+    SETTINGS[1],
+    SETTINGS[2],
+    SETTINGS[3],
+    SCALE_DEF,
+    REFERENCE_DEFS[0],
+    REFERENCE_DEFS[1],
+];
 
 /// The key of the trace brightness setting.
 pub const BRIGHTNESS_SETTING: &str = "brightness";
@@ -1707,6 +1752,7 @@ impl crate::display::Display for Waveform {
         self.set_unit(Unit::from_setting(
             context.settings.get(UNIT_SETTING).map(String::as_str),
         ));
+        self.set_reference_levels(ReferenceLevels::from_settings(&context.settings));
         self.set_measurement(crate::output_conversion::measurement(
             context.colour_setup.clone(),
             luma,
@@ -1729,16 +1775,45 @@ impl crate::display::Display for Waveform {
     fn offered_defs(&self) -> Vec<SettingDef> {
         let m = self.measurement();
         let offer_nits = crate::waveform_scale::nits_offered(m.space, m.assumed);
+        let line_unit = self.line_unit();
         self.setting_defs()
             .iter()
+            .map(|d| match REFERENCE_DEFS.iter().find(|r| r.key == d.key) {
+                // The one stored pair, on the sliders of the unit the lines are read in.
+                Some(_) => crate::reference_levels::popover_defs(line_unit)
+                    .into_iter()
+                    .find(|p| p.key == d.key)
+                    .unwrap_or(*d),
+                None => *d,
+            })
             .map(|d| {
                 if d.key == UNIT_SETTING && !offer_nits {
                     SCALE_DEF_NO_NITS
                 } else {
-                    *d
+                    d
                 }
             })
             .collect()
+    }
+
+    /// The reference-level sliders read the one stored pair in the unit of the scale.
+    fn popover_settings(&self, stored: &crate::settings::Settings) -> crate::settings::Settings {
+        let m = self.measurement();
+        crate::reference_levels::slider_settings(stored, self.line_unit(), m.levels, m.space)
+    }
+
+    /// A reference-level slider's value is kept as a signal level, whatever unit it was set in.
+    fn stored_value(&self, stored: &crate::settings::Settings, key: &str, value: &str) -> String {
+        let m = self.measurement();
+        crate::reference_levels::stored_value(
+            stored,
+            key,
+            value,
+            self.line_unit(),
+            m.levels,
+            m.space,
+        )
+        .unwrap_or_else(|| value.to_string())
     }
 
     fn label(&self) -> String {
@@ -1772,7 +1847,11 @@ impl crate::display::Display for Waveform {
             self.measurement().space,
             self.unit(),
         );
-        let middle = |r: [f32; 4]| r[1] + r[3] / 2.0;
+        // The edge rows sit at the very edge of the content, so a label centred on one would be cut by the title
+        // bar or the border: keep each whole line inside the content (the rows themselves do not move).
+        let half_line = crate::style::TYPE_SCALE * scale * crate::style::TYPE_SCALE_LINE / 2.0;
+        let (top_limit, bottom_limit) = (area[1] + half_line, area[1] + area[3] - half_line);
+        let middle = |r: [f32; 4]| (r[1] + r[3] / 2.0).min(bottom_limit).max(top_limit);
         // (text, height on screen, rank: lower matters more)
         let mut marks = vec![(unit.above_text(levels, space), middle(plot.above()), 1)];
         marks.extend(

@@ -1471,3 +1471,206 @@ fn the_drawn_waveform_stays_in_the_frames_aspect_and_follows_a_resolution_change
         "the new resolution is laid out at once: {w} x {h}"
     );
 }
+
+#[test]
+fn no_edge_row_label_crosses_the_content_top_or_bottom() {
+    use scopecreep::display::Display;
+    use scopecreep::style;
+    use scopecreep::waveform_scale::Unit;
+    let mut b = Bench::new("edgelabels");
+    b.waveform.set_measurement(Measurement {
+        levels: Levels::Video,
+        ..measuring(MeasuredSpace::Rec2100Pq, LumaWeights::FromPrimaries)
+    });
+    // A tall frame fills the content top to bottom, so the edge rows sit at its very edge.
+    b.play(200, 400, &picture(200, 400, |_, _| grey(500)));
+    for scale in [1.0_f32, 1.5, 2.0] {
+        let area = [0.0, 40.0, 720.0 * scale, 420.0 * scale];
+        let half_line = style::TYPE_SCALE * scale * style::TYPE_SCALE_LINE / 2.0;
+        for unit in [Unit::Codes, Unit::Percent, Unit::Nits] {
+            b.waveform.set_unit(unit);
+            let texts = b.waveform.scale_texts(area, scale);
+            let edge = |prefix: &str| {
+                texts
+                    .iter()
+                    .find(|t| t.text.starts_with(prefix))
+                    .unwrap_or_else(|| panic!("{unit:?} at {scale}: no {prefix:?} label"))
+            };
+            let above = edge(">");
+            let below = edge("<");
+            assert!(
+                above.top - half_line >= area[1],
+                "{unit:?} at {scale}: {} crosses the top",
+                above.text
+            );
+            assert!(
+                below.top + half_line <= area[1] + area[3],
+                "{unit:?} at {scale}: {} crosses the bottom",
+                below.text
+            );
+        }
+    }
+}
+
+// ------------------------------------------------------------------ Reference-level lines (#128)
+
+/// The brightest the empty plot is drawn along `code`'s row, across its whole width (a dashed line lights only
+/// part of the row).
+fn brightest_along(b: &mut Bench, codes: &[u32]) -> Vec<u8> {
+    b.play(64, 1024, &picture(64, 1024, |_, _| [0.5; 3]));
+    let (width, height) = (400usize, 1024 + 22);
+    let image = draw(b, width as u32, height as u32);
+    let layout = PlotLayout::fitted([0.0, 0.0, width as f32, height as f32], 1.0, [64, 1024]);
+    let plot = layout.plot();
+    codes
+        .iter()
+        .map(|&code| {
+            let y = layout.y_of_code(code).floor() as usize;
+            (plot[0] as usize..(plot[0] + plot[2]) as usize)
+                .map(|x| image[(y * width + x) * 4])
+                .max()
+                .unwrap()
+        })
+        .collect()
+}
+
+/// The lines as a slider sets them: each (key, value) in `unit` on the Panel's current measurement.
+fn references(b: &Bench, sets: &[(&str, &str)]) -> scopecreep::reference_levels::ReferenceLevels {
+    use scopecreep::display::Display;
+    let mut stored = scopecreep::settings::Settings::new();
+    for (key, value) in sets {
+        let kept = b.waveform.stored_value(&stored, key, value);
+        stored.insert(key.to_string(), kept);
+    }
+    scopecreep::reference_levels::ReferenceLevels::from_settings(&stored)
+}
+
+#[test]
+fn reference_lines_are_off_by_default_and_draw_where_their_unit_says() {
+    use scopecreep::waveform_scale::{Unit, nits_code};
+    let mut b = Bench::new("reference-lines");
+    b.waveform
+        .set_measurement(levels(Levels::Video, Some(Provenance::Project)));
+    let codes: Vec<u32> = (0..1024).collect();
+    let off = brightest_along(&mut b, &codes);
+    assert_eq!(b.waveform.reference_codes(), [None, None]);
+    let plot = off[600];
+
+    // Codes: Low 200, High 800.
+    let pair = references(&b, &[("reference_low", "200"), ("reference_high", "800")]);
+    b.waveform.set_reference_levels(pair);
+    let on = brightest_along(&mut b, &codes);
+    assert!(
+        on[200] > plot + 20 && on[800] > plot + 20,
+        "{} {}",
+        on[200],
+        on[800]
+    );
+    let changed: Vec<usize> = (0..1024).filter(|&c| on[c] != off[c]).collect();
+    assert_eq!(changed, [200, 800], "only the two rows change");
+
+    // The one pair stays where it is when the scale unit changes: only the sliders read it differently.
+    b.waveform.set_unit(Unit::Percent);
+    assert_eq!(b.waveform.reference_codes(), [Some(200), Some(800)]);
+    let pct = brightest_along(&mut b, &codes);
+    assert!(
+        pct[200] > plot + 20 && pct[800] > plot + 20,
+        "the lines do not move with the unit"
+    );
+    // Set in percent of the Levels' range (video: 10 % is code 152, 90 % is 852).
+    let pair = references(&b, &[("reference_low", "10"), ("reference_high", "90")]);
+    b.waveform.set_reference_levels(pair);
+    assert_eq!(b.waveform.reference_codes(), [Some(152), Some(852)]);
+
+    // Nits on a PQ output: 1000 nits is where the scale puts 1000.
+    b.waveform.set_unit(Unit::Nits);
+    b.waveform.set_measurement(Measurement {
+        levels: Levels::Video,
+        ..measuring(MeasuredSpace::Rec2100Pq, LumaWeights::FromPrimaries)
+    });
+    let pair = references(&b, &[("reference_high", "1000")]);
+    b.waveform.set_reference_levels(pair);
+    let code = nits_code(1000, Levels::Video, MeasuredSpace::Rec2100Pq);
+    assert_eq!(b.waveform.reference_codes(), [None, Some(code)]);
+    // The same line, read in codes and then percent, is still on 1000 nits.
+    b.waveform.set_unit(Unit::Codes);
+    assert_eq!(b.waveform.reference_codes(), [None, Some(code)]);
+    // An output without light: the line stays where it was, and is there when a PQ output returns.
+    b.waveform.set_unit(Unit::Nits);
+    b.waveform
+        .set_measurement(levels(Levels::Video, Some(Provenance::Project)));
+    assert_eq!(b.waveform.reference_codes(), [None, Some(code)]);
+    b.waveform.set_measurement(Measurement {
+        levels: Levels::Video,
+        ..measuring(MeasuredSpace::Rec2100Pq, LumaWeights::FromPrimaries)
+    });
+    assert_eq!(b.waveform.reference_codes(), [None, Some(code)]);
+}
+
+#[test]
+fn reference_lines_follow_the_graticule_brightness_and_change_no_count() {
+    let mut b = Bench::new("reference-gain");
+    b.waveform
+        .set_measurement(levels(Levels::Video, Some(Provenance::Project)));
+    let counts = b.play(64, 1024, &picture(64, 1024, |_, y| grey(1023 - y)));
+    let pair = references(&b, &[("reference_low", "300"), ("reference_high", "700")]);
+    b.waveform.set_reference_levels(pair);
+    assert_eq!(
+        b.waveform.counts(),
+        counts,
+        "a drawing aid, never a measurement"
+    );
+    let at = |b: &mut Bench, graticule: f32| {
+        b.waveform.set_look(Look {
+            graticule,
+            ..Look::default()
+        });
+        brightest_along(b, &[300, 500])
+    };
+    let (dim, normal, bright) = (at(&mut b, 0.2), at(&mut b, 1.0), at(&mut b, 3.0));
+    assert!(
+        dim[0] < normal[0] && normal[0] < bright[0],
+        "{} {} {}",
+        dim[0],
+        normal[0],
+        bright[0]
+    );
+}
+
+#[test]
+fn the_popover_offers_one_reference_pair_in_the_unit_the_scale_reads() {
+    use scopecreep::display::Display;
+    use scopecreep::waveform_scale::Unit;
+    let b = Bench::new("reference-popover");
+    let suffix = |b: &Bench| {
+        let defs = b.waveform.offered_defs();
+        let pair: Vec<_> = defs
+            .iter()
+            .filter(|d| d.key.starts_with("reference_"))
+            .map(|d| (d.key, d.amount.unwrap().unit))
+            .collect();
+        assert_eq!(pair.len(), 2, "one pair, never a pair per unit");
+        pair[0].1
+    };
+    assert_eq!(suffix(&b), " codes");
+    b.waveform.set_unit(Unit::Percent);
+    assert_eq!(suffix(&b), " %");
+    b.waveform.set_unit(Unit::Nits);
+    // No light on this output: the scale reads codes (ADR 0033), so the sliders do too.
+    assert_eq!(b.waveform.unit(), Unit::Codes);
+    assert_eq!(suffix(&b), " codes");
+    b.waveform.set_measurement(measuring(
+        MeasuredSpace::Rec2100Hlg,
+        LumaWeights::FromPrimaries,
+    ));
+    assert_eq!(suffix(&b), " nits");
+    // One pair is kept per Panel.
+    assert_eq!(
+        b.waveform
+            .setting_defs()
+            .iter()
+            .filter(|d| d.key.starts_with("reference_"))
+            .count(),
+        2
+    );
+}

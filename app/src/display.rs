@@ -117,6 +117,16 @@ pub trait Display: Send + Sync {
     fn offered_defs(&self) -> Vec<SettingDef> {
         self.setting_defs().to_vec()
     }
+    /// `stored` (the Panel's resolved settings) as the popover's sliders read them, for a display whose slider is
+    /// in a unit other than the one it keeps. The same by default.
+    fn popover_settings(&self, stored: &Settings) -> Settings {
+        stored.clone()
+    }
+    /// What to keep for setting `key` to `value` from the popover (the inverse of [`Display::popover_settings`]).
+    /// `value` by default.
+    fn stored_value(&self, _stored: &Settings, _key: &str, value: &str) -> String {
+        value.to_string()
+    }
     /// The settings (from [`Display::setting_defs`]) the display shows as chips on its title bar. The popover
     /// holds the rest. None by default.
     fn toolbar_defs(&self) -> &'static [ToolbarDef] {
@@ -394,6 +404,29 @@ impl DisplaySet {
         }
     }
 
+    fn setting_panels(&self) -> Vec<(&'static str, &'static [SettingDef])> {
+        self.displays
+            .iter()
+            .map(|d| (d.name(), d.setting_defs()))
+            .collect()
+    }
+
+    /// Whether every Panel's legend is on (the View menu's entry is marked, #191).
+    pub fn legends_on(&self, settings: &PanelSettings) -> bool {
+        settings.legends_on(&self.setting_panels())
+    }
+
+    /// Set the legend of every Panel that has one, on or off, through its own Panel setting (#191).
+    pub fn set_legends(&self, settings: &mut PanelSettings, on: bool) {
+        settings.set_legends(&self.setting_panels(), on);
+    }
+
+    /// The View menu's entry and its hotkey: every legend off if they are all on, else every legend on.
+    pub fn toggle_legends(&self, settings: &mut PanelSettings) {
+        let on = !self.legends_on(settings);
+        self.set_legends(settings, on);
+    }
+
     /// The settings the display in Panel `index` offers.
     pub fn setting_defs(&self, index: usize) -> &'static [SettingDef] {
         self.displays[index].setting_defs()
@@ -451,6 +484,22 @@ impl DisplaySet {
     /// Set the zoom of the display in Panel `index` to `percent` (tests set a zoom this way; 0 is Fit).
     pub fn set_zoom(&self, index: usize, area: [f32; 4], scale: f32, percent: f32) {
         self.displays[index].set_zoom(area, scale, percent);
+    }
+
+    /// The settings of the display in Panel `index` as its popover shows them.
+    pub fn popover_settings(&self, index: usize, settings: &PanelSettings) -> Settings {
+        self.displays[index].popover_settings(&self.settings_of(index, settings))
+    }
+
+    /// What to keep for Panel `index`'s `key` set to `value` from the popover or a chip.
+    pub fn stored_value(
+        &self,
+        index: usize,
+        settings: &PanelSettings,
+        key: &str,
+        value: &str,
+    ) -> String {
+        self.displays[index].stored_value(&self.settings_of(index, settings), key, value)
     }
 
     /// The settings the display in Panel `index` is using, given everyone's choices.

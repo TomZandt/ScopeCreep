@@ -732,6 +732,7 @@ fn the_menu_offers_trace_brightness_targets_and_the_skin_tone_line_with_sensible
             ("brightness", vec![]),
             ("spread", vec![]),
             ("graticule", vec![]),
+            ("graticule-style", vec!["standard", "hue-vectors"]),
             ("targets", vec!["both", "75", "100"]),
             ("skin-line", vec!["on", "off"]),
             ("plots", vec!["both", "100", "200"]),
@@ -1362,5 +1363,126 @@ fn graticule_brightness_scales_the_grid_and_skin_line_and_never_the_label() {
         (dim_label.as_str(), bright_label.as_str()),
         (label.as_str(), label.as_str()),
         "drawing only: the label does not change"
+    );
+}
+
+/// How lit the plot is on the spoke to a colour target, a third of the way out to the 100 % bar of that colour (turned by
+/// `turn` degrees about the middle), on the 100 % plot (`which` 0) or the 200 % plot (1), in a render 2000 wide.
+fn on_spoke(
+    b: &Bench,
+    image: &[u8],
+    panels: &[PanelLayout],
+    which: usize,
+    target: [f64; 3],
+    turn: f64,
+) -> u8 {
+    let zoom = if which == 0 { Zoom::X1 } else { Zoom::X2 };
+    let [cb, cr] = cb_cr(target);
+    let (s, c) = turn.to_radians().sin_cos();
+    let (cb, cr) = (cb * c - cr * s, cb * s + cr * c);
+    let [x, y] = b.square(panels, which).position(cb * 0.35, cr * 0.35, zoom);
+    brightest_near(image, 2000, [x, y])
+}
+
+const SIX: [[f64; 3]; 6] = [
+    [1.0, 0.0, 0.0],
+    [1.0, 1.0, 0.0],
+    [0.0, 1.0, 0.0],
+    [0.0, 1.0, 1.0],
+    [1.0, 0.0, 1.0],
+    [0.0, 0.0, 1.0],
+];
+
+#[test]
+fn hue_vectors_draw_a_spoke_to_each_colour_target_on_both_plots_and_standard_draws_none() {
+    let mut b = Bench::new("spokes");
+    b.play(64, 36, &solid(64, 36, [0.0; 3]));
+    let (standard, panels) = b.render(2000, 900, 1.0);
+    for which in 0..2 {
+        for target in SIX {
+            assert!(
+                on_spoke(&b, &standard, &panels, which, target, 0.0) <= 20,
+                "Standard is the default and draws no spoke: {target:?} {which} {}",
+                on_spoke(&b, &standard, &panels, which, target, 0.0)
+            );
+        }
+    }
+    b.choose(V, "graticule-style", "hue-vectors");
+    let (image, panels) = b.render(2000, 900, 1.0);
+    for which in 0..2 {
+        for target in SIX {
+            let lit = on_spoke(&b, &image, &panels, which, target, 0.0);
+            assert!(lit >= 30, "a spoke to {target:?} on plot {which}: {lit}");
+            let off = on_spoke(&b, &image, &panels, which, target, -20.0);
+            assert!(
+                off <= 20,
+                "dark 20 degrees off the spoke (clear of the skin-tone line): {off}"
+            );
+        }
+    }
+    b.choose(V, "graticule-style", "standard");
+    let (back, _) = b.render(2000, 900, 1.0);
+    assert!(back == standard, "back to Standard draws as before");
+}
+
+#[test]
+fn the_spokes_follow_graticule_brightness_and_leave_the_skin_line_and_trace_alone() {
+    let lit = |style: &str, graticule: &str| {
+        let mut b = Bench::new("spokes-bright");
+        b.choose(V, "graticule-style", style);
+        b.choose(V, "graticule", graticule);
+        b.play(64, 36, &solid(64, 36, [0.0; 3]));
+        let (image, panels) = b.render(2000, 900, 1.0);
+        let square = b.square(&panels, 0);
+        let [mx, my] = square.centre();
+        let r = square.ring_radius() * 0.7;
+        let (s, c) = SKIN_TONE_LINE_DEGREES.to_radians().sin_cos();
+        let skin = brightest_near(&image, 2000, [mx + r * c as f32, my - r * s as f32]);
+        (on_spoke(&b, &image, &panels, 0, SIX[5], 0.0), skin)
+    };
+    let (dim, _) = lit("hue-vectors", "20");
+    let (normal, skin) = lit("hue-vectors", "100");
+    let (bright, _) = lit("hue-vectors", "300");
+    assert!(
+        dim < normal && normal < bright,
+        "{dim} < {normal} < {bright}"
+    );
+    assert_eq!(
+        lit("standard", "100").1,
+        skin,
+        "the skin-tone line is unchanged"
+    );
+
+    // A pixel the trace lights draws the same with or without the spokes.
+    let draw = |style: &str| {
+        let mut b = Bench::new("spokes-trace");
+        b.choose(V, "graticule-style", style);
+        let (w, h, pixels, _) = bars(0.75);
+        b.play(w, h, &pixels);
+        let (image, panels) = b.render(2000, 900, 1.0);
+        let [cb, cr] = cb_cr([0.75, 0.0, 0.0]);
+        let [x, y] = b.square(&panels, 0).position(cb, cr, Zoom::X1);
+        pixel(&image, 2000, [x, y])
+    };
+    assert_eq!(
+        draw("standard"),
+        draw("hue-vectors"),
+        "the trace is unchanged"
+    );
+}
+
+#[test]
+fn the_graticule_choice_is_remembered_per_panel_and_the_label_does_not_change() {
+    let mut b = Bench::new("spokes-saved");
+    let before = b.label(V);
+    b.choose(V, "graticule-style", "hue-vectors");
+    assert_eq!(b.label(V), before, "a drawing choice, not a measurement");
+    let back = PanelSettings::from_text(&b.settings.to_text());
+    let defs = b.set.setting_defs(b.index(V));
+    assert_eq!(
+        back.resolve(V, defs)
+            .get("graticule-style")
+            .map(String::as_str),
+        Some("hue-vectors")
     );
 }

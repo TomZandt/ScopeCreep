@@ -239,6 +239,41 @@ impl PanelSettings {
     }
 }
 
+/// The setting every picture Panel with a legend calls it (ARRI False Colour, Stops False Colour, the saturation
+/// heatmap), with the choices "on" and "off" (#191).
+pub const LEGEND_KEY: &str = "legend";
+/// The two values of the legend setting.
+pub const LEGEND_ON: &str = "on";
+pub const LEGEND_OFF: &str = "off";
+
+/// Whether `def` is a Panel's legend on/off setting.
+fn is_legend(def: &SettingDef) -> bool {
+    def.key == LEGEND_KEY
+        && def.amount.is_none()
+        && def.choices.iter().any(|c| c.value == LEGEND_ON)
+        && def.choices.iter().any(|c| c.value == LEGEND_OFF)
+}
+
+impl PanelSettings {
+    /// Whether every legend of `panels` (each a display's name and the settings it offers) is on, defaults
+    /// included. True when there is none.
+    pub fn legends_on(&self, panels: &[(&str, &[SettingDef])]) -> bool {
+        panels.iter().all(|(name, defs)| {
+            !defs.iter().any(is_legend)
+                || self.resolve(name, defs).get(LEGEND_KEY).map(String::as_str) == Some(LEGEND_ON)
+        })
+    }
+
+    /// Set the legend of every Panel in `panels` that has one, on or off, as its own popover would.
+    pub fn set_legends(&mut self, panels: &[(&str, &[SettingDef])], on: bool) {
+        for (name, defs) in panels {
+            if defs.iter().any(is_legend) {
+                self.set(name, LEGEND_KEY, if on { LEGEND_ON } else { LEGEND_OFF });
+            }
+        }
+    }
+}
+
 /// Logical pixels: the menu's size.
 pub const MENU_WIDTH: f32 = crate::style::SPACE_MENU_WIDTH;
 pub const MENU_ROW: f32 = crate::style::SPACE_MENU_ROW;

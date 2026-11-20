@@ -59,8 +59,8 @@ fn every_slot_has_a_show_and_a_save_command() {
     let all = Command::all();
     assert_eq!(
         all.len(),
-        1 + 2 * SLOTS + 2,
-        "Default layout, show and save each slot, the Fit toggle, fill the Window"
+        1 + 2 * SLOTS + 3,
+        "Default layout, show and save each slot, the Fit toggle, fill the Window, the legends"
     );
     for slot in 0..SLOTS {
         assert!(all.contains(&Command::RecallLayout(slot)));
@@ -315,4 +315,24 @@ fn ctrl_f_fills_the_window_by_default_and_can_be_changed_like_any_hotkey() {
     let mut saved = Hotkeys::default();
     saved.assign(Command::FillWindow, ctrl("Enter")).unwrap();
     assert_eq!(Hotkeys::from_text(&saved.to_text()), saved);
+}
+
+#[test]
+fn the_legends_command_has_no_hotkey_until_one_is_given_and_it_round_trips() {
+    let mut hotkeys = Hotkeys::default();
+    assert_eq!(Command::ToggleLegends.label(), "Legends: show / hide");
+    assert_eq!(hotkeys.get(Command::ToggleLegends), None);
+    assert!(Command::all().contains(&Command::ToggleLegends));
+    hotkeys.assign(Command::ToggleLegends, ctrl("L")).unwrap();
+    assert_eq!(hotkeys.command_for(ctrl("L")), Some(Command::ToggleLegends));
+    let saved = hotkeys.clone();
+    assert_eq!(Hotkeys::from_text(&saved.to_text()), saved);
+    hotkeys.clear(Command::ToggleLegends);
+    assert_eq!(hotkeys.get(Command::ToggleLegends), None);
+    hotkeys.assign(Command::ToggleLegends, ctrl("L")).unwrap();
+    hotkeys.reset(Command::ToggleLegends);
+    assert_eq!(hotkeys, Hotkeys::default(), "reset puts back no hotkey");
+    hotkeys.assign(Command::ToggleLegends, ctrl("L")).unwrap();
+    hotkeys.reset_all();
+    assert_eq!(hotkeys, Hotkeys::default());
 }

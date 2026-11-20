@@ -4,7 +4,9 @@
 use scopecreep::commands::{Command, Hotkey, Hotkeys, Key};
 use scopecreep::components::*;
 use scopecreep::layouts::{Layouts, Rename, SLOTS};
-use scopecreep::menu_bar::{self, BarState, Current, LAYOUT, LayoutMode, MenuAction, layout_menu};
+use scopecreep::menu_bar::{
+    self, BarState, Current, LAYOUT, LayoutMode, MenuAction, SETTINGS, VIEW, layout_menu, view_menu,
+};
 use scopecreep::panel_grid::PanelGrid;
 use scopecreep::style;
 
@@ -499,4 +501,78 @@ fn every_layout_menu_fits_a_small_window() {
             );
         }
     }
+}
+
+// ---- The View menu (#191, spec #192) ----
+
+#[test]
+fn the_view_title_sits_between_layout_and_settings_and_is_hit_where_drawn() {
+    let bar = menu_bar::bar();
+    assert_eq!(bar.titles, ["Layout", "View", "Settings"]);
+    assert_eq!((LAYOUT, VIEW, SETTINGS), (0, 1, 2));
+    for scale in SCALES {
+        let rects = bar.title_rects(0.0, 0.0, scale);
+        assert_eq!(rects.len(), 3);
+        assert_eq!(rects[0][0] + rects[0][2], rects[1][0], "no gap");
+        assert_eq!(rects[1][0] + rects[1][2], rects[2][0], "no gap");
+        assert_eq!(rects[VIEW][3], MenuBar::height(scale));
+        assert_eq!(bar.hit(0.0, 0.0, centre(rects[VIEW]), scale), Some(VIEW));
+    }
+    let (one, two) = (
+        bar.title_rects(0.0, 0.0, 1.0)[VIEW],
+        bar.title_rects(0.0, 0.0, 2.0)[VIEW],
+    );
+    for k in 0..4 {
+        assert!((one[k] * 2.0 - two[k]).abs() < 1e-3, "doubles at 2x");
+    }
+}
+
+#[test]
+fn the_views_first_entry_shows_or_hides_the_legends_and_is_marked_when_every_legend_is_on() {
+    let hotkeys = Hotkeys::default();
+    for on in [false, true] {
+        let menu = view_menu(&hotkeys, on);
+        let (i, entry) = item(&menu, "Show legends");
+        assert_eq!(i, 0, "the first entry");
+        assert_eq!(entry.on, on);
+        assert!(entry.enabled);
+        assert_eq!(entry.hotkey, "", "no default hotkey");
+        assert_eq!(
+            menu.action(i),
+            Some(MenuAction::Run(Command::ToggleLegends))
+        );
+        for scale in SCALES {
+            let title = menu_bar::bar().title_rects(0.0, 0.0, scale)[VIEW];
+            let r = menu.drop.rect(title, [800.0 * scale, 600.0 * scale], scale);
+            assert_eq!(r[0], title[0], "drops under its title");
+            let row = menu.drop.entry_rects(r, scale)[0];
+            let hit = menu.drop.hit(r, centre(row), scale);
+            assert_eq!(hit, Some(0), "the entry is hit at {scale}x");
+        }
+    }
+}
+
+#[test]
+fn the_views_entry_shows_the_hotkey_the_command_has() {
+    let mut hotkeys = Hotkeys::default();
+    hotkeys
+        .assign(
+            Command::ToggleLegends,
+            Hotkey::ctrl(Key::named("L").unwrap()),
+        )
+        .unwrap();
+    let (_, entry) = item(&view_menu(&hotkeys, true), "Show legends");
+    assert_eq!(entry.hotkey, "Ctrl+L");
+}
+
+#[test]
+fn the_view_menu_is_among_the_menus_the_minimum_size_is_worked_out_from_with_its_widest_hotkey() {
+    let menus = menu_bar::largest_menus();
+    assert!(
+        menus.iter().any(|m| m.entries.iter().any(|e| matches!(
+            e,
+            MenuEntry::Item(i) if i.label == "Show legends" && i.hotkey == "Ctrl+Shift+Alt+Page Down"
+        ))),
+        "{menus:?}"
+    );
 }

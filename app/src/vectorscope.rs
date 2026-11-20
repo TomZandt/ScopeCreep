@@ -171,6 +171,8 @@ pub const TARGETS_SETTING: &str = "targets";
 pub const SKIN_LINE_SETTING: &str = "skin-line";
 pub const BRIGHTNESS_SETTING: &str = "brightness";
 pub const SPREAD_SETTING: &str = "spread";
+/// Standard (the ring, axes and boxes) or Hue vectors (the same plus a spoke to each colour target), #130.
+pub const GRATICULE_STYLE_SETTING: &str = "graticule-style";
 
 /// The trace brightness slider, in percent of the normal look (#86). The range reaches the old Brighter (4 times the
 /// gain) and Dimmer (a quarter), so a file saved with either still draws as it did.
@@ -189,7 +191,7 @@ pub const MONO_SETTING: &str = "mono";
 /// Which tonal range is plotted: all (the default), shadows, mids or highlights (#124).
 pub const TONAL_SETTING: &str = "tonal";
 
-pub const SETTINGS: [SettingDef; 8] = [
+pub const SETTINGS: [SettingDef; 9] = [
     SettingDef {
         key: BRIGHTNESS_SETTING,
         label: "Trace brightness",
@@ -207,6 +209,21 @@ pub const SETTINGS: [SettingDef; 8] = [
         label: "Graticule brightness",
         amount: Some(crate::scope_shader::GRATICULE_AMOUNT),
         choices: &[],
+    },
+    SettingDef {
+        key: GRATICULE_STYLE_SETTING,
+        label: "Graticule",
+        amount: None,
+        choices: &[
+            Choice {
+                value: "standard",
+                text: "Standard",
+            },
+            Choice {
+                value: "hue-vectors",
+                text: "Hue vectors",
+            },
+        ],
     },
     SettingDef {
         key: TARGETS_SETTING,
@@ -376,6 +393,8 @@ struct Config {
     /// The levels of the two target boxes per hue (0.75 and/or 1.0); the same twice when one set shows.
     bars: [f64; 2],
     skin_line: bool,
+    /// Spokes from the middle to each colour target (the Hue vectors graticule).
+    hue_vectors: bool,
     gain: f32,
     /// The graticule gain (1 is the normal look).
     graticule: f32,
@@ -575,7 +594,7 @@ fn measure(@builtin(global_invocation_id) id: vec3<u32>) {
 /// Hue-angle bins for clipping, after the plot's bins.
 const CLIP_BINS: u32 = 720;
 const PARAMS_BYTES: u64 = 64;
-const DRAW_UNIFORM_BYTES: u64 = 208;
+const DRAW_UNIFORM_BYTES: u64 = 224;
 
 const DRAW_SHADER: &str = r#"
 struct Placement {
@@ -587,6 +606,7 @@ struct Placement {
     targets: array<vec4<f32>, 6>,   // Cb, Cr of each colour target, then Cb, Cr of its second box (the same again when there is one set)
     weights: vec4<f32>,   // luma weights for R, G, B, to turn a position back into a colour, the graticule gain
     join: vec4<f32>,      // the joined pair's divider: 1 on the right edge, -1 on the left, 0 none
+    hue_vectors: vec4<f32>, // x: the hue-vector spokes on (1) or off (0)
 };
 @group(0) @binding(0) var<uniform> placement: Placement;
 @group(0) @binding(1) var<storage, read> bins: array<u32>;
@@ -698,6 +718,21 @@ fn fs(@builtin(position) position: vec4<f32>) -> @location(0) vec4<f32> {
         if (clipped > 0u) {
             let d = q / max(r, 0.001);
             base = tint(d.x * 0.5, -d.y * 0.5) * 0.95;
+        }
+    }
+    // Hue vectors: a quiet spoke from the middle to each colour target, along the angle of its boxes.
+    if (placement.hue_vectors.x > 0.5) {
+        let kk = radius / placement.info.x;
+        for (var i = 0u; i < 6u; i++) {
+            let far = select(placement.targets[i].xy, placement.targets[i].zw, length(placement.targets[i].zw) > length(placement.targets[i].xy));
+            let end = vec2<f32>(far.x * kk, -far.y * kk);
+            let reach = length(end);
+            let dir = end / max(reach, 0.001);
+            let along = dot(q, dir);
+            let across = abs(q.x * dir.y - q.y * dir.x);
+            if (along > 0.0 && along <= reach && across <= half_line) {
+                base = graticule(GRID, placement.weights.w);
+            }
         }
     }
     // The skin-tone line, from the middle to the outer ring.
@@ -850,6 +885,7 @@ impl Vectorscope {
                 measurement: Measurement::default(),
                 bars: [0.75, 1.0],
                 skin_line: true,
+                hue_vectors: false,
                 gain: 1.0,
                 graticule: 1.0,
                 spread: SPREAD_AMOUNT.default,
@@ -1024,6 +1060,7 @@ impl Display for Vectorscope {
                 _ => [0.75, 1.0],
             },
             skin_line: get(SKIN_LINE_SETTING) != Some("off"),
+            hue_vectors: get(GRATICULE_STYLE_SETTING) == Some("hue-vectors"),
             spread: SPREAD_AMOUNT.read(get(SPREAD_SETTING)),
             plots: Plots::from_setting(get(PLOTS_SETTING)),
             mono: get(MONO_SETTING) == Some("on"),
@@ -1125,6 +1162,7 @@ impl Display for Vectorscope {
             } else {
                 -1.0
             };
+            placement[52] = if config.hue_vectors { 1.0 } else { 0.0 };
             self.queue
                 .write_buffer(&self.placement[i], 0, bytemuck::cast_slice(&placement));
             pass.set_bind_group(0, &state.draw_bound.as_ref().unwrap()[i], &[]);
