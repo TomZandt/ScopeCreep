@@ -5,8 +5,9 @@
 #![allow(dead_code)]
 use scopecreep::feed_loop::{Changed, FeedLoop};
 use scopecreep::gpu_frame::{FrameUploader, GpuFrame};
+use scopecreep::layout_tree::LayoutTree;
 use scopecreep::monitor::Monitor;
-use scopecreep::panel_grid::{PanelGrid, PanelLayout};
+use scopecreep::panel_grid::PanelLayout;
 use scopecreep::project::ProjectReader;
 use scopecreep_feed::{FeedWriter, FrameMeta, Provenance, SentColourSetup, now_ns};
 use std::path::PathBuf;
@@ -238,7 +239,7 @@ impl Drop for Rig {
 /// The Panels of `count` displays in a `width` × `height` window at `scale`, as the window lays them out.
 pub fn layouts(count: usize, width: u32, height: u32, scale: f32) -> Vec<PanelLayout> {
     let cells =
-        PanelGrid::automatic(count).cells([0.0, 0.0, width as f32, height as f32], 8.0 * scale);
+        LayoutTree::automatic(count).cells([0.0, 0.0, width as f32, height as f32], 8.0 * scale);
     cells.iter().map(|c| PanelLayout::new(*c, scale)).collect()
 }
 

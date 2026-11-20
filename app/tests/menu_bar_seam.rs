@@ -3,11 +3,11 @@
 //! entry runs the command its shown hotkey runs, and the menus on a small Window.
 use scopecreep::commands::{Command, Hotkey, Hotkeys, Key};
 use scopecreep::components::*;
+use scopecreep::layout_tree::LayoutTree;
 use scopecreep::layouts::{Layouts, Rename, SLOTS};
 use scopecreep::menu_bar::{
     self, BarState, Current, LAYOUT, LayoutMode, MenuAction, SETTINGS, VIEW, layout_menu, view_menu,
 };
-use scopecreep::panel_grid::PanelGrid;
 use scopecreep::style;
 
 const SCALES: [f32; 2] = [1.0, 2.0];
@@ -52,8 +52,8 @@ fn item(menu: &menu_bar::Menu, label: &str) -> (usize, MenuItem) {
         .unwrap_or_else(|| panic!("no entry {label}"))
 }
 
-fn arranged() -> PanelGrid {
-    let mut grid = PanelGrid::default_for(&NAMES);
+fn arranged() -> LayoutTree {
+    let mut grid = LayoutTree::default_for(&NAMES);
     grid.swap(0, 1);
     grid
 }

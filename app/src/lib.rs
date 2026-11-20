@@ -16,6 +16,7 @@ pub mod gpu_memory;
 pub mod highlight_neutrals;
 pub mod hotkeys_panel;
 pub mod layout;
+pub mod layout_tree;
 pub mod layouts;
 pub mod loupe;
 pub mod measurement;

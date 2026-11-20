@@ -29,3 +29,5 @@ The Panel grid fits one shape of footage and one set of seven Panels. A colouris
 - ADR 0012's grid rules (column and row weights, spans, every cell used) are replaced by a ratio per split; its Panel minimums, the minimum Window rule and the repair of saved sizes (#179) carry over to the tree.
 - Panels need ids of their own so a display can appear more than once (ADR 0039), and the saved layout text moves to a new version.
 - The prototype's pure module (a plain tree and functions over it) is the reference for the model; the prototype itself is never merged.
+
+Built in #204 (`app/src/layout_tree.rs`): the first step, with one Panel per tab group so the Window looks and works as before; the saved text is "layout 2" and an old grid converts when it is a sequence of cuts.

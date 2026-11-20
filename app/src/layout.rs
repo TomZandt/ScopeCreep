@@ -6,7 +6,8 @@ pub const MARGIN: f32 = crate::style::SPACE_MARGIN;
 pub const GUTTER: f32 = crate::style::SPACE_GUTTER;
 
 use crate::components::{DropMenu, MenuBar};
-use crate::panel_grid::{PanelGrid, min_panel_size};
+use crate::layout_tree::LayoutTree;
+use crate::panel_grid::min_panel_size;
 use crate::style;
 use crate::view_strip::ViewStrip;
 
@@ -15,7 +16,7 @@ use crate::view_strip::ViewStrip;
 /// (a notice can take the second); room for the menu bar row's titles and the view strip (ADR 0040); and room under the menu bar for the largest of `menus`, so no menu is cut off.
 /// A layout the user dragged is not part of it: making the Window smaller than that layout was arranged at shrinks
 /// its Panels with it.
-pub fn min_window(grid: &PanelGrid, menus: &[DropMenu]) -> [f32; 2] {
+pub fn min_window(grid: &LayoutTree, menus: &[DropMenu]) -> [f32; 2] {
     let area = grid.min_area(MARGIN, min_panel_size(1.0));
     let chrome = MenuBar::height(1.0)
         + crate::components::BarKind::Top.height(1.0)

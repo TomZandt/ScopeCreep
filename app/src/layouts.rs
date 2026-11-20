@@ -1,11 +1,11 @@
-//! Named layouts (#98): the nine slots the user saves arrangements of the Panel grid into, recalls and renames.
+//! Named layouts (#98): the nine slots the user saves arrangements of the layout tree into, recalls and renames.
 //! The Layout menu that lists them is in `menu_bar`. Pure: no GPU, no window, no fonts.
 //!
-//! A slot holds the grid as [`PanelGrid::to_text`] writes it, so recalling one goes through [`PanelGrid::from_text`]:
-//! a Panel the layout names that no longer exists is dropped, and a Panel it does not name is placed in the first
-//! free cells. Nothing here is on screen until the user opens the menu or presses a hotkey (the hotkeys are commands, in
+//! A slot holds the layout as [`LayoutTree::to_text`] writes it, so recalling one goes through [`LayoutTree::from_text`]:
+//! a Panel the layout names that no longer exists is dropped, and a layout that lacks a display the Window has gives the default layout. Old grids are
+//! converted by the same read. Nothing here is on screen until the user opens the menu or presses a hotkey (the hotkeys are commands, in
 //! `commands`).
-use crate::panel_grid::PanelGrid;
+use crate::layout_tree::LayoutTree;
 
 /// How many layouts can be saved.
 pub const SLOTS: usize = 9;
@@ -42,7 +42,7 @@ fn default_name(slot: usize) -> String {
 
 impl Layouts {
     /// Save `grid` (for the displays called `names`) into `slot`. A slot keeps its name when it has one.
-    pub fn save(&mut self, slot: usize, grid: &PanelGrid, names: &[&str]) {
+    pub fn save(&mut self, slot: usize, grid: &LayoutTree, names: &[&str]) {
         if slot >= SLOTS {
             return;
         }
@@ -56,9 +56,9 @@ impl Layouts {
     }
 
     /// The arrangement saved in `slot` for the displays called `names`; `None` when the slot is empty.
-    pub fn recall(&self, slot: usize, names: &[&str]) -> Option<PanelGrid> {
+    pub fn recall(&self, slot: usize, names: &[&str]) -> Option<LayoutTree> {
         let saved = self.slots.get(slot)?.as_ref()?;
-        Some(PanelGrid::from_text(names, &saved.grid))
+        Some(LayoutTree::from_text(names, &saved.grid))
     }
 
     /// The name of the layout in `slot`, if it holds one.

@@ -3,8 +3,9 @@
 //! line with playback and performance only. No GPU.
 use scopecreep::colour_setup::{ColourSetup, KnownColourSetup, Provenance};
 use scopecreep::display::DisplayContext;
+use scopecreep::layout_tree::LayoutTree;
 use scopecreep::measurement::LumaWeights;
-use scopecreep::panel_grid::{PanelGrid, PanelLayout};
+use scopecreep::panel_grid::PanelLayout;
 use scopecreep::settings::Settings;
 use scopecreep::window_text::{self, PanelTitle, panel_title};
 use scopecreep_feed::SentColourSetup;
@@ -352,9 +353,15 @@ fn stops_false_colour_says_approximated_assumed_and_when_it_cannot_measure() {
 #[test]
 fn every_title_bar_fits_one_line_at_the_default_layout() {
     let area = [12.0, 12.0, 1256.0, 716.0];
-    let cells = PanelGrid::default_for(&NAMES).cells(area, 12.0);
+    // The displays the Window shows today (the Channel view and Colour waveform are out of it).
+    let shown: Vec<&str> = NAMES
+        .iter()
+        .copied()
+        .filter(|n| !["Channel view", "Colour waveform"].contains(n))
+        .collect();
+    let cells = LayoutTree::default_for(&shown).cells(area, 12.0);
     for scale in [1.0, 2.0] {
-        for (i, name) in NAMES.iter().enumerate() {
+        for (i, name) in shown.iter().enumerate() {
             let cell = cells[i].map(|v| v * scale);
             let bar = PanelLayout::new(cell, scale).title;
             // Usual states: everything fits beside the name.

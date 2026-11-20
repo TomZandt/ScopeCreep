@@ -1,0 +1,727 @@
+//! Where the Panels go: a layout tree (ADR 0038). Its leaves are tab groups (one or more Panels, one shown) and its
+//! inner nodes are splits, side by side or stacked, each holding the share of its space (net of the gap) that its
+//! first side takes. The tree always fills the Panel area, so no cell is ever empty. This is the one place that
+//! decides where each display goes. Pure: no GPU, no window, no fonts.
+//!
+//! A Panel is named here by its index (the display's place in the display order). Rectangles are left, top, width,
+//! height in device pixels. What sits inside one Panel (border, title bar, display) is [`crate::panel_grid`].
+
+use crate::panel_grid::{MIN_PANEL, PanelLayout, off_screen};
+use crate::style;
+
+/// The window the saved layouts are checked against (logical pixels, the Panel area and the gap between Panels):
+/// the default window size. A saved split that would leave a Panel under its minimum here is moved (#179).
+const REFERENCE_AREA: [f32; 2] = style::SPACE_REFERENCE_AREA;
+const REFERENCE_GAP: f32 = style::SPACE_REFERENCE_GAP;
+/// The first line of a saved layout. A grid saved as "layout 1" is converted when it is a sequence of cuts.
+const HEADER: &str = "layout 2";
+const OLD_HEADER: &str = "layout 1";
+/// A saved layout deeper than this, or with more tab groups, is rubbish.
+const MAX_DEPTH: usize = 24;
+const MAX_LEAVES: usize = 64;
+/// A Panel the saved text names that no longer exists.
+const UNKNOWN: usize = usize::MAX;
+/// Keeps a share away from 0 and 1 so a minimum can always be divided by it.
+const MIN_RATIO: f32 = 0.001;
+
+/// Which way a split divides its space.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Dir {
+    /// Side by side: the first child on the left.
+    Row,
+    /// Stacked: the first child on top.
+    Col,
+}
+
+/// A divider between the two sides of one split that can be dragged. Names the split by its path from the root.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Border {
+    pub dir: Dir,
+    path: Vec<bool>,
+}
+
+/// What a press at a point starts: a border drag or a Panel drag (#97). Never both.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum Press {
+    Border(Border),
+    /// Dragging the Panel (display index) by its title bar, to swap it with another.
+    Panel(usize),
+}
+
+#[derive(Clone, Debug, PartialEq)]
+enum Node {
+    Leaf {
+        tabs: Vec<usize>,
+        active: usize,
+    },
+    Split {
+        dir: Dir,
+        ratio: f32,
+        a: Box<Node>,
+        b: Box<Node>,
+    },
+}
+
+impl Node {
+    fn leaf(panel: usize) -> Node {
+        Node::Leaf {
+            tabs: vec![panel],
+            active: 0,
+        }
+    }
+
+    fn at(&self, path: &[bool]) -> Option<&Node> {
+        match (path.split_first(), self) {
+            (None, _) => Some(self),
+            (Some((second, rest)), Node::Split { a, b, .. }) => {
+                (if *second { b } else { a }).at(rest)
+            }
+            _ => None,
+        }
+    }
+
+    fn at_mut(&mut self, path: &[bool]) -> Option<&mut Node> {
+        match (path.split_first(), self) {
+            (None, node) => Some(node),
+            (Some((second, rest)), Node::Split { a, b, .. }) => {
+                (if *second { b } else { a }).at_mut(rest)
+            }
+            _ => None,
+        }
+    }
+
+    /// The least size this node needs for every Panel in it to be at least `min`, given the shares it holds.
+    fn need(&self, gap: f32, min: [f32; 2]) -> [f32; 2] {
+        match self {
+            Node::Leaf { .. } => min,
+            Node::Split { dir, ratio, a, b } => {
+                let (na, nb) = (a.need(gap, min), b.need(gap, min));
+                let r = ratio.clamp(MIN_RATIO, 1.0 - MIN_RATIO);
+                match dir {
+                    Dir::Row => [
+                        gap + f32::max(na[0] / r, nb[0] / (1.0 - r)),
+                        f32::max(na[1], nb[1]),
+                    ],
+                    Dir::Col => [
+                        f32::max(na[0], nb[0]),
+                        gap + f32::max(na[1] / r, nb[1] / (1.0 - r)),
+                    ],
+                }
+            }
+        }
+    }
+
+    /// Visit every node with its rectangle in `rect` and its path.
+    fn walk(
+        &self,
+        rect: [f32; 4],
+        gap: f32,
+        path: &mut Vec<bool>,
+        f: &mut dyn FnMut(&Node, [f32; 4], &[bool]),
+    ) {
+        f(self, rect, path);
+        if let Node::Split { dir, ratio, a, b } = self {
+            let [ra, rb] = halves(*dir, rect, gap, *ratio);
+            path.push(false);
+            a.walk(ra, gap, path, f);
+            path.pop();
+            path.push(true);
+            b.walk(rb, gap, path, f);
+            path.pop();
+        }
+    }
+
+    fn panels(&self, out: &mut Vec<usize>) {
+        match self {
+            Node::Leaf { tabs, .. } => out.extend(tabs),
+            Node::Split { a, b, .. } => {
+                a.panels(out);
+                b.panels(out);
+            }
+        }
+    }
+
+    fn map_panels(&mut self, f: &impl Fn(usize) -> usize) {
+        match self {
+            Node::Leaf { tabs, .. } => tabs.iter_mut().for_each(|t| *t = f(*t)),
+            Node::Split { a, b, .. } => {
+                a.map_panels(f);
+                b.map_panels(f);
+            }
+        }
+    }
+
+    /// This node without the Panels `gone` says are gone: an emptied tab group is removed and its sibling takes
+    /// the space. None when nothing is left.
+    fn pruned(self, gone: &impl Fn(usize) -> bool) -> Option<Node> {
+        match self {
+            Node::Leaf { tabs, active } => {
+                let shown = tabs.get(active).copied();
+                let tabs: Vec<usize> = tabs.into_iter().filter(|t| !gone(*t)).collect();
+                let active = shown
+                    .and_then(|s| tabs.iter().position(|t| *t == s))
+                    .unwrap_or(0);
+                (!tabs.is_empty()).then_some(Node::Leaf { tabs, active })
+            }
+            Node::Split { dir, ratio, a, b } => match (a.pruned(gone), b.pruned(gone)) {
+                (Some(a), Some(b)) => Some(Node::Split {
+                    dir,
+                    ratio,
+                    a: Box::new(a),
+                    b: Box::new(b),
+                }),
+                (one, other) => one.or(other),
+            },
+        }
+    }
+
+    fn write(&self, names: &[&str], text: &mut String) {
+        match self {
+            Node::Leaf { tabs, active } => {
+                let list: Vec<&str> = tabs
+                    .iter()
+                    .map(|t| names.get(*t).copied().unwrap_or(""))
+                    .collect();
+                *text += &format!("leaf {active} {}\n", list.join("|"));
+            }
+            Node::Split { dir, ratio, a, b } => {
+                let dir = if *dir == Dir::Row { "row" } else { "col" };
+                *text += &format!("split {dir} {ratio}\n");
+                a.write(names, text);
+                b.write(names, text);
+            }
+        }
+    }
+}
+
+/// The two sides of a split of `rect`: the first takes `ratio` of the space net of `gap`.
+fn halves(dir: Dir, rect: [f32; 4], gap: f32, ratio: f32) -> [[f32; 4]; 2] {
+    let [x, y, w, h] = rect;
+    match dir {
+        Dir::Row => {
+            let first = ratio * (w - gap).max(0.0);
+            [
+                [x, y, first, h],
+                [x + first + gap, y, (w - first - gap).max(0.0), h],
+            ]
+        }
+        Dir::Col => {
+            let first = ratio * (h - gap).max(0.0);
+            [
+                [x, y, w, first],
+                [x, y + first + gap, w, (h - first - gap).max(0.0)],
+            ]
+        }
+    }
+}
+
+/// The default layout, in whole numbers: columns and rows (as weights), then each Panel by display name at
+/// `(column, row, columns, rows)`. 5 x 4: the clean picture 3 x 2 at the top left, the luma waveform and the
+/// Vectorscope (two cells wide) to its right, then two rows of Picture Views below (ARRI False Colour three wide
+/// with Stops False Colour, Skin tone with the Saturation heatmap three wide), every cell used. It is turned into a
+/// tree by the same conversion an old saved grid goes through.
+const DEFAULT_COLUMNS: [f32; 5] = [1.0, 1.0, 1.0, 1.0, 1.0];
+const DEFAULT_ROWS: [f32; 4] = [14.0, 14.0, 11.0, 11.0];
+const DEFAULT_PLACES: [(&str, [usize; 4]); 7] = [
+    ("Clean picture", [0, 0, 3, 2]),
+    ("Luma waveform", [3, 0, 2, 1]),
+    ("Vectorscope", [3, 1, 2, 1]),
+    ("ARRI False Colour", [0, 2, 3, 1]),
+    ("Stops False Colour", [3, 2, 2, 1]),
+    ("Saturation heatmap", [0, 3, 3, 1]),
+    ("Skin tone", [3, 3, 2, 1]),
+];
+
+/// A Panel's cell of a grid: its first column and row, and how many columns and rows it spans.
+#[derive(Clone, Copy)]
+struct Cell {
+    panel: usize,
+    column: usize,
+    row: usize,
+    columns: usize,
+    rows: usize,
+}
+
+/// The grid being turned into a tree: weights of its columns and rows, and the size of one weight in the
+/// reference window.
+struct Grid<'a> {
+    columns: &'a [f32],
+    rows: &'a [f32],
+    column_unit: f32,
+    row_unit: f32,
+}
+
+impl Grid<'_> {
+    /// The size of columns `a..b` (`across`) or rows with the gaps between them, in the reference window.
+    fn extent(&self, across: bool, a: usize, b: usize) -> f32 {
+        let (weights, unit) = if across {
+            (self.columns, self.column_unit)
+        } else {
+            (self.rows, self.row_unit)
+        };
+        weights[a..b].iter().sum::<f32>() * unit + REFERENCE_GAP * (b - a - 1) as f32
+    }
+
+    /// `items` (which fill columns `c` and rows `r` exactly) as a tree, by cutting edge to edge. The first cut
+    /// found is taken, side by side before stacked, so the tree is the same every time.
+    fn build(&self, items: &[Cell], c: (usize, usize), r: (usize, usize)) -> Option<Node> {
+        if let [one] = items {
+            return Some(Node::leaf(one.panel));
+        }
+        let boxed = |n: Option<Node>| n.map(Box::new);
+        for k in c.0 + 1..c.1 {
+            if items
+                .iter()
+                .all(|i| i.column + i.columns <= k || i.column >= k)
+            {
+                let (left, right): (Vec<Cell>, Vec<Cell>) =
+                    items.iter().partition(|i| i.column < k);
+                return Some(Node::Split {
+                    dir: Dir::Row,
+                    ratio: self.extent(true, c.0, k)
+                        / (self.extent(true, c.0, c.1) - REFERENCE_GAP),
+                    a: boxed(self.build(&left, (c.0, k), r))?,
+                    b: boxed(self.build(&right, (k, c.1), r))?,
+                });
+            }
+        }
+        for k in r.0 + 1..r.1 {
+            if items.iter().all(|i| i.row + i.rows <= k || i.row >= k) {
+                let (top, bottom): (Vec<Cell>, Vec<Cell>) = items.iter().partition(|i| i.row < k);
+                return Some(Node::Split {
+                    dir: Dir::Col,
+                    ratio: self.extent(false, r.0, k)
+                        / (self.extent(false, r.0, r.1) - REFERENCE_GAP),
+                    a: boxed(self.build(&top, c, (r.0, k)))?,
+                    b: boxed(self.build(&bottom, c, (k, r.1)))?,
+                });
+            }
+        }
+        None
+    }
+}
+
+/// A grid as a tree, when its Panels tile it exactly and are a sequence of cuts (edge to edge, each splitting
+/// what is left in two). The shares are those the grid has in the reference window, so the arrangement is the
+/// same there.
+fn tree_from_grid(columns: &[f32], rows: &[f32], cells: &[Cell]) -> Option<Node> {
+    if cells.is_empty() {
+        return None;
+    }
+    let unit = |w: &[f32], total: f32| {
+        (total - REFERENCE_GAP * w.len().saturating_sub(1) as f32) / w.iter().sum::<f32>()
+    };
+    // Every grid cell is used exactly once.
+    let mut used = vec![vec![0u8; columns.len()]; rows.len()];
+    for c in cells {
+        if c.columns == 0
+            || c.rows == 0
+            || c.column + c.columns > columns.len()
+            || c.row + c.rows > rows.len()
+        {
+            return None;
+        }
+        for row in &mut used[c.row..c.row + c.rows] {
+            for n in &mut row[c.column..c.column + c.columns] {
+                *n += 1;
+            }
+        }
+    }
+    if used.iter().flatten().any(|n| *n != 1) {
+        return None;
+    }
+    let grid = Grid {
+        columns,
+        rows,
+        column_unit: unit(columns, REFERENCE_AREA[0]),
+        row_unit: unit(rows, REFERENCE_AREA[1]),
+    };
+    grid.build(cells, (0, columns.len()), (0, rows.len()))
+}
+
+/// The layout: a tree of tab groups filling the Panel area.
+#[derive(Clone, Debug, PartialEq)]
+pub struct LayoutTree {
+    root: Node,
+}
+
+impl LayoutTree {
+    /// A plain layout for `panels` displays, split in halves along the longer side so every Panel is about the
+    /// same size. Used when the displays are not the ones the default layout is made for.
+    pub fn automatic(panels: usize) -> LayoutTree {
+        fn go(lo: usize, hi: usize, w: f32, h: f32) -> Node {
+            let n = hi - lo;
+            if n == 1 {
+                return Node::leaf(lo);
+            }
+            let first = n.div_ceil(2);
+            let ratio = first as f32 / n as f32;
+            let dir = if w >= h { Dir::Row } else { Dir::Col };
+            let (wa, ha, wb, hb) = match dir {
+                Dir::Row => (w * ratio, h, w * (1.0 - ratio), h),
+                Dir::Col => (w, h * ratio, w, h * (1.0 - ratio)),
+            };
+            Node::Split {
+                dir,
+                ratio,
+                a: Box::new(go(lo, lo + first, wa, ha)),
+                b: Box::new(go(lo + first, hi, wb, hb)),
+            }
+        }
+        LayoutTree {
+            root: if panels == 0 {
+                Node::Leaf {
+                    tabs: Vec::new(),
+                    active: 0,
+                }
+            } else {
+                go(0, panels, REFERENCE_AREA[0], REFERENCE_AREA[1])
+            },
+        }
+    }
+
+    /// The default layout for the displays called `names` (in display order). Falls back to [`Self::automatic`]
+    /// unless these are exactly the displays the default layout is made for, so the tree fills either way.
+    pub fn default_for(names: &[&str]) -> LayoutTree {
+        let cells: Option<Vec<Cell>> = names
+            .iter()
+            .enumerate()
+            .map(|(panel, name)| {
+                DEFAULT_PLACES.iter().find(|(n, _)| n == name).map(
+                    |(_, [column, row, columns, rows])| Cell {
+                        panel,
+                        column: *column,
+                        row: *row,
+                        columns: *columns,
+                        rows: *rows,
+                    },
+                )
+            })
+            .collect();
+        cells
+            .filter(|c| c.len() == DEFAULT_PLACES.len())
+            .and_then(|c| tree_from_grid(&DEFAULT_COLUMNS, &DEFAULT_ROWS, &c))
+            .map_or_else(
+                || LayoutTree::automatic(names.len()),
+                |root| LayoutTree { root },
+            )
+    }
+
+    fn panel_list(&self) -> Vec<usize> {
+        let mut all = Vec::new();
+        self.root.panels(&mut all);
+        all
+    }
+
+    /// How many Panels the tree holds.
+    pub fn len(&self) -> usize {
+        self.panel_list().len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
+
+    /// The least area (width, height, with `gap` between Panels) in which every Panel is at least `min`: the
+    /// shares the tree holds stay as they are, so each side of a split needs its own minimum divided by its share.
+    pub fn min_area(&self, gap: f32, min: [f32; 2]) -> [f32; 2] {
+        self.root.need(gap, min)
+    }
+
+    /// Each Panel's rectangle, in display order, filling `area` with `gap` between Panels. A Panel in a tab group
+    /// that is not the shown one has an empty cell far off screen.
+    pub fn cells(&self, area: [f32; 4], gap: f32) -> Vec<[f32; 4]> {
+        let count = self.panel_list().into_iter().max().map_or(0, |m| m + 1);
+        let mut out = vec![off_screen(); count];
+        self.root
+            .walk(area, gap, &mut Vec::new(), &mut |node, rect, _| {
+                if let Node::Leaf { tabs, active } = node
+                    && let Some(p) = tabs.get(*active)
+                {
+                    out[*p] = rect;
+                }
+            });
+        out
+    }
+
+    /// The divider under `point`, if any: within `slop` of the gap between the two sides of a split.
+    pub fn border_at(
+        &self,
+        area: [f32; 4],
+        gap: f32,
+        point: [f32; 2],
+        slop: f32,
+    ) -> Option<Border> {
+        let mut best: Option<(f32, Border)> = None;
+        self.root
+            .walk(area, gap, &mut Vec::new(), &mut |node, rect, path| {
+                let Node::Split { dir, ratio, .. } = node else {
+                    return;
+                };
+                let [first, _] = halves(*dir, rect, gap, *ratio);
+                let (across, along, middle, lo, len) = match dir {
+                    Dir::Row => (
+                        point[0],
+                        point[1],
+                        first[0] + first[2] + gap / 2.0,
+                        rect[1],
+                        rect[3],
+                    ),
+                    Dir::Col => (
+                        point[1],
+                        point[0],
+                        first[1] + first[3] + gap / 2.0,
+                        rect[0],
+                        rect[2],
+                    ),
+                };
+                let distance = (across - middle).abs();
+                if distance <= gap / 2.0 + slop
+                    && along >= lo
+                    && along <= lo + len
+                    && best.as_ref().is_none_or(|(d, _)| distance < *d)
+                {
+                    let border = Border {
+                        dir: *dir,
+                        path: path.to_vec(),
+                    };
+                    best = Some((distance, border));
+                }
+            });
+        best.map(|(_, b)| b)
+    }
+
+    /// What a press at `point` starts: a border drag when it is on a border (that wins), a Panel drag when it is on
+    /// a Panel's title bar (at `scale` device pixels per logical pixel), else nothing.
+    pub fn press_at(
+        &self,
+        area: [f32; 4],
+        gap: f32,
+        point: [f32; 2],
+        slop: f32,
+        scale: f32,
+    ) -> Option<Press> {
+        if let Some(border) = self.border_at(area, gap, point, slop) {
+            return Some(Press::Border(border));
+        }
+        let panel = self.panel_at(area, gap, point)?;
+        let t = PanelLayout::new(self.cells(area, gap)[panel], scale).title;
+        let in_bar = point[0] >= t[0]
+            && point[0] < t[0] + t[2]
+            && point[1] >= t[1]
+            && point[1] < t[1] + t[3];
+        in_bar.then_some(Press::Panel(panel))
+    }
+
+    /// The Panel whose cell holds `point`, if any (a gap holds none).
+    pub fn panel_at(&self, area: [f32; 4], gap: f32, point: [f32; 2]) -> Option<usize> {
+        self.cells(area, gap).iter().position(|c| {
+            point[0] >= c[0] && point[0] < c[0] + c[2] && point[1] >= c[1] && point[1] < c[1] + c[3]
+        })
+    }
+
+    /// Swap two Panels: each takes the other's place in the tree.
+    pub fn swap(&mut self, a: usize, b: usize) {
+        self.root.map_panels(&|p| match p {
+            p if p == a => b,
+            p if p == b => a,
+            p => p,
+        });
+    }
+
+    /// Move `border` to `to`: only the split it belongs to changes, so who is next to whom stays as it was, and
+    /// neither side goes under what its Panels need (`min` is one Panel's least width and height).
+    pub fn drag(&mut self, border: &Border, to: [f32; 2], area: [f32; 4], gap: f32, min: [f32; 2]) {
+        let mut found = None;
+        self.root
+            .walk(area, gap, &mut Vec::new(), &mut |_, rect, path| {
+                if path == border.path.as_slice() {
+                    found = Some(rect);
+                }
+            });
+        let Some(rect) = found else { return };
+        let Some(Node::Split { dir, ratio, a, b }) = self.root.at(&border.path) else {
+            return;
+        };
+        let (need_a, need_b) = (a.need(gap, min), b.need(gap, min));
+        let (start, total, position, na, nb) = match dir {
+            Dir::Row => (rect[0], rect[2], to[0], need_a[0], need_b[0]),
+            Dir::Col => (rect[1], rect[3], to[1], need_a[1], need_b[1]),
+        };
+        let avail = total - gap;
+        if avail <= 0.0 {
+            return;
+        }
+        let wanted = position - gap / 2.0 - start;
+        let first = if na + nb > avail {
+            *ratio * avail
+        } else {
+            wanted.clamp(na, avail - nb)
+        };
+        let new_ratio = (first / avail).clamp(MIN_RATIO, 1.0 - MIN_RATIO);
+        if let Some(Node::Split { ratio, .. }) = self.root.at_mut(&border.path) {
+            *ratio = new_ratio;
+        }
+    }
+
+    /// The layout, to remember between sessions (`names` in display order).
+    pub fn to_text(&self, names: &[&str]) -> String {
+        let mut text = format!("{HEADER}\n");
+        self.root.write(names, &mut text);
+        text
+    }
+
+    /// The layout `text` holds for the displays called `names`. A grid saved before the tree ("layout 1") is
+    /// converted when it is a sequence of cuts. Anything else that is not this version's, does not make sense, or
+    /// does not hold exactly these displays once the ones that no longer exist are dropped, gives the default
+    /// layout. A split saved so that a Panel is under its minimum in the reference window is moved off it; one that
+    /// cannot be is rubbish.
+    pub fn from_text(names: &[&str], text: &str) -> LayoutTree {
+        Self::parse(names, text).unwrap_or_else(|| LayoutTree::default_for(names))
+    }
+
+    fn parse(names: &[&str], text: &str) -> Option<LayoutTree> {
+        let mut lines = text.lines();
+        let known = |name: &str| names.iter().position(|n| *n == name).unwrap_or(UNKNOWN);
+        let root = match lines.next()? {
+            HEADER => {
+                let mut leaves = 0;
+                let root = parse_node(&mut lines, &known, 0, &mut leaves)?;
+                lines.next().is_none().then_some(root)?
+            }
+            OLD_HEADER => parse_old(&mut lines, &known)?,
+            _ => return None,
+        };
+        let root = root.pruned(&|p| p == UNKNOWN)?;
+        // Exactly these displays, each once.
+        let mut tree = LayoutTree { root };
+        let mut all = tree.panel_list();
+        all.sort_unstable();
+        if all != (0..names.len()).collect::<Vec<_>>() {
+            return None;
+        }
+        tree.hold_minimums()?;
+        Some(tree)
+    }
+
+    /// Move every share off a side that would leave a Panel under its minimum in the reference window. None when
+    /// the Panels cannot all fit it.
+    fn hold_minimums(&mut self) -> Option<()> {
+        let area = [0.0, 0.0, REFERENCE_AREA[0], REFERENCE_AREA[1]];
+        for _ in 0..16 {
+            let mut fixes: Vec<(Vec<bool>, f32)> = Vec::new();
+            self.root.walk(
+                area,
+                REFERENCE_GAP,
+                &mut Vec::new(),
+                &mut |node, rect, path| {
+                    if let Node::Split { dir, ratio, a, b } = node {
+                        let na = a.need(REFERENCE_GAP, MIN_PANEL);
+                        let nb = b.need(REFERENCE_GAP, MIN_PANEL);
+                        let (total, na, nb) = match dir {
+                            Dir::Row => (rect[2], na[0], nb[0]),
+                            Dir::Col => (rect[3], na[1], nb[1]),
+                        };
+                        let avail = total - REFERENCE_GAP;
+                        if avail > 0.0 && na + nb <= avail {
+                            let fixed = ratio.clamp(na / avail, 1.0 - nb / avail);
+                            if (fixed - ratio).abs() > 1e-6 {
+                                fixes.push((path.to_vec(), fixed));
+                            }
+                        }
+                    }
+                },
+            );
+            if fixes.is_empty() {
+                break;
+            }
+            for (path, fixed) in fixes {
+                if let Some(Node::Split { ratio, .. }) = self.root.at_mut(&path) {
+                    *ratio = fixed;
+                }
+            }
+        }
+        let need = self.min_area(REFERENCE_GAP, MIN_PANEL);
+        (need[0] <= REFERENCE_AREA[0] + 0.01 && need[1] <= REFERENCE_AREA[1] + 0.01).then_some(())
+    }
+}
+
+fn parse_node<'a>(
+    lines: &mut impl Iterator<Item = &'a str>,
+    known: &impl Fn(&str) -> usize,
+    depth: usize,
+    leaves: &mut usize,
+) -> Option<Node> {
+    if depth > MAX_DEPTH {
+        return None;
+    }
+    let line = lines.next()?;
+    if let Some(rest) = line.strip_prefix("leaf ") {
+        *leaves += 1;
+        if *leaves > MAX_LEAVES {
+            return None;
+        }
+        let (active, list) = rest.split_once(' ')?;
+        let active: usize = active.parse().ok()?;
+        let tabs: Vec<usize> = list.split('|').map(known).collect();
+        return (active < tabs.len()).then_some(Node::Leaf { tabs, active });
+    }
+    let rest = line.strip_prefix("split ")?;
+    let (dir, ratio) = rest.split_once(' ')?;
+    let dir = match dir {
+        "row" => Dir::Row,
+        "col" => Dir::Col,
+        _ => return None,
+    };
+    let ratio: f32 = ratio.parse().ok()?;
+    if !ratio.is_finite() || !(MIN_RATIO..=1.0 - MIN_RATIO).contains(&ratio) {
+        return None;
+    }
+    let a = parse_node(lines, known, depth + 1, leaves)?;
+    let b = parse_node(lines, known, depth + 1, leaves)?;
+    Some(Node::Split {
+        dir,
+        ratio,
+        a: Box::new(a),
+        b: Box::new(b),
+    })
+}
+
+/// A grid saved as "layout 1": column and row weights, then each Panel's place.
+fn parse_old<'a>(
+    lines: &mut impl Iterator<Item = &'a str>,
+    known: &impl Fn(&str) -> usize,
+) -> Option<Node> {
+    let weights = |line: &str, key: &str| -> Option<Vec<f32>> {
+        let values: Vec<f32> = line
+            .strip_prefix(key)?
+            .split_whitespace()
+            .map(|v| v.parse().ok())
+            .collect::<Option<_>>()?;
+        let sum: f32 = values.iter().sum();
+        let sane = !values.is_empty()
+            && values.len() <= MAX_LEAVES
+            && values.iter().all(|v| v.is_finite() && *v > 0.0)
+            && (sum - 1.0).abs() < 0.01;
+        sane.then_some(values)
+    };
+    let columns = weights(lines.next()?, "columns ")?;
+    let rows = weights(lines.next()?, "rows ")?;
+    let mut cells = Vec::new();
+    for line in lines {
+        let mut parts = line.strip_prefix("panel ")?.splitn(5, ' ');
+        let mut number = || parts.next()?.parse::<usize>().ok();
+        let (column, row, across, down) = (number()?, number()?, number()?, number()?);
+        cells.push(Cell {
+            panel: known(parts.next()?),
+            column,
+            row,
+            columns: across,
+            rows: down,
+        });
+        if cells.len() > MAX_LEAVES {
+            return None;
+        }
+    }
+    tree_from_grid(&columns, &rows, &cells)
+}

@@ -25,8 +25,9 @@ use scopecreep::components::{BarKind, MenuBar};
 use scopecreep::display::{Display, DisplayContext, DisplaySet};
 use scopecreep::gpu_frame::{GpuFrame, new_texture_id};
 use scopecreep::layout::MARGIN;
+use scopecreep::layout_tree::LayoutTree;
 use scopecreep::output_conversion::OutputConversion;
-use scopecreep::panel_grid::{PanelGrid, PanelLayout, cells_filled};
+use scopecreep::panel_grid::{PanelLayout, cells_filled};
 use scopecreep::settings::PanelSettings;
 use scopecreep::style;
 use scopecreep::waveform::Waveform;
@@ -283,7 +284,7 @@ fn stats(samples: &[f64]) -> [f64; 3] {
 
 /// Each Panel's content rectangle in the default layout's Window of `size`, as the app lays it out, or the one
 /// Panel filling it.
-fn contents(grid: &PanelGrid, size: &Size, panels: usize) -> Vec<[f32; 4]> {
+fn contents(grid: &LayoutTree, size: &Size, panels: usize) -> Vec<[f32; 4]> {
     let [width, height] = size.surface;
     let scale = size.scale;
     let margin = MARGIN * scale;
@@ -437,7 +438,7 @@ fn main() {
         .filter(|(variant, in_window, _, _)| *in_window && variant.is_none())
         .map(|(_, _, _, display)| display.name())
         .collect();
-    let grid = PanelGrid::default_for(&window_names);
+    let grid = LayoutTree::default_for(&window_names);
     let entries: Vec<Entry> = list
         .into_iter()
         .map(|(variant, in_window, like, display)| Entry {

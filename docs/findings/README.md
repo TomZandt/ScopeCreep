@@ -103,6 +103,7 @@ What we learned by testing, kept in the repo so it isn't lost when an issue thre
 | [196](196-tiling-layout-prototype.md) | Can the Window tile like a window manager (add, dock, tab, duplicate, Auto layout, pages)? What a critical look at the UHD Window and a throwaway prototype showed (prototype branch, pure layout module) |
 | [128](128-reference-level-lines.md) | Do the waveforms' Low and High reference-level sliders draw dashed lines at the right codes in each scale unit, off by default, Low never above High, without changing a count (headless)? |
 | [130](130-hue-vectors.md) | Does a Standard / Hue vectors graticule choice on the Vectorscope draw a neutral spoke to each of the six colour targets on both plots, follow graticule brightness, and leave the default, the trace, the clipping marks and the skin-tone line unchanged (Feed seam)? |
+| [204](204-layout-tree.md) | Does the Window draw from a layout tree that looks and behaves as the grid did, and do old and named layouts still recall (headless)? |
 
 ## Adding findings
 

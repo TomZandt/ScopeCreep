@@ -267,7 +267,7 @@ pub fn largest_menus() -> Vec<DropMenu> {
     use crate::commands::{Hotkey, Key};
     use crate::hotkeys_panel::{HotkeysPanel, State};
     let mut layouts = Layouts::default();
-    let grid = crate::panel_grid::PanelGrid::automatic(1);
+    let grid = crate::layout_tree::LayoutTree::automatic(1);
     let long = "W".repeat(crate::layouts::NAME_LENGTH);
     for slot in 0..SLOTS {
         layouts.save(slot, &grid, &["x"]);

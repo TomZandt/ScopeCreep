@@ -677,14 +677,14 @@ fn every_panel_has_an_id_of_its_own_and_numbers_count_up() {
 
 #[test]
 fn a_saved_layout_names_panels_by_key_and_one_that_names_displays_still_recalls() {
+    use scopecreep::layout_tree::LayoutTree;
     use scopecreep::layouts::Layouts;
-    use scopecreep::panel_grid::PanelGrid;
     let mut b = Bench::new("layout-keys");
     b.set.register(Keyed::new());
     b.set.register(Keyed::new());
     let owned = b.set.keys();
     let keys: Vec<&str> = owned.iter().map(String::as_str).collect();
-    let grid = PanelGrid::default_for(&keys);
+    let grid = LayoutTree::default_for(&keys);
     let mut layouts = Layouts::default();
     layouts.save(0, &grid, &keys);
     assert!(
@@ -695,7 +695,7 @@ fn a_saved_layout_names_panels_by_key_and_one_that_names_displays_still_recalls(
     assert_eq!(layouts.recall(0, &keys), Some(grid));
     // Saved before instances: the display names, each the first instance's key.
     let old = &b.set.names()[..keys.len() - 1];
-    let old_grid = PanelGrid::default_for(old);
+    let old_grid = LayoutTree::default_for(old);
     let mut before = Layouts::default();
     before.save(1, &old_grid, old);
     assert_eq!(before.recall(1, &keys[..keys.len() - 1]), Some(old_grid));

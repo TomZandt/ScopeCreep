@@ -238,7 +238,7 @@ fn a_changed_hotkey_shows_in_the_layout_menu_at_once() {
     let names = ["Clean picture", "Luma waveform"];
     layouts.save(
         0,
-        &scopecreep::panel_grid::PanelGrid::default_for(&names),
+        &scopecreep::layout_tree::LayoutTree::default_for(&names),
         &names,
     );
     click(&mut panel, &mut hotkeys, "Show layout 1");

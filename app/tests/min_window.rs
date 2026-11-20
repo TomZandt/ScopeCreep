@@ -2,8 +2,9 @@
 //! minimum and every menu fits under the menu bar, at 1x and 2x.
 use scopecreep::components::{BarKind, MenuBar};
 use scopecreep::layout::{MARGIN, min_window};
+use scopecreep::layout_tree::LayoutTree;
 use scopecreep::menu_bar::{self, largest_menus};
-use scopecreep::panel_grid::{PanelGrid, PanelLayout, min_panel_size};
+use scopecreep::panel_grid::{PanelLayout, min_panel_size};
 use scopecreep::style;
 
 const NAMES: [&str; 7] = [
@@ -17,7 +18,7 @@ const NAMES: [&str; 7] = [
 ];
 
 fn minimum() -> [f32; 2] {
-    min_window(&PanelGrid::default_for(&NAMES), &largest_menus())
+    min_window(&LayoutTree::default_for(&NAMES), &largest_menus())
 }
 
 /// The Panel area the window draws in a window of `size` device pixels, with the status row at its tallest (a
@@ -41,7 +42,7 @@ fn the_minimum_is_smaller_than_the_default_window() {
 
 #[test]
 fn at_the_minimum_every_panel_of_the_default_layout_is_at_least_its_minimum() {
-    let grid = PanelGrid::default_for(&NAMES);
+    let grid = LayoutTree::default_for(&NAMES);
     for scale in [1.0, 1.5, 2.0] {
         let size = minimum().map(|v| v * scale);
         let min = min_panel_size(scale);
@@ -65,7 +66,7 @@ fn at_the_minimum_every_panel_of_the_default_layout_is_at_least_its_minimum() {
 #[test]
 fn the_minimum_is_tight_so_it_is_no_bigger_than_it_needs_to_be() {
     // Shrink the Panel area by a pixel either way and some Panel is under its minimum (unless a menu set it).
-    let grid = PanelGrid::default_for(&NAMES);
+    let grid = LayoutTree::default_for(&NAMES);
     let need = grid.min_area(MARGIN, min_panel_size(1.0));
     let min = min_panel_size(1.0);
     let under = |a: [f32; 4]| {

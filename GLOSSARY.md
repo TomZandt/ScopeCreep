@@ -140,7 +140,7 @@ _Avoid_: Letterbox (that is one kind of matte), border
 The columns and rows the Panels sit in, each Panel at a cell with a span of columns and rows, every cell used. By default the clean picture spans 3 × 2 at the top left, the luma waveform and the Vectorscope (two columns wide) beside it, and the four other Picture Views fill two rows below (ARRI False Colour 3 wide with Stops False Colour, the Saturation heatmap 3 wide with Skin tone), so all 7 Panels use every cell. Column and row sizes are weights, so border positions the user dragged stay valid at any window size. Each Panel has a thin border and a title bar with its label at its top.
 _Avoid_: Layout for the grid (a Layout is a saved arrangement of it), dock
 
-Since spec #196 (ADR 0038) the grid is replaced by the **Layout tree** below; this entry stays until it is built.
+Since spec #196 (ADR 0038) the grid is replaced by the **Layout tree** below, built in #204; this entry is kept for the old saved layouts, which convert when they are a sequence of cuts.
 
 **Layout** (named):
 An arrangement of the Panel grid saved in one of nine slots (Ctrl+Shift+1 to 9 by default), shown again with Ctrl+1 to 9 or from the Layout menu on the Menu bar, which also saves, renames layouts and restores the default layout. A layout names its Panels, so one still opens after Panels are added or removed.
@@ -149,7 +149,7 @@ _Avoid_: Preset, workspace, profile
 Since spec #196 (ADR 0041) named layouts become **Pages**; this entry stays until they are built.
 
 **Layout tree**:
-The arrangement of one Page: a binary tree whose leaves are Tab groups and whose inner nodes are splits, each side by side or stacked with the share of its space (net of the gap) that its first child takes. It always fills the Panel area, so no cell is empty, and a Panel can never be smaller than the minimum Panel size (ADR 0038). Decided in spec #196; replaces the Panel grid when built.
+The arrangement of one Page: a binary tree whose leaves are Tab groups and whose inner nodes are splits, each side by side or stacked with the share of its space (net of the gap) that its first child takes. It always fills the Panel area, so no cell is empty, and a Panel can never be smaller than the minimum Panel size (ADR 0038). Decided in spec #196 and built in #204: the Window draws from it, one Panel per tab group for now, and a saved layout reads "layout 2" (an old grid converts when it is a sequence of cuts, otherwise the default layout is used).
 _Avoid_: Grid (for the new model), dock, split view
 
 **Tab group**:

@@ -16,6 +16,7 @@ The format follows [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/
 
 ### Changed
 - A picture Panel's title bar no longer has a zoom chip or a Link chip: it shows its zoom as a read-only tag beside its other tags ("Fit 17 %"), and the view strip sets it. The chips of every title bar are set apart by setting, with a wider gap between groups than within one (the Vectorscope's eight chips are plots, mono and tonal range), and on a narrow Panel only the chips give way to the settings button's popover (#205, ADR 0040).
+- The Window's Panels now sit in a layout tree instead of a grid (ADR 0038). It looks and works as before: same default layout, drag a gap to resize, drag a title to swap, Ctrl+F to fill the Window. Dragging a gap now moves only the two sides of that split, so a border no longer runs on across the whole Window. Saved layouts and named layouts from before still open (an old arrangement converts when it is a sequence of cuts, otherwise the default layout is used). The smallest the Window can be is now 469 × 669 (was 469 × 645), because the tree's shares need a little more height in the default layout (#204).
 - The Window can't be made smaller than 469 × 645 (logical pixels): the size at which every Panel of the default layout keeps its minimum size and every menu, including the Hotkeys panel, fits under the menu bar. A layout you dragged can still shrink its Panels below their minimum in a Window smaller than the one it was arranged in (#172).
 
 ### Fixed

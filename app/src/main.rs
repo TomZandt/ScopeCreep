@@ -28,11 +28,12 @@ use scopecreep::flat_rects::FlatRects;
 use scopecreep::gpu_frame::FrameUploader;
 use scopecreep::hotkeys_panel::HotkeysPanel;
 use scopecreep::layout::MARGIN;
+use scopecreep::layout_tree::{Border, Dir, LayoutTree, Press};
 use scopecreep::layouts::{Layouts, Rename};
 use scopecreep::menu_bar::{self, BarState, Current, LayoutMode, MenuAction};
 use scopecreep::monitor::Monitor;
 use scopecreep::output_conversion::OutputConversion;
-use scopecreep::panel_grid::{self, Border, PanelGrid, PanelLayout, Press, min_panel_size};
+use scopecreep::panel_grid::{self, PanelLayout, min_panel_size};
 use scopecreep::resolve_helper::ScriptHelper;
 use scopecreep::settings::{Amount, Menu, PanelSettings};
 use scopecreep::style;
@@ -246,7 +247,7 @@ struct AppWindow {
     surface: wgpu::Surface<'static>,
     config: wgpu::SurfaceConfiguration,
     displays: DisplaySet,
-    grid: PanelGrid,
+    grid: LayoutTree,
     /// Every Panel's settings, shared with the Feed thread (which gives them to the displays).
     settings: Arc<Mutex<PanelSettings>>,
     /// The right-click menu, while open, with where it opened.
@@ -384,7 +385,7 @@ impl AppWindow {
         let displays = DisplaySet::standard(&device, &queue, format, filterable);
         // The Window can't be made smaller than the default layout and every menu need (#172).
         let [min_w, min_h] = scopecreep::layout::min_window(
-            &PanelGrid::default_for(&as_strs(&displays.keys())),
+            &LayoutTree::default_for(&as_strs(&displays.keys())),
             &menu_bar::largest_menus(),
         );
         window.set_min_inner_size(Some(LogicalSize::new(min_w, min_h)));
@@ -404,8 +405,8 @@ impl AppWindow {
         let grid = grid_file()
             .and_then(|path| std::fs::read_to_string(path).ok())
             .map_or_else(
-                || PanelGrid::default_for(&names),
-                |text| PanelGrid::from_text(&names, &text),
+                || LayoutTree::default_for(&names),
+                |text| LayoutTree::from_text(&names, &text),
             );
         let mut font_system = FontSystem::new();
         let cache = Cache::new(&device);
@@ -727,7 +728,7 @@ impl AppWindow {
         self.update_hover();
         if let Some(panel) = self.pointer_panel.or(self.middle_panel) {
             self.display_pointer(panel, Pointer::Move(self.cursor));
-        } else if let Some(border) = self.drag {
+        } else if let Some(border) = &self.drag {
             self.grid.drag(
                 border,
                 self.cursor,
@@ -740,8 +741,8 @@ impl AppWindow {
             self.window.request_redraw();
         } else {
             self.window.set_cursor(match self.press_under_pointer() {
-                Some(Press::Border(Border::Column { .. })) => CursorIcon::ColResize,
-                Some(Press::Border(Border::Row { .. })) => CursorIcon::RowResize,
+                Some(Press::Border(Border { dir: Dir::Row, .. })) => CursorIcon::ColResize,
+                Some(Press::Border(Border { dir: Dir::Col, .. })) => CursorIcon::RowResize,
                 Some(Press::Panel(_)) => CursorIcon::Grab,
                 None => CursorIcon::Default,
             });
@@ -781,7 +782,7 @@ impl AppWindow {
     fn current_layout(&self) -> Option<Current> {
         let keys = self.displays.keys();
         let names = as_strs(&keys);
-        if self.grid == PanelGrid::default_for(&names) {
+        if self.grid == LayoutTree::default_for(&names) {
             return Some(Current::Default);
         }
         (0..scopecreep::layouts::SLOTS)
@@ -991,7 +992,7 @@ impl AppWindow {
                 self.window.request_redraw();
                 return;
             }
-            Command::DefaultLayout => self.grid = PanelGrid::default_for(&names),
+            Command::DefaultLayout => self.grid = LayoutTree::default_for(&names),
             Command::RecallLayout(slot) => match self.layouts.recall(slot, &names) {
                 Some(grid) => self.grid = grid,
                 None => return,
