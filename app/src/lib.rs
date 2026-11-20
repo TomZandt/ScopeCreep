@@ -5,6 +5,7 @@ pub mod black_and_white;
 pub mod channel_view;
 pub mod cie;
 pub mod colour_setup;
+pub mod commands;
 pub mod components;
 pub mod display;
 pub mod feed_loop;

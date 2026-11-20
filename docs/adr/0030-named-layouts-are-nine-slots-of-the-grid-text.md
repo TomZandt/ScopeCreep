@@ -18,3 +18,7 @@ One format and one set of recovery rules, instead of a second grid format that c
 
 - A layout saved when a Panel was in the Window and recalled after that Panel left (with no other Panel to fill its cells) shows the default layout, not a layout with a gap. A Panel added since the layout was saved (one of the three spec #94 hides, if it returns) gets a row of its own under it.
 - Layouts are not shared between machines and have no import or export.
+
+## Note 2026-11-20
+
+Showing, saving into and the default layout are commands in the command table, and Ctrl+1 to 9 and Ctrl+Shift+1 to 9 are their default hotkeys, which the user can change (ADR 0036, #146).

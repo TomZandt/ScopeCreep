@@ -3,7 +3,8 @@
 //!
 //! A slot holds the grid as [`PanelGrid::to_text`] writes it, so recalling one goes through [`PanelGrid::from_text`]:
 //! a Panel the layout names that no longer exists is dropped, and a Panel it does not name is placed in the first
-//! free cells. Nothing here is on screen until the user opens the menu or presses a shortcut.
+//! free cells. Nothing here is on screen until the user opens the menu or presses a hotkey (the hotkeys are commands, in
+//! `commands`).
 use crate::panel_grid::PanelGrid;
 use crate::settings::{Menu, MenuRow};
 
@@ -13,29 +14,6 @@ pub const SLOTS: usize = 9;
 pub const NAME_LENGTH: usize = 24;
 /// The first line of the saved layouts.
 const HEADER: &str = "layouts 1";
-
-/// What a layout shortcut does.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum Shortcut {
-    /// Ctrl+1 to 9: show the layout in the slot (0 to 8).
-    Recall(usize),
-    /// Ctrl+Shift+1 to 9: save the arrangement on screen into the slot.
-    Save(usize),
-}
-
-/// The shortcut for the digit key `digit` (1 to 9) pressed with the modifiers held; `None` for any other key or
-/// with Alt held.
-pub fn shortcut(digit: u8, ctrl: bool, shift: bool, alt: bool) -> Option<Shortcut> {
-    if !ctrl || alt || !(1..=SLOTS as u8).contains(&digit) {
-        return None;
-    }
-    let slot = digit as usize - 1;
-    Some(if shift {
-        Shortcut::Save(slot)
-    } else {
-        Shortcut::Recall(slot)
-    })
-}
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 struct Slot {

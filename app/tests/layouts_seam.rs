@@ -1,8 +1,6 @@
-//! Named layouts at the pure seam (#98): saving into slots, recalling, renaming, the shortcuts, the menu, and a
+//! Named layouts at the pure seam (#98): saving into slots, recalling, renaming, the menu, and a
 //! layout surviving Panels being added or removed.
-use scopecreep::layouts::{
-    Action, Click, Layouts, Rename, SLOTS, Shortcut, action, menu, shortcut,
-};
+use scopecreep::layouts::{Action, Click, Layouts, Rename, SLOTS, action, menu};
 use scopecreep::panel_grid::{Border, PanelGrid};
 use scopecreep::settings::MenuRow;
 
@@ -27,30 +25,6 @@ fn arranged() -> PanelGrid {
     let mut grid = default_grid();
     grid.swap(0, 1);
     grid
-}
-
-#[test]
-fn ctrl_digits_recall_and_ctrl_shift_digits_save() {
-    assert_eq!(shortcut(1, true, false, false), Some(Shortcut::Recall(0)));
-    assert_eq!(shortcut(9, true, false, false), Some(Shortcut::Recall(8)));
-    assert_eq!(shortcut(3, true, true, false), Some(Shortcut::Save(2)));
-}
-
-#[test]
-fn other_keys_are_not_layout_shortcuts() {
-    assert_eq!(
-        shortcut(1, false, false, false),
-        None,
-        "a digit alone is not"
-    );
-    assert_eq!(shortcut(1, false, true, false), None);
-    assert_eq!(shortcut(0, true, false, false), None, "there is no slot 0");
-    assert_eq!(shortcut(10, true, false, false), None);
-    assert_eq!(
-        shortcut(1, true, false, true),
-        None,
-        "Alt is another shortcut"
-    );
 }
 
 #[test]

@@ -19,6 +19,7 @@ use glyphon::{
     Attrs, Buffer, Cache, Color, ColorMode, Family, FontSystem, Metrics, Resolution, Shaping,
     SwashCache, TextArea, TextAtlas, TextBounds, TextRenderer, Viewport,
 };
+use scopecreep::commands::{Command, Hotkey, Hotkeys, Key};
 use scopecreep::components::{self, Align, BarKind, Prim, State, Tooltip};
 use scopecreep::display::{DisplaySet, Pointer};
 use scopecreep::feed_loop::{FeedLoop, Texts};
@@ -42,7 +43,7 @@ use winit::application::ApplicationHandler;
 use winit::dpi::LogicalSize;
 use winit::event::{ElementState, MouseButton, MouseScrollDelta, WindowEvent};
 use winit::event_loop::{ActiveEventLoop, EventLoop, EventLoopProxy};
-use winit::keyboard::{Key, KeyCode, ModifiersState, NamedKey, PhysicalKey};
+use winit::keyboard::{Key as LogicalKey, ModifiersState, NamedKey, PhysicalKey};
 use winit::window::{CursorIcon, Window, WindowId};
 
 /// Neutral, dark, and the same on every channel: nothing around the picture may tint the eye.
@@ -89,6 +90,11 @@ fn settings_file() -> Option<PathBuf> {
 /// Where the named layouts are remembered, next to the border positions.
 fn layouts_file() -> Option<PathBuf> {
     grid_file().map(|p| p.with_file_name("layouts"))
+}
+
+/// Where the hotkeys the user changed are remembered, next to the layouts (ADR 0036).
+fn hotkeys_file() -> Option<PathBuf> {
+    grid_file().map(|p| p.with_file_name("hotkeys"))
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -239,6 +245,8 @@ struct AppWindow {
     /// line) and not a Panel's settings.
     layouts: Layouts,
     layout_menu: bool,
+    /// The hotkey of each command (ADR 0036).
+    hotkeys: Hotkeys,
     /// A layout's name being typed in the layout menu.
     renaming: Option<Rename>,
     modifiers: ModifiersState,
@@ -469,6 +477,9 @@ impl AppWindow {
                 .and_then(|path| std::fs::read_to_string(path).ok())
                 .map_or_else(Layouts::default, |text| Layouts::from_text(&text)),
             layout_menu: false,
+            hotkeys: hotkeys_file()
+                .and_then(|path| std::fs::read_to_string(path).ok())
+                .map_or_else(Hotkeys::default, |text| Hotkeys::from_text(&text)),
             renaming: None,
             modifiers: ModifiersState::empty(),
             flat,
@@ -776,23 +787,24 @@ impl AppWindow {
         }
     }
 
-    /// A key: Ctrl+1 to 9 recalls a layout and Ctrl+Shift+1 to 9 saves one (the Window is still, nothing shows);
-    /// while a layout name is being typed, the keys type it.
+    /// A key: a hotkey does its command (by default Ctrl+1 to 9 shows a layout and Ctrl+Shift+1 to 9 saves one;
+    /// the Window is still, nothing shows); while a layout name is being typed, the keys type it. winit gives keys
+    /// only to the focused window, so the app never takes keys from Resolve.
     fn key(&mut self, event: &winit::event::KeyEvent) {
         if event.state != ElementState::Pressed {
             return;
         }
         if self.renaming.is_some() {
             match &event.logical_key {
-                Key::Named(NamedKey::Enter) => {
+                LogicalKey::Named(NamedKey::Enter) => {
                     self.finish_rename(true);
                     self.show_layout_menu();
                 }
-                Key::Named(NamedKey::Escape) => {
+                LogicalKey::Named(NamedKey::Escape) => {
                     self.renaming = None;
                     self.show_layout_menu();
                 }
-                Key::Named(NamedKey::Backspace) => {
+                LogicalKey::Named(NamedKey::Backspace) => {
                     if let Some(r) = self.renaming.as_mut() {
                         r.backspace();
                     }
@@ -807,31 +819,35 @@ impl AppWindow {
             }
             return;
         }
-        if event.logical_key == Key::Named(NamedKey::Escape) && self.menu.is_some() {
+        if event.logical_key == LogicalKey::Named(NamedKey::Escape) && self.menu.is_some() {
             self.close_menu();
             return;
         }
-        let digit = match event.physical_key {
-            PhysicalKey::Code(KeyCode::Digit1) => Some(1),
-            PhysicalKey::Code(KeyCode::Digit2) => Some(2),
-            PhysicalKey::Code(KeyCode::Digit3) => Some(3),
-            PhysicalKey::Code(KeyCode::Digit4) => Some(4),
-            PhysicalKey::Code(KeyCode::Digit5) => Some(5),
-            PhysicalKey::Code(KeyCode::Digit6) => Some(6),
-            PhysicalKey::Code(KeyCode::Digit7) => Some(7),
-            PhysicalKey::Code(KeyCode::Digit8) => Some(8),
-            PhysicalKey::Code(KeyCode::Digit9) => Some(9),
-            _ => None,
-        };
-        let m = self.modifiers;
-        if let Some(shortcut) =
-            digit.and_then(|d| layouts::shortcut(d, m.control_key(), m.shift_key(), m.alt_key()))
+        if let PhysicalKey::Code(code) = event.physical_key
+            && let Some(key) = Key::from_code(code)
         {
-            let action = match shortcut {
-                layouts::Shortcut::Recall(slot) => Action::Recall(slot),
-                layouts::Shortcut::Save(slot) => Action::Save(slot),
+            let m = self.modifiers;
+            if m.super_key() {
+                return;
+            }
+            let hotkey = Hotkey {
+                key,
+                ctrl: m.control_key(),
+                shift: m.shift_key(),
+                alt: m.alt_key(),
             };
-            self.layout_action(action);
+            if let Some(command) = self.hotkeys.command_for(hotkey) {
+                self.run(command);
+            }
+        }
+    }
+
+    /// Do a command, from its hotkey or its menu entry.
+    fn run(&mut self, command: Command) {
+        match command {
+            Command::DefaultLayout => self.layout_action(Action::Default),
+            Command::RecallLayout(slot) => self.layout_action(Action::Recall(slot)),
+            Command::SaveLayout(slot) => self.layout_action(Action::Save(slot)),
         }
     }
 

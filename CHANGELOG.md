@@ -6,6 +6,9 @@ The format follows [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/
 
 ## [Unreleased]
 
+### Changed
+- Layouts: Ctrl+1 to 9 (show a layout) and Ctrl+Shift+1 to 9 (save one) are now hotkeys of named commands, and behave as before. Changed hotkeys are kept in `~/.config/scopecreep/hotkeys` beside the layouts; a line the app can't read keeps that command's default, and two commands never share a hotkey (#146, ADR 0036).
+
 ## [0.3.0] - 2026-11-20
 
 Milestone 3 so far: a colourist's Window. The Window is 7 Panels with the clean picture as the hero, named layouts, Panel toolbars and sliders, zoom and pan with Link, and a joined 100 % and 200 % Vectorscope. Milestone 3 is not finished (see [#113](https://github.com/TomZandt/scopecreep/issues/113)); this is a checkpoint.

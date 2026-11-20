@@ -107,6 +107,7 @@ DaVinci Resolve                                 scopecreep app (Rust + wgpu)
   - [0033](docs/adr/0033-waveform-scale-units-rename-positions-only.md): Waveform scale units rename positions; nits are for PQ and HLG and say what they assume
   - [0034](docs/adr/0034-the-clean-picture-carries-the-channel-and-the-loupe.md): The clean picture carries the channel and the Loupe, and the Channel view leaves the Window
   - [0035](docs/adr/0035-whole-panel-zoom-of-source-pixels.md): Whole-Panel zoom of source pixels, from Fit to 800 %: free below 100 %, whole steps above, display state never saved
+  - [0036](docs/adr/0036-commands-and-hotkeys-in-one-table.md): Every app command is in one table, and the user's hotkeys are kept as changes from its defaults
 - [docs/findings/](docs/findings/): what testing showed, one file per ticket.
 - [docs/research/](docs/research/): what public sources say, with dates and links.
 

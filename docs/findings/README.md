@@ -86,6 +86,7 @@ What we learned by testing, kept in the repo so it isn't lost when an issue thre
 | [167](167-picture-panels-zoom.md) | Does every picture Panel in the Window (ARRI and Stops False Colour, Skin Tone, saturation heatmap) zoom and pan on its own in exact squares with mattes black and the legend strip untouched, and show a zoom chip that survives a small Panel (Feed and Toolbar seams)? |
 | [176](176-zoom-800-link-default.md) | Does zoom stop at 800 % in exact 8-pixel squares, does Link open on (saved off stays off, rubbish is on) and light on every picture Panel, and does a click on the zoom chip go to Fit on all Panels while linked (zoom model, Feed, Toolbar and Settings seams)? |
 | [168](168-link.md) | Do picture Panels of different sizes share one zoom and spot while Link is on (Fit fits each, on takes the clicked Panel's view, off keeps each), with a link chip lit on all of them, and is Link remembered while zoom is not (zoom model, Feed, Toolbar and Settings seams)? |
+| [146](146-commands-and-hotkeys.md) | Are the layout shortcuts named commands with default hotkeys that behave as before, and do assign, clear, reset, conflicts, reserved keys and the hotkeys file behave (pure command and hotkey seam)? |
 
 ## Adding findings
 
