@@ -320,7 +320,7 @@ pub fn lay_out_title(
     bar: [f32; 4],
     scale: f32,
 ) -> (crate::components::TitleLayout, String, bool) {
-    lay_out_toolbar_title(title, &[], false, bar, scale)
+    lay_out_toolbar_title(title, &[], &[], false, bar, scale)
 }
 
 /// The same with the Panel's toolbar: its `chips` and, when it has one, its settings button stay at the right of
@@ -328,6 +328,7 @@ pub fn lay_out_title(
 pub fn lay_out_toolbar_title(
     title: &PanelTitle,
     chips: &[crate::components::Chip],
+    groups: &[usize],
     settings_button: bool,
     bar: [f32; 4],
     scale: f32,
@@ -339,6 +340,7 @@ pub fn lay_out_toolbar_title(
             name: title.name.clone(),
             tags: tags.clone(),
             chips: chips.to_vec(),
+            groups: groups.to_vec(),
             settings_button,
         }
         .layout(bar, scale);

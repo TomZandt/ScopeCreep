@@ -5,6 +5,7 @@ use scopecreep::components::{self, Tooltip};
 use scopecreep::display::DisplayContext;
 use scopecreep::panel_grid::PanelLayout;
 use scopecreep::settings::{Menu, MenuRow, PanelSettings, Settings};
+use scopecreep::style;
 use scopecreep::toolbar::{Toolbar, popover_defs};
 use scopecreep::window_text::{self, panel_title};
 
@@ -123,8 +124,14 @@ fn the_popover_opened_from_the_settings_button_stays_inside_the_window() {
             let bar = PanelLayout::new(cell, scale).title;
             let title = panel_title(NAME, &DisplayContext::default(), String::new());
             let toolbar = Toolbar::new(&TOOLBAR, &current(None));
-            let (layout, _, _) =
-                window_text::lay_out_toolbar_title(&title, &toolbar.chips, true, bar, scale);
+            let (layout, _, _) = window_text::lay_out_toolbar_title(
+                &title,
+                &toolbar.chips,
+                &toolbar.groups,
+                true,
+                bar,
+                scale,
+            );
             let button = layout.settings.expect("the settings button is on the bar");
             let rect = menu.rect([button[0], button[1] + button[3]], window, scale);
             assert!(
@@ -146,8 +153,14 @@ fn the_toolbar_shrinks_on_a_small_panel_chips_stay_name_truncates_tags_go_to_the
     for scale in [1.0, 2.0] {
         // Wide: everything fits.
         let wide = PanelLayout::new([0.0, 0.0, 600.0 * scale, 300.0 * scale], scale).title;
-        let (l, tags, all) =
-            window_text::lay_out_toolbar_title(&title, &toolbar.chips, true, wide, scale);
+        let (l, tags, all) = window_text::lay_out_toolbar_title(
+            &title,
+            &toolbar.chips,
+            &toolbar.groups,
+            true,
+            wide,
+            scale,
+        );
         assert!(
             !l.name_cut && all && !l.tags_in_tooltip && l.tags.is_some(),
             "wide: {l:?}"
@@ -156,8 +169,14 @@ fn the_toolbar_shrinks_on_a_small_panel_chips_stay_name_truncates_tags_go_to_the
         assert_eq!(tags, title.tags_text());
         // Small: the chips and the button stay whole inside the bar, the name is cut, the tags are in the hover.
         let small = PanelLayout::new([0.0, 0.0, 130.0 * scale, 200.0 * scale], scale).title;
-        let (l, tags, all) =
-            window_text::lay_out_toolbar_title(&title, &toolbar.chips, true, small, scale);
+        let (l, tags, all) = window_text::lay_out_toolbar_title(
+            &title,
+            &toolbar.chips,
+            &toolbar.groups,
+            true,
+            small,
+            scale,
+        );
         assert!(l.name_cut, "the name truncates");
         assert!(
             !all && tags.is_empty() && l.tags.is_none(),
@@ -312,17 +331,6 @@ fn the_clean_picture_channel_chips_switch_turn_off_on_a_second_click_and_are_rem
 
 // ---- small Panels (#171): chips that do not fit go to the popover, never past the title bar
 
-/// A zoom chip as a picture Panel shows it at Fit.
-fn fit_readout() -> scopecreep::zoom::Readout {
-    scopecreep::zoom::Readout {
-        text: "Fit 75 %".into(),
-        short: "75 %".into(),
-        percent: 75.0,
-        fit: 75.0,
-        max: 800.0,
-    }
-}
-
 /// The title bar of a Panel `width` logical pixels wide at `scale`.
 fn bar(width: f32, scale: f32) -> [f32; 4] {
     PanelLayout::new([0.0, 0.0, width * scale, 200.0 * scale], scale).title
@@ -341,8 +349,14 @@ fn fit_inside(
     toolbar.fit_to(bar[2], !popover_defs(defs, toolbar_defs).is_empty(), scale);
     let popover = scopecreep::toolbar::popover_with(defs, toolbar_defs, &toolbar.collapsed);
     let title = panel_title(what, &DisplayContext::default(), String::new());
-    let (l, _, _) =
-        window_text::lay_out_toolbar_title(&title, &toolbar.chips, !popover.is_empty(), bar, scale);
+    let (l, _, _) = window_text::lay_out_toolbar_title(
+        &title,
+        &toolbar.chips,
+        &toolbar.groups,
+        !popover.is_empty(),
+        bar,
+        scale,
+    );
     let inside = |r: [f32; 4]| r[0] >= bar[0] && r[0] + r[2] <= bar[0] + bar[2] + 0.01;
     assert_eq!(l.chips.len(), toolbar.chips.len(), "{what}");
     for chip in &l.chips {
@@ -368,14 +382,12 @@ fn clean_picture(set: &[(&str, &str)]) -> Settings {
 }
 
 #[test]
-fn at_the_minimum_panel_width_the_clean_picture_chips_go_to_the_popover_and_stay_reachable() {
+fn at_the_minimum_panel_width_only_the_clean_pictures_chips_overflow_and_stay_reachable() {
     let own = clean_picture(&[("channel", "blue"), ("loupe", "on")]);
     for scale in [1.0, 2.0] {
         let small = bar(scopecreep::style::SPACE_MIN_PANEL_WIDTH, scale);
-        let mut toolbar = Toolbar::new(&picture_view::TOOLBAR, &own)
-            .with_zoom(Some(&fit_readout()))
-            .with_link(true);
-        let (_, popover) = fit_inside(
+        let mut toolbar = Toolbar::new(&picture_view::TOOLBAR, &own);
+        let (l, popover) = fit_inside(
             &mut toolbar,
             &picture_view::SETTINGS,
             &picture_view::TOOLBAR,
@@ -383,30 +395,27 @@ fn at_the_minimum_panel_width_the_clean_picture_chips_go_to_the_popover_and_stay
             scale,
             "Clean picture",
         );
-        assert_eq!(
-            toolbar
-                .chips
-                .iter()
-                .map(|c| c.text.as_str())
-                .collect::<Vec<_>>(),
-            ["75 %"],
-            "the zoom chip, first, stays; the rest leave from the right"
-        );
-        assert_eq!(toolbar.collapsed, ["link", "channel", "loupe"]);
+        assert!(toolbar.chips.is_empty(), "every chip gave way");
+        assert_eq!(toolbar.collapsed, ["channel", "loupe"]);
         assert_eq!(
             popover,
-            ["link", "channel", "loupe", "size"],
+            ["channel", "loupe", "size"],
             "every collapsed choice is in the popover, before the Loupe size"
         );
+        // The settings button is fixed at the right edge of the bar.
+        let button = l.settings.unwrap();
+        assert!(
+            (small[0] + small[2] - style::SPACE_BAR_PAD * scale - (button[0] + button[2])).abs()
+                < 0.01,
+            "{button:?} at the right edge of {small:?}"
+        );
         // The popover shows each choice as it is, and its rows are what the chips would set.
-        let mut current = own.clone();
-        current.insert("link".into(), "on".into());
         let defs = scopecreep::toolbar::popover_with(
             &picture_view::SETTINGS,
             &picture_view::TOOLBAR,
             &toolbar.collapsed,
         );
-        let menu = Menu::new(0, &defs, &current).unwrap();
+        let menu = Menu::new(0, &defs, &own).unwrap();
         let lit: Vec<(&str, &str)> = menu
             .rows
             .iter()
@@ -422,12 +431,7 @@ fn at_the_minimum_panel_width_the_clean_picture_chips_go_to_the_popover_and_stay
             .collect();
         assert_eq!(
             lit,
-            [
-                ("link", "on"),
-                ("channel", "blue"),
-                ("loupe", "on"),
-                ("size", "medium")
-            ]
+            [("channel", "blue"), ("loupe", "on"), ("size", "medium")]
         );
     }
 }
@@ -479,8 +483,8 @@ fn with_room_the_clean_picture_shows_every_chip_as_before() {
             &mut toolbar,
             &picture_view::SETTINGS,
             &picture_view::TOOLBAR,
-            // Five chips, the settings button and the pads take 190 px; the Panel's border takes 2 more.
-            bar(192.0, scale),
+            // Five chips in two groups, the settings button and the pads take 198 px; the Panel's border takes 2 more.
+            bar(200.0, scale),
             scale,
             "Clean picture",
         );
@@ -494,31 +498,11 @@ fn with_room_the_clean_picture_shows_every_chip_as_before() {
         );
         assert!(toolbar.collapsed.is_empty());
         assert_eq!(popover, ["size"], "the popover is as before");
-        let mut toolbar = Toolbar::new(&picture_view::TOOLBAR, &own)
-            .with_zoom(Some(&fit_readout()))
-            .with_link(true);
-        fit_inside(
-            &mut toolbar,
-            &picture_view::SETTINGS,
-            &picture_view::TOOLBAR,
-            bar(400.0, scale),
-            scale,
-            "Clean picture",
-        );
-        assert_eq!(
-            toolbar
-                .chips
-                .iter()
-                .map(|c| c.text.as_str())
-                .collect::<Vec<_>>(),
-            ["Fit 75 %", "Link", "Y", "R", "G", "B", "L"]
-        );
-        assert!(toolbar.collapsed.is_empty());
     }
 }
 
 #[test]
-fn the_zoom_and_link_chips_of_the_other_picture_panels_obey_the_minimum_panel_width() {
+fn at_the_minimum_panel_width_the_other_picture_panels_chips_overflow_into_the_popover() {
     let grey: Settings = [("mode".to_string(), "grey-plus-one".to_string())].into();
     let panels: [(
         &str,
@@ -547,10 +531,8 @@ fn the_zoom_and_link_chips_of_the_other_picture_panels_obey_the_minimum_panel_wi
     ];
     for (name, defs, toolbar_defs, own) in panels {
         for scale in [1.0, 2.0] {
-            let mut toolbar = Toolbar::new(toolbar_defs, &own)
-                .with_zoom(Some(&fit_readout()))
-                .with_link(false);
-            let (_, popover) = fit_inside(
+            let mut toolbar = Toolbar::new(toolbar_defs, &own);
+            let (l, popover) = fit_inside(
                 &mut toolbar,
                 defs,
                 toolbar_defs,
@@ -558,12 +540,36 @@ fn the_zoom_and_link_chips_of_the_other_picture_panels_obey_the_minimum_panel_wi
                 scale,
                 name,
             );
-            assert_eq!(toolbar.chips[0].text, "75 %", "{name}: the zoom chip stays");
-            assert!(toolbar.collapsed.contains(&"link"), "{name}");
+            assert!(l.settings.is_some(), "{name}: the settings button stays");
             for key in &toolbar.collapsed {
                 assert!(popover.contains(key), "{name}: {key} is in the popover");
             }
         }
+    }
+}
+
+#[test]
+fn a_toolbars_chips_are_grouped_by_setting_with_a_gap_twice_that_within_a_group() {
+    let own = clean_picture(&[]);
+    let toolbar = Toolbar::new(&picture_view::TOOLBAR, &own);
+    assert_eq!(toolbar.groups, [0, 0, 0, 0, 1], "channels, then the Loupe");
+    for scale in [1.0, 2.0] {
+        let rects =
+            components::chip_row_grouped(&toolbar.chips, &toolbar.groups, [0.0, 0.0], scale);
+        let gap = |i: usize| rects[i + 1][0] - (rects[i][0] + rects[i][2]);
+        let within = gap(0);
+        assert!((within - style::SPACE_CHIP_GAP * scale).abs() < 0.01);
+        assert!(
+            gap(3) >= 2.0 * within - 0.01,
+            "between groups {} vs {within}",
+            gap(3)
+        );
+        assert!(
+            (components::chip_row_width_grouped(&toolbar.chips, &toolbar.groups, scale)
+                - (rects[4][0] + rects[4][2]))
+                .abs()
+                < 0.01
+        );
     }
 }
 
@@ -902,7 +908,7 @@ mod colorise_chip {
         for scale in [1.0, 2.0] {
             let small = PanelLayout::new([0.0, 0.0, 180.0 * scale, 200.0 * scale], scale).title;
             let (l, _, _) =
-                window_text::lay_out_toolbar_title(&title, &t.chips, true, small, scale);
+                window_text::lay_out_toolbar_title(&title, &t.chips, &t.groups, true, small, scale);
             assert_eq!(l.chips.len(), 5, "every chip is placed");
             assert!(l.name_cut, "the name truncates");
             for chip in &l.chips {
@@ -930,6 +936,30 @@ mod vectorscope_chips {
 
     fn toolbar(s: &PanelSettings) -> Toolbar {
         Toolbar::new(&TOOLBAR, &s.resolve(NAME, &SETTINGS))
+    }
+
+    #[test]
+    fn the_eight_chips_are_three_groups_with_gaps_between_groups_twice_those_within_one() {
+        let t = toolbar(&PanelSettings::default());
+        assert_eq!(
+            t.groups,
+            [0, 0, 0, 1, 2, 2, 2, 2],
+            "plots, mono, tonal range"
+        );
+        for scale in [1.0, 2.0] {
+            let r =
+                scopecreep::components::chip_row_grouped(&t.chips, &t.groups, [0.0, 0.0], scale);
+            let gap = |i: usize| r[i + 1][0] - (r[i][0] + r[i][2]);
+            let within = gap(0);
+            assert!(within > 0.0);
+            for i in 0..7 {
+                if t.groups[i] == t.groups[i + 1] {
+                    assert!((gap(i) - within).abs() < 0.01, "within a group");
+                } else {
+                    assert!(gap(i) >= 2.0 * within - 0.01, "between groups at {i}");
+                }
+            }
+        }
     }
 
     #[test]

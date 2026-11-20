@@ -121,6 +121,10 @@ pub const SPACE_CHIP_HEIGHT: f32 = 20.0;
 pub const SPACE_CHIP_MIN_WIDTH: f32 = 26.0;
 pub const SPACE_CHIP_PAD: f32 = 8.0;
 pub const SPACE_CHIP_GAP: f32 = 4.0;
+/// The gap between two groups of chips on a title bar: at least twice the gap within a group (ADR 0040).
+pub const SPACE_CHIP_GROUP_GAP: f32 = 12.0;
+/// The gap between the parts of the view strip on the menu bar row (ADR 0040).
+pub const SPACE_STRIP_GAP: f32 = 8.0;
 pub const SPACE_CHAR_WIDTH: f32 = 7.6;
 /// A segmented control: height and side padding of a segment.
 pub const SPACE_SEGMENT_HEIGHT: f32 = 22.0;

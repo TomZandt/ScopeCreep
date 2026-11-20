@@ -63,9 +63,7 @@ impl Bench {
     }
 
     fn chip(&self) -> String {
-        self.set.toolbar(0, &self.settings, AREA, 1.0).chips[0]
-            .text
-            .clone()
+        self.set.zoom_tag(0, AREA, 1.0).expect("a zoom tag")
     }
 }
 
@@ -180,73 +178,84 @@ fn zoomed_in_the_panel_is_full_and_nothing_is_drawn_outside_it() {
 // ---- the toolbar seam
 
 #[test]
-fn the_clean_picture_shows_a_zoom_chip_that_reads_fit_by_default() {
+fn the_clean_picture_shows_a_read_only_zoom_tag_that_reads_fit_by_default_and_no_zoom_chip() {
     let b = Bench::new("clean-zoom-chip");
-    let toolbar = b.set.toolbar(0, &b.settings, AREA, 1.0);
-    assert_eq!(toolbar.chips[0].text, "Fit 75 %");
-    assert!(!toolbar.on[0], "not lit at Fit");
-    assert_eq!(
-        toolbar.click(0),
-        Some((scopecreep::zoom::ZOOM_KEY, "")),
-        "a click asks for Fit"
-    );
+    assert_eq!(b.chip(), "Fit 75 %");
+    let toolbar = b.set.toolbar(0, &b.settings);
     assert_eq!(
         toolbar.chips.len(),
-        7,
-        "the zoom and link chips, then the channel and Loupe chips"
+        5,
+        "the channel and Loupe chips only: zoom and Link are in the view strip"
+    );
+    assert!(
+        toolbar
+            .chips
+            .iter()
+            .all(|c| !c.text.contains('%') && c.text != "Link")
     );
     wheel_to(&b, "200 %");
-    let zoomed = b.set.toolbar(0, &b.settings, AREA, 1.0);
-    assert!(zoomed.on[0], "lit while zoomed in");
+    assert_eq!(b.chip(), "200 %", "the tag follows the zoom");
 }
 
 #[test]
-fn a_scope_has_no_zoom_chip() {
+fn a_scope_has_no_zoom_tag() {
     let rig = Rig::new("clean-zoom-scope");
     let (set, _) = DisplaySet::standard_with_handles(&rig.device, &rig.queue, TARGET, false);
     let waveform = (0..set.len())
         .find(|i| set.name(*i) == "Luma waveform")
         .unwrap();
     assert!(set.zoom(waveform, AREA, 1.0).is_none());
+    assert!(set.zoom_tag(waveform, AREA, 1.0).is_none());
 }
 
 #[test]
-fn clicking_the_zoom_chip_goes_back_to_fit() {
+fn fit_in_the_view_strip_goes_back_to_fit() {
     let b = Bench::new("clean-zoom-click-fit");
     let fit = b.render();
     wheel_to(&b, "300 %");
     assert_eq!(b.chip(), "300 %");
-    b.set.zoom_to_fit(0, AREA, 1.0);
+    b.set.fit_all(&[AREA], 1.0);
     assert_eq!(b.chip(), "Fit 75 %");
     assert_eq!(b.render(), fit, "drawn as at Fit");
 }
 
 #[test]
-fn the_chip_stays_on_a_small_panel_and_shortens_to_its_number() {
+fn the_zoom_tag_gives_way_to_the_hover_on_a_small_panel_and_never_to_a_chip() {
     let b = Bench::new("clean-zoom-small");
-    let title = panel_title(NAME, &DisplayContext::default(), String::new());
+    let mut title = panel_title(NAME, &DisplayContext::default(), String::new());
+    title.tags.push(b.chip());
     for scale in [1.0f32, 2.0] {
         let small = scopecreep::panel_grid::PanelLayout::new(
             [0.0, 0.0, 190.0 * scale, 200.0 * scale],
             scale,
         )
         .title;
-        let mut toolbar = b.set.toolbar(0, &b.settings, AREA, 1.0);
+        let mut toolbar = b.set.toolbar(0, &b.settings);
         toolbar.fit_to(small[2], true, scale);
-        assert_eq!(
-            toolbar.chips[0].text, "75 %",
-            "the word Fit goes first when there is no room"
+        let (l, tags, _) = window_text::lay_out_toolbar_title(
+            &title,
+            &toolbar.chips,
+            &toolbar.groups,
+            true,
+            small,
+            scale,
         );
-        let (l, _, _) =
-            window_text::lay_out_toolbar_title(&title, &toolbar.chips, true, small, scale);
-        let chip = l.chips[0];
         assert!(
-            chip[0] >= small[0] && chip[0] + chip[2] <= small[0] + small[2] + 0.01,
-            "{chip:?} stays inside {small:?}"
+            l.chips
+                .iter()
+                .all(|c| c[0] + c[2] <= small[0] + small[2] + 0.01)
         );
-        let mut roomy = b.set.toolbar(0, &b.settings, AREA, 1.0);
-        roomy.fit_to(400.0 * scale, true, scale);
-        assert_eq!(roomy.chips[0].text, "Fit 75 %", "with room it says Fit");
+        assert!(
+            l.tags.is_some() || l.tags_in_tooltip || tags.is_empty() || l.name_cut,
+            "the tag is shown or in the hover"
+        );
+        let wide = [0.0, 0.0, 700.0 * scale, 24.0 * scale];
+        let (_, tags, shown) =
+            window_text::lay_out_toolbar_title(&title, &[], &[], true, wide, scale);
+        assert!(
+            shown && tags.ends_with("Fit 75 %"),
+            "with room it says it: {tags}"
+        );
     }
 }
 

@@ -7,6 +7,7 @@ The format follows [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/
 ## [Unreleased]
 
 ### Added
+- A view strip at the right end of the menu bar row: Fit (takes every picture Panel to Fit), the zoom readout (the shared zoom while Link is on, "Fit" or "200 %", and "Mixed" when Link is off and the Panels differ) and Link. It is always in the same place, greyed while no picture Panel is shown, and the Window's minimum width counts it. Link keeps its saved choice and is on in a first session; the wheel, middle-drag and Z work as before (#205, ADR 0040).
 - The luma and Colour Waveforms' settings have Low and High reference level sliders: two quiet dashed lines across the plot to mark a floor and a peak, such as a delivery's maximum nits. Off by default, set in the Panel's scale unit (nits on a PQ or HLG output, percent or 10-bit codes otherwise), Low can't go above High, and the lines follow the graticule brightness. One pair per Panel: a 1000 nit line stays on 1000 nits whether the scale reads nits, codes or percent, and the sliders read in the scale's unit, so where nits are not available (no PQ or HLG output) they read codes like the scale, and the nits come back with the output. Drawing only: no count changes (#128).
 - Vectorscope: a Graticule choice in its popover, Standard (as before) or Hue vectors, which adds a quiet grey spoke from the middle to each of the six colour targets on both plots, so you can see how far a colour has drifted off its hue line. It follows Graticule brightness and is remembered per Panel; the trace, clipping marks and skin-tone line are unchanged (#130).
 - A View menu on the menu bar, between Layout and Settings. Its first entry, "Show legends", shows or hides the legend strips of ARRI False Colour, Stops False Colour and the saturation heatmap at once (marked while all are on); each Panel's own Legend setting still works afterwards. It is "Legends: show / hide" in the Hotkeys panel, with no default hotkey (#191).
@@ -14,6 +15,7 @@ The format follows [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/
 - `feed-synth --out-of-range`: the bottom of the moving test card becomes a grey ramp from -0.25 to 1.25, so the luma waveform's edge rows can be seen lit without Resolve (#32).
 
 ### Changed
+- A picture Panel's title bar no longer has a zoom chip or a Link chip: it shows its zoom as a read-only tag beside its other tags ("Fit 17 %"), and the view strip sets it. The chips of every title bar are set apart by setting, with a wider gap between groups than within one (the Vectorscope's eight chips are plots, mono and tonal range), and on a narrow Panel only the chips give way to the settings button's popover (#205, ADR 0040).
 - The Window can't be made smaller than 469 × 645 (logical pixels): the size at which every Panel of the default layout keeps its minimum size and every menu, including the Hotkeys panel, fits under the menu bar. A layout you dragged can still shrink its Panels below their minimum in a Window smaller than the one it was arranged in (#172).
 
 ### Fixed

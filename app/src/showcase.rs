@@ -199,6 +199,7 @@ pub fn showcase(scale: f32) -> Showcase {
         name: "Luma waveform".to_string(),
         tags: "Rec.709 weights, 100 %".to_string(),
         chips: bar_chips,
+        groups: Vec::new(),
         settings_button: true,
     };
     let states = [

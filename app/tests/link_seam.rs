@@ -147,20 +147,22 @@ impl Bench {
         self.set.pointer(index, a, 1.0, Pointer::MiddleUp);
     }
 
-    fn chips(&self, index: usize) -> scopecreep::toolbar::Toolbar {
-        self.set.toolbar(index, &self.settings, AREAS[index], 1.0)
-    }
-
+    /// What Panel `index` reads as its zoom tag.
     fn text(&self, index: usize) -> String {
-        self.chips(index).chips[0].text.clone()
+        self.set
+            .zoom_tag(index, AREAS[index], 1.0)
+            .expect("a picture Panel has a zoom tag")
     }
 
-    /// Click the link chip of Panel `index`, as the window does.
-    fn click_link(&self, index: usize) {
-        let toolbar = self.chips(index);
-        let (key, value) = toolbar.click(1).map(|(k, v)| (k, v.to_string())).unwrap();
-        assert_eq!(key, LINK_KEY);
-        self.set.set_link(value == "on", index);
+    /// The view strip as the window reads it.
+    fn strip(&self) -> scopecreep::view_strip::ViewStrip {
+        self.set.view_strip(&AREAS, 1.0)
+    }
+
+    /// Click Link in the view strip, as the window does.
+    fn click_link(&self) {
+        let on = self.set.link_on();
+        self.set.set_link_from_strip(!on, &AREAS, 1.0);
     }
 }
 
@@ -234,9 +236,9 @@ fn with_link_on_zooming_or_panning_one_panel_draws_the_same_pixels_in_every_pane
 }
 
 #[test]
-fn turning_link_on_takes_the_clicked_panels_view_and_off_keeps_every_view() {
+fn turning_link_on_takes_the_zoomed_panels_view_and_off_keeps_every_view() {
     let b = Bench::new("link-feed-onoff");
-    b.click_link(0);
+    b.click_link();
     assert!(!b.set.link_on());
     b.wheel_to(2, "200 %");
     assert_eq!(
@@ -244,7 +246,7 @@ fn turning_link_on_takes_the_clicked_panels_view_and_off_keeps_every_view() {
         ("Fit 50 %", "200 %")
     );
     b.drag(2, 20.0);
-    b.click_link(2);
+    b.click_link();
     for i in 0..4 {
         assert_eq!(b.text(i), "200 %");
         let a = AREAS[i];
@@ -254,7 +256,7 @@ fn turning_link_on_takes_the_clicked_panels_view_and_off_keeps_every_view() {
             "Panel {i}: on the clicked Panel's spot ({offset})"
         );
     }
-    b.click_link(0);
+    b.click_link();
     assert!(!b.set.link_on());
     let before: Vec<_> = (0..4).map(|i| b.render(i)).collect();
     assert_eq!(b.text(1), "200 %", "off leaves each Panel where it is");
@@ -268,43 +270,65 @@ fn turning_link_on_takes_the_clicked_panels_view_and_off_keeps_every_view() {
 }
 
 #[test]
-fn with_link_on_clicking_the_zoom_chip_takes_every_panel_back_to_fit() {
+fn with_link_on_fit_in_the_strip_takes_every_panel_back_to_fit() {
     let b = Bench::new("link-fit-click");
     b.wheel_to(3, "200 %");
     assert!((0..4).all(|i| b.text(i) == "200 %"));
-    b.set.zoom_to_fit(1, AREAS[1], 1.0);
+    b.set.fit_all(&AREAS, 1.0);
     for i in 0..4 {
         assert!(b.text(i).starts_with("Fit"), "Panel {i}: {}", b.text(i));
     }
 }
 
-// ---- the Toolbar seam
+// ---- the view strip (#205, ADR 0040)
 
 #[test]
-fn the_link_chip_shows_on_every_picture_panel_lit_by_default_and_goes_out_on_all_of_them_at_once() {
-    let b = Bench::new("link-toolbar");
+fn the_picture_panels_have_no_link_chip_and_the_strip_shows_link_lit_by_default() {
+    let b = Bench::new("link-strip-default");
     for (i, name) in NAMES.iter().enumerate() {
-        let t = b.chips(i);
-        assert_eq!(t.chips[1].text, "Link", "{name}: beside the zoom chip");
-        assert!(t.on[1], "{name}: lit by default");
-        assert_eq!(
-            t.click(1),
-            Some((LINK_KEY, "off")),
-            "{name}: a click turns Link off"
+        let t = b.set.toolbar(i, &b.settings);
+        assert!(t.chips.iter().all(|c| c.text != "Link"), "{name}");
+        assert!(
+            (0..t.chips.len()).all(|c| t.click(c).is_none_or(|(k, _)| k != LINK_KEY)),
+            "{name}"
         );
     }
-    b.click_link(2);
-    for (i, name) in NAMES.iter().enumerate() {
-        let t = b.chips(i);
-        assert!(!t.on[1], "{name}: unlit with Link off");
-        assert_eq!(
-            t.click(1),
-            Some((LINK_KEY, "on")),
-            "{name}: a click turns it on"
-        );
+    let strip = b.strip();
+    assert!(strip.enabled && strip.link, "lit by default");
+    assert_eq!(strip.readout, "Fit");
+}
+
+#[test]
+fn the_readout_says_the_shared_zoom_while_link_is_on_and_mixed_when_it_is_off_and_panels_differ() {
+    let b = Bench::new("link-strip-readout");
+    b.wheel_to(0, "200 %");
+    assert_eq!(b.strip().readout, "200 %", "the shared zoom");
+    b.click_link();
+    assert!(!b.strip().link);
+    assert_eq!(
+        b.strip().readout,
+        "200 %",
+        "off leaves every Panel at 200 %"
+    );
+    b.wheel(1, -30.0);
+    assert_eq!(b.strip().readout, "Mixed", "Link off and the Panels differ");
+    b.set.fit_all(&AREAS, 1.0);
+    assert_eq!(b.strip().readout, "Fit", "Fit takes every Panel there");
+    assert!((0..4).all(|i| b.text(i).starts_with("Fit")));
+    b.click_link();
+    assert!(b.strip().link && b.set.link_on(), "Link switches back on");
+}
+
+#[test]
+fn turning_link_on_from_the_strip_brings_every_panel_to_the_zoomed_panels_view() {
+    let b = Bench::new("link-strip-on");
+    b.click_link();
+    b.wheel_to(0, "200 %");
+    assert!(b.text(1).starts_with("Fit"), "off: the others stay");
+    b.click_link();
+    for i in 0..4 {
+        assert_eq!(b.text(i), "200 %", "Panel {i}");
     }
-    b.click_link(3);
-    assert!((0..4).all(|i| b.chips(i).on[1]));
 }
 
 // ---- the Settings seam

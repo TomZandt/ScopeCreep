@@ -83,12 +83,13 @@ impl Bench {
 
         // The title bar, laid out as main.rs lays it out: name, tags, chips and the settings button.
         let title = self.set.titles(&DisplayContext::default(), &self.settings)[i].clone();
-        let mut toolbar = self.set.toolbar(i, &self.settings, panel.content, scale);
+        let mut toolbar = self.set.toolbar(i, &self.settings);
         let has_popover = !self.set.popover_defs(i).is_empty();
         toolbar.fit_to(panel.title[2], has_popover, scale);
         let (l, tags, _) = window_text::lay_out_toolbar_title(
             &title,
             &toolbar.chips,
+            &toolbar.groups,
             has_popover,
             panel.title,
             scale,

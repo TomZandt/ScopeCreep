@@ -430,6 +430,7 @@ fn title(chips: usize) -> TitleBar {
         name: "Luma waveform".into(),
         tags: "Rec.709 weights".into(),
         chips: all[..chips].to_vec(),
+        groups: vec![],
         settings_button: true,
     }
 }
@@ -484,6 +485,7 @@ fn a_title_bar_without_tags_or_chips_has_nothing_to_move() {
         name: "Skin Tone".into(),
         tags: String::new(),
         chips: vec![],
+        groups: vec![],
         settings_button: false,
     };
     let l = bare.layout([0.0, 0.0, 300.0, 100.0], 1.0);

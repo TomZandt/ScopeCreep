@@ -216,6 +216,8 @@ pub struct ToolbarDef {
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct Toolbar {
     pub chips: Vec<Chip>,
+    /// The group of each chip: the chips of one setting are a group, set apart from the next by a wider gap.
+    pub groups: Vec<usize>,
     pub on: Vec<bool>,
     pub tooltips: Vec<String>,
     /// What a click on chip `i` does.
@@ -230,10 +232,6 @@ pub struct Toolbar {
 pub enum ChipAction {
     /// Set a Panel setting: its key and the value it takes.
     Set(&'static str, String),
-    /// Ask for the zoom popover. `short` is what the chip says when the bar has no room for the word Fit.
-    Zoom { short: String },
-    /// Switch the Window's Link to this state.
-    Link(bool),
 }
 
 impl ChipAction {
@@ -241,97 +239,34 @@ impl ChipAction {
     pub fn key(&self) -> &'static str {
         match self {
             ChipAction::Set(key, _) => key,
-            ChipAction::Zoom { .. } => crate::zoom::ZOOM_KEY,
-            ChipAction::Link(_) => crate::zoom::LINK_KEY,
         }
     }
 }
 
-/// The link chip as a popover row, for a bar too small for the chip (#171). Link is Window state, not a Panel
-/// setting: the Window switches it ([`crate::zoom::LINK_KEY`]) rather than storing the choice for the Panel.
-pub const LINK_DEF: SettingDef = SettingDef {
-    key: crate::zoom::LINK_KEY,
-    label: "Link zoom across Panels",
-    amount: None,
-    choices: &[
-        Choice {
-            value: "on",
-            text: "On",
-        },
-        Choice {
-            value: TOGGLE_OFF,
-            text: "Off",
-        },
-    ],
-};
-
-/// The tip on a picture Panel's zoom chip.
-pub const ZOOM_TOOLTIP: &str = "Zoom: scroll, or click for Fit";
-
-/// The link chip's text and tip.
-pub const LINK_CHIP: &str = "Link";
-pub const LINK_TOOLTIP: &str = "Link zoom across Panels";
-
 impl Toolbar {
-    /// The toolbar with the zoom chip first when the Panel zooms (`readout` is `Some`): lit while zoomed in, and a
-    /// click on it asks for the zoom popover ([`ChipAction::Zoom`]).
-    pub fn with_zoom(mut self, readout: Option<&crate::zoom::Readout>) -> Toolbar {
-        let Some(r) = readout else { return self };
-        self.chips.insert(0, Chip::new(&r.text));
-        self.on.insert(0, r.percent > r.fit + 0.01);
-        self.tooltips.insert(0, ZOOM_TOOLTIP.to_string());
-        self.picks.insert(
-            0,
-            ChipAction::Zoom {
-                short: r.short.clone(),
-            },
-        );
-        self
-    }
-
-    /// The toolbar with the link chip beside the zoom chip (second) when the Panel zooms: lit on every picture Panel
-    /// while Link is on, and a click on it asks to switch it ([`ChipAction::Link`], to the state it would
-    /// then have).
-    pub fn with_link(mut self, on: bool) -> Toolbar {
-        if !matches!(self.picks.first(), Some(ChipAction::Zoom { .. })) {
-            return self;
-        }
-        self.chips.insert(1, Chip::new(LINK_CHIP));
-        self.on.insert(1, on);
-        self.tooltips.insert(1, LINK_TOOLTIP.to_string());
-        self.picks.insert(1, ChipAction::Link(!on));
-        self
-    }
-
     /// Fit the chips on a title bar `bar_width` wide (device pixels) beside the settings button, never past it
-    /// (#171). First the zoom chip shortens to its number ("23 %" for "Fit 23 %"); then whole settings leave the
-    /// bar from the right, the least used first by the toolbar's own order, into [`Toolbar::collapsed`] for the
-    /// popover to offer. Once any has left the settings button is counted, as the popover now holds them. The
-    /// zoom chip is first, so it is the last to go.
+    /// (#171, ADR 0040): only the chips give way. Whole settings leave the bar from the right, the least used first
+    /// by the toolbar's own order, into [`Toolbar::collapsed`] for the popover to offer. Once any has left the
+    /// settings button is counted, as the popover now holds them.
     pub fn fit_to(&mut self, bar_width: f32, settings_button: bool, scale: f32) {
-        let needed = |chips: &[Chip], button: bool| {
+        let needed = |chips: &[Chip], groups: &[usize], button: bool| {
             let button = if button {
                 (crate::style::SPACE_SETTINGS_BUTTON + crate::style::SPACE_CHIP_GAP) * scale
             } else {
                 0.0
             };
-            crate::components::chip_row_width(chips, scale)
+            crate::components::chip_row_width_grouped(chips, groups, scale)
                 + button
                 + 2.0 * crate::style::SPACE_BAR_PAD * scale
         };
-        if needed(&self.chips, settings_button) <= bar_width {
+        if needed(&self.chips, &self.groups, settings_button) <= bar_width {
             return;
         }
-        if let Some(ChipAction::Zoom { short }) = self.picks.first() {
-            self.chips[0].text = short.clone();
-            if needed(&self.chips, settings_button) <= bar_width {
-                return;
-            }
-        }
-        while !self.chips.is_empty() && needed(&self.chips, true) > bar_width {
+        while !self.chips.is_empty() && needed(&self.chips, &self.groups, true) > bar_width {
             let key = self.picks.last().map(ChipAction::key);
             while self.picks.last().map(ChipAction::key) == key {
                 self.chips.pop();
+                self.groups.pop();
                 self.on.pop();
                 self.tooltips.pop();
                 self.picks.pop();
@@ -346,7 +281,9 @@ impl Toolbar {
         for def in defs {
             let stored = current.get(def.key).map(String::as_str);
             let first = toolbar.on.len();
+            let group = toolbar.groups.last().map_or(0, |g| g + 1);
             for chip in def.chips {
+                toolbar.groups.push(group);
                 toolbar.chips.push(match chip.channel {
                     Some(channel) => Chip::channel(chip.text, channel),
                     None => Chip::new(chip.text),
@@ -392,8 +329,6 @@ impl Toolbar {
     pub fn click(&self, index: usize) -> Option<(&'static str, &str)> {
         self.picks.get(index).map(|action| match action {
             ChipAction::Set(key, value) => (*key, value.as_str()),
-            ChipAction::Zoom { .. } => (crate::zoom::ZOOM_KEY, ""),
-            ChipAction::Link(on) => (crate::zoom::LINK_KEY, if *on { "on" } else { TOGGLE_OFF }),
         })
     }
 
@@ -412,8 +347,7 @@ pub fn popover_defs(defs: &[SettingDef], toolbar: &[ToolbarDef]) -> Vec<SettingD
 }
 
 /// The popover of a Panel whose title bar is `toolbar`: the settings of the chips that did not fit
-/// ([`Toolbar::collapsed`]) first, in bar order, then those that are never chips. Link becomes its own row
-/// ([`LINK_DEF`]); the zoom chip none, as the wheel and the Fit toggle (Z) reach it.
+/// ([`Toolbar::collapsed`]) first, in bar order, then those that are never chips.
 pub fn popover_with(
     defs: &[SettingDef],
     toolbar_defs: &[ToolbarDef],
@@ -421,13 +355,7 @@ pub fn popover_with(
 ) -> Vec<SettingDef> {
     collapsed
         .iter()
-        .filter_map(|key| {
-            if *key == crate::zoom::LINK_KEY {
-                Some(LINK_DEF)
-            } else {
-                defs.iter().find(|d| d.key == *key).copied()
-            }
-        })
+        .filter_map(|key| defs.iter().find(|d| d.key == *key).copied())
         .chain(popover_defs(defs, toolbar_defs))
         .collect()
 }

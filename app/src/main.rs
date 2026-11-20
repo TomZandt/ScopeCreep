@@ -37,6 +37,7 @@ use scopecreep::resolve_helper::ScriptHelper;
 use scopecreep::settings::{Amount, Menu, PanelSettings};
 use scopecreep::style;
 use scopecreep::toolbar::{ChipAction, Toolbar};
+use scopecreep::view_strip::{self, StripPart, ViewStrip};
 use scopecreep::window_text;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -65,6 +66,8 @@ enum Hover {
     Chip(usize, usize),
     /// Panel `.0`'s settings button.
     SettingsButton(usize),
+    /// Fit or Link in the view strip.
+    Strip(StripPart),
     Status,
 }
 
@@ -308,6 +311,8 @@ struct AppWindow {
     /// Each Panel's toolbar and where its chips and settings button were last drawn (device pixels).
     toolbars: Vec<Toolbar>,
     title_layouts: Vec<components::TitleLayout>,
+    /// The view strip as last drawn (ADR 0040): what its buttons hit.
+    view_strip: ViewStrip,
     status_bar: [f32; 4],
     status_hover: String,
     stop: Arc<AtomicBool>,
@@ -541,6 +546,11 @@ impl AppWindow {
             title_hovers: Vec::new(),
             toolbars: Vec::new(),
             title_layouts: Vec::new(),
+            view_strip: ViewStrip {
+                enabled: false,
+                readout: String::new(),
+                link: true,
+            },
             status_bar: [0.0; 4],
             status_hover: String::new(),
             stop,
@@ -594,6 +604,8 @@ impl AppWindow {
             None
         } else if components::contains(self.status_bar, self.cursor) {
             Some(Hover::Status)
+        } else if let Some(part) = self.strip_hit() {
+            Some(Hover::Strip(part))
         } else {
             match self.toolbar_hit() {
                 Some(ToolbarHit::Chip(panel, chip)) => Some(Hover::Chip(panel, chip)),
@@ -609,6 +621,12 @@ impl AppWindow {
             self.hover = hover;
             self.window.request_redraw();
         }
+    }
+
+    /// The view strip's button under the pointer (none while no picture Panel is shown).
+    fn strip_hit(&self) -> Option<StripPart> {
+        self.view_strip
+            .hit(self.config.width as f32, self.cursor, self.scale)
     }
 
     /// The chip or settings button of a title bar under the pointer.
@@ -632,16 +650,9 @@ impl AppWindow {
 
     /// Open Panel `panel`'s popover at `at` (none when every setting of the Panel is a chip, or it has none).
     fn open_popover(&mut self, panel: usize, at: [f32; 2]) {
-        let mut current = self
+        let current = self
             .displays
             .popover_settings(panel, &self.settings.lock().unwrap());
-        // Link is Window state: its row, there when its chip did not fit (#171), shows it as it is.
-        let link = if self.displays.link_on() {
-            "on"
-        } else {
-            scopecreep::toolbar::TOGGLE_OFF
-        };
-        current.insert(scopecreep::zoom::LINK_KEY.to_string(), link.to_string());
         let defs = match self.toolbars.get(panel) {
             Some(toolbar) => self.displays.popover_for(panel, toolbar),
             None => self.displays.popover_defs(panel),
@@ -649,20 +660,18 @@ impl AppWindow {
         self.menu = Menu::new(panel, &defs, &current).map(|menu| (menu, at));
     }
 
-    /// Take Panel `panel`'s zoom chip click: back to Fit (every picture Panel while Link is on). Zoom is display
-    /// state: it is never put in the settings or saved.
-    fn zoom_to_fit(&mut self, panel: usize) {
-        let Some(area) = self.contents.get(panel).copied() else {
-            return;
-        };
-        self.displays.zoom_to_fit(panel, area, self.scale);
+    /// The strip's Fit: every picture Panel back to Fit. Zoom is display state: it is never put in the settings or
+    /// saved.
+    fn fit_all(&mut self) {
+        self.displays.fit_all(&self.contents, self.scale);
         self.window.request_redraw();
     }
 
-    /// Switch the Window's Link from the link chip on Panel `panel` (turning it on takes that Panel's view) and
+    /// Switch the Window's Link from the strip (turning it on takes the view of the first picture Panel) and
     /// remember it; zoom and pan are not remembered.
-    fn set_link(&mut self, panel: usize, on: bool) {
-        self.displays.set_link(on, panel);
+    fn set_link(&mut self, on: bool) {
+        self.displays
+            .set_link_from_strip(on, &self.contents, self.scale);
         let changed = scopecreep::zoom::remember_link(&mut self.settings.lock().unwrap(), on);
         if changed {
             self.save_settings();
@@ -1046,10 +1055,8 @@ impl AppWindow {
             return;
         }
         let choice = menu.choice_at(rect, cursor, scale);
-        match choice {
-            Some((scopecreep::zoom::LINK_KEY, value)) => self.set_link(panel, value == "on"),
-            Some((key, value)) => self.choose(panel, key, value),
-            None => {}
+        if let Some((key, value)) = choice {
+            self.choose(panel, key, value);
         }
         if choice.is_none() && Menu::contains(rect, cursor) {
             return;
@@ -1188,6 +1195,15 @@ impl AppWindow {
             self.reset_bar_menus();
             return;
         }
+        if let Some(part) = self.strip_hit() {
+            self.menu = None;
+            self.hover = None;
+            match part {
+                StripPart::Fit => self.fit_all(),
+                StripPart::Link => self.set_link(!self.displays.link_on()),
+            }
+            return;
+        }
         if self.menu.is_some() {
             self.menu_click();
             return;
@@ -1204,8 +1220,6 @@ impl AppWindow {
                             .cloned()
                         {
                             match action {
-                                ChipAction::Zoom { .. } => self.zoom_to_fit(panel),
-                                ChipAction::Link(on) => self.set_link(panel, on),
                                 ChipAction::Set(key, value) => self.choose(panel, key, &value),
                             }
                         }
@@ -1288,11 +1302,13 @@ impl AppWindow {
             .saturating_sub(8)
             .clamp(40, 110);
         for (i, cell) in cells.iter().enumerate() {
-            let title = texts.titles.get(i).cloned().unwrap_or_default();
+            let mut title = texts.titles.get(i).cloned().unwrap_or_default();
             let panel = PanelLayout::new(*cell, scale);
-            let mut toolbar = self
-                .displays
-                .toolbar(i, &settings_now, panel.content, scale);
+            // A picture Panel keeps its zoom as a read-only tag with its other tags (ADR 0040).
+            if let Some(zoom) = self.displays.zoom_tag(i, panel.content, scale) {
+                title.tags.push(zoom);
+            }
+            let mut toolbar = self.displays.toolbar(i, &settings_now);
             toolbar.fit_to(
                 panel.title[2],
                 !self.displays.popover_defs(i).is_empty(),
@@ -1303,6 +1319,7 @@ impl AppWindow {
             let (l, tags, all_shown) = window_text::lay_out_toolbar_title(
                 &title,
                 &toolbar.chips,
+                &toolbar.groups,
                 has_popover,
                 panel.title,
                 scale,
@@ -1344,6 +1361,8 @@ impl AppWindow {
         self.toolbars = toolbars;
         self.title_layouts = layouts;
         self.contents = panels.iter().map(|p| p.content).collect();
+        // Hidden cells have no content, so no zoom to read.
+        self.view_strip = self.displays.view_strip(&self.contents, scale);
         let status_width = width - 2.0 * margin;
         // Playback and performance only: the longest choice that fits, whole parts only (never cut mid-word).
         let status_line = window_text::fit_status(&texts.status, status_width, scale);
@@ -1640,6 +1659,12 @@ impl AppWindow {
             }
         }
         over.extend(menu_bar::bar().draw(0.0, 0.0, width, self.bar.open, self.bar_hover, scale));
+        let strip_hover = if self.menu.is_some() || self.bar.open.is_some() {
+            None
+        } else {
+            self.strip_hit()
+        };
+        over.extend(self.view_strip.draw(width, strip_hover, scale));
         let bar_menu = self
             .bar_menu()
             .and_then(|m| self.bar_menu_rect(&m).map(|r| (m, r)));
@@ -1668,6 +1693,15 @@ impl AppWindow {
                     self.title_bars.get(i).copied(),
                     self.title_hovers.get(i).cloned(),
                 ),
+                Hover::Strip(part) => {
+                    let l = view_strip::ViewStrip::layout(width, scale);
+                    match part {
+                        StripPart::Fit => (Some(l.fit), Some(view_strip::FIT_TOOLTIP.to_string())),
+                        StripPart::Link => {
+                            (Some(l.link), Some(view_strip::LINK_TOOLTIP.to_string()))
+                        }
+                    }
+                }
                 Hover::Status => (Some(self.status_bar), Some(self.status_hover.clone())),
             };
             if let (Some(anchor), Some(text)) = (anchor, text.filter(|t| !t.is_empty())) {

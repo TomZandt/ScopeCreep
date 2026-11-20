@@ -107,7 +107,7 @@ fn framed(area: [f32; 4], border: Rgb, fill: Rgb, scale: f32) -> [Prim; 2] {
 }
 
 /// Room a line of `text` takes in the pure layout (the real width is only known once shaped).
-fn text_width(text: &str, scale: f32) -> f32 {
+pub fn text_width(text: &str, scale: f32) -> f32 {
     text.chars().count() as f32 * style::SPACE_CHAR_WIDTH * scale
 }
 
@@ -252,12 +252,37 @@ impl Chip {
 
 /// Where each chip of a row goes, left to right from `at`.
 pub fn chip_row(chips: &[Chip], at: [f32; 2], scale: f32) -> Vec<[f32; 4]> {
+    chip_row_grouped(chips, &[], at, scale)
+}
+
+/// The gap before chip `i` of a row: the chip gap within a group, the wider group gap where `groups[i]` differs
+/// from the chip before it (`groups` empty: one group).
+fn gap_before(groups: &[usize], i: usize, scale: f32) -> f32 {
+    if i == 0 {
+        0.0
+    } else if groups.get(i) != groups.get(i - 1) {
+        style::SPACE_CHIP_GROUP_GAP * scale
+    } else {
+        style::SPACE_CHIP_GAP * scale
+    }
+}
+
+/// Where each chip of a row goes when chip `i` belongs to group `groups[i]`: a wider gap between groups than within
+/// one (ADR 0040).
+pub fn chip_row_grouped(
+    chips: &[Chip],
+    groups: &[usize],
+    at: [f32; 2],
+    scale: f32,
+) -> Vec<[f32; 4]> {
     let mut left = at[0];
     chips
         .iter()
-        .map(|chip| {
+        .enumerate()
+        .map(|(i, chip)| {
+            left += gap_before(groups, i, scale);
             let r = chip.rect([left, at[1]], scale);
-            left += r[2] + style::SPACE_CHIP_GAP * scale;
+            left += r[2];
             r
         })
         .collect()
@@ -265,8 +290,16 @@ pub fn chip_row(chips: &[Chip], at: [f32; 2], scale: f32) -> Vec<[f32; 4]> {
 
 /// The width of a row of chips.
 pub fn chip_row_width(chips: &[Chip], scale: f32) -> f32 {
-    chips.iter().map(|c| c.size(scale)[0]).sum::<f32>()
-        + chips.len().saturating_sub(1) as f32 * style::SPACE_CHIP_GAP * scale
+    chip_row_width_grouped(chips, &[], scale)
+}
+
+/// The width of a row of chips in groups (see [`chip_row_grouped`]).
+pub fn chip_row_width_grouped(chips: &[Chip], groups: &[usize], scale: f32) -> f32 {
+    chips
+        .iter()
+        .enumerate()
+        .map(|(i, c)| c.size(scale)[0] + gap_before(groups, i, scale))
+        .sum()
 }
 
 // ---- Segmented control ----
@@ -655,6 +688,8 @@ pub struct TitleBar {
     pub name: String,
     pub tags: String,
     pub chips: Vec<Chip>,
+    /// The group of each chip (empty: one group); groups are set apart by a wider gap.
+    pub groups: Vec<usize>,
     pub settings_button: bool,
 }
 
@@ -686,13 +721,14 @@ impl TitleBar {
             right -= side;
             [right, bar[1] + (bar[3] - side) / 2.0, side, side]
         });
-        let chips_width = chip_row_width(&self.chips, scale);
+        let chips_width = chip_row_width_grouped(&self.chips, &self.groups, scale);
         if settings.is_some() && !self.chips.is_empty() {
             right -= style::SPACE_CHIP_GAP * scale;
         }
         let chips_left = (right - chips_width).max(bar[0] + pad);
-        let chips = chip_row(
+        let chips = chip_row_grouped(
             &self.chips,
+            &self.groups,
             [
                 chips_left,
                 bar[1] + (bar[3] - style::SPACE_CHIP_HEIGHT * scale) / 2.0,

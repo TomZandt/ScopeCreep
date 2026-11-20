@@ -98,7 +98,7 @@ _Avoid_: Widget, control (for the whole set)
 A small toggle on a title bar: a letter or short word, grey when off, the accent (or its channel's colour for R, G, B, Y) when on. A row of chips behaves in one of four ways: single (one always on), multiple (any combination, at least one on), toggle (free to be off) or one or none (at most one on; clicking the lit one turns it off).
 
 **Toolbar**:
-The settings a display marks to show as chips on its Panel's title bar (the Channel view's Y R G B, one at a time (out of the Window); the luma waveform's Y R G B, any combination with at least one on; the clean picture's Y R G B, one or none, none being colour, the default, with the channel named as a tag when lit). The popover holds the settings that are not on the toolbar. On a title bar too narrow for every chip, whole settings leave the bar from the right (the zoom chip, first, last) and the popover offers them first, Link included; the settings button always stays and nothing runs past the bar.
+The settings a display marks to show as chips on its Panel's title bar (the Channel view's Y R G B, one at a time (out of the Window); the luma waveform's Y R G B, any combination with at least one on; the clean picture's Y R G B, one or none, none being colour, the default, with the channel named as a tag when lit). The chips of one setting are a group, with a wider gap between groups than within one (the Vectorscope: plots, mono, tonal range). The popover holds the settings that are not on the toolbar. On a title bar too narrow for every chip, whole settings leave the bar from the right (only the chips give way, ADR 0040) and the popover offers them first; the settings button stays fixed at the right edge and nothing runs past the bar.
 
 **Legend strip**:
 The colour scale of a display, always horizontal: under the picture, full width, read left to right.
@@ -120,21 +120,17 @@ The one part of the code every Picture View draws through. It places the frame i
 _Avoid_: Renderer, canvas
 
 **Zoom**:
-How much of a picture Panel's frame is shown, in percent of source pixels: 100 % is one picture pixel to one device pixel. It runs from Fit to 800 %, free below 100 % and in whole steps (200, 300 ... 800 %) above, so every picture pixel is an exact square. The scroll wheel zooms toward the pointer and the zoom chip on the title bar says it, and a click on it goes back to Fit (every picture Panel while Link is on). It is not a setting: it is not saved and every session starts at Fit (ADR 0035). On every picture Panel in the Window, each on its own, or all together while Link is on.
+How much of a picture Panel's frame is shown, in percent of source pixels: 100 % is one picture pixel to one device pixel. It runs from Fit to 800 %, free below 100 % and in whole steps (200, 300 ... 800 %) above, so every picture pixel is an exact square. The scroll wheel zooms toward the pointer; a read-only zoom tag on the title bar says it, and Fit in the view strip takes every picture Panel back to Fit. It is not a setting: it is not saved and every session starts at Fit (ADR 0035). On every picture Panel in the Window, each on its own, or all together while Link is on.
 _Avoid_: Magnify (that is the Loupe), scale
-
-Since spec #196 (ADR 0040) the zoom is read on a Panel's title bar as a read-only tag and set from the view strip; this entry stays until it is built.
 
 **Pan**:
 Moving a zoomed picture inside its Panel by dragging with the middle mouse button, as in Resolve's Viewer. The picture moves exactly as far as the pointer; its edge stops at the Panel's edge, so the Panel is never left empty, and an axis on which the picture is smaller than the Panel stays centred. Nothing to pan at Fit. Not saved.
 
 **Fit**:
-The zoom that shows the whole frame in the Panel, as a picture Panel always did. The zoom chip says how much that scales the frame: "Fit 23 %". A frame already larger than 100 % at Fit (a small frame in a big Panel) starts at Fit and zooms on in whole steps. Z (a Hotkey) toggles the picture Panel under the pointer between Fit and the zoom and spot it last left, like Resolve's Shift+Z.
+The zoom that shows the whole frame in the Panel, as a picture Panel always did. The zoom tag says how much that scales the frame: "Fit 23 %". A frame already larger than 100 % at Fit (a small frame in a big Panel) starts at Fit and zooms on in whole steps. Z (a Hotkey) toggles the picture Panel under the pointer between Fit and the zoom and spot it last left, like Resolve's Shift+Z.
 
 **Link**:
-One Window-wide switch, a link chip beside the zoom chip on every picture Panel (lit on all of them while on). It is on in a first session; a saved choice wins. With Link on, every picture Panel shares one zoom and one centre point in picture coordinates, so Panels of different sizes look at the same pixels and each fits its own Panel at Fit; scroll, middle-drag and the zoom chip's Fit on any of them move all of them. Turning it on brings every Panel to the zoom and spot of the Panel it was clicked on; turning it off leaves each where it is. Link is remembered between sessions; zoom and pan are not (ADR 0035, 0015).
-
-Since spec #196 (ADR 0040) the link chip on every picture Panel becomes the Link switch in the view strip; this entry stays until it is built.
+One Window-wide switch, in the view strip (lit while on). It is on in a first session; a saved choice wins. With Link on, every picture Panel shares one zoom and one centre point in picture coordinates, so Panels of different sizes look at the same pixels and each fits its own Panel at Fit; scroll, middle-drag and the view strip's Fit on any of them move all of them. Turning it on brings every Panel to the zoom and spot of the first Panel zoomed in (else the first picture Panel); turning it off leaves each where it is. Link is remembered between sessions; zoom and pan are not (ADR 0035, 0015).
 
 **Matte**:
 A black bar around the picture: whole rows at the top and bottom, or whole columns at the sides, in which every pixel is exactly black. The Picture stage finds them once per frame and draws them black on every Picture View. A black pixel inside the picture is not a matte.

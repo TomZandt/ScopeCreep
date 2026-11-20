@@ -124,9 +124,9 @@ impl Bench {
     }
 
     fn chip(&self, index: usize) -> String {
-        self.set.toolbar(index, &self.settings, AREA, 1.0).chips[0]
-            .text
-            .clone()
+        self.set
+            .zoom_tag(index, AREA, 1.0)
+            .expect("a picture Panel has a zoom tag")
     }
 
     fn wheel_to(&self, index: usize, text: &str) {
@@ -339,34 +339,24 @@ fn zoomed_the_legend_strip_is_unchanged() {
 // ---- the toolbar seam
 
 #[test]
-fn every_picture_panel_has_a_zoom_chip_before_its_own_chips_that_reads_fit_and_survives_a_small_panel()
- {
+fn every_picture_panel_has_a_read_only_zoom_tag_and_no_zoom_or_link_chip() {
     let b = Bench::new("panels-zoom-chips", "off");
     for (i, name) in NAMES.iter().enumerate() {
-        let toolbar = b.set.toolbar(i, &b.settings, AREA, 1.0);
-        assert_eq!(toolbar.chips[0].text, "Fit 50 %", "{name}");
-        assert_eq!(
-            toolbar.click(0),
-            Some((scopecreep::zoom::ZOOM_KEY, "")),
-            "{name}: a click asks for Fit"
+        assert_eq!(b.chip(i), "Fit 50 %", "{name}");
+        let toolbar = b.set.toolbar(i, &b.settings);
+        assert!(
+            toolbar
+                .chips
+                .iter()
+                .all(|c| !c.text.contains('%') && c.text != "Link"),
+            "{name}: zoom and Link are in the view strip"
         );
         assert!(
-            toolbar.chips.len() > 1 || i == 1 || i == 3 || name == &"Skin Tone",
-            "{name}: beside its own chips"
+            toolbar.chips.iter().enumerate().all(|(c, _)| toolbar
+                .click(c)
+                .is_none_or(|(key, _)| key != scopecreep::zoom::LINK_KEY)),
+            "{name}: no chip switches Link"
         );
-        let title = panel_title(name, &Default::default(), String::new());
-        for scale in [1.0f32, 2.0] {
-            let small = PanelLayout::new([0.0, 0.0, 190.0 * scale, 200.0 * scale], scale).title;
-            let mut t = b.set.toolbar(i, &b.settings, AREA, scale);
-            t.fit_to(small[2], true, scale);
-            let (l, _, _) =
-                window_text::lay_out_toolbar_title(&title, &t.chips, true, small, scale);
-            let chip = l.chips[0];
-            assert!(
-                chip[0] >= small[0] && chip[0] + chip[2] <= small[0] + small[2] + 0.01,
-                "{name}: {chip:?} stays inside {small:?}"
-            );
-        }
     }
 }
 
@@ -375,7 +365,8 @@ fn at_the_minimum_panel_width_every_picture_panel_keeps_its_chips_inside_and_the
  {
     let b = Bench::new("panels-zoom-min-width", "off");
     for (i, name) in NAMES.iter().enumerate() {
-        let title = panel_title(name, &Default::default(), String::new());
+        let mut title = panel_title(name, &Default::default(), String::new());
+        title.tags.push(b.chip(i));
         for scale in [1.0f32, 2.0] {
             let small = PanelLayout::new(
                 [
@@ -387,22 +378,19 @@ fn at_the_minimum_panel_width_every_picture_panel_keeps_its_chips_inside_and_the
                 scale,
             )
             .title;
-            let mut t = b.set.toolbar(i, &b.settings, AREA, scale);
+            let mut t = b.set.toolbar(i, &b.settings);
             t.fit_to(small[2], !b.set.popover_defs(i).is_empty(), scale);
             let popover: Vec<&str> = b.set.popover_for(i, &t).iter().map(|d| d.key).collect();
             let (l, _, _) = window_text::lay_out_toolbar_title(
                 &title,
                 &t.chips,
+                &t.groups,
                 !popover.is_empty(),
                 small,
                 scale,
             );
             let inside =
                 |r: [f32; 4]| r[0] >= small[0] && r[0] + r[2] <= small[0] + small[2] + 0.01;
-            assert_eq!(
-                t.chips[0].text, "50 %",
-                "{name}: the zoom chip stays, short"
-            );
             for chip in l.chips.iter().chain(&l.settings) {
                 assert!(inside(*chip), "{name}: {chip:?} stays inside {small:?}");
             }
@@ -412,11 +400,7 @@ fn at_the_minimum_panel_width_every_picture_panel_keeps_its_chips_inside_and_the
                     "{name}: no chip runs under the settings button"
                 );
             }
-            for key in t
-                .collapsed
-                .iter()
-                .filter(|k| **k != scopecreep::zoom::ZOOM_KEY)
-            {
+            for key in &t.collapsed {
                 assert!(popover.contains(key), "{name}: {key} is in the popover");
             }
         }
@@ -424,12 +408,15 @@ fn at_the_minimum_panel_width_every_picture_panel_keeps_its_chips_inside_and_the
 }
 
 #[test]
-fn clicking_the_zoom_chip_takes_each_picture_panel_back_to_fit_and_a_scope_has_none() {
+fn fit_in_the_view_strip_takes_each_picture_panel_back_to_fit_and_a_scope_has_no_zoom() {
     let b = Bench::new("panels-zoom-slider", "off");
+    let areas = [AREA; NAMES.len()];
     for (i, name) in NAMES.iter().enumerate() {
         b.wheel_to(i, "200 %");
         assert_eq!(b.chip(i), "200 %", "{name}");
-        b.set.zoom_to_fit(i, AREA, 1.0);
+    }
+    b.set.fit_all(&areas, 1.0);
+    for (i, name) in NAMES.iter().enumerate() {
         assert_eq!(b.chip(i), "Fit 50 %", "{name}");
     }
     // The rig holds the GPU, so the Panels' session ends before the Scope's starts.

@@ -42,6 +42,7 @@ pub mod stops_false_colour;
 pub mod style;
 pub mod toolbar;
 pub mod vectorscope;
+pub mod view_strip;
 pub mod viewer_gate;
 pub mod waveform;
 pub mod waveform_scale;
