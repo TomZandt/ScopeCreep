@@ -31,3 +31,18 @@ Run: `cargo run --release --manifest-path accuracy/Cargo.toml` (~4 s). Compares 
 **Sources:** Blackmagic "DaVinci Resolve 17 Wide Gamut Intermediate" v1.1; ITU-R BT.709-6, BT.1886, BT.2020-2, BT.2100-2; SMPTE ST 2084, ST 431-2, EG 432-1, ST 2065-1; Academy S-2016-001 (ACEScct), S-2014-004 (AP1); ACES 2.0 CTL above. Each is cited in the module that uses it.
 
 
+
+## DaVinci tone mapping is the project's Output DRT (#21, checked 2026-11-20)
+
+The old script key `colorSpaceOutputToneMapping` reads back "DaVinci" but changes nothing: Resolve 21.2's Color Management page has no tone-mapping dropdown any more; tone mapping is the **Output DRT** dropdown (None, Simple, Luminance Mapping, DaVinci, Saturation Preserving), whose script key is `outputDRT` (settable, read-back confirmed; the matching `inputDRT` too). That is why every earlier script-set "tone mapping on" render equalled "off".
+
+Measured on `scopecreep-test-dwg-pq-tmon` (DWG/DI timeline, Rec.2100 PQ output), frame 1 of each test clip, float EXR renders, app conversion (no tone mapping) against Resolve, absolute difference on the PQ-encoded scale:
+
+| Clip | vs Output DRT None: max / mean | vs Output DRT DaVinci: max / mean |
+|---|---|---|
+| ramp | 7.3e-6 / 3.8e-7 | 0.100 / 0.0151 |
+| chart | 2.1e-6 / 3.1e-7 | 0.066 / 0.0096 |
+| outofrange | 6.3e-6 / 1.6e-6 | 0.079 / 0.0114 |
+| natural | 9.4e-6 / 3.5e-7 | 0.093 / 0.0248 |
+
+So the app is exact when the Output DRT is None and about 0.07 to 0.10 of the PQ range away at worst (1.2 to 2.5 % mean) with DaVinci. The app reads only `colorSpaceOutputToneMapping`, not `outputDRT`, so a project with Output DRT on is labelled exact (a false claim, ADR 0007): see the issue filed from this check. The other three DRTs were set by script and accepted but not measured. Colour-managed `colorSpaceOutputGamutMapping` still accepts only "None" by script (14 values tried); the UI's "Limit output gamut to" is a different dropdown whose key is not yet identified (#22).

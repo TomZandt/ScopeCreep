@@ -53,3 +53,7 @@ Screenshots (not in git): `~/scopecreep-testdata/screenshots/18/` — Resolve: `
 ## Decision
 
 The app always shows sub-black and super-white values, even where Resolve's own scope flattens them (Video Level Scopes on). There is no option to match Resolve's flattening (product owner, 2026-11-15; #41).
+
+## 'Retain sub-black and super-white data' (#41, checked 2026-11-20)
+
+The project setting is scriptable (`videoDataLevelsRetainSubblockAndSuperWhiteData`, read and set through `Project.SetSetting`; read-back confirmed). With it on, the Feed frames the app converts from `yrgb-rec709g24`, `dwg-rec709` and `acescct-rec709` are pixel-identical (0 differing pixels in all four clips) to the same captures with it off, and the sub-black and super-white values are in both (ramp -0.25 to 1.25, out-of-range -1 to 10). So the setting does not change what Resolve hands the Sender; scopecreep keeps showing out-of-range values either way, as decided on 2026-11-15. Not checked: what the setting does to Resolve's own scopes.

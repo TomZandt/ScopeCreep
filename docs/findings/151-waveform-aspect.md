@@ -6,3 +6,5 @@ What ticket #151 showed on 2026-11-19, at the pure layout seam (`app/tests/layou
 - A different resolution gives a different layout on the next draw, with nothing drawn outside the fitted plot and its edge rows.
 - Learned: the seam tests that read the plot by code row had assumed it filled its Panel; a plot of exactly 1024 pixels (one row per code) now needs a frame and Panel chosen to fit (a 400 x 1024 frame in a 500 x 1046 area). Counts, traces, edge rows and Colorise tests pass unchanged apart from taking the frame size in the layout.
 - Not verified: the look on small Panels, HiDPI and the shorter plot at 16:9 and 2.39:1 at Resolve: #152.
+
+**Checked at Resolve and at the app by the product owner, 2026-11-20 (#152):** small Panels, HiDPI, 16:9 and 2.39:1, resolution changes without a restart, the Colorise and Y R G B chips, and `feed-synth --out-of-range` at scale 1.5 and 2 (edge rows, title bar text, scale numbers) all pass.

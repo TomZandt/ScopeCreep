@@ -12,3 +12,5 @@ What the ticket (#93) verified, headlessly (`app/tests/stops_false_colour_seam.r
 - The licensed scheme's name appears nowhere in the app.
 
 Unverified, needing a person (#131): the colours by eye against the reference scale and on a real monitor and HiDPI, and that the text widths estimate fits the real font.
+
+**Checked by the product owner, 2026-11-20 (#131):** the 17 swatch colours, the horizontal scale, numbers, captions and message on a real monitor and HiDPI, and the approximated/assumed labelling on a space the Panel cannot decode all pass; no colour changes needed.

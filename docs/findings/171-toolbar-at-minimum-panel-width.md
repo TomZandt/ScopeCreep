@@ -10,3 +10,5 @@ What ticket #171 showed on 2026-11-20, at the pure toolbar seam (`app/tests/tool
 - The same fit applies to every Panel's toolbar, Scopes included, since the Window now fits each one, not only those with a zoom chip.
 
 Not verified (a person at the app): how a narrow Panel looks and feels with its chips in the popover, and that the Link row switches Link on every picture Panel as the chip does.
+
+**Checked at the app by the product owner, 2026-11-20 (#184):** chips leave the title bar into the popover as a Panel narrows, and the Link row switches Link on every picture Panel, at 1x and HiDPI, on picture Panels and Scopes.

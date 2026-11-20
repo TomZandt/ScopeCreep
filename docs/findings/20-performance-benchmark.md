@@ -31,3 +31,7 @@ An earlier run the same evening with the Sender from before 53e2c9d gave the sam
 - Resolve's own dropped-frame count isn't scriptable; the green readout (red when Resolve can't keep up) and the Sender's continuous frame numbers stand in for it.
 - A new app window on Resolve's monitor covers Resolve, which then stops playing; the script moves the app to another monitor.
 - Results (not in git): `~/scopecreep-testdata/bench/uhd50-20261116-211512/`.
+
+## Re-run, 2026-11-20 (#177, #178, #190)
+
+Same project and loop (`scopecreep-test-bench50`), app with its saved layout and all Panels: Sender off 0.00 renders/s, Sender on 49.98, Sender on with the app 49.98; Resolve's fps readout read 50 in all 36 five-second samples. Results (not in git): `~/scopecreep-testdata/bench/uhd50-20261120-125541/`.

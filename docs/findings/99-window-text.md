@@ -9,3 +9,5 @@ What ticket #99 showed on 2026-11-18, at the pure text seam (`app/tests/window_t
 - The feeding timeline's name comes from the Sender when the scripting side has supplied it, else from the project as last read; with neither it is left out rather than named by instance number.
 
 Not verified (a person at the app): how the top bar, the title bars and the two hovers look and read at 1280 x 760 and on a real screen, and that the estimated widths match the shaped text: filed as ready-for-human: https://github.com/TomZandt/scopecreep/issues/135
+
+**Checked at the app by the product owner, 2026-11-20 (#135):** the top bar, title bars, hovers, 320 px status line and the three Colour Setup title bars all pass.

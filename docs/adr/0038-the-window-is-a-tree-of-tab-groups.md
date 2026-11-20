@@ -11,7 +11,7 @@ The Panel grid fits one shape of footage and one set of seven Panels. A colouris
 - **Edge add**: a **+** on each edge of a tab group opens the list of displays and adds the new tab group on that side at 50/50.
 - **Dock**: dragging a title or tab onto another tab group, the outer quarter of an edge splits that edge and the middle makes a tab; the overlay shows the exact result; Escape cancels; Shift on drop swaps the two tab groups (the swap of #97 is kept).
 - **Close** removes a Panel and its sibling takes the space; an emptied page shows one large Add panel button. A Panel's menu offers Replace with, Duplicate right, Duplicate below and Close.
-- **Minimum size.** A tab group is at least the minimum Panel size; a split is at least its children plus the gap (side by side the sum, stacked the larger). Ratios are held so no child goes under its minimum, and an add or dock that would break a minimum is refused with a notice that names it.
+- **Minimum size.** A tab group is at least the minimum Panel size; a split is at least its children plus the gap (side by side the sum, stacked the larger). Ratios are held so no child goes under its minimum, and an add, edge add or side dock that would break a minimum does not fail: the Panel joins the focused (or target) tab group as a new tab, with a notice that says so and names the minimum.
 - **Hidden Panels do not measure or draw.** Only the shown Panel of each tab group on the current page measures and draws; the rest keep their settings but cost nothing.
 - Old saved grids convert to a tree when they are a sequence of cuts (the default layout is); one that is not, or cannot be read, gives the default.
 

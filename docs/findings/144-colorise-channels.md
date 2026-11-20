@@ -9,3 +9,5 @@ What ticket #144 showed on 2026-11-18, at the Feed seam (`app/tests/waveform_sea
 - The R, G and B traces' default look changes from coloured (#117) to white, because Colorise is off by default (ADR 0032).
 
 Not verified: the UHD 50 cost with Resolve playing (the per-channel tint adds no pass, so the cost of #143's colour pass is the only open one) and the look beside Resolve: ready-for-human, https://github.com/TomZandt/scopecreep/issues/150
+
+**Checked at Resolve 21 by the product owner, 2026-11-20 (#140):** Resolve's waveform has three exclusive modes (Y, CbCr, RGB). Colorize is one switch inside whichever mode is chosen, and it stays set across all three. This differs from ADR 0032's assumption of any combination of Y R G B; see #202.

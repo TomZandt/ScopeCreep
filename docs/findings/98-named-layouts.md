@@ -8,3 +8,5 @@ What ticket #98 showed on 2026-11-18, at the pure layout seam (`app/tests/layout
 - The layout menu is the settings menu's rows (heading, "Default layout", nine slots, a line of how-to), so the popover draws it. Names are cleaned (no control characters, 24 characters, trimmed) and an empty name keeps the old one.
 
 Not verified (a person at the app): key handling on a real keyboard (Ctrl+Shift+digit is read by key position), the menu opening on the status line, typing a name: https://github.com/TomZandt/scopecreep/issues/136
+
+**Checked at the app by the product owner, 2026-11-20 (#136):** Ctrl+Shift+digit save, Ctrl+digit recall, the status-line menu (recall, Shift-click save, rename with Enter/Esc), Default layout, restart persistence and the keyboard-layout check all pass. Spec #196 replaces named layouts with pages (ADR 0038 to 0041).

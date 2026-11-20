@@ -13,3 +13,5 @@ What the ARRI False Colour ticket (#57) verified, headlessly (no Resolve involve
 - **Edges.** Lower edge in, upper edge out; the first band is open below and the last open above (ADR 0016).
 
 Not verified (a person at the app and Resolve): the look in the real app, the ColorChecker clip in the product owner's own project, and what an out-of-gamut channel looks like after the Output Conversion: https://github.com/TomZandt/scopecreep/issues/71
+
+**Checked at the app by the product owner, 2026-11-20 (#154):** the proportional scale bar legends (ARRI about 41 px, heatmap about 24 px) read well at HiDPI without crowding the picture; text-only marks, with no pointer line, are enough.

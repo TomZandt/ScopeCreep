@@ -16,7 +16,7 @@ What spec #196 learned on 2026-11-20 from a critical look at the running app (UH
 A single HTML page with a pure layout module (a binary tree of tab groups and splits) and a thin page around it, run in Node and in a browser. The rules it settled:
 
 - **Dwindle works.** Splitting the focused cell along its longer side, 50/50, gave a sensible Window for 1 to 7 Panels on landscape, ultrawide, 4:3 and portrait monitors, and a portrait monitor flips the first split without any other rule.
-- **Minimum size.** An add that would put a Panel under 120 x 96 is refused; the tree never leaves an empty cell.
+- **Minimum size.** The prototype refused an add that would put a Panel under 120 x 96 and the tree never left an empty cell. The product owner chose to tab such a Panel into the focused tab group instead of refusing it (ADR 0038).
 - **Dock zones.** The outer quarter of an edge splits, the middle tabs; the overlay showing the exact half read clearly.
 - **Duplicates.** Four clean pictures numbered by reading order worked in the prototype, but numbering by position would change a Panel's settings owner when Panels move, so the app uses stable numbers (ADR 0039).
 - **Auto layout** (one press) searched ordered cuts and picked a different arrangement for each of 16:9, 2.39:1, 9:16, a portrait monitor and an ultrawide Window. Run in Node: 7 Panels in 11 to 20 ms (1,280 candidate cuts, the first cut limited to the middle once there are more than 6 items), 9 Panels in about 420 ms (35,840 cuts), 3 Panels under 1 ms. A full search at 6 items is 1,344 cuts. Beyond 9 the prototype refuses.

@@ -165,7 +165,7 @@ A Panel is one instance of a display with a stable id, so a display can be on th
 _Avoid_: Copy (for the id), clone
 
 **Add panel**:
-A Command that splits the focused tab group along its longer side (wider than tall: the new Panel on the right; otherwise below) at 50/50 and focuses it. A **+** on each edge of a tab group (hover) does the same on a chosen side. A new Panel is refused with a notice, naming the minimum, when there is no room.
+A Command that splits the focused tab group along its longer side (wider than tall: the new Panel on the right; otherwise below) at 50/50 and focuses it. A **+** on each edge of a tab group (hover) does the same on a chosen side. A new Panel that has no room joins the focused tab group as a tab instead, with a notice that says so and names the minimum.
 _Avoid_: Insert, new window
 
 **Dock**:

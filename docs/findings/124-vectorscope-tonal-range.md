@@ -9,3 +9,5 @@ What ticket #124 showed on 2026-11-19, at the pure UI seam (`app/tests/toolbar.r
 - Tags: "shadows only", "mids only" or "highlights only" when not All; the title bar's hover label spells out the three ranges and says clipping counts only these pixels. All is not tagged. The choice round-trips through the saved settings per Panel; the chips are All, Shadows, Mids and Highlights, one at a time, after the plots and Mono chips.
 
 Unverified against Resolve 21.2 itself: [#155](https://github.com/TomZandt/scopecreep/issues/155).
+
+**Checked against Resolve 21.2 by the product owner, 2026-11-20 (#155):** Resolve's Low, Mid and High vectorscope channels plot differently from scopecreep's Shadows, Mids and Highlights chips (30 % and 70 %). The product owner prefers scopecreep's, so they are not made to match.
