@@ -155,12 +155,12 @@ fn default_cells() -> Vec<[f32; 4]> {
             )
         }
     };
-    let (top, bottom) = halves(AREA, false, 0.65909094);
-    let (clean, right) = halves(top, true, 0.59458417);
-    let (above, luma) = halves(right, false, 0.31868654);
-    let (vector, heat) = halves(above, true, 0.5728693);
-    let (skin, strip) = halves(bottom, true, 0.29629093);
-    let (stops, arri) = halves(strip, true, 0.5);
+    let (top, bottom) = halves(AREA, false, 0.6427851);
+    let (clean, right) = halves(top, true, 0.57572013);
+    let (above, luma) = halves(right, false, 0.37797147);
+    let (vector, heat) = halves(above, true, 0.56338125);
+    let (stops, strip) = halves(bottom, true, 0.30952382);
+    let (arri, skin) = halves(strip, true, 0.5);
     let by = |name: &str| match name {
         "Channel Viewer" => clean,
         "Vectorscope" => vector,
@@ -426,11 +426,11 @@ fn a_divider_stops_where_a_panel_would_go_under_its_minimum_and_never_reorders()
     let order = arrangement(&tree, AREA);
     let borders = [
         border_between(&tree, "Channel Viewer", "Vectorscope"),
-        border_between(&tree, "Channel Viewer", "Skin Tone"),
+        border_between(&tree, "Channel Viewer", "False Colour - Stops"),
         border_between(&tree, "Vectorscope", "Waveform"),
         border_between(&tree, "Vectorscope", "Saturation"),
-        border_between(&tree, "Skin Tone", "False Colour - Stops"),
         border_between(&tree, "False Colour - Stops", "False Colour - Arri"),
+        border_between(&tree, "False Colour - Arri", "Skin Tone"),
     ];
     for (border, _) in &borders {
         for far in [[9000.0, 9000.0], [-9000.0, -9000.0], [9000.0, -9000.0]] {
@@ -512,7 +512,7 @@ fn a_press_on_a_display_starts_nothing() {
 #[test]
 fn a_press_in_a_gap_starts_a_border_drag_not_a_panel_drag() {
     let tree = default_tree();
-    let c = cell_of(&tree, "False Colour - Stops");
+    let c = cell_of(&tree, "False Colour - Arri");
     let level = c[1] + 10.0;
     assert!(matches!(
         tree.press_at(AREA, GAP, [c[0] - GAP / 2.0, level], 3.0, 1.0),

@@ -38,4 +38,4 @@ Built in #204 (`app/src/layout_tree.rs`): the first step, with one Panel per tab
 
 ## Update: the default layout
 
-The default layout is no longer built from a 5 x 4 grid. It is one explicit tree, independent of the footage and of Auto layout: the clean picture (now Channel Viewer) at the left; the Vectorscope beside the Saturation Panel over the Waveform at its right; Skin Tone, False Colour - Stops and False Colour - Arri along the bottom. The split ratios are the owner's own saved ones. Old saved grids still convert as before, and a layout that is missing or unreadable falls back to this one.
+The default layout is no longer built from a 5 x 4 grid. It is one explicit tree, independent of the footage and of Auto layout: the clean picture (now Channel Viewer) at the left; the Vectorscope beside the Saturation Panel over the Waveform at its right; False Colour - Stops, False Colour - Arri and Skin Tone along the bottom. The split ratios are the owner's own saved ones. Old saved grids still convert as before, and a layout that is missing or unreadable falls back to this one.

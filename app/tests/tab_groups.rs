@@ -39,7 +39,8 @@ fn a_panel_dropped_in_the_middle_becomes_a_shown_tab_of_that_group() {
     // The dragged Panel is in the target's cell, the target is hidden, and the old cell's neighbour took its space.
     assert_eq!(after[5], before[0]);
     assert!(!shown(after[0]));
-    assert!(after[6][2] > before[6][2]);
+    // Skin Tone ends the bottom strip, so Arri (index 2) beside it takes the space.
+    assert!(after[2][2] > before[2][2]);
 }
 
 #[test]

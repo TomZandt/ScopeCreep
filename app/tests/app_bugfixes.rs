@@ -275,11 +275,11 @@ fn the_default_layout_is_the_owners_arrangement_and_every_minimum_holds() {
             by("False Colour - Arri"),
         );
         // Big clean picture at the left; the Vectorscope beside the heatmap with the waveform under them; a strip at
-        // the bottom, in reading order.
+        // the bottom: Stops, Arri, Skin Tone.
         assert!(clean[2] > vector[2] + heat[2] && clean[3] > luma[3]);
         assert!(vector[0] > clean[0] + clean[2] && heat[0] > vector[0]);
         assert!(luma[1] > vector[1] && (luma[0] - vector[0]).abs() < 1.0);
-        assert!(skin[1] > clean[1] + clean[3] && stops[0] > skin[0] && arri[0] > stops[0]);
+        assert!(skin[1] > clean[1] + clean[3] && arri[0] > stops[0] && skin[0] > arri[0]);
         for c in cells {
             assert!(
                 c[2] >= 120.0 * scale - 1.0 && c[3] >= 105.0 * scale - 1.0,
@@ -315,5 +315,5 @@ fn the_displays_to_choose_from_are_listed_a_to_z_whatever_the_panel_order() {
 #[test]
 fn the_windows_least_size_follows_the_default_layout() {
     let tree = LayoutTree::default_for(&default_names());
-    assert_eq!(min_window(&tree, &largest_menus()), [759.0, 667.0]);
+    assert_eq!(min_window(&tree, &largest_menus()), [713.0, 645.0]);
 }

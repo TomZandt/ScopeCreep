@@ -60,8 +60,8 @@ fn a_dock_on_each_edge_gives_the_dragged_panel_that_half() {
 fn the_sources_neighbour_takes_its_old_space() {
     let mut tree = default_tree();
     let before = cell_of(&tree, "Skin Tone");
-    // Stops False Colour sits directly right of Skin tone in the bottom strip.
-    let beside = cell_of(&tree, "False Colour - Stops");
+    // ARRI False Colour sits directly left of Skin tone, at the end of the bottom strip.
+    let beside = cell_of(&tree, "False Colour - Arri");
     tree.dock(
         index("Skin Tone"),
         index("Channel Viewer"),
@@ -70,8 +70,12 @@ fn the_sources_neighbour_takes_its_old_space() {
         GAP,
         min_panel_size(1.0),
     );
-    let after = cell_of(&tree, "False Colour - Stops");
-    assert!((after[0] - before[0]).abs() < 0.01);
+    let after = cell_of(&tree, "False Colour - Arri");
+    assert!((after[0] - beside[0]).abs() < 0.01, "it stays where it was");
+    assert!(
+        ((after[0] + after[2]) - (before[0] + before[2])).abs() < 0.01,
+        "it reaches the strip's end"
+    );
     assert!(after[2] > beside[2], "the strip takes the freed width");
 }
 

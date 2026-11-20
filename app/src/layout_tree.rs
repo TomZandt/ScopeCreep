@@ -657,18 +657,18 @@ impl LayoutTree {
         let (clean, vector, heat, luma, skin, stops, arri) = (0, 1, 2, 3, 4, 5, 6);
         let scopes = split(
             Dir::Col,
-            0.31868654,
-            split(Dir::Row, 0.5728693, leaf(vector), leaf(heat)),
+            0.37797147,
+            split(Dir::Row, 0.56338125, leaf(vector), leaf(heat)),
             leaf(luma),
         );
-        let top = split(Dir::Row, 0.59458417, leaf(clean), scopes);
+        let top = split(Dir::Row, 0.57572013, leaf(clean), scopes);
         let bottom = split(
             Dir::Row,
-            0.29629093,
-            leaf(skin),
-            split(Dir::Row, 0.5, leaf(stops), leaf(arri)),
+            0.30952382,
+            leaf(stops),
+            split(Dir::Row, 0.5, leaf(arri), leaf(skin)),
         );
-        LayoutTree::new(split(Dir::Col, 0.65909094, top, bottom), names.len())
+        LayoutTree::new(split(Dir::Col, 0.6427851, top, bottom), names.len())
     }
 
     /// Auto resize (#213): change ratios only, top down. Where a split has exactly one picture-shaped side (a

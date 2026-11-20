@@ -161,22 +161,22 @@ fn a_panel_already_on_the_page_is_only_focused() {
 
 #[test]
 fn closing_a_panel_gives_its_space_to_its_sibling() {
-    // Stops False Colour is beside ARRI False Colour: closing it, ARRI has both.
+    // ARRI False Colour is beside Skin Tone at the end of the bottom strip: closing Skin Tone, ARRI has both.
     let mut tree = default_tree();
-    let (stops, arri) = (index("False Colour - Stops"), index("False Colour - Arri"));
+    let (skin, arri) = (index("Skin Tone"), index("False Colour - Arri"));
     let before = tree.cells(AREA, GAP);
-    tree.close(stops);
+    tree.close(skin);
     let after = tree.cells(AREA, GAP);
-    assert!(!shown(after[stops]));
-    assert!(!tree.contains(stops));
-    let (a, b) = (before[stops], before[arri]);
+    assert!(!shown(after[skin]));
+    assert!(!tree.contains(skin));
+    let (a, b) = (before[arri], before[skin]);
     assert!(
         near(after[arri], [a[0], a[1], b[0] + b[2] - a[0], a[3]]),
         "{:?}",
         after[arri]
     );
     for (i, cell) in before.iter().enumerate() {
-        if i != stops && i != arri {
+        if i != skin && i != arri {
             assert!(near(after[i], *cell));
         }
     }

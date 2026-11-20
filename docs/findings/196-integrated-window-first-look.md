@@ -27,4 +27,4 @@ The migration from named layouts left Main and the layouts on the same first ins
 
 ## Owner decisions made in the same round
 
-The view strip readout, the default layout, and the display names are in the changelog, the glossary's Displays table and ADRs 0038, 0040 and 0041. The new default layout's least Window size is 759 × 667.
+The view strip readout, the default layout, and the display names are in the changelog, the glossary's Displays table and ADRs 0038, 0040 and 0041. The new default layout's least Window size is 713 × 645.
