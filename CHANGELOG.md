@@ -7,6 +7,7 @@ The format follows [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/
 ## [Unreleased]
 
 ### Added
+- A Sponsor button on the GitHub repository and a line in the README that link to buymeacoffee.com/tomzandtvalentine.
 - Gamut Warning, Neutrals and Chromaticity are back in the Window (the former gamut/legal warning, Highlight Neutrals and CIE plot, renamed). Add panel, a Panel's edge **+** and Replace with list them A to Z with the other seven; they are not in the default layout or the page templates, so a page gets one by adding it. Each can be duplicated and closed like any Panel, keeps its own settings, and costs nothing while it is not on the page you are on. Pages and settings saved under the old names still load (#222).
 - A **Displays** table in the glossary: the seven displays in the Window with their kind, purpose and former name, and the six kept out of the Window.
 - A regression test that a freshly started Window and the Feed thread keep going while Panels are made, hidden, drawn and removed (`display_lock_stress`).
@@ -77,7 +78,7 @@ A menu bar and hotkeys you can change: the Layout menu replaces the right-click 
 
 ## [0.3.0] - 2026-11-20
 
-Milestone 3 so far: a colourist's Window. The Window is 7 Panels with the clean picture as the hero, named layouts, Panel toolbars and sliders, zoom and pan with Link, and a joined 100 % and 200 % Vectorscope. Milestone 3 is not finished (see [#113](https://github.com/TomZandt/scopecreep/issues/113)); this is a checkpoint.
+Milestone 3 so far: a colourist's Window. The Window is 7 Panels with the clean picture as the hero, named layouts, Panel toolbars and sliders, zoom and pan with Link, and a joined 100 % and 200 % Vectorscope. Milestone 3 is not finished (see [#113](https://github.com/TomZandt/ScopeCreep/issues/113)); this is a checkpoint.
 
 ### Added
 - Clean picture: it zooms like Resolve's Viewer. The scroll wheel over it zooms toward the pointer from Fit to 400 % of source pixels, free below 100 %, landing on 100 %, then whole steps (200, 300, 400 %), so above 100 % every picture pixel is an exact square. A zoom chip, first on the title bar, says "Fit 23 %" or "200 %" (lit while zoomed in); click it for a slider from Fit to 400 % that snaps to whole steps above 100 %. Mattes stay black and the legend strip does not move. Zoom is not saved: every session starts at Fit. With the Loupe on, the wheel over the Loupe is still its zoom (#165, ADR 0035).
@@ -287,7 +288,7 @@ Stage 0: colour and performance checks. Nothing here is the product yet; it is t
 - ADR 0003: "Resolve never waits" is proven at UHD float, 23.976 to 60 fps, on the CUDA path.
 - ADR 0004: Resolve's waveform uses Rec.709 weights for P3; offered as a Match Resolve mode.
 
-[Unreleased]: https://github.com/TomZandt/scopecreep/compare/v0.2.0...HEAD
-[0.2.0]: https://github.com/TomZandt/scopecreep/compare/v0.1.0...v0.2.0
-[0.1.0]: https://github.com/TomZandt/scopecreep/compare/v0.0.0...v0.1.0
-[0.0.0]: https://github.com/TomZandt/scopecreep/releases/tag/v0.0.0
+[Unreleased]: https://github.com/TomZandt/ScopeCreep/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/TomZandt/ScopeCreep/compare/v0.1.0...v0.2.0
+[0.1.0]: https://github.com/TomZandt/ScopeCreep/compare/v0.0.0...v0.1.0
+[0.0.0]: https://github.com/TomZandt/ScopeCreep/releases/tag/v0.0.0

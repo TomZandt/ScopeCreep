@@ -33,7 +33,7 @@ A tool, not a sales pitch: sensible defaults read from the project, with a manua
 
 ### Issue tracker
 
-Issues live in GitHub Issues on TomZandt/scopecreep (via `gh`). See `docs/agents/issue-tracker.md`.
+Issues live in GitHub Issues on TomZandt/ScopeCreep (via `gh`). See `docs/agents/issue-tracker.md`.
 
 ### Triage labels
 
