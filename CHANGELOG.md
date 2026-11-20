@@ -7,6 +7,7 @@ The format follows [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/
 ## [Unreleased]
 
 ### Added
+- Gamut Warning, Neutrals and Chromaticity are back in the Window (the former gamut/legal warning, Highlight Neutrals and CIE plot, renamed). Add panel, a Panel's edge **+** and Replace with list them A to Z with the other seven; they are not in the default layout or the page templates, so a page gets one by adding it. Each can be duplicated and closed like any Panel, keeps its own settings, and costs nothing while it is not on the page you are on. Pages and settings saved under the old names still load (#222).
 - A **Displays** table in the glossary: the seven displays in the Window with their kind, purpose and former name, and the six kept out of the Window.
 - A regression test that a freshly started Window and the Feed thread keep going while Panels are made, hidden, drawn and removed (`display_lock_stress`).
 - Page templates. The **+** menu's New page from now also offers All 7 Panels, Picture views (clean picture, ARRI False Colour, Stops False Colour, Saturation heatmap, Skin tone), Scopes (clean picture, luma waveform, Vectorscope) and Picture only. Each page is named after its template (rename it as any page), has its own Panels and settings, is remembered like any page, and is arranged once with Auto layout for the footage on screen (16:9 with no Feed); if the Window is too small for that, the Panels are simply halved (#215, ADR 0041).

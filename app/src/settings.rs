@@ -269,13 +269,16 @@ impl PanelSettings {
 /// The displays' former names (before the rename of spec #196's follow-up), and what each is called now. Saved files
 /// written under a former name are still read: [`modern_key`] gives the name a key is kept under today, and files are
 /// written with the new names from the next save on. See the Displays table in GLOSSARY.md.
-pub const FORMER_NAMES: [(&str, &str); 6] = [
+pub const FORMER_NAMES: [(&str, &str); 9] = [
     ("Clean picture", "Channel Viewer"),
     ("Luma waveform", "Waveform"),
     ("ARRI False Colour", "False Colour - Arri"),
     ("Stops False Colour", "False Colour - Stops"),
     ("Skin tone", "Skin Tone"),
     ("Saturation heatmap", "Saturation"),
+    ("Gamut/legal warning", "Gamut Warning"),
+    ("Highlight neutrals", "Neutrals"),
+    ("CIE chromaticity", "Chromaticity"),
 ];
 
 /// The key `key` is kept under today: a display's former name ("Clean picture") or a further instance of it

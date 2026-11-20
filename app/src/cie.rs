@@ -782,7 +782,7 @@ impl CiePlot {
 
 impl crate::display::Display for CiePlot {
     fn name(&self) -> &'static str {
-        "CIE chromaticity"
+        "Chromaticity"
     }
 
     fn on_frame(&self, encoder: &mut wgpu::CommandEncoder, frame: &GpuFrame) {

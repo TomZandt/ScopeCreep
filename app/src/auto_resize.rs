@@ -40,8 +40,8 @@ pub fn shape_of(name: &str) -> Shape {
         | "False Colour - Arri"
         | "Channel view"
         | "Black and white"
-        | "Highlight neutrals"
-        | "Gamut/legal warning"
+        | "Neutrals"
+        | "Gamut Warning"
         | "Saturation"
         | "Skin Tone"
         | crate::stops_false_colour::NAME => Shape::Picture,

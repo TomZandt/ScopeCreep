@@ -67,7 +67,8 @@ impl Bench {
     /// Draw every display into its Panel of a `width` × `height` target, as the window does, and read it back
     /// (RGBA8, rows top first).
     fn render(&self, width: u32, height: u32, scale: f32) -> (Vec<u8>, Vec<PanelLayout>) {
-        let panels = layouts(self.set.len(), width, height, scale);
+        // Seven Panels' worth of room (the Window's default page is seven); the Panels after them are not drawn.
+        let panels = layouts(7, width, height, scale);
         let image = self.rig.render(width, height, |pass| {
             for (i, panel) in panels.iter().enumerate() {
                 self.set
@@ -88,23 +89,18 @@ fn middle(rect: [f32; 4]) -> (f32, f32) {
 }
 
 #[test]
-fn the_window_shows_seven_panels_without_the_gamut_warning_highlight_neutrals_cie_plot_black_and_white_colour_waveform_and_channel_view()
- {
+fn the_window_registers_ten_displays_without_black_and_white_colour_waveform_and_channel_view() {
     let b = Bench::new("order");
     let names = b.set.names();
-    assert_eq!(names.len(), 7, "{names:?}");
-    assert_eq!(
-        names[..3],
-        ["Channel Viewer", "Waveform", "False Colour - Arri"]
-    );
-    for gone in [
-        "Gamut/legal warning",
-        "Highlight neutrals",
-        "CIE chromaticity",
-        "Black and white",
-        "Colour waveform",
-        "Channel view",
-    ] {
+    assert_eq!(names.len(), 10, "{names:?}");
+    assert_eq!(names[..3], ["Channel Viewer", "Waveform", "Gamut Warning"]);
+    for back in ["Gamut Warning", "Neutrals", "Chromaticity"] {
+        assert!(
+            names.contains(&back),
+            "{back} is back in the Window (#222): {names:?}"
+        );
+    }
+    for gone in ["Black and white", "Colour waveform", "Channel view"] {
         assert!(
             !names.contains(&gone),
             "{gone} is out of the Window: {names:?}"
@@ -115,8 +111,8 @@ fn the_window_shows_seven_panels_without_the_gamut_warning_highlight_neutrals_ci
 #[test]
 fn settings_of_panels_out_of_the_window_stay_in_the_saved_text() {
     let mut saved = PanelSettings::default();
-    saved.set("Gamut/legal warning", "limits", "ebu");
-    saved.set("CIE chromaticity", "plot", "x");
+    saved.set("Gamut Warning", "limits", "ebu");
+    saved.set("Chromaticity", "plot", "x");
     saved.set("Colour waveform", "brightness", "50");
     saved.set("Channel view", "channel", "red");
     let text = saved.to_text();
@@ -680,7 +676,7 @@ fn a_saved_layout_names_panels_by_key_and_one_that_names_displays_still_recalls(
     b.set.register(Keyed::new());
     let owned = b.set.keys();
     let keys: Vec<&str> = owned.iter().map(String::as_str).collect();
-    let grid = LayoutTree::default_for(&keys);
+    let grid = LayoutTree::automatic(keys.len());
     let mut layouts = Layouts::default();
     layouts.save(0, &grid, &keys);
     assert!(
@@ -691,7 +687,7 @@ fn a_saved_layout_names_panels_by_key_and_one_that_names_displays_still_recalls(
     assert_eq!(layouts.recall(0, &keys), Some(grid));
     // Saved before instances: the display names, each the first instance's key.
     let old = &b.set.names()[..keys.len() - 1];
-    let old_grid = LayoutTree::default_for(old);
+    let old_grid = LayoutTree::automatic(old.len());
     let mut before = Layouts::default();
     before.save(1, &old_grid, old);
     assert_eq!(before.recall(1, &keys[..keys.len() - 1]), Some(old_grid));

@@ -208,13 +208,14 @@ pub struct InWindow {
     pub channel_view: bool,
 }
 
-/// What the Window shows (ticket #95: the first three displays below are out of it for now; #118: the clean picture's
+/// What the Window shows (#95 took the first three displays below out, #222 brought them back as Gamut Warning,
+/// Neutrals and Chromaticity, offered by Add panel but not in the default layout; #118: the clean picture's
 /// B/W toggle does the black and white Panel's job; #145: the Colour Waveform is out, Colorise on the luma waveform
 /// does its job; #162: the Channel view is out, the clean picture's Y R G B chips and Loupe do its job).
 pub const IN_WINDOW: InWindow = InWindow {
-    gamut_legal_warning: false,
-    highlight_neutrals: false,
-    cie_plot: false,
+    gamut_legal_warning: true,
+    highlight_neutrals: true,
+    cie_plot: true,
     black_and_white: false,
     colour_waveform: false,
     channel_view: false,

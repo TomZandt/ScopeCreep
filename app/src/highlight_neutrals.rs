@@ -108,7 +108,7 @@ impl HighlightNeutrals {
 
 impl Display for HighlightNeutrals {
     fn name(&self) -> &'static str {
-        "Highlight neutrals"
+        "Neutrals"
     }
 
     fn on_frame(&self, encoder: &mut wgpu::CommandEncoder, frame: &GpuFrame) {
@@ -141,11 +141,11 @@ impl Display for HighlightNeutrals {
 
     fn label(&self) -> String {
         if !self.stage.has_picture() {
-            return "Highlight neutrals".to_string();
+            return "Neutrals".to_string();
         }
         let config = self.config.lock().unwrap();
         format!(
-            "Highlight neutrals  ·  green where R, G and B are within {} of each other, the rest in Luma grey  ·  {}",
+            "Neutrals  ·  green where R, G and B are within {} of each other, the rest in Luma grey  ·  {}",
             TOLERANCE_AMOUNT.text(config.percent),
             config.source
         )

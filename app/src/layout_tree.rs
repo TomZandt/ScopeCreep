@@ -636,14 +636,15 @@ impl LayoutTree {
         }
     }
 
-    /// The default layout for the displays called `names` (in display order). Falls back to [`Self::automatic`]
-    /// unless these are exactly the displays the default layout is made for, so the tree fills either way.
+    /// The default layout for the displays called `names` (in display order): the seven it is made for, placed
+    /// exactly, and any other display (Gamut Warning, Neutrals, Chromaticity) closed, for Add panel to bring in.
+    /// Falls back to [`Self::automatic`] only when one of the seven is missing, so the tree fills either way.
     pub fn default_for(names: &[&str]) -> LayoutTree {
         let place: Option<Vec<usize>> = DEFAULT_NAMES
             .iter()
             .map(|n| names.iter().position(|m| m == n))
             .collect();
-        let Some(p) = place.filter(|_| names.len() == DEFAULT_NAMES.len()) else {
+        let Some(p) = place else {
             return LayoutTree::automatic(names.len());
         };
         let split = |dir, ratio, a, b| Node::Split {

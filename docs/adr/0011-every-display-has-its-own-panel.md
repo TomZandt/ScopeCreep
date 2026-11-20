@@ -25,7 +25,7 @@ The vectorscope at 100 % and at 200 % is one Panel, not two. They are one scope 
 
 ## Note, 2026-11-19 (#162)
 
-The Channel view is out of the Window (ADR 0034): the clean picture's Y R G B chips and Loupe do its job, so the Window shows 7 Panels. Its module, tests and saved settings are kept.
+The Channel view is out of the Window (ADR 0034): the clean picture's Y R G B chips and Loupe do its job, so the Window's default layout shows 7 Panels. Its module, tests and saved settings are kept.
 
 ## Note, 2026-11-20 (#174)
 
@@ -34,3 +34,5 @@ The two plots are now joined as one scope: edge to edge with no gap, one backgro
 ## Note, 2026-11-20 (spec #196, ADR 0038)
 
 The second and third decisions' limits no longer hold. Panels can be hidden (closed or tabbed away), moved and docked in a tree of tab groups (ADR 0038), the same display can be on the Window more than once (ADR 0039), and only the shown Panels on the current page measure and draw, so "every display measures every Feed frame" in the first consequence now means every shown Panel. The default layout still shows all seven displays at once, which is what "see everything at a glance" asked for. The rejected "picker per slot" returns in a different shape: Replace with in a Panel's menu, which changes one Panel and hides nothing else.
+
+Gamut Warning, Neutrals and Chromaticity (the former gamut/legal warning, Highlight Neutrals and CIE plot) are back in the Window (#222): ten displays are registered, and Add panel, the edge **+** and Replace with list them A to Z. They are not in the default layout or the page templates, which stay the seven; a page gets one by adding it.

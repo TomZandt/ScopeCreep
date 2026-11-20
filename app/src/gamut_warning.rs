@@ -194,7 +194,7 @@ impl Warning {
             "no tolerance".to_string()
         };
         format!(
-            "Gamut/legal warning  ·  {levels}  ·  {space}  ·  blue below {} (code {}), red above {} (code {})  ·  {tolerance}  ·  every channel checked",
+            "Gamut Warning  ·  {levels}  ·  {space}  ·  blue below {} (code {}), red above {} (code {})  ·  {tolerance}  ·  every channel checked",
             percent(self.low),
             self.code(self.low),
             percent(self.high),
@@ -236,7 +236,7 @@ impl GamutWarning {
 
 impl Display for GamutWarning {
     fn name(&self) -> &'static str {
-        "Gamut/legal warning"
+        "Gamut Warning"
     }
 
     fn on_frame(&self, encoder: &mut wgpu::CommandEncoder, frame: &GpuFrame) {

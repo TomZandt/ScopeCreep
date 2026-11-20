@@ -250,7 +250,7 @@ fn the_tolerance_is_a_slider_of_percent_defaulting_to_three_and_the_label_names_
             .collect::<Vec<f32>>(),
     );
     let label = b.display.label();
-    assert!(label.starts_with("Highlight neutrals"), "{label}");
+    assert!(label.starts_with("Neutrals"), "{label}");
     assert!(label.contains("Output picture"), "{label}");
     assert!(label.contains("within 3.0 %"), "{label}");
     assert!(label.contains("DaVinci WG/Intermediate"), "{label}");
@@ -267,5 +267,5 @@ fn the_tolerance_is_a_slider_of_percent_defaulting_to_three_and_the_label_names_
 fn nothing_is_drawn_before_a_frame_arrives() {
     let b = Bench::new("empty", None);
     assert_eq!(pixel(&b.render(64, 36), 64, 32, 18), [0, 0, 0]);
-    assert_eq!(b.display.label(), "Highlight neutrals");
+    assert_eq!(b.display.label(), "Neutrals");
 }

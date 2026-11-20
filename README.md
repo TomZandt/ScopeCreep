@@ -27,7 +27,7 @@ Pre-alpha. Nothing to install yet.
 |---|---|---|
 | Feed protocol | `feed/PROTOCOL.md`, `feed/include/scopecreep_feed.h`, `feed/` crate | The shared-memory ring between Sender and app: spec, C header (Sender), Rust reader and synthetic writer (app, tests) |
 | Sender | `sender/` | C++ OFX plugin, Resolve's CUDA render path, async pinned copy into the Feed |
-| App | `app/` | Rust + wgpu: one window of Pages, each a layout of Panels, by default 7 (Scopes and Picture Views: the Channel Viewer as the hero, one Vectorscope Panel showing 100 % and 200 % side by side; every display and its former name is in the [Displays table](GLOSSARY.md#displays)), all showing the latest Feed frame (GPU, every pixel, full resolution). The gamut/legal warning, Highlight Neutrals, the CIE plot, the Black and white Panel, the Colour Waveform and the Channel view are built and tested but not in the Window (#95, #118, #145, #162) |
+| App | `app/` | Rust + wgpu: one window of Pages, each a layout of Panels, by default 7 (Scopes and Picture Views: the Channel Viewer as the hero, one Vectorscope Panel showing 100 % and 200 % side by side; every display and its former name is in the [Displays table](GLOSSARY.md#displays)), all showing the latest Feed frame (GPU, every pixel, full resolution). Gamut Warning, Neutrals and Chromaticity are offered by Add panel but not in the default layout (#222); the Black and white Panel, the Colour Waveform and the Channel view are built and tested but not in the Window (#118, #145, #162) |
 
 ```sh
 cargo test                       # Feed protocol (Rust and C against each other) and the app, driven at the Feed seam (waveform tests need a GPU)

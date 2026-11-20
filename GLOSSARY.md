@@ -71,16 +71,16 @@ The displays, by their name now. Each Panel is one of these (a page can hold the
 | False Colour - Stops | Picture View | The Timeline frame in stops from middle grey (Zones, or Grey +1), with a legend | Stops False Colour |
 | Saturation | Picture View | Luma in grey with saturation laid over it, cool to hot, with a legend | Saturation heatmap |
 | Skin Tone | Picture View | Pixels near the skin-tone line painted solid yellow, green or magenta | Skin tone, Skin Tone Panel |
+| Gamut Warning | Picture View | The Output picture with channels outside the Levels' range painted blue (below) or red (above); not in the default layout, added with Add panel | Gamut/legal warning |
+| Neutrals | Picture View | Pixels whose R, G and B are within a tolerance of each other painted green over Luma grey; not in the default layout, added with Add panel | Highlight Neutrals, Highlight neutrals |
+| Chromaticity | Scope | Every pixel placed on the CIE 1931 xy diagram with the gamut triangles of the Output and Timeline Colour Spaces; not in the default layout, added with Add panel | CIE plot, CIE chromaticity |
 | Vectorscope | Scope | Cb across, Cr up: hue is the angle, saturation the distance; 100 % and 200 % side by side | (unchanged) |
 | Waveform | Scope | Luma (and Y R G B, Colorise) per column of the picture | Luma waveform |
 
-Built and tested but kept out of the Window (parked, #121), by the flag `IN_WINDOW` in `app/src/display.rs`:
+Built and tested but kept out of the Window (parked, #121; Gamut Warning, Neutrals and Chromaticity came back in #222), by the flag `IN_WINDOW` in `app/src/display.rs`:
 
 | Display | Kind | Why it is parked |
 |---|---|---|
-| Gamut/legal warning | Picture View | Parked (#121) |
-| Highlight Neutrals | Picture View | Parked (#121) |
-| CIE plot | Scope | Parked (#121) |
 | Black and white | Picture View | Parked (#121): the Channel Viewer's Y chip does its job |
 | Colour Waveform | Scope | Parked (#121): the Waveform's Colorise chip does its job |
 | Channel view | Picture View | Parked (#121): the Channel Viewer's chips and Loupe do its job |
@@ -131,7 +131,7 @@ _Avoid_: Vertical legend
 The legend strip of False Colour - Arri and the Saturation: a bar proportional to a range (0 to 100 % of Output Luma, or 0 to the heatmap's scale), tick numbers along its top and marks under it at the meaningful points. Ticks thin out and marks drop out on a small Panel; text never overlaps.
 
 **Panel**:
-One area of the Window that shows one Scope or Picture View. Every display in the Window has its own Panel, so everything can be seen at once, unless it is closed (Close in the Panel's popover or the Layout menu; Add panel brings it back) (7 Panels; the gamut/legal warning, Highlight Neutrals, CIE plot, Black and white, Colour Waveform and Channel view are out of the Window but their code and saved settings are kept); the Panels sit in an ordered grid whose borders the user can drag.
+One area of the Window that shows one Scope or Picture View. Every display in the Window has its own Panel, so everything can be seen at once, unless it is closed (Close in the Panel's popover or the Layout menu; Add panel brings it back) (7 Panels by default, ten displays to choose from; Black and white, Colour Waveform and Channel view are out of the Window but their code and saved settings are kept); the Panels sit in an ordered grid whose borders the user can drag.
 _Avoid_: Pane, view, tile, window (for one display)
 
 **Display**:
@@ -300,7 +300,7 @@ _Avoid_: Glow, blur, smoothing
 A display that shows the Feed as an image, either untouched (the Channel Viewer) or remapped for inspection (false colour, black and white).
 _Avoid_: Scope (for false colour), filter, LUT view
 
-**Highlight Neutrals**:
+**Highlight Neutrals** (shown as Neutrals):
 A Picture View that shows the Output picture in Luma grey and pixels whose red, green and blue are nearly equal (within a tolerance, a share of the full signal range, 3 % by default) in green, for checking that whites and greys are balanced.
 _Avoid_: White balance check, neutral finder
 **Black and white**:
@@ -364,7 +364,7 @@ _Avoid_: Test image, chart file, colour-nuke EXR
 One of the 24 coloured squares of a ColorChecker frame, numbered 1 to 24 left to right and top to bottom. The six greys are 19 to 24; neutral 5 (22) is 19.06 % Y, not 18 %.
 _Avoid_: Swatch, chip, tile
 
-**Gamut/legal warning**:
+**Gamut/legal warning** (shown as Gamut Warning):
 A Picture View showing the Output picture's Luma in black and white, with problem pixels coloured: red from the upper threshold up to legal white (solid above it), blue from the lower threshold down to legal black (solid below it). Every channel is checked as well as Luma, so a colour outside the Output Colour Space's gamut is caught. Percentages are of the Levels' range.
 _Avoid_: Zebras, clipping indicator, safe colour
 
@@ -372,7 +372,7 @@ _Avoid_: Zebras, clipping indicator, safe colour
 An option on the gamut/legal warning that widens the limits from 0 % and 100 % to -5 % and 105 %, the excursion the EBU's R103 recommendation allows.
 _Avoid_: Broadcast safe
 
-**CIE plot**:
+**CIE plot** (shown as Chromaticity):
 A Panel placing each pixel's chromaticity on the CIE 1931 xy diagram, with the spectral locus and the gamut triangles of the Output and Timeline Colour Spaces.
 _Avoid_: Gamut scope, horseshoe, chromaticity scope
 

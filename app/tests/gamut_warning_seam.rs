@@ -213,7 +213,7 @@ fn the_label_names_the_levels_and_any_tolerance_in_use() {
     let mut video = Bench::new("label-video", VIDEO);
     video.shade(grey(0.5));
     let label = video.label();
-    assert!(label.starts_with("Gamut/legal warning"), "{label}");
+    assert!(label.starts_with("Gamut Warning"), "{label}");
     assert!(label.contains("Legal 64–940"), "{label}");
     assert!(
         label.contains("red above 90 % (code 852)") && label.contains("blue below 10 % (code 152)"),

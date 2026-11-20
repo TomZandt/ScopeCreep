@@ -90,7 +90,8 @@ impl Bench {
     /// Draw every display into its Panel of a `width` × `height` target, as the window does, and read it back
     /// (RGBA8, rows top first).
     fn render(&self, width: u32, height: u32, scale: f32) -> (Vec<u8>, Vec<PanelLayout>) {
-        let panels = layouts(self.set.len(), width, height, scale);
+        // Room for the first seven Panels (the Vectorscope is the sixth); the later ones are not drawn.
+        let panels = layouts(7, width, height, scale);
         let image = self.rig.render(width, height, |pass| {
             for (i, panel) in panels.iter().enumerate() {
                 self.set
