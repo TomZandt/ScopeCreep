@@ -227,10 +227,40 @@ pub struct ScopeHandles {
     pub vectorscope: Arc<crate::vectorscope::Vectorscope>,
 }
 
+/// A Panel's stable id (ADR 0039): given when the Panel is created, never reused, and never follows the Panel's
+/// position.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct PanelId(pub u64);
+
+/// What makes a Panel an instance of a display (ADR 0039): its id, and its key, under which its settings,
+/// remembered state and place in a saved layout are kept.
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct Instance {
+    id: PanelId,
+    key: String,
+}
+
+/// The key of the next instance of the display called `name`, given the instances in use (ADR 0039). The first
+/// instance keeps the display's name, so everything saved before still applies; further ones are "Name 2",
+/// "Name 3", the lowest number not in use.
+fn instance_key(name: &str, taken: &[Instance]) -> String {
+    let free = |key: &str| taken.iter().all(|i| i.key != key);
+    if free(name) {
+        return name.to_string();
+    }
+    (2..)
+        .map(|n| format!("{name} {n}"))
+        .find(|key| free(key))
+        .expect("an unused number")
+}
+
 /// Every display, in Panel order (the order of the grid, left to right then down).
 #[derive(Clone, Default)]
 pub struct DisplaySet {
     displays: Vec<Arc<dyn Display>>,
+    /// The instance each display is, in the same order as `displays`.
+    instances: Vec<Instance>,
+    next_id: u64,
     /// The Window's one Link: picture Panels zoom and pan together while it is on (#168).
     link: crate::zoom::Link,
 }
@@ -314,10 +344,26 @@ impl DisplaySet {
         )
     }
 
-    /// Add a display after the others.
-    pub fn register(&mut self, display: Arc<dyn Display>) {
+    /// Add a display after the others, as a new Panel: it gets an id of its own, and the key of its settings and
+    /// state (the display's name for the first of its kind, "Name 2" and on for the next, ADR 0039).
+    pub fn register(&mut self, display: Arc<dyn Display>) -> PanelId {
         display.link_to(&self.link);
+        let id = PanelId(self.next_id);
+        self.next_id += 1;
+        let key = instance_key(display.name(), &self.instances);
+        self.instances.push(Instance { id, key });
         self.displays.push(display);
+        id
+    }
+
+    /// Panel `index`'s stable id.
+    pub fn id(&self, index: usize) -> PanelId {
+        self.instances[index].id
+    }
+
+    /// Every Panel's key, in Panel order: what settings, state and saved layouts name it by.
+    pub fn keys(&self) -> Vec<String> {
+        self.instances.iter().map(|i| i.key.clone()).collect()
     }
 
     /// Whether Link is on.
@@ -340,6 +386,7 @@ impl DisplaySet {
         self.displays.is_empty()
     }
 
+    /// What each Panel's display is called (not its key: see [`DisplaySet::keys`]).
     pub fn names(&self) -> Vec<&'static str> {
         self.displays.iter().map(|d| d.name()).collect()
     }
@@ -360,14 +407,15 @@ impl DisplaySet {
         );
         self.displays
             .iter()
-            .map(|display| {
+            .zip(&self.instances)
+            .map(|(display, instance)| {
                 let mut own = DisplayContext {
-                    settings: settings.resolve(display.name(), display.setting_defs()),
+                    settings: settings.resolve(&instance.key, display.setting_defs()),
                     luma,
                     ..context.clone()
                 };
                 own.settings
-                    .extend(settings.state_of(display.name(), display.state_keys()));
+                    .extend(settings.state_of(&instance.key, display.state_keys()));
                 crate::window_text::panel_title(display.name(), &own, display.label())
             })
             .collect()
@@ -392,22 +440,23 @@ impl DisplaySet {
         let luma = crate::measurement::luma_weights_of(
             &settings.resolve(crate::waveform::NAME, &crate::waveform::SETTINGS),
         );
-        for display in &self.displays {
+        for (display, instance) in self.displays.iter().zip(&self.instances) {
             let mut own = DisplayContext {
-                settings: settings.resolve(display.name(), display.setting_defs()),
+                settings: settings.resolve(&instance.key, display.setting_defs()),
                 luma,
                 ..context.clone()
             };
             own.settings
-                .extend(settings.state_of(display.name(), display.state_keys()));
+                .extend(settings.state_of(&instance.key, display.state_keys()));
             display.configure(&own);
         }
     }
 
-    fn setting_panels(&self) -> Vec<(&'static str, &'static [SettingDef])> {
+    fn setting_panels(&self) -> Vec<(&str, &'static [SettingDef])> {
         self.displays
             .iter()
-            .map(|d| (d.name(), d.setting_defs()))
+            .zip(&self.instances)
+            .map(|(d, i)| (i.key.as_str(), d.setting_defs()))
             .collect()
     }
 
@@ -504,13 +553,21 @@ impl DisplaySet {
 
     /// The settings the display in Panel `index` is using, given everyone's choices.
     pub fn settings_of(&self, index: usize, settings: &PanelSettings) -> Settings {
-        let display = &self.displays[index];
-        settings.resolve(display.name(), display.setting_defs())
+        settings.resolve(
+            &self.instances[index].key,
+            self.displays[index].setting_defs(),
+        )
     }
 
-    /// What the display in Panel `index` is called (its settings are kept under this name).
+    /// What the display in Panel `index` is called.
     pub fn name(&self, index: usize) -> &'static str {
         self.displays[index].name()
+    }
+
+    /// Panel `index`'s key: what its settings and remembered state are kept under (the display's name for the
+    /// first of its kind, "Name 2" and on for the next, ADR 0039).
+    pub fn key(&self, index: usize) -> &str {
+        &self.instances[index].key
     }
 
     pub fn draw(

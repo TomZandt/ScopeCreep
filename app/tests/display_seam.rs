@@ -549,3 +549,154 @@ fn a_choice_that_is_no_longer_offered_falls_back_to_the_default() {
         b.set.labels()[1]
     );
 }
+
+// Panels are instances of a display with a stable id (ADR 0039, #203).
+
+const KEYED_DEFS: &[scopecreep::settings::SettingDef] = &[scopecreep::settings::SettingDef {
+    key: "mode",
+    label: "Mode",
+    amount: None,
+    choices: &[
+        scopecreep::settings::Choice {
+            value: "a",
+            text: "A",
+        },
+        scopecreep::settings::Choice {
+            value: "b",
+            text: "B",
+        },
+    ],
+}];
+
+/// A display with one setting and one remembered value, that keeps what `configure` gave it.
+struct Keyed {
+    context: Mutex<Option<DisplayContext>>,
+}
+
+impl Keyed {
+    fn new() -> Arc<Keyed> {
+        Arc::new(Keyed {
+            context: Default::default(),
+        })
+    }
+    fn seen(&self, key: &str) -> Option<String> {
+        self.context
+            .lock()
+            .unwrap()
+            .as_ref()
+            .and_then(|c| c.settings.get(key).cloned())
+    }
+}
+
+impl Display for Keyed {
+    fn name(&self) -> &'static str {
+        "Keyed"
+    }
+    fn on_frame(&self, _encoder: &mut wgpu::CommandEncoder, _frame: &GpuFrame) {}
+    fn configure(&self, context: &DisplayContext) {
+        *self.context.lock().unwrap() = Some(context.clone());
+    }
+    fn setting_defs(&self) -> &'static [scopecreep::settings::SettingDef] {
+        KEYED_DEFS
+    }
+    fn state_keys(&self) -> &'static [&'static str] {
+        &["spot"]
+    }
+    fn label(&self) -> String {
+        "Keyed".into()
+    }
+    fn draw(&self, _: &mut wgpu::RenderPass<'_>, _: [f32; 4], _: [f32; 2], _: f32) {}
+}
+
+#[test]
+fn the_first_instance_of_a_display_is_keyed_by_the_display_name_and_reads_what_was_saved_before() {
+    let mut b = Bench::new("first-key");
+    let first = Keyed::new();
+    b.set.register(first.clone());
+    let at = b.set.len() - 1;
+    assert_eq!(b.set.key(at), "Keyed", "the first instance keeps the name");
+    assert_eq!(b.set.keys()[at], "Keyed");
+    // Written before instances existed: under the display's name.
+    let mut before = PanelSettings::default();
+    before.set("Keyed", "mode", "b");
+    before.set_state("Keyed", "spot", "0.25");
+    let mut saved = PanelSettings::from_text(&before.to_text());
+    b.set.configure(&DisplayContext::default(), &saved);
+    assert_eq!(first.seen("mode").as_deref(), Some("b"));
+    assert_eq!(first.seen("spot").as_deref(), Some("0.25"));
+    assert!(!saved.set_state("Keyed", "spot", "0.25"), "nothing changed");
+}
+
+#[test]
+fn a_second_instance_has_its_own_key_settings_and_state_and_never_disturbs_the_first() {
+    let mut b = Bench::new("second-key");
+    let (first, second) = (Keyed::new(), Keyed::new());
+    b.set.register(first.clone());
+    b.set.register(second.clone());
+    let at = b.set.len() - 2;
+    assert_eq!(b.set.keys()[at], "Keyed");
+    assert_eq!(b.set.keys()[at + 1], "Keyed 2");
+    assert_eq!(b.set.key(at + 1), "Keyed 2");
+    assert_eq!(b.set.names()[at + 1], "Keyed", "its display is still Keyed");
+    assert_ne!(b.set.id(at), b.set.id(at + 1));
+
+    let mut settings = PanelSettings::default();
+    settings.set("Keyed 2", "mode", "b");
+    settings.set_state("Keyed 2", "spot", "0.75");
+    b.set.configure(&DisplayContext::default(), &settings);
+    assert_eq!(
+        first.seen("mode").as_deref(),
+        Some("a"),
+        "first on defaults"
+    );
+    assert_eq!(first.seen("spot"), None);
+    assert_eq!(second.seen("mode").as_deref(), Some("b"));
+    assert_eq!(second.seen("spot").as_deref(), Some("0.75"));
+
+    settings.set("Keyed", "mode", "b");
+    settings.set("Keyed 2", "mode", "a");
+    b.set.configure(&DisplayContext::default(), &settings);
+    assert_eq!(first.seen("mode").as_deref(), Some("b"));
+    assert_eq!(second.seen("mode").as_deref(), Some("a"));
+    assert_eq!(first.seen("spot"), None, "state stays under its own key");
+}
+
+#[test]
+fn every_panel_has_an_id_of_its_own_and_numbers_count_up() {
+    let mut b = Bench::new("ids");
+    for _ in 0..3 {
+        b.set.register(Keyed::new());
+    }
+    let n = b.set.len();
+    let mut ids: Vec<_> = (0..n).map(|i| b.set.id(i)).collect();
+    ids.sort();
+    ids.dedup();
+    assert_eq!(ids.len(), n, "every Panel has an id of its own");
+    assert_eq!(b.set.keys()[n - 3..], ["Keyed", "Keyed 2", "Keyed 3"]);
+}
+
+#[test]
+fn a_saved_layout_names_panels_by_key_and_one_that_names_displays_still_recalls() {
+    use scopecreep::layouts::Layouts;
+    use scopecreep::panel_grid::PanelGrid;
+    let mut b = Bench::new("layout-keys");
+    b.set.register(Keyed::new());
+    b.set.register(Keyed::new());
+    let owned = b.set.keys();
+    let keys: Vec<&str> = owned.iter().map(String::as_str).collect();
+    let grid = PanelGrid::default_for(&keys);
+    let mut layouts = Layouts::default();
+    layouts.save(0, &grid, &keys);
+    assert!(
+        layouts.to_text().contains("Keyed 2"),
+        "{}",
+        layouts.to_text()
+    );
+    assert_eq!(layouts.recall(0, &keys), Some(grid));
+    // Saved before instances: the display names, each the first instance's key.
+    let old = &b.set.names()[..keys.len() - 1];
+    let old_grid = PanelGrid::default_for(old);
+    let mut before = Layouts::default();
+    before.save(1, &old_grid, old);
+    assert_eq!(before.recall(1, &keys[..keys.len() - 1]), Some(old_grid));
+}

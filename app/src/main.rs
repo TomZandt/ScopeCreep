@@ -77,6 +77,12 @@ enum ToolbarHit {
 
 /// Where the border positions are remembered: `$XDG_CONFIG_HOME/scopecreep/panel-grid`, else
 /// `~/.config/scopecreep/panel-grid`.
+/// The Panel keys as the grid and the saved layouts take them. A layout names Panels by key, which is the display's
+/// name for the first instance of a display, so a layout saved before instances still recalls (ADR 0039).
+fn as_strs(keys: &[String]) -> Vec<&str> {
+    keys.iter().map(String::as_str).collect()
+}
+
 fn grid_file() -> Option<PathBuf> {
     let base = std::env::var_os("XDG_CONFIG_HOME")
         .filter(|v| !v.is_empty())
@@ -373,7 +379,7 @@ impl AppWindow {
         let displays = DisplaySet::standard(&device, &queue, format, filterable);
         // The Window can't be made smaller than the default layout and every menu need (#172).
         let [min_w, min_h] = scopecreep::layout::min_window(
-            &PanelGrid::default_for(&displays.names()),
+            &PanelGrid::default_for(&as_strs(&displays.keys())),
             &menu_bar::largest_menus(),
         );
         window.set_min_inner_size(Some(LogicalSize::new(min_w, min_h)));
@@ -388,7 +394,8 @@ impl AppWindow {
             scopecreep::zoom::link_remembered(&settings.lock().unwrap()),
             0,
         );
-        let names = displays.names();
+        let keys = displays.keys();
+        let names = as_strs(&keys);
         let grid = grid_file()
             .and_then(|path| std::fs::read_to_string(path).ok())
             .map_or_else(
@@ -567,8 +574,10 @@ impl AppWindow {
     /// Remember the layout.
     fn save_grid(&self) {
         if let Some(path) = grid_file()
-            && let Err(e) =
-                scopecreep::settings::save(&path, &self.grid.to_text(&self.displays.names()))
+            && let Err(e) = scopecreep::settings::save(
+                &path,
+                &self.grid.to_text(&as_strs(&self.displays.keys())),
+            )
         {
             eprintln!("scopecreep: cannot remember the Panel layout: {e}");
         }
@@ -663,7 +672,7 @@ impl AppWindow {
 
     /// Set a Panel's setting from the popover or a chip, remembering it if it changed.
     fn choose(&mut self, panel: usize, key: &str, value: &str) {
-        let name = self.displays.name(panel);
+        let name = self.displays.key(panel);
         let changed = {
             let mut settings = self.settings.lock().unwrap();
             let before = settings.version();
@@ -761,7 +770,8 @@ impl AppWindow {
 
     /// What is on screen: the default layout, or the first slot whose saved arrangement it is.
     fn current_layout(&self) -> Option<Current> {
-        let names = self.displays.names();
+        let keys = self.displays.keys();
+        let names = as_strs(&keys);
         if self.grid == PanelGrid::default_for(&names) {
             return Some(Current::Default);
         }
@@ -954,7 +964,8 @@ impl AppWindow {
 
     /// Do a command, from its hotkey or its menu entry.
     fn run(&mut self, command: Command) {
-        let names = self.displays.names();
+        let keys = self.displays.keys();
+        let names = as_strs(&keys);
         // Showing a layout or the default brings the grid back.
         if matches!(command, Command::DefaultLayout | Command::RecallLayout(_)) {
             self.full = None;
@@ -1065,7 +1076,7 @@ impl AppWindow {
         };
         let result = self.displays.pointer(panel, area, self.scale, event);
         if result.used {
-            let name = self.displays.name(panel);
+            let name = self.displays.key(panel);
             {
                 let mut settings = self.settings.lock().unwrap();
                 for (key, value) in &result.remember {
