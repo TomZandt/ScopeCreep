@@ -36,3 +36,7 @@ The luma waveform's plot no longer fills its whole Panel (#50 dropped the aspect
 ## Note 2026-11-20 (#179): saved weights are repaired, not refused
 
 Saved column and row weights that leave a track under the minimum Panel size in the reference area (the default window) are no longer rubbish: each such track is raised to the minimum and the others scaled down, keeping their proportions, so the layout recalls with its places intact. A border dragged to the minimum in a much larger window therefore comes back a little further out there. Weights that are not finite and positive, do not add up to 1, do not fit the places, or cannot all reach the minimum are still refused and the default used.
+
+## Note, 2026-11-20 (spec #196, ADR 0038)
+
+The Panel grid (columns and rows of weights, spans, every cell used) is replaced by a layout tree of tab groups and splits. A split's ratio replaces the column and row weights, the tree can never leave a cell empty, and the minimum Panel sizes, the minimum Window rule and the repair of saved sizes (#179) carry over to it. A grid saved in the old text converts when it is a sequence of cuts (the default is), else the default page is used.

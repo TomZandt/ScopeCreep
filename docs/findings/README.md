@@ -98,6 +98,7 @@ What we learned by testing, kept in the repo so it isn't lost when an issue thre
 | [32](32-out-of-range-edge-rows-hidpi.md) | Can `feed-synth` play values below 0 and above 1, and do they light the luma waveform's edge rows with legible text at scale 1, 1.5 and 2 (pure and Feed seam, offscreen draw)? |
 | [82](82-panel-gpu-time.md) | How much GPU time does each Panel take per UHD frame (measure and draw, timestamp queries, headless), and is any Panel of the Window over its share of the UHD 50 frame? |
 | [44](44-aces2-dark-saturated-precision.md) | Can the GPU's 32-bit ACES 2.0 conversion keep dark saturated colours inside the exact tolerance on a dense grid, and at what GPU cost (Feed seam)? |
+| [196](196-tiling-layout-prototype.md) | Can the Window tile like a window manager (add, dock, tab, duplicate, Auto layout, pages)? What a critical look at the UHD Window and a throwaway prototype showed (prototype branch, pure layout module) |
 
 ## Adding findings
 

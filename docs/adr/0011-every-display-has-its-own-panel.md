@@ -30,3 +30,7 @@ The Channel view is out of the Window (ADR 0034): the clean picture's Y R G B ch
 ## Note, 2026-11-20 (#174)
 
 The two plots are now joined as one scope: edge to edge with no gap, one background with a faint divider at the join (graticule tone), sized from the smaller of half the Panel's width and its height and centred as a pair, so the pair scales as a unit. The Panel is still two grid cells wide with one label, menu and measurement; only the layout of the plots inside it changed. A single plot still fills the Panel.
+
+## Note, 2026-11-20 (spec #196, ADR 0038)
+
+The second and third decisions' limits no longer hold. Panels can be hidden (closed or tabbed away), moved and docked in a tree of tab groups (ADR 0038), the same display can be on the Window more than once (ADR 0039), and only the shown Panels on the current page measure and draw, so "every display measures every Feed frame" in the first consequence now means every shown Panel. The default layout still shows all seven displays at once, which is what "see everything at a glance" asked for. The rejected "picker per slot" returns in a different shape: Replace with in a Panel's menu, which changes one Panel and hides nothing else.

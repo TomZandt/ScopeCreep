@@ -140,9 +140,49 @@ _Avoid_: Letterbox (that is one kind of matte), border
 The columns and rows the Panels sit in, each Panel at a cell with a span of columns and rows, every cell used. By default the clean picture spans 3 × 2 at the top left, the luma waveform and the Vectorscope (two columns wide) beside it, and the four other Picture Views fill two rows below (ARRI False Colour 3 wide with Stops False Colour, the Saturation heatmap 3 wide with Skin tone), so all 7 Panels use every cell. Column and row sizes are weights, so border positions the user dragged stay valid at any window size. Each Panel has a thin border and a title bar with its label at its top.
 _Avoid_: Layout for the grid (a Layout is a saved arrangement of it), dock
 
+Since spec #196 (ADR 0038) the grid is replaced by the **Layout tree** below; this entry stays until it is built.
+
 **Layout** (named):
 An arrangement of the Panel grid saved in one of nine slots (Ctrl+Shift+1 to 9 by default), shown again with Ctrl+1 to 9 or from the Layout menu on the Menu bar, which also saves, renames layouts and restores the default layout. A layout names its Panels, so one still opens after Panels are added or removed.
 _Avoid_: Preset, workspace, profile
+
+Since spec #196 (ADR 0041) named layouts become **Pages**; this entry stays until they are built.
+
+**Layout tree**:
+The arrangement of one Page: a binary tree whose leaves are Tab groups and whose inner nodes are splits, each side by side or stacked with the share of its space (net of the gap) that its first child takes. It always fills the Panel area, so no cell is empty, and a Panel can never be smaller than the minimum Panel size (ADR 0038). Decided in spec #196; replaces the Panel grid when built.
+_Avoid_: Grid (for the new model), dock, split view
+
+**Tab group**:
+A leaf of the Layout tree: one or more Panels sharing one area, one shown (its title bar holds a tab for each when there is more than one). Only the shown Panel measures and draws. A tab group with one Panel looks as a Panel does today.
+_Avoid_: Pane, stack, container
+
+**Panel instance**:
+A Panel is one instance of a display with a stable id, so a display can be on the Window more than once. The first instance keeps the display's name as its settings key; further ones are "Name 2", "Name 3", numbered when created and never by position (ADR 0039).
+_Avoid_: Copy (for the id), clone
+
+**Add panel**:
+A Command that splits the focused tab group along its longer side (wider than tall: the new Panel on the right; otherwise below) at 50/50 and focuses it. A **+** on each edge of a tab group (hover) does the same on a chosen side. A new Panel is refused with a notice, naming the minimum, when there is no room.
+_Avoid_: Insert, new window
+
+**Dock**:
+Dragging a Panel's title or tab onto another tab group: the outer quarter nearest an edge splits that edge, the middle joins the tab group as a tab, and Shift on drop swaps the two tab groups. The overlay shows the result before release; Escape cancels.
+_Avoid_: Snap, drop zone (for the overlay)
+
+**Page**:
+A saved layout shown as a tab in the Page bar under the Colour Setup line: its own Layout tree, focused tab group and undo. The pages and the current page are remembered; only the current page's Panels measure and draw. New pages come from a template (All 7 Panels, Picture views, Scopes, Picture only, Empty page) or as a copy of the current one; Ctrl+1 to 9 go to pages 1 to 9 (ADR 0041).
+_Avoid_: Workspace (Resolve's word for its page arrangement), slot, preset
+
+**Auto layout**:
+A button on the Page bar that re-arranges every Panel on the current Page once, for the Feed's aspect and the Window: it keeps the Panels in reading order and picks the cutting of them into splits that gives the most useful area, with the clean picture weighted most. It never runs by itself, and Undo brings the old layout back (ADR 0041).
+_Avoid_: Auto-arrange, tidy, auto mode (it is not a mode)
+
+**Auto resize**:
+A button beside Auto layout that only resizes splits on the current Page so picture cells match the Feed's aspect; no Panel changes place and the nesting is unchanged (ADR 0041).
+_Avoid_: Fit layout, auto fit
+
+**View strip**:
+Fit, the shared zoom readout and Link, at the right end of the menu bar row: the Window-wide view controls, always in the same place. A picture Panel keeps a read-only zoom tag (ADR 0040).
+_Avoid_: View toolbar, zoom bar
 
 **Command**:
 Something the app does that a menu entry offers and a Hotkey can trigger, such as showing a layout or saving one into a slot. Every command is one entry in one table, with a label and a default Hotkey, and works from its menu with no Hotkey (ADR 0036).

@@ -44,3 +44,7 @@ Three changes asked for by the product owner after using the shipped zoom (spec 
 - **Link opens on.** Nothing saved, or rubbish saved, now reads as on; only a saved "off" is off, and a saved choice still wins. This replaces the rule in the #168 note ("anything but on reads as off").
 - **The range goes up to 800 %** (it was 400 %): free below 100 %, landing on 100 %, then whole steps 200, 300 ... 800 %, nearest texel above 100 %. The top of the range is the larger of 800 % and Fit.
 - **The zoom chip has no popover and no slider.** A click goes to Fit, on every picture Panel while Link is on; the wheel is the way to zoom. This drops the slider of #165 (`Menu::zoom`, the Reset row and their tests); `Display::set_zoom` stays as the model's Fit and test entry point, and `DisplaySet::zoom_to_fit` is what the window calls. The chip's tooltip says "Zoom: scroll, or click for Fit".
+
+## Note, 2026-11-20 (spec #196, ADR 0040)
+
+The zoom chip and the link chip on every picture Panel's title bar become a view strip at the right end of the menu bar row: Fit, the shared zoom readout and Link. A picture Panel keeps a read-only zoom tag. The zoom model, Link's rules and saved state, the wheel, middle-drag and Z are unchanged.

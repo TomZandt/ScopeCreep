@@ -26,3 +26,7 @@ Showing, saving into and the default layout are commands in the command table, a
 ## Note 2026-11-20 (#147)
 
 The layout menu is no longer opened by right-clicking the status line, and its Shift-click and right-click are gone with its hint heading: the Layout menu on the menu bar lists Default layout and the nine slots (a click shows a saved one, or saves into an empty one), with "Save current layout into…" and "Rename layout…" switching the menu to the slots to save into or rename. Every entry runs a command and shows its hotkey.
+
+## Note, 2026-11-20 (spec #196, ADR 0041)
+
+The nine slots become pages: each saved layout is read once and becomes a page named as it was, after a first page, Main, holding the arrangement the user had. Ctrl+1 to 9 go to page 1 to 9, the save-into-slot Commands go, and the Layout menu lists pages, Add panel, Auto layout, Auto resize and Undo layout change.
