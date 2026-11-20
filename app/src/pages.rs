@@ -9,9 +9,9 @@ use crate::layout_history::LayoutHistory;
 use crate::layout_tree::LayoutTree;
 use crate::layouts::{Layouts, NAME_LENGTH, SLOTS, clean};
 
-/// The most pages there can be: the tabs past the ninth have no Ctrl+number, but they are still pages. The Layout
-/// menu lists every page, so the limit is what the Window's minimum height has room for.
-pub const MAX_PAGES: usize = 12;
+/// The most pages there can be: nine, one for each Ctrl+number that goes to a page, so every page has its hotkey and
+/// shows its number. The Layout menu lists every page, so the limit is also what the Window's minimum height has room for.
+pub const MAX_PAGES: usize = 9;
 /// How many pages show their number and have a Ctrl+number to go to them.
 pub const NUMBERED: usize = 9;
 /// The first line of the saved pages.

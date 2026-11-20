@@ -25,3 +25,4 @@ The nine named layouts (ADR 0030) are a menu and a hotkey: nothing on screen say
 - ADR 0030's slot file, the slot Commands and its Layout menu rows go; the layout text it saved is read by the migration. ADR 0036's default hotkeys change as above, and a saved hotkey line that names a removed Command is skipped by its existing rule.
 - Pages are the cheap way to keep an expensive scope off the Feed: a Panel on another page costs nothing (ADR 0038).
 - Auto layout runs on the UI thread and has a budget of about 100 ms at 7 Panels, which the pure seam measures; it must never stall the Feed thread (ADR 0003).
+- **At most nine pages** (product owner's choice, 2026-11-20 review of spec #196): one for each Ctrl+1 to 9, so every page has its number and hotkey. A new page past the ninth is refused with a notice. A user who had all nine named layouts and Main gets Main and the first eight layouts at migration; the ninth is dropped.
