@@ -7,11 +7,12 @@ use crate::layouts::{Layouts, Rename, SLOTS};
 
 /// The menus on the bar, left to right.
 pub const LAYOUT: usize = 0;
+pub const SETTINGS: usize = 1;
 
-/// The menu bar's titles.
+/// The menu bar's titles. A View menu waits until there are window-wide display choices to put in it (spec #142).
 pub fn bar() -> MenuBar {
     MenuBar {
-        titles: vec!["Layout".to_string()],
+        titles: vec!["Layout".to_string(), "Settings".to_string()],
     }
 }
 
@@ -63,6 +64,10 @@ pub enum MenuAction {
     Mode(LayoutMode),
     /// Start typing a new name for the layout in a slot; the menu stays open.
     Rename(usize),
+    /// Show the Hotkeys panel in place of the Settings menu.
+    OpenHotkeys,
+    /// Something in the Hotkeys panel.
+    Hotkeys(crate::hotkeys_panel::PanelAction),
 }
 
 /// What is on screen now: the default layout, or the arrangement saved in a slot.
@@ -80,7 +85,17 @@ pub struct Menu {
 }
 
 impl Menu {
-    fn push(&mut self, entry: MenuEntry, action: Option<MenuAction>) {
+    pub(crate) fn new() -> Menu {
+        Menu {
+            drop: DropMenu {
+                entries: Vec::new(),
+            },
+            actions: Vec::new(),
+        }
+    }
+
+    /// Add an entry; its action is dropped when it is not an enabled item.
+    pub(crate) fn push(&mut self, entry: MenuEntry, action: Option<MenuAction>) {
         let usable = matches!(&entry, MenuEntry::Item(item) if item.enabled);
         self.drop.entries.push(entry);
         self.actions.push(action.filter(|_| usable));
@@ -122,12 +137,7 @@ pub fn layout_menu(
     mode: LayoutMode,
     renaming: Option<&Rename>,
 ) -> Menu {
-    let mut menu = Menu {
-        drop: DropMenu {
-            entries: Vec::new(),
-        },
-        actions: Vec::new(),
-    };
+    let mut menu = Menu::new();
     let item = |label: String, command: Option<Command>, enabled: bool, on: bool| {
         MenuEntry::Item(MenuItem {
             label,
@@ -215,5 +225,15 @@ pub fn layout_menu(
             );
         }
     }
+    menu
+}
+
+/// The Settings menu: Hotkeys, which opens the Hotkeys panel in its place.
+pub fn settings_menu() -> Menu {
+    let mut menu = Menu::new();
+    menu.push(
+        MenuEntry::Item(MenuItem::new("Hotkeys…", "")),
+        Some(MenuAction::OpenHotkeys),
+    );
     menu
 }

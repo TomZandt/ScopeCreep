@@ -8,6 +8,10 @@ The format follows [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/
 
 ### Added
 - A thin menu bar across the very top of the Window, above the Colour Setup line. Its Layout menu lists Default layout and the nine layout slots by name (empty ones say so, and the layout on screen is marked): click a saved one to show it, or an empty one to save the arrangement on screen into it. "Save current layout into…" lists the slots to save into (a saved one keeps its name) and "Rename layout…" the saved ones to rename, typed into the row. Each entry shows its hotkey. Menus open on a click, follow the pointer along the bar while open, and close on a second click, a click elsewhere or Escape. The Panels lose the bar's height (#147).
+- Settings, then Hotkeys…: every command with its hotkey. Click one and press the combination you want; Escape cancels, Backspace or Delete clears it. A combination another command has names that command and offers Replace or Cancel; Escape, Enter, Backspace and Delete are kept by the app. A command can be reset to its default while it is chosen, and every command from "Reset all to defaults". The menus show a change at once, and it is remembered in `~/.config/scopecreep/hotkeys` (#148, ADR 0036).
+
+### Fixed
+- Menu bar: a menu never moves up over the bar in a short Window, a Panel's popover pushed over the bar keeps its clicks, nothing stays lit once the pointer leaves the Window, an entry shows pressed while the button is down, and a middle-button drag keeps following the pointer when a menu opens (#147 review).
 
 ### Removed
 - The layout menu on a right-click of the status line, with its Shift-click and right-click and its hint line: the Layout menu on the menu bar does all of it (#147).

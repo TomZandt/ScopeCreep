@@ -13,6 +13,7 @@ pub mod flat_rects;
 pub mod gamut_warning;
 pub mod gpu_frame;
 pub mod highlight_neutrals;
+pub mod hotkeys_panel;
 pub mod layout;
 pub mod layouts;
 pub mod loupe;

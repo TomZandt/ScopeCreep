@@ -26,6 +26,7 @@ use scopecreep::display::{DisplaySet, Pointer};
 use scopecreep::feed_loop::{FeedLoop, Texts};
 use scopecreep::flat_rects::FlatRects;
 use scopecreep::gpu_frame::FrameUploader;
+use scopecreep::hotkeys_panel::HotkeysPanel;
 use scopecreep::layout::MARGIN;
 use scopecreep::layouts::{Layouts, Rename};
 use scopecreep::menu_bar::{self, BarState, Current, LayoutMode, MenuAction};
@@ -250,6 +251,10 @@ struct AppWindow {
     bar: BarState,
     bar_hover: Option<usize>,
     layout_mode: LayoutMode,
+    /// The Hotkeys panel, while it shows in place of the Settings menu (#148).
+    hotkeys_panel: Option<HotkeysPanel>,
+    /// The left button is down (a menu entry under it shows pressed).
+    left_down: bool,
     /// The hotkey of each command (ADR 0036).
     hotkeys: Hotkeys,
     /// A layout's name being typed in the Layout menu.
@@ -484,6 +489,8 @@ impl AppWindow {
             bar: BarState::default(),
             bar_hover: None,
             layout_mode: LayoutMode::Show,
+            hotkeys_panel: None,
+            left_down: false,
             hotkeys: hotkeys_file()
                 .and_then(|path| std::fs::read_to_string(path).ok())
                 .map_or_else(Hotkeys::default, |text| Hotkeys::from_text(&text)),
@@ -663,10 +670,13 @@ impl AppWindow {
             self.window.request_redraw();
         }
         if self.bar.open.is_some() {
+            // A middle-button drag that began before the menu opened still follows the pointer.
+            if let Some(panel) = self.middle_panel {
+                self.display_pointer(panel, Pointer::Move(self.cursor));
+            }
             if let Some(title) = over_title.filter(|t| self.bar.open != Some(*t)) {
-                self.finish_rename(true);
                 self.bar.hover_title(title);
-                self.layout_mode = LayoutMode::Show;
+                self.reset_bar_menus();
             }
             // The entry under the pointer lights.
             self.window.request_redraw();
@@ -746,6 +756,10 @@ impl AppWindow {
                 self.layout_mode,
                 self.renaming.as_ref(),
             )),
+            menu_bar::SETTINGS => Some(match &self.hotkeys_panel {
+                Some(panel) => panel.menu(&self.hotkeys),
+                None => menu_bar::settings_menu(),
+            }),
             _ => None,
         }
     }
@@ -769,20 +783,34 @@ impl AppWindow {
 
     /// Close the bar's menu (a name being typed is kept, as a click elsewhere does in any desktop menu).
     fn close_bar(&mut self) {
-        self.finish_rename(true);
         self.bar.close();
+        self.reset_bar_menus();
+    }
+
+    /// A bar menu closed or another opened: a name being typed is kept, a hotkey being captured dropped, and each
+    /// menu opens as it first shows.
+    fn reset_bar_menus(&mut self) {
+        self.finish_rename(true);
         self.layout_mode = LayoutMode::Show;
+        self.hotkeys_panel = None;
         self.window.request_redraw();
+    }
+
+    /// Remember the hotkeys.
+    fn save_hotkeys(&self) {
+        if let Some(path) = hotkeys_file()
+            && let Err(e) = scopecreep::settings::save(&path, &self.hotkeys.to_text())
+        {
+            eprintln!("scopecreep: cannot remember the hotkeys: {e}");
+        }
     }
 
     /// Left button with a bar menu open: a click on a title opens or closes its menu, on an entry does what it
     /// says, on the menu's padding, a heading or a greyed entry nothing; anywhere else closes the menu.
     fn bar_click(&mut self) {
         if let Some(title) = self.bar_title_at_pointer() {
-            self.finish_rename(true);
             self.bar.click_title(title);
-            self.layout_mode = LayoutMode::Show;
-            self.window.request_redraw();
+            self.reset_bar_menus();
             return;
         }
         let Some(menu) = self.bar_menu() else {
@@ -807,6 +835,14 @@ impl AppWindow {
             }
             Some(MenuAction::Mode(mode)) => self.layout_mode = mode,
             Some(MenuAction::Rename(slot)) => self.renaming = Rename::start(&self.layouts, slot),
+            Some(MenuAction::OpenHotkeys) => self.hotkeys_panel = Some(HotkeysPanel::default()),
+            Some(MenuAction::Hotkeys(action)) => {
+                if let Some(panel) = self.hotkeys_panel.as_mut()
+                    && panel.click(action, &mut self.hotkeys)
+                {
+                    self.save_hotkeys();
+                }
+            }
             None => {}
         }
         self.window.request_redraw();
@@ -832,6 +868,27 @@ impl AppWindow {
     /// only to the focused window, so the app never takes keys from Resolve.
     fn key(&mut self, event: &winit::event::KeyEvent) {
         if event.state != ElementState::Pressed {
+            return;
+        }
+        let pressed = match event.physical_key {
+            PhysicalKey::Code(code) if !self.modifiers.super_key() => {
+                Key::from_code(code).map(|key| Hotkey {
+                    key,
+                    ctrl: self.modifiers.control_key(),
+                    shift: self.modifiers.shift_key(),
+                    alt: self.modifiers.alt_key(),
+                })
+            }
+            _ => None,
+        };
+        // The Hotkeys panel's key-capture field takes every combination (a modifier alone waits for its key).
+        if let Some(panel) = self.hotkeys_panel.as_mut().filter(|p| p.takes_keys()) {
+            if let Some(pressed) = pressed {
+                if panel.key(pressed, &mut self.hotkeys) {
+                    self.save_hotkeys();
+                }
+                self.window.request_redraw();
+            }
             return;
         }
         if self.renaming.is_some() {
@@ -860,22 +917,8 @@ impl AppWindow {
             }
             return;
         }
-        if let PhysicalKey::Code(code) = event.physical_key
-            && let Some(key) = Key::from_code(code)
-        {
-            let m = self.modifiers;
-            if m.super_key() {
-                return;
-            }
-            let hotkey = Hotkey {
-                key,
-                ctrl: m.control_key(),
-                shift: m.shift_key(),
-                alt: m.alt_key(),
-            };
-            if let Some(command) = self.hotkeys.command_for(hotkey) {
-                self.run(command);
-            }
+        if let Some(command) = pressed.and_then(|h| self.hotkeys.command_for(h)) {
+            self.run(command);
         }
     }
 
@@ -1019,6 +1062,7 @@ impl AppWindow {
     }
 
     fn button(&mut self, state: ElementState) {
+        self.left_down = state == ElementState::Pressed;
         // Letting go always ends a drag, even with a menu open over it (a right click can open one meanwhile).
         if state == ElementState::Released {
             self.slider_drag = None;
@@ -1049,12 +1093,20 @@ impl AppWindow {
             self.bar_click();
             return;
         }
+        // A Panel's popover pushed up over the bar keeps its own clicks.
+        if self.menu.is_some()
+            && self
+                .menu_rect()
+                .is_some_and(|r| Menu::contains(r, self.cursor))
+        {
+            self.menu_click();
+            return;
+        }
         if let Some(title) = self.bar_title_at_pointer() {
             self.menu = None;
             self.hover = None;
             self.bar.click_title(title);
-            self.layout_mode = LayoutMode::Show;
-            self.window.request_redraw();
+            self.reset_bar_menus();
             return;
         }
         if self.menu.is_some() {
@@ -1494,7 +1546,7 @@ impl AppWindow {
             .and_then(|m| self.bar_menu_rect(&m).map(|r| (m, r)));
         if let Some((menu, rect)) = bar_menu {
             let hover = menu.drop.hit(rect, self.cursor, scale);
-            over.extend(menu.drop.draw(rect, hover, false, scale));
+            over.extend(menu.drop.draw(rect, hover, self.left_down, scale));
         } else if let (Some((menu, _)), Some(rect)) = (self.menu.as_ref(), self.menu_rect()) {
             over.extend(components::popover(menu, rect, self.cursor, scale));
         } else if let Some(hover) = self.hover {
@@ -1721,7 +1773,10 @@ impl ApplicationHandler<Wake> for App {
                 MouseScrollDelta::PixelDelta(p) => p.y as f32 / 40.0,
             }),
             WindowEvent::CursorLeft { .. } => {
-                if w.hover.take().is_some() {
+                // Nothing stays lit once the pointer has left: no hover, no bar title, no menu entry.
+                w.cursor = [-1.0, -1.0];
+                if w.hover.take().is_some() || w.bar_hover.take().is_some() || w.bar.open.is_some()
+                {
                     w.window.request_redraw();
                 }
             }

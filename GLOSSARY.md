@@ -149,7 +149,7 @@ Something the app does that a menu entry offers and a Hotkey can trigger, such a
 _Avoid_: Action, shortcut
 
 **Hotkey**:
-A key, by its position on the keyboard, with Ctrl, Shift or Alt held, that triggers a Command while the app's window has focus. Each Command has at most one and no two share one; the defaults are Ctrl+1 to 9 (show a layout) and Ctrl+Shift+1 to 9 (save one). Changes are kept in the config folder beside the layouts. Escape, and plain Enter, Backspace and Delete are reserved.
+A key, by its position on the keyboard, with Ctrl, Shift or Alt held, that triggers a Command while the app's window has focus. Each Command has at most one and no two share one; the defaults are Ctrl+1 to 9 (show a layout) and Ctrl+Shift+1 to 9 (save one). Assigned, cleared and reset in the Hotkeys panel (Settings, then Hotkeys…) by pressing the combination. Changes are kept in the config folder beside the layouts. Escape, and plain Enter, Backspace and Delete are reserved.
 _Avoid_: Shortcut, keybinding, accelerator
 
 **Menu bar**:

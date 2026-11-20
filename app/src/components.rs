@@ -1001,13 +1001,14 @@ impl DropMenu {
         [widest, rows + 2.0 * style::SPACE_MENU_PAD * scale]
     }
 
-    /// Where it drops: under `title` (the bar title it belongs to), its left edge on the title's, moved left and
-    /// up as needed to stay inside a window of `window` device pixels.
+    /// Where it drops: under `title` (the bar title it belongs to), its left edge on the title's, moved left as
+    /// needed to stay inside a window of `window` device pixels. It never moves up over the bar, so a Window too
+    /// short for it cuts its foot off (the Window has no minimum size yet, #172).
     pub fn rect(&self, title: [f32; 4], window: [f32; 2], scale: f32) -> [f32; 4] {
         let [w, h] = self.size(scale);
         [
             title[0].min(window[0] - w).max(0.0),
-            (title[1] + title[3]).min(window[1] - h).max(0.0),
+            title[1] + title[3],
             w,
             h,
         ]
