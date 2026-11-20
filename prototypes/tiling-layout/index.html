@@ -1,0 +1,682 @@
+<title>Tiling Layout Prototype</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+/* Layout concept: a dark instrument-style window you can poke at, with the tiling rules and state laid out underneath.
+   Single dark look on purpose, because scopecreep is dark-only. */
+:root {
+  --bg: #0e0f10;
+  --surface: #17181a;
+  --bar: #1e2022;
+  --line: #2e3033;
+  --text: #cfd1d3;
+  --muted: #8e9195;
+  --accent: #5aa9ff;
+  --accent-soft: rgba(90, 169, 255, .28);
+  --warn: #e3b341;
+  --font: Inter, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--text); font-family: var(--font); font-size: 14px; line-height: 1.5; }
+.wrap { max-width: 1180px; margin: 0 auto; padding-block: 24px 64px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+h1 { font-size: 22px; margin: 0 0 6px; font-weight: 600; letter-spacing: -.01em; }
+h2 { font-size: 13px; margin: 0 0 10px; font-weight: 600; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); }
+p { margin: 0 0 10px; }
+.question { max-width: 72ch; color: var(--muted); margin-bottom: 18px; }
+.question b { color: var(--text); font-weight: 500; }
+button { font: inherit; color: var(--text); background: var(--bar); border: 1px solid var(--line); border-radius: 4px; padding: 5px 11px; cursor: pointer; }
+button:hover { background: #26282b; }
+button:focus-visible, select:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+button:disabled { opacity: .4; cursor: default; }
+select { font: inherit; color: var(--text); background: var(--bar); border: 1px solid var(--line); border-radius: 4px; padding: 5px 8px; }
+.toolbar { display: flex; flex-wrap: wrap; gap: 8px 10px; align-items: center; margin-bottom: 10px; }
+.toolbar .sep { width: 1px; align-self: stretch; background: var(--line); margin: 0 4px; }
+.toolbar label { color: var(--muted); font-size: 12px; display: flex; gap: 6px; align-items: center; }
+.hint { color: var(--muted); font-size: 12px; margin-bottom: 8px; }
+.pagebar { display: flex; flex-wrap: wrap; gap: 8px; justify-content: space-between; align-items: flex-end; margin-bottom: -1px; }
+.pagetabs { display: flex; flex-wrap: wrap; gap: 2px; }
+.pagetabs .pg { border-radius: 4px 4px 0 0; border-bottom: 0; background: var(--surface); color: var(--muted); padding: 6px 14px; }
+.pagetabs .pg.on { color: #fff; background: var(--bar); box-shadow: inset 0 2px 0 var(--accent); }
+.pagetabs input { font: inherit; color: #fff; background: #0e0f10; border: 1px solid var(--accent); border-radius: 4px 4px 0 0; padding: 5px 10px; width: 130px; }
+.pbr { display: flex; gap: 6px; padding-bottom: 6px; }
+.stagewrap { background: #08090a; border: 1px solid var(--line); border-radius: 6px; padding: 10px; overflow: auto; display: flex; justify-content: center; }
+#stage { position: relative; background: var(--bg); flex: none; user-select: none; touch-action: none; }
+.pane { position: absolute; background: var(--surface); border: 1px solid var(--line); display: flex; flex-direction: column; overflow: hidden; }
+.pane.focus { border-color: #6b6e72; box-shadow: inset 0 0 0 1px #6b6e72; }
+.bar { height: 24px; flex: none; display: flex; align-items: center; background: var(--bar); border-bottom: 1px solid var(--line); font-size: 12px; min-width: 0; }
+.bar .grab { cursor: grab; padding: 0 8px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--text); height: 100%; display: flex; align-items: center; min-width: 0; }
+.bar .tab { border-right: 1px solid var(--line); color: var(--muted); }
+.bar .tab.on { color: var(--text); background: var(--surface); box-shadow: inset 0 -2px 0 var(--accent); }
+.bar .fill { flex: 1; }
+.bar .more { border: 0; background: none; padding: 0 8px; height: 100%; border-radius: 0; color: var(--muted); }
+.body { flex: 1; position: relative; min-height: 0; }
+.body canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+.edge { position: absolute; width: 22px; height: 22px; padding: 0; border-radius: 11px; line-height: 20px; text-align: center; background: var(--bar); border-color: #55585c; color: var(--text); opacity: 0; z-index: 3; }
+.pane:hover .edge, .edge:focus-visible { opacity: .95; }
+.edge.l { left: 4px; top: calc(50% - 11px); } .edge.r { right: 4px; top: calc(50% - 11px); }
+.edge.t { top: 30px; left: calc(50% - 11px); } .edge.b { bottom: 4px; left: calc(50% - 11px); }
+.divider { position: absolute; z-index: 4; }
+.divider.row { cursor: col-resize; } .divider.col { cursor: row-resize; }
+.divider:hover { background: var(--accent-soft); }
+.drop { position: absolute; z-index: 9; pointer-events: none; background: var(--accent-soft); border: 2px solid var(--accent); color: #fff; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 500; }
+.ghost { position: fixed; z-index: 50; pointer-events: none; background: var(--bar); border: 1px solid var(--accent); padding: 3px 10px; font-size: 12px; border-radius: 3px; }
+.empty { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; color: var(--muted); }
+.empty button { font-size: 16px; padding: 10px 22px; }
+#menu { position: fixed; z-index: 60; background: #1c1e20; border: 1px solid #44474b; border-radius: 6px; padding: 5px; min-width: 190px; box-shadow: 0 8px 24px rgba(0,0,0,.5); }
+#menu[hidden] { display: none; }
+#menu .mh { padding: 5px 10px 3px; font-size: 11px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); }
+#menu button { display: block; width: 100%; text-align: left; border: 0; background: none; padding: 5px 10px; border-radius: 3px; }
+#menu button:hover { background: #2b2e31; }
+#menu hr { border: 0; border-top: 1px solid var(--line); margin: 5px 0; }
+#toast { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); background: #2a2417; border: 1px solid var(--warn); color: #f3dba0; padding: 8px 14px; border-radius: 6px; z-index: 70; max-width: 90vw; }
+#toast[hidden] { display: none; }
+.cols { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 20px; margin-top: 24px; }
+@media (max-width: 860px) { .cols { grid-template-columns: minmax(0, 1fr); } }
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: 6px; padding: 16px; }
+.tabs { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
+.tabs button.on { border-color: var(--accent); color: #fff; }
+.steps { display: flex; flex-direction: column; gap: 6px; margin-top: 10px; }
+.steps button { text-align: left; }
+.steps button.next { border-color: var(--accent); background: #1d2a3a; }
+.steps button.done { color: var(--muted); }
+.watch { border-left: 2px solid var(--accent); padding-left: 10px; color: var(--muted); }
+.stats { display: flex; flex-wrap: wrap; gap: 6px 18px; font-family: var(--mono); font-size: 12px; margin-bottom: 12px; }
+.stats b { color: #fff; font-weight: 500; }
+.outline, .outline ul { list-style: none; margin: 0; padding-left: 16px; border-left: 1px solid var(--line); font-size: 13px; }
+.outline { padding-left: 0; border: 0; }
+.outline li { padding: 2px 0; }
+.outline .dir { color: var(--accent); font-family: var(--mono); font-size: 12px; }
+.outline .pn { color: var(--text); }
+.outline .tg { color: var(--muted); }
+.log { font-family: var(--mono); font-size: 12px; color: var(--muted); max-height: 150px; overflow: auto; margin-top: 12px; }
+.log div:first-child { color: var(--text); }
+</style>
+
+<div class="wrap">
+  <h1>Tiling Layout Prototype</h1>
+  <p class="question"><b>The question.</b> Can scopecreep's Window behave like a tiling window manager: one panel fills the app, each new one splits the focused panel along its longer side, you can add a panel from any edge or drag one where you want it, the same display can appear four times, one press of Auto layout can re-arrange the whole Window for the footage's shape, and you can keep several pages, each with its own layout? This page is a throwaway stand-in for the layout rules only. The pictures, waveform and vectorscope are real maths on a made-up frame, but nothing here measures a real Feed.</p>
+
+  <div class="toolbar">
+    <button id="add">+ Add panel &#9662;</button>
+    <button id="undo">Undo</button>
+    <button id="def">Load 7-panel default</button>
+    <button id="clear">Clear</button>
+    <span class="sep"></span>
+    <label>Footage <select id="footage">
+      <option value="1.7778">16:9</option><option value="2.39">2.39:1</option><option value="1.3333">4:3</option><option value="1">1:1</option><option value="0.5625">9:16</option>
+    </select></label>
+    <label>Monitor <select id="shape">
+      <option value="1.7778">Landscape 16:9</option><option value="2.3333">Ultrawide 21:9</option><option value="1.3333">4:3</option><option value="0.5625">Portrait 9:16</option>
+    </select></label>
+  </div>
+  <p class="hint">Click a panel to focus it (light outline). <b>Add panel</b> splits the focused panel along its longer side. Hover a panel's edge for a <b>+</b>. Drag a title onto another panel: edges split, the middle makes a tab. Drag the gaps to resize. Use <b>&#8943;</b> for replace, duplicate and close. <b>Auto layout</b> is a one-shot button: it re-arranges every panel on this page right now (Undo brings the old layout back). <b>Auto resize</b> only resizes the splits. Both act on the current page only, which is why they sit with the page tabs. Alt+1 to 9 switch pages.</p>
+
+  <div class="pagebar"><div class="pagetabs" id="pages"></div><div class="pbr"><button id="auto" title="Re-arrange every panel on THIS page to fit the footage and the monitor, once. Undo brings the old layout back.">Auto layout</button><button id="fit" title="On THIS page, keep every panel where it is and only change the split sizes so picture cells match the footage">Auto resize</button><button id="delpage">Delete page</button></div></div>
+  <div class="stagewrap" id="stagewrap"><div id="stage"></div></div>
+
+  <div class="cols">
+    <div class="card">
+      <h2>Guided walkthroughs</h2>
+      <div class="tabs" id="wtabs"></div>
+      <div id="wbody"></div>
+    </div>
+    <div class="card">
+      <h2>Current layout</h2>
+      <div class="stats" id="stats"></div>
+      <div id="outline"></div>
+      <div class="log" id="log"></div>
+    </div>
+  </div>
+</div>
+
+<div id="menu" hidden></div>
+<div id="toast" hidden></div>
+
+<script>
+// ===== Tiler: the portable logic. Pure functions over a plain tree; no DOM below this line until "PAGE". =====
+// <tiler>
+const Tiler = (() => {
+  let n = 0;
+  const nid = p => p + (++n);
+  const MIN = { w: 120, h: 96 };
+  const TITLE = 24;
+  const KINDS = ['Clean picture', 'Luma waveform', 'Vectorscope', 'ARRI False Colour', 'Stops False Colour', 'Saturation heatmap', 'Skin tone'];
+  const ASPECT = { 'Clean picture': 1, 'Luma waveform': 1, 'ARRI False Colour': 1, 'Stops False Colour': 1, 'Saturation heatmap': 1, 'Skin tone': 1 };
+  const LEGEND = { 'ARRI False Colour': 22, 'Stops False Colour': 22, 'Saturation heatmap': 22 };
+  const GUTTER = 44;
+  const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
+  const clone = x => JSON.parse(JSON.stringify(x));
+
+  const pane = kind => ({ t: 'leaf', id: nid('p'), tabs: [{ id: nid('i'), kind }], active: 0 });
+  const split = (dir, a, b, ratio = 0.5) => ({ t: 'split', id: nid('s'), dir, ratio, a, b });
+
+  const panes = (nd, out = []) => { if (!nd) return out; if (nd.t === 'leaf') out.push(nd); else { panes(nd.a, out); panes(nd.b, out); } return out; };
+
+  // Replace pane `pid` with fn(pane); fn may return null to delete it, its sibling then takes the space.
+  const mapPane = (nd, pid, fn) => {
+    if (nd.t === 'leaf') return nd.id === pid ? fn(nd) : nd;
+    const a = mapPane(nd.a, pid, fn), b = mapPane(nd.b, pid, fn);
+    if (!a) return b; if (!b) return a;
+    return { ...nd, a, b };
+  };
+
+  const minW = (nd, gap) => nd.t === 'leaf' ? MIN.w : nd.dir === 'row' ? minW(nd.a, gap) + gap + minW(nd.b, gap) : Math.max(minW(nd.a, gap), minW(nd.b, gap));
+  const minH = (nd, gap) => nd.t === 'leaf' ? MIN.h : nd.dir === 'col' ? minH(nd.a, gap) + gap + minH(nd.b, gap) : Math.max(minH(nd.a, gap), minH(nd.b, gap));
+  const fits = (tree, W, H, gap) => !tree || (minW(tree, gap) <= W && minH(tree, gap) <= H);
+
+  // The two child rectangles of a split, with the ratio held so neither child goes under its minimum.
+  const childRects = (nd, r, gap) => {
+    const row = nd.dir === 'row';
+    const total = (row ? r.w : r.h) - gap;
+    const lo = (row ? minW(nd.a, gap) : minH(nd.a, gap)) / total;
+    const hi = 1 - (row ? minW(nd.b, gap) : minH(nd.b, gap)) / total;
+    const ratio = clamp(nd.ratio, lo, Math.max(lo, hi));
+    const as = total * ratio;
+    return row
+      ? { a: { x: r.x, y: r.y, w: as, h: r.h }, b: { x: r.x + as + gap, y: r.y, w: total - as, h: r.h }, gapRect: { x: r.x + as, y: r.y, w: gap, h: r.h }, total, ratio }
+      : { a: { x: r.x, y: r.y, w: r.w, h: as }, b: { x: r.x, y: r.y + as + gap, w: r.w, h: total - as }, gapRect: { x: r.x, y: r.y + as, w: r.w, h: gap }, total, ratio };
+  };
+
+  const layout = (nd, r, gap, out = { leaves: [], dividers: [] }) => {
+    if (!nd) return out;
+    if (nd.t === 'leaf') { out.leaves.push({ node: nd, rect: r }); return out; }
+    const c = childRects(nd, r, gap);
+    out.dividers.push({ node: nd, rect: c.gapRect, parent: r, total: c.total, row: nd.dir === 'row' });
+    layout(nd.a, c.a, gap, out); layout(nd.b, c.b, gap, out);
+    return out;
+  };
+
+  // Add a new pane beside `pid` on `side`. Returns { tree, focus }.
+  const addAt = (tree, pid, side, kind, inst) => {
+    const np = inst ? { t: 'leaf', id: nid('p'), tabs: [inst], active: 0 } : pane(kind);
+    const dir = (side === 'left' || side === 'right') ? 'row' : 'col';
+    const first = side === 'left' || side === 'top';
+    return { tree: mapPane(tree, pid, p => first ? split(dir, np, p) : split(dir, p, np)), focus: np.id };
+  };
+
+  // Hyprland-style: split the focused pane along its longer side, 50/50. A wide pane puts the new one to the right.
+  const addDwindle = (tree, focusId, kind, W, H, gap) => {
+    if (!tree) { const p = pane(kind); return { tree: p, focus: p.id }; }
+    const ls = layout(tree, { x: 0, y: 0, w: W, h: H }, gap).leaves;
+    const t = ls.find(l => l.node.id === focusId) || ls.reduce((m, l) => l.rect.w * l.rect.h > m.rect.w * m.rect.h ? l : m);
+    return addAt(tree, t.node.id, t.rect.w >= t.rect.h ? 'right' : 'bottom', kind);
+  };
+
+  const findPane = (tree, instId) => panes(tree).find(p => p.tabs.some(t => t.id === instId));
+
+  const extract = (tree, instId) => {
+    let inst = null;
+    const rec = nd => {
+      if (nd.t === 'leaf') {
+        const i = nd.tabs.findIndex(x => x.id === instId);
+        if (i < 0) return nd;
+        inst = nd.tabs[i];
+        if (nd.tabs.length === 1) return null;
+        const tabs = nd.tabs.filter((_, k) => k !== i);
+        return { ...nd, tabs, active: Math.min(nd.active, tabs.length - 1) };
+      }
+      const a = rec(nd.a), b = rec(nd.b);
+      if (!a) return b; if (!b) return a;
+      return { ...nd, a, b };
+    };
+    return { tree: rec(tree), inst };
+  };
+
+  // Drop instance `instId` on pane `targetId`: zone is left, right, top, bottom (split) or center (tab).
+  const dock = (tree, instId, targetId, zone) => {
+    const src = findPane(tree, instId);
+    if (!src || (src.id === targetId && src.tabs.length === 1)) return null;
+    const ex = extract(tree, instId);
+    if (zone === 'center') {
+      return { tree: mapPane(ex.tree, targetId, p => ({ ...p, tabs: [...p.tabs, ex.inst], active: p.tabs.length })), focus: targetId };
+    }
+    return addAt(ex.tree, targetId, zone, null, ex.inst);
+  };
+
+  const close = (tree, instId) => extract(tree, instId).tree;
+  const replace = (tree, instId, kind) => {
+    const p = findPane(tree, instId);
+    return mapPane(tree, p.id, q => ({ ...q, tabs: q.tabs.map(t => t.id === instId ? { ...t, kind } : t) }));
+  };
+  const activate = (tree, pid, i) => mapPane(tree, pid, p => ({ ...p, active: i }));
+
+  // Auto resize: where a split has one picture-shaped pane beside something else, set the ratio so the
+  // picture's cell matches the footage's shape. Pictures and the waveform count; the vectorscope does not.
+  const fit = (tree, W, H, gap, aspect) => {
+    if (!tree) return tree;
+    const t = clone(tree);
+    const rec = (nd, r) => {
+      if (nd.t === 'leaf') return;
+      const row = nd.dir === 'row';
+      const total = (row ? r.w : r.h) - gap;
+      const need = c => {
+        if (c.t !== 'leaf') return null;
+        const k = c.tabs[c.active].kind;
+        if (!ASPECT[k]) return null;
+        const g = k === 'Luma waveform' ? GUTTER : 0, lg = LEGEND[k] || 0;
+        return row ? (r.h - TITLE - lg - 4) * aspect + g + 2 : (r.w - g - 2) / aspect + TITLE + lg + 4;
+      };
+      const na = need(nd.a), nb = need(nd.b);
+      if (na != null && nb == null) nd.ratio = clamp(na / total, 0.15, 0.85);
+      else if (nb != null && na == null) nd.ratio = 1 - clamp(nb / total, 0.15, 0.85);
+      const c = childRects(nd, r, gap);
+      rec(nd.a, c.a); rec(nd.b, c.b);
+    };
+    rec(t, { x: 0, y: 0, w: W, h: H });
+    return t;
+  };
+
+  // Auto layout: try every way of cutting the panels (kept in reading order) into splits, set each split's ratio
+  // from the panels' weights, fit the picture cells to the footage, drop any that breaks a minimum size, and keep
+  // the one whose panels show the most useful area (log, so no panel is starved for the sake of another).
+  const WEIGHT = { 'Clean picture': 3, 'Luma waveform': 1.6, 'Vectorscope': 1.2 };
+  const wOf = p => WEIGHT[p.tabs[p.active].kind] || 1;
+  const weightOf = nd => nd.t === 'leaf' ? wOf(nd) : weightOf(nd.a) + weightOf(nd.b);
+  const useful = (kind, r, aspect) => {
+    const cw = r.w - 2, ch = r.h - TITLE - 2;
+    if (cw <= 0 || ch <= 0) return 1;
+    if (kind === 'Vectorscope') { const d = Math.min(cw, ch); return Math.PI * d * d / 4; }
+    const aw = cw - (kind === 'Luma waveform' ? GUTTER : 0), ah = ch - (LEGEND[kind] || 0);
+    if (aw <= 0 || ah <= 0) return 1;
+    const w = Math.min(aw, ah * aspect); return w * (w / aspect);
+  };
+  const score = (tree, W, H, gap, aspect) => layout(tree, { x: 0, y: 0, w: W, h: H }, gap).leaves
+    .reduce((s, l) => s + wOf(l.node) * Math.log(1 + useful(l.node.tabs[l.node.active].kind, l.rect, aspect)), 0);
+  const gen = items => {
+    const n = items.length; if (n === 1) return [items[0]];
+    const ks = []; if (n > 6) { ks.push(Math.floor(n / 2)); if (n % 2) ks.push(Math.ceil(n / 2)); } else for (let k = 1; k < n; k++) ks.push(k);
+    const out = [];
+    for (const k of ks) { const As = gen(items.slice(0, k)), Bs = gen(items.slice(k));
+      for (const A of As) for (const B of Bs) for (const dir of ['row', 'col']) out.push(split(dir, A, B, weightOf(A) / (weightOf(A) + weightOf(B)))); }
+    return out;
+  };
+  const AUTO_MAX = 9;
+  const autoArrange = (items, W, H, gap, aspect) => {
+    if (!items.length || items.length > AUTO_MAX) return null;
+    let best = null, bs = -Infinity;
+    for (const cand of gen(items)) {
+      const t = items.length > 1 ? fit(cand, W, H, gap, aspect) : cand;
+      if (!fits(t, W, H, gap)) continue;
+      const sc = score(t, W, H, gap, aspect); if (sc > bs) { bs = sc; best = t; }
+    }
+    return best;
+  };
+
+  // Names: a kind that appears more than once is numbered in reading order.
+  const names = tree => {
+    const all = panes(tree).flatMap(p => p.tabs);
+    const count = {}; all.forEach(t => count[t.kind] = (count[t.kind] || 0) + 1);
+    const seen = {}, out = {};
+    all.forEach(t => { seen[t.kind] = (seen[t.kind] || 0) + 1; out[t.id] = count[t.kind] > 1 ? `${t.kind} #${seen[t.kind]}` : t.kind; });
+    return out;
+  };
+
+  return { KINDS, ASPECT, LEGEND, GUTTER, TITLE, MIN, pane, split, panes, layout, fits, addAt, addDwindle, extract, dock, close, replace, activate, fit, autoArrange, AUTO_MAX, names, findPane, clone, clamp, minW, minH };
+})();
+// </tiler>
+
+// ===== PAGE: a thin shell over Tiler =====
+const GAP = 6;
+const $ = id => document.getElementById(id);
+const S = { tree: null, focus: null, history: [], log: [], aspect: 16 / 9, shape: 16 / 9, W: 900, H: 506, auto: true, pages: [], pi: 0 };
+
+// ---- a made-up frame, and the measurements taken from it ----
+let scene = null, renders = {};
+function buildScene() {
+  const h = 120, w = Math.round(h * S.aspect);
+  const c = document.createElement('canvas'); c.width = w; c.height = h;
+  const g = c.getContext('2d', { willReadFrequently: true });
+  let gr = g.createLinearGradient(0, 0, 0, h); gr.addColorStop(0, '#8fa9bf'); gr.addColorStop(.45, '#c9d8e2'); g.fillStyle = gr; g.fillRect(0, 0, w, h);
+  gr = g.createLinearGradient(0, h * .3, 0, h); gr.addColorStop(0, '#1c5560'); gr.addColorStop(1, '#06222b'); g.fillStyle = gr;
+  g.beginPath(); g.moveTo(0, h * .38); g.bezierCurveTo(w * .3, h * .1, w * .62, h * .12, w, h * .32); g.lineTo(w, h); g.lineTo(0, h); g.fill();
+  gr = g.createRadialGradient(w * .8, h * .72, 2, w * .8, h * .72, h * .38); gr.addColorStop(0, '#fff'); gr.addColorStop(1, 'rgba(255,255,255,0)'); g.fillStyle = gr; g.fillRect(0, 0, w, h);
+  gr = g.createRadialGradient(w * .4, h * .2, 2, w * .4, h * .2, h * .3); gr.addColorStop(0, 'rgba(235,240,245,.9)'); gr.addColorStop(1, 'rgba(235,240,245,0)'); g.fillStyle = gr; g.fillRect(0, 0, w, h);
+  g.fillStyle = '#10161a'; g.beginPath(); g.ellipse(w * .62, h * .72, w * .06, h * .1, 0, 0, 7); g.fill();
+  g.fillStyle = '#c98f6e'; g.beginPath(); g.arc(w * .62, h * .6, h * .05, 0, 7); g.fill();
+  const id = g.getImageData(0, 0, w, h), d = id.data;
+  for (let i = 0; i < d.length; i += 4) { const nz = (Math.random() - .5) * 8; d[i] += nz; d[i + 1] += nz; d[i + 2] += nz; }
+  g.putImageData(id, 0, 0);
+  scene = { w, h, canvas: c, d: g.getImageData(0, 0, w, h).data };
+  renders = {};
+  const make = fn => { const cc = document.createElement('canvas'); cc.width = w; cc.height = h; const x = cc.getContext('2d'); const o = x.createImageData(w, h);
+    for (let i = 0; i < w * h; i++) { const r = scene.d[i * 4], gg = scene.d[i * 4 + 1], b = scene.d[i * 4 + 2]; const px = fn(r / 255, gg / 255, b / 255); o.data.set([px[0], px[1], px[2], 255], i * 4); }
+    x.putImageData(o, 0, 0); return cc; };
+  const lum = (r, g, b) => .2126 * r + .7152 * g + .0722 * b;
+  const grey = l => { const v = Math.round(l * 255); return [v, v, v]; };
+  const hsv = (r, g, b) => { const mx = Math.max(r, g, b), mn = Math.min(r, g, b), dd = mx - mn; let hh = 0;
+    if (dd) { hh = mx === r ? ((g - b) / dd) % 6 : mx === g ? (b - r) / dd + 2 : (r - g) / dd + 4; hh *= 60; if (hh < 0) hh += 360; } return [hh, mx ? dd / mx : 0, mx]; };
+  const hsl2rgb = (hh, s, l) => { const a = s * Math.min(l, 1 - l), f = n => { const k = (n + hh / 30) % 12; return l - a * Math.max(-1, Math.min(k - 3, 9 - k, 1)); }; return [f(0) * 255, f(8) * 255, f(4) * 255]; };
+  const STOPS = [[91, 29, 153], [155, 123, 224], [44, 63, 208], [79, 179, 240], [15, 157, 74], [143, 212, 74], [153, 153, 153], [240, 224, 32], [255, 154, 31], [224, 32, 32], [240, 96, 160], [255, 255, 255]];
+  renders['Clean picture'] = c;
+  renders['ARRI False Colour'] = make((r, g, b) => { const l = lum(r, g, b);
+    if (l < .05) return [120, 40, 160]; if (Math.abs(l - .42) < .03) return [40, 190, 70]; if (Math.abs(l - .56) < .025) return [240, 110, 170]; if (l > .96) return [230, 30, 30]; if (l > .92) return [240, 220, 40]; return grey(l * .8); });
+  renders['Stops False Colour'] = make((r, g, b) => { const l = Math.max(lum(r, g, b), .001); return STOPS[Tiler.clamp(Math.floor(Math.log2(l / .18)) + 6, 0, 11)]; });
+  renders['Saturation heatmap'] = make((r, g, b) => { const s = hsv(r, g, b)[1]; if (s < .12) return grey(lum(r, g, b) * .8); return hsl2rgb(190 * (1 - Math.min(1, s / .75)), 1, .5); });
+  renders['Skin tone'] = make((r, g, b) => { const [hh, s, v] = hsv(r, g, b); return (hh > 8 && hh < 38 && s > .2 && s < .7 && v > .3) ? [255, 60, 220] : grey(lum(r, g, b) * .8); });
+}
+
+// ---- drawing ----
+const BG = '#121314', LABEL = '#8e9195', GRID = '#34373a';
+function legendStrip(ctx, kind, W, H) {
+  const y = H - 16, h = 10, x0 = 6, w = W - 12;
+  if (kind === 'Stops False Colour') { const cols = ['#5b1d99', '#9b7be0', '#2c3fd0', '#4fb3f0', '#0f9d4a', '#8fd44a', '#999', '#f0e020', '#ff9a1f', '#e02020', '#f060a0', '#fff']; cols.forEach((c, i) => { ctx.fillStyle = c; ctx.fillRect(x0 + w / 12 * i, y, w / 12 + 1, h); }); }
+  else { const g = ctx.createLinearGradient(x0, 0, x0 + w, 0);
+    if (kind === 'ARRI False Colour') { g.addColorStop(0, '#781fa0'); g.addColorStop(.06, '#222'); g.addColorStop(.42, '#2ab246'); g.addColorStop(.5, '#777'); g.addColorStop(.56, '#f06eaa'); g.addColorStop(.94, '#ddd'); g.addColorStop(.97, '#f0dc28'); g.addColorStop(1, '#e61e1e'); }
+    else { g.addColorStop(0, '#1fb5d2'); g.addColorStop(.35, '#2ad25a'); g.addColorStop(.7, '#e8d828'); g.addColorStop(1, '#e03020'); }
+    ctx.fillStyle = g; ctx.fillRect(x0, y, w, h); }
+}
+function drawPicture(ctx, W, H, kind) {
+  const src = renders[kind], lg = Tiler.LEGEND[kind] || 0, ah = H - lg;
+  const s = Math.min(W / src.width, ah / src.height), dw = src.width * s, dh = src.height * s;
+  ctx.imageSmoothingEnabled = s < 1;
+  ctx.drawImage(src, (W - dw) / 2, (ah - dh) / 2, dw, dh);
+  if (lg) legendStrip(ctx, kind, W, H);
+}
+function drawWaveform(ctx, W, H) {
+  const G = Tiler.GUTTER, aw = W - G - 10, ah = H - 20;
+  const pw = Math.max(20, Math.min(aw, ah * S.aspect)), ph = pw / S.aspect;
+  const x0 = G + (aw - pw) / 2, y0 = 10 + (ah - ph) / 2;
+  ctx.fillStyle = '#0a0a0b'; ctx.fillRect(x0, y0, pw, ph);
+  ctx.font = '10px "JetBrains Mono", monospace'; ctx.textAlign = 'right'; ctx.textBaseline = 'middle';
+  const placed = [];
+  [940, 64, 512, 1023, 0].forEach(code => {
+    const y = y0 + ph * (1 - code / 1023);
+    ctx.strokeStyle = GRID; ctx.beginPath(); ctx.moveTo(x0, Math.round(y) + .5); ctx.lineTo(x0 + pw, Math.round(y) + .5); ctx.stroke();
+    // Edge labels sit inside the plot's height with half a line of inset, so none is cut; a label that would touch
+    // one already drawn is left out, so text never overlaps.
+    const ly = Tiler.clamp(y, y0 + 7, y0 + ph - 7);
+    if (placed.some(p => Math.abs(p - ly) < 13)) return;
+    placed.push(ly); ctx.fillStyle = LABEL; ctx.fillText(String(code), x0 - 6, ly);
+  });
+  ctx.fillStyle = 'rgba(255,255,255,.16)';
+  for (let y = 0; y < scene.h; y++) for (let x = 0; x < scene.w; x++) { const i = (y * scene.w + x) * 4, l = (.2126 * scene.d[i] + .7152 * scene.d[i + 1] + .0722 * scene.d[i + 2]) / 255;
+    ctx.fillRect(x0 + x / scene.w * pw, y0 + (1 - l) * ph, Math.max(1, pw / scene.w), 1); }
+}
+function drawVector(ctx, W, H) {
+  const r = Math.max(10, Math.min(W, H) / 2 - 14), cx = W / 2, cy = H / 2;
+  ctx.strokeStyle = GRID; ctx.beginPath(); ctx.arc(cx, cy, r, 0, 7); ctx.stroke(); ctx.beginPath(); ctx.arc(cx, cy, r * .5, 0, 7); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(cx - r, cy); ctx.lineTo(cx + r, cy); ctx.moveTo(cx, cy - r); ctx.lineTo(cx, cy + r); ctx.stroke();
+  ctx.globalCompositeOperation = 'lighter';
+  for (let i = 0; i < scene.w * scene.h; i += 2) { const R = scene.d[i * 4] / 255, G = scene.d[i * 4 + 1] / 255, B = scene.d[i * 4 + 2] / 255;
+    const cb = -.1146 * R - .3854 * G + .5 * B, cr = .5 * R - .4542 * G - .0458 * B;
+    ctx.fillStyle = `rgba(${R * 255 | 0},${G * 255 | 0},${B * 255 | 0},.35)`; ctx.fillRect(cx + cb * 2 * r * 1.7, cy - cr * 2 * r * 1.7, 1.5, 1.5); }
+  ctx.globalCompositeOperation = 'source-over';
+}
+function drawKind(canvas, kind) {
+  const dpr = window.devicePixelRatio || 1, W = canvas.clientWidth, H = canvas.clientHeight;
+  canvas.width = Math.max(1, W * dpr); canvas.height = Math.max(1, H * dpr);
+  const ctx = canvas.getContext('2d'); ctx.scale(dpr, dpr); ctx.fillStyle = BG; ctx.fillRect(0, 0, W, H);
+  if (kind === 'Luma waveform') drawWaveform(ctx, W, H); else if (kind === 'Vectorscope') drawVector(ctx, W, H); else drawPicture(ctx, W, H, kind);
+}
+
+// ---- state changes ----
+function toast(msg) { const t = $('toast'); t.textContent = msg; t.hidden = false; clearTimeout(toast.t); toast.t = setTimeout(() => t.hidden = true, 3200); }
+function note(msg) { S.log.unshift(msg); if (S.log.length > 30) S.log.pop(); }
+const esc = x => String(x).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+const noRoom = `No room: every panel needs at least ${Tiler.MIN.w} \u00D7 ${Tiler.MIN.h}. Close one, tab it, or use a bigger window.`;
+const selectNearest = (id, v) => { const sel = $(id); let best = 0; [...sel.options].forEach((o, i) => { if (Math.abs(+o.value - v) < Math.abs(+sel.options[best].value - v)) best = i; }); sel.selectedIndex = best; };
+
+// Pages: each has its own panels, focus and undo. S.tree, S.focus, S.history are the live copy of the current page.
+function pageSave() { const P = S.pages[S.pi]; P.tree = S.tree; P.focus = S.focus; P.history = S.history; }
+function pageLoad(i) { S.pi = i; const P = S.pages[i]; S.tree = P.tree; S.focus = P.focus; S.history = P.history; }
+function treeFromKinds(kinds) {
+  const ps = kinds.map(k => Tiler.pane(k)); if (!ps.length) return null;
+  const a = Tiler.autoArrange(ps, S.W, S.H, GAP, S.aspect); if (a) return a;
+  let t = ps[0]; for (let i = 1; i < ps.length; i++) t = Tiler.addAt(t, Tiler.panes(t).slice(-1)[0].id, 'right', null, ps[i].tabs[0]).tree;
+  return t;
+}
+function mkPage(name, kinds) { const tree = treeFromKinds(kinds); return { name, tree, focus: tree ? Tiler.panes(tree)[0].id : null, history: [] }; }
+const TEMPLATES = {
+  'Grade (all 7 panels)': Tiler.KINDS,
+  'Picture views': ['Clean picture', 'ARRI False Colour', 'Stops False Colour', 'Saturation heatmap', 'Skin tone'],
+  'Scopes': ['Clean picture', 'Luma waveform', 'Vectorscope'],
+  'Picture only': ['Clean picture'],
+  'Empty page': [],
+};
+// Auto layout is a one-shot: it arranges the page's panels now, and nothing re-arranges them afterwards.
+function arrangeNow(tree) { return Tiler.autoArrange(Tiler.panes(tree), S.W, S.H, GAP, S.aspect); }
+function commit(res, msg) {
+  const tree = res ? res.tree : S.tree;
+  if (tree && !Tiler.fits(tree, S.W, S.H, GAP)) { toast(noRoom); return false; }
+  S.history.push(Tiler.clone(S.tree));
+  S.tree = tree; if (res && res.focus) S.focus = res.focus;
+  note(msg); render(); return true;
+}
+const act = {
+  reset() { S.tree = null; S.focus = null; S.history = []; note('Cleared this page: no panels.'); render(); },
+  resetAll() { S.pages = [{ name: 'Page 1', tree: null, focus: null, history: [] }]; pageLoad(0); S.log = []; note('Cleared: one empty page.'); render(); },
+  add(kind) { const r = Tiler.addDwindle(S.tree, S.focus, kind, S.W, S.H, GAP); const rect = S.tree ? Tiler.layout(S.tree, { x: 0, y: 0, w: S.W, h: S.H }, GAP).leaves.find(l => l.node.id === S.focus) : null;
+    const side = !S.tree ? 'fills the Window' : (rect && rect.rect.w >= rect.rect.h ? 'split side by side (the focused panel is wider than tall)' : 'split top and bottom (the focused panel is taller than wide)');
+    commit(r, `Added ${kind}: ${side}.`); },
+  edge(targetKind, side, kind) { const p = paneOfKind(targetKind); if (!p) return toast(`No ${targetKind} panel to attach to.`); commit(Tiler.addAt(S.tree, p.id, side, kind), `Added ${kind} on the ${side} of ${targetKind}.`); },
+  dup(kind, side) { const p = paneOfKind(kind); if (!p) return; commit(Tiler.addAt(S.tree, p.id, side, kind), `Duplicated ${kind} to the ${side}.`); },
+  dock(kind, targetKind, zone) { const i = instOfKind(kind), p = paneOfKind(targetKind); if (!i || !p) return; const r = Tiler.dock(S.tree, i.id, p.id, zone); if (r) commit(r, zone === 'center' ? `Tabbed ${kind} into ${targetKind}'s panel.` : `Moved ${kind} to the ${zone} of ${targetKind}.`); },
+  close(kind) { const i = instOfKind(kind); if (i) commit({ tree: Tiler.close(S.tree, i.id) }, `Closed ${kind}; its neighbour took the space.`); },
+  footage(a) { S.aspect = a; selectNearest('footage', a); buildScene(); note(`Footage is now ${a.toFixed(2)}:1. Nothing moved: press Auto layout (re-arrange everything) or Auto resize (resize only).`); render(); },
+  stage(a) { S.shape = a; selectNearest('shape', a); sizeStage(); note(`Monitor shape ${a.toFixed(2)}:1. Nothing moved unless a panel no longer fits.`); render(); },
+  fit() { if (!S.tree) return; commit({ tree: Tiler.fit(S.tree, S.W, S.H, GAP, S.aspect) }, `Auto resize (${S.aspect.toFixed(2)}:1): picture cells now match the frame's shape. No panel moved.`); },
+  autoLayout() {
+    if (!S.tree) return toast('Nothing to arrange: this page has no panels.');
+    const n = Tiler.panes(S.tree).length;
+    const a = arrangeNow(S.tree);
+    if (!a) return toast(n > Tiler.AUTO_MAX ? `Auto layout handles up to ${Tiler.AUTO_MAX} panels in this prototype.` : noRoom);
+    commit({ tree: a }, `Auto layout: re-arranged all ${n} panels for ${S.aspect.toFixed(2)}:1 footage on a ${S.W}\u00D7${S.H} monitor.`);
+  },
+  def() { const P = k => Tiler.pane(k), sp = Tiler.split;
+    const left = sp('col', P('Clean picture'), sp('col', P('ARRI False Colour'), P('Saturation heatmap'), .5), .6);
+    const right = sp('col', P('Luma waveform'), sp('col', P('Vectorscope'), sp('col', P('Stops False Colour'), P('Skin tone'), .5), .5), .3);
+    commit({ tree: sp('row', left, right, .6), focus: Tiler.panes(left)[0].id }, 'Loaded the 7-panel default.'); },
+  nudge() { if (!S.tree || S.tree.t !== 'split') return; S.history.push(Tiler.clone(S.tree)); S.tree.ratio = Tiler.clamp(S.tree.ratio + .15, .2, .8); note('Dragged a divider by hand.'); render(); },
+  go(i) { if (i === S.pi || !S.pages[i]) return; pageSave(); pageLoad(i); note(`Switched to the "${S.pages[i].name}" page.`); render(); },
+  startPage(tpl) { S.pages = [mkPage(tpl.replace(/ \(.*\)/, ''), TEMPLATES[tpl])]; pageLoad(0); S.log = []; note('Started with one page: ' + S.pages[0].name + '.'); render(); },
+  addPage(tpl) {
+    pageSave(); let P;
+    if (tpl === 'copy') { const c = S.pages[S.pi]; P = { name: c.name + ' copy', tree: c.tree ? Tiler.clone(c.tree) : null, focus: c.focus, history: [] }; }
+    else P = mkPage(tpl.replace(/ \(.*\)/, ''), TEMPLATES[tpl]);
+    S.pages.push(P); pageLoad(S.pages.length - 1); note(`Added the page "${P.name}".`); render(); },
+  delPage() { if (S.pages.length < 2) return; const n = S.pages[S.pi].name; S.pages.splice(S.pi, 1); pageLoad(Math.min(S.pi, S.pages.length - 1)); note(`Deleted the page "${n}".`); render(); },
+};
+const paneOfKind = k => Tiler.panes(S.tree).find(p => p.tabs.some(t => t.kind === k));
+const instOfKind = k => { for (const p of Tiler.panes(S.tree)) for (const t of p.tabs) if (t.kind === k) return t; };
+
+function sizeStage() {
+  const avail = Math.max(300, $('stagewrap').clientWidth - 22);
+  const h = Math.min(640, avail / S.shape), w = h * S.shape;
+  S.W = Math.round(w); S.H = Math.round(h);
+  const st = $('stage'); st.style.width = S.W + 'px'; st.style.height = S.H + 'px';
+}
+
+// ---- menus ----
+function openMenu(x, y, items) {
+  const m = $('menu'); m.innerHTML = '';
+  items.forEach(it => {
+    if (it === '-') { m.appendChild(document.createElement('hr')); return; }
+    if (it.head) { const d = document.createElement('div'); d.className = 'mh'; d.textContent = it.head; m.appendChild(d); return; }
+    const b = document.createElement('button'); b.textContent = it.label; b.onclick = () => { closeMenu(); it.run(); }; m.appendChild(b);
+  });
+  m.hidden = false;
+  m.style.left = Math.min(x, innerWidth - 220) + 'px'; m.style.top = Math.min(y, innerHeight - m.offsetHeight - 10) + 'px';
+}
+function closeMenu() { $('menu').hidden = true; }
+const kindItems = (head, run) => [{ head }, ...Tiler.KINDS.map(k => ({ label: k, run: () => run(k) }))];
+document.addEventListener('pointerdown', e => { if (!$('menu').contains(e.target) && !e.target.closest('[data-menu]')) closeMenu(); }, true);
+document.addEventListener('keydown', e => { if (e.key === 'Escape') { closeMenu(); cancelDrag(); } });
+
+// ---- render ----
+function render() {
+  const st = $('stage'); st.innerHTML = '';
+  if (!S.tree) {
+    st.innerHTML = '<div class="empty"><div>No panels. The Window is empty.</div><button id="first" data-menu>+ Add panel</button></div>';
+    $('first').onclick = e => openMenu(e.clientX, e.clientY, kindItems('Add panel', k => act.add(k)));
+  } else {
+    const L = Tiler.layout(S.tree, { x: 0, y: 0, w: S.W, h: S.H }, GAP), nm = Tiler.names(S.tree);
+    L.leaves.forEach(({ node: p, rect: r }) => {
+      const el = document.createElement('div'); el.className = 'pane' + (p.id === S.focus ? ' focus' : ''); el.dataset.pid = p.id;
+      Object.assign(el.style, { left: r.x + 'px', top: r.y + 'px', width: r.w + 'px', height: r.h + 'px' });
+      const act0 = p.tabs[p.active];
+      const bar = document.createElement('div'); bar.className = 'bar';
+      p.tabs.forEach((t, i) => { const g = document.createElement('div'); g.className = 'grab' + (p.tabs.length > 1 ? ' tab' + (i === p.active ? ' on' : '') : ''); g.textContent = nm[t.id]; g.dataset.inst = t.id; g.dataset.idx = i; bar.appendChild(g); });
+      const fl = document.createElement('div'); fl.className = 'fill'; bar.appendChild(fl);
+      const more = document.createElement('button'); more.className = 'more'; more.textContent = '\u22EF'; more.title = 'Panel menu'; more.dataset.menu = '1'; more.dataset.inst = act0.id; bar.appendChild(more);
+      const body = document.createElement('div'); body.className = 'body'; const cv = document.createElement('canvas'); body.appendChild(cv);
+      el.append(bar, body);
+      [['l', 'left'], ['r', 'right'], ['t', 'top'], ['b', 'bottom']].forEach(([c, side]) => { const b = document.createElement('button'); b.className = 'edge ' + c; b.textContent = '+'; b.title = `Add a panel on the ${side}`; b.dataset.menu = '1'; b.dataset.side = side; b.dataset.pid = p.id; el.appendChild(b); });
+      st.appendChild(el);
+      el._kind = act0.kind;
+    });
+    L.dividers.forEach(d => { const el = document.createElement('div'); el.className = 'divider ' + (d.row ? 'row' : 'col'); const pad = 3;
+      Object.assign(el.style, d.row ? { left: d.rect.x - pad + 'px', top: d.rect.y + 'px', width: d.rect.w + 2 * pad + 'px', height: d.rect.h + 'px' } : { left: d.rect.x + 'px', top: d.rect.y - pad + 'px', width: d.rect.w + 'px', height: d.rect.h + 2 * pad + 'px' });
+      el._d = d; st.appendChild(el); });
+    st.querySelectorAll('.pane').forEach(el => drawKind(el.querySelector('canvas'), el._kind));
+  }
+  renderState();
+}
+
+function renderState() {
+  renderPages();
+  const panes = Tiler.panes(S.tree), shown = panes.length, all = panes.reduce((a, p) => a + p.tabs.length, 0);
+  $('stats').innerHTML = `<span>Panels on screen <b>${shown}</b></span><span>Measuring now <b>${shown}</b></span><span>Hidden in tabs, not measuring <b>${all - shown}</b></span><span>Page <b>${esc(S.pages[S.pi].name)}</b></span><span>Footage <b>${S.aspect.toFixed(2)}:1</b></span><span>Monitor <b>${S.W}&#215;${S.H}</b></span>`;
+  const nm = Tiler.names(S.tree);
+  const desc = nd => { if (nd.t === 'leaf') return `<li><span class="pn">${nd.tabs.length > 1 ? 'Tabs: ' + nd.tabs.map((t, i) => (i === nd.active ? '<b>' + nm[t.id] + '</b>' : nm[t.id])).join(' &#183; ') : nm[nd.tabs[0].id]}</span>${nd.id === S.focus ? ' <span class="tg">(focused)</span>' : ''}</li>`;
+    return `<li><span class="dir">${nd.dir === 'row' ? 'side by side' : 'stacked'}</span> <span class="tg">${Math.round(nd.ratio * 100)} / ${100 - Math.round(nd.ratio * 100)}</span><ul>${desc(nd.a)}${desc(nd.b)}</ul></li>`; };
+  $('outline').innerHTML = S.tree ? `<ul class="outline">${desc(S.tree)}</ul>` : '<span class="tg">Empty.</span>';
+  $('log').innerHTML = S.log.map(l => `<div>${l}</div>`).join('');
+  $('undo').disabled = !S.history.length;
+}
+
+// ---- pointer: focus, tabs, dividers, drag to dock ----
+let drag = null;
+function zoneAt(pEl, x, y) {
+  const r = pEl.getBoundingClientRect(), fx = (x - r.left) / r.width, fy = (y - r.top) / r.height;
+  const dl = fx, dr = 1 - fx, dt = fy, db = 1 - fy, m = Math.min(dl, dr, dt, db);
+  if (m > 0.25) return 'center';
+  return m === dl ? 'left' : m === dr ? 'right' : m === dt ? 'top' : 'bottom';
+}
+function cancelDrag() { if (!drag) return; drag.ghost && drag.ghost.remove(); drag.drop && drag.drop.remove(); drag = null; }
+$('stage').addEventListener('pointerdown', e => {
+  const pEl = e.target.closest('.pane');
+  if (pEl && !e.target.closest('.edge')) { if (S.focus !== pEl.dataset.pid) { S.focus = pEl.dataset.pid; document.querySelectorAll('.pane').forEach(x => x.classList.toggle('focus', x === pEl)); renderState(); } }
+  const dv = e.target.closest('.divider');
+  if (dv) { drag = { kind: 'div', d: dv._d }; e.preventDefault(); return; }
+  const g = e.target.closest('.grab');
+  if (g) { drag = { kind: 'title', inst: g.dataset.inst, idx: +g.dataset.idx, pid: pEl.dataset.pid, x: e.clientX, y: e.clientY, moved: false }; e.preventDefault(); }
+});
+document.addEventListener('pointermove', e => {
+  if (!drag) return;
+  if (drag.kind === 'div') {
+    const d = drag.d, st = $('stage').getBoundingClientRect(), pos = d.row ? e.clientX - st.left : e.clientY - st.top, start = d.row ? d.parent.x : d.parent.y;
+    const lo = (d.row ? Tiler.minW(d.node.a, GAP) : Tiler.minH(d.node.a, GAP)), hi = d.total - (d.row ? Tiler.minW(d.node.b, GAP) : Tiler.minH(d.node.b, GAP));
+    d.node.ratio = Tiler.clamp((pos - start - GAP / 2) , lo, Math.max(lo, hi)) / d.total;
+    render(); return;
+  }
+  if (!drag.moved && Math.hypot(e.clientX - drag.x, e.clientY - drag.y) < 6) return;
+  if (!drag.moved) { drag.moved = true; const nm = Tiler.names(S.tree); drag.ghost = document.createElement('div'); drag.ghost.className = 'ghost'; drag.ghost.textContent = nm[drag.inst]; document.body.appendChild(drag.ghost); }
+  drag.ghost.style.left = e.clientX + 12 + 'px'; drag.ghost.style.top = e.clientY + 8 + 'px';
+  const under = document.elementsFromPoint(e.clientX, e.clientY).find(x => x.classList && x.classList.contains('pane'));
+  drag.drop && drag.drop.remove(); drag.drop = null; drag.target = null;
+  if (!under) return;
+  const zone = zoneAt(under, e.clientX, e.clientY), src = Tiler.findPane(S.tree, drag.inst);
+  if (src.id === under.dataset.pid && src.tabs.length === 1) return;
+  drag.target = { pid: under.dataset.pid, zone };
+  const st = $('stage'), r = { x: under.offsetLeft, y: under.offsetTop, w: under.offsetWidth, h: under.offsetHeight };
+  const box = zone === 'left' ? { ...r, w: r.w / 2 } : zone === 'right' ? { ...r, x: r.x + r.w / 2, w: r.w / 2 } : zone === 'top' ? { ...r, h: r.h / 2 } : zone === 'bottom' ? { ...r, y: r.y + r.h / 2, h: r.h / 2 } : r;
+  const dp = document.createElement('div'); dp.className = 'drop'; dp.textContent = zone === 'center' ? 'Tab here' : 'Split ' + zone;
+  Object.assign(dp.style, { left: box.x + 'px', top: box.y + 'px', width: box.w + 'px', height: box.h + 'px' }); st.appendChild(dp); drag.drop = dp;
+});
+document.addEventListener('pointerup', () => {
+  if (!drag) return;
+  const d = drag; cancelDrag();
+  if (d.kind === 'div') { note('Resized a split.'); render(); return; }
+  if (!d.moved) { const p = Tiler.panes(S.tree).find(p => p.id === d.pid); if (p && p.tabs.length > 1) { S.tree = Tiler.activate(S.tree, p.id, d.idx); render(); } return; }
+  if (d.target) { const r = Tiler.dock(S.tree, d.inst, d.target.pid, d.target.zone); if (r) { const nm = Tiler.names(S.tree); commit(r, d.target.zone === 'center' ? `Tabbed ${nm[d.inst]} into another panel.` : `Moved ${nm[d.inst]} to the ${d.target.zone} edge of another panel.`, 'manual'); } }
+});
+$('stage').addEventListener('click', e => {
+  const ed = e.target.closest('.edge');
+  if (ed) { const side = ed.dataset.side, pid = ed.dataset.pid; openMenu(e.clientX, e.clientY, kindItems(`Add on the ${side}`, k => commit(Tiler.addAt(S.tree, pid, side, k), `Added ${k} on the ${side} edge.`, 'manual'))); return; }
+  const mo = e.target.closest('.more');
+  if (mo) { const inst = mo.dataset.inst, p = Tiler.findPane(S.tree, inst), kind = p.tabs.find(t => t.id === inst).kind;
+    openMenu(e.clientX, e.clientY, [...kindItems('Replace with', k => commit({ tree: Tiler.replace(S.tree, inst, k) }, `Replaced ${kind} with ${k}.`)), '-', { head: 'Duplicate' },
+      { label: 'Duplicate to the right', run: () => commit(Tiler.addAt(S.tree, p.id, 'right', kind), `Duplicated ${kind} to the right.`) },
+      { label: 'Duplicate below', run: () => commit(Tiler.addAt(S.tree, p.id, 'bottom', kind), `Duplicated ${kind} below.`) }, '-',
+      { label: 'Close panel', run: () => commit({ tree: Tiler.close(S.tree, inst) }, `Closed ${kind}; its neighbour took the space.`) }]); }
+});
+
+// ---- toolbar ----
+$('add').onclick = e => openMenu(e.clientX, e.clientY, kindItems('Add panel (splits the focused one)', k => act.add(k)));
+$('add').dataset.menu = '1';
+$('undo').onclick = () => { if (!S.history.length) return; S.tree = S.history.pop(); if (S.tree && !Tiler.panes(S.tree).some(p => p.id === S.focus)) S.focus = Tiler.panes(S.tree)[0].id; note('Undid the last change.'); render(); };
+$('fit').onclick = () => act.fit(); $('def').onclick = () => act.def(); $('clear').onclick = () => act.reset();
+$('footage').onchange = e => act.footage(+e.target.value);
+$('shape').onchange = e => act.stage(+e.target.value);
+addEventListener('resize', () => { sizeStage(); render(); });
+function renderPages() {
+  $('pages').innerHTML = S.pages.map((p, i) => `<button class="pg${i === S.pi ? ' on' : ''}" data-i="${i}" title="Alt+${i + 1}. Double-click to rename.">${esc(p.name)}</button>`).join('') + '<button class="pg" id="addpage" data-menu="1" title="Add a page">+</button>';
+  $('delpage').disabled = S.pages.length < 2;
+}
+$('pages').addEventListener('click', e => {
+  if (e.target.id === 'addpage') { const r = e.target.getBoundingClientRect();
+    openMenu(r.left, r.bottom + 4, [{ head: 'New page from' }, ...Object.keys(TEMPLATES).map(t => ({ label: t, run: () => act.addPage(t) })), '-', { label: 'Copy of this page', run: () => act.addPage('copy') }]); return; }
+  const b = e.target.closest('.pg[data-i]'); if (b) act.go(+b.dataset.i);
+});
+$('pages').addEventListener('dblclick', e => {
+  const b = e.target.closest('.pg[data-i]'); if (!b) return; const i = +b.dataset.i, inp = document.createElement('input'); let done = false;
+  inp.value = S.pages[i].name; b.replaceWith(inp); inp.focus(); inp.select();
+  const fin = ok => { if (done) return; done = true; if (ok && inp.value.trim()) S.pages[i].name = inp.value.trim(); renderState(); };
+  inp.onkeydown = ev => { if (ev.key === 'Enter') fin(true); if (ev.key === 'Escape') fin(false); }; inp.onblur = () => fin(true);
+});
+$('auto').onclick = () => act.autoLayout();
+$('delpage').onclick = () => act.delPage();
+document.addEventListener('keydown', e => { if (e.altKey && /^Digit[1-9]$/.test(e.code) && !(e.target && e.target.tagName === 'INPUT')) { const i = +e.code.slice(5) - 1; if (S.pages[i]) { e.preventDefault(); act.go(i); } } });
+
+// ---- guided walkthroughs ----
+const W = [
+  { name: 'One, then more', setup: () => { act.resetAll(); act.stage(16 / 9); act.footage(16 / 9); },
+    text: 'Start with one panel and add more, watching which way each new one splits.',
+    watch: 'One panel fills the whole Window. The second goes beside it because the picture is wider than tall. The third splits the waveform (the focused panel) top and bottom because it is now taller than wide.',
+    steps: [['Add Clean picture', () => act.add('Clean picture')], ['Add Luma waveform', () => act.add('Luma waveform')], ['Add Vectorscope', () => act.add('Vectorscope')], ['Add Stops False Colour', () => act.add('Stops False Colour')], ['Close the Vectorscope', () => act.close('Vectorscope')]] },
+  { name: 'Portrait monitor', setup: () => { act.resetAll(); act.footage(16 / 9); act.stage(9 / 16); },
+    text: 'The same four adds on a portrait monitor.',
+    watch: 'The rule only looks at the focused panel\'s shape, so on a tall screen the first split is top and bottom instead. Also watch for the "No room" notice: a narrow window runs out of space sooner.',
+    steps: [['Add Clean picture', () => act.add('Clean picture')], ['Add Luma waveform', () => act.add('Luma waveform')], ['Add Vectorscope', () => act.add('Vectorscope')], ['Add Stops False Colour', () => act.add('Stops False Colour')], ['Add Skin tone', () => act.add('Skin tone')]] },
+  { name: 'Place it exactly', setup: () => { act.resetAll(); act.stage(16 / 9); act.footage(16 / 9); },
+    text: 'Skip the automatic rule and put each panel where you want it, the way the edge + buttons do.',
+    watch: 'Each step is the same operation as clicking a panel\'s edge + and choosing a display. Try the + buttons yourself after step 4.',
+    steps: [['Add Clean picture', () => act.add('Clean picture')], ['Add Luma waveform on the right of the picture', () => act.edge('Clean picture', 'right', 'Luma waveform')], ['Add Vectorscope below the waveform', () => act.edge('Luma waveform', 'bottom', 'Vectorscope')], ['Add ARRI False Colour under the picture', () => act.edge('Clean picture', 'bottom', 'ARRI False Colour')], ['Add Skin tone on the left of everything', () => act.edge('Clean picture', 'left', 'Skin tone')]] },
+  { name: 'Four clean pictures', setup: () => { act.resetAll(); act.stage(16 / 9); act.footage(16 / 9); },
+    text: 'The same display four times, then a different shape of footage.',
+    watch: 'Each copy is numbered. Four pictures cost little, but four vectorscopes would be four times the GPU work, which is a question for the real app. After step 5 the cells are not the footage\'s shape, and "Auto resize" fixes that.',
+    steps: [['Add Clean picture', () => act.add('Clean picture')], ['Duplicate it to the right', () => act.dup('Clean picture', 'right')], ['Add a third clean picture (dwindle)', () => act.add('Clean picture')], ['Add a fourth clean picture (dwindle)', () => act.add('Clean picture')], ['Switch the footage to 2.39:1', () => act.footage(2.39)], ['Auto resize', () => act.fit()]] },
+  { name: 'Tabs and docking', setup: () => { act.resetAll(); act.stage(16 / 9); act.footage(16 / 9); act.def(); },
+    text: 'Start from the 7-panel default and rearrange it.',
+    watch: 'A tabbed panel keeps its place but only the visible tab is measured, so the counter on the right drops. Docking to an edge splits; docking to the middle tabs. Also drag a title yourself to try the drop zones.',
+    steps: [['Tab Skin tone into the Saturation heatmap', () => act.dock('Skin tone', 'Saturation heatmap', 'center')], ['Tab Stops False Colour into the Vectorscope', () => act.dock('Stops False Colour', 'Vectorscope', 'center')], ['Move the Vectorscope to the left of the picture', () => act.dock('Vectorscope', 'Clean picture', 'left')], ['Close the ARRI False Colour', () => act.close('ARRI False Colour')]] },
+  { name: 'Fit to footage', setup: () => { act.resetAll(); act.stage(16 / 9); act.footage(16 / 9); act.def(); },
+    text: 'The default layout was drawn for 16:9. What happens with other footage?',
+    watch: 'Before fitting, the wide footage leaves empty bars inside the picture and waveform cells. Fitting changes only the split ratios, never which panel is where. The waveform keeps its true aspect, so its cell gets wide and short too.',
+    steps: [['Switch the footage to 2.39:1', () => act.footage(2.39)], ['Auto resize', () => act.fit()], ['Switch the footage to 9:16', () => act.footage(9 / 16)], ['Auto resize', () => act.fit()], ['Back to 16:9 and fit', () => { act.footage(16 / 9); act.fit(); }]] },
+  { name: 'Auto layout', setup: () => { act.resetAll(); act.stage(16 / 9); act.footage(16 / 9); act.startPage('Grade (all 7 panels)'); },
+    text: 'Auto layout is a one-shot button. Change the footage or the monitor, see that nothing moves by itself, then press it.',
+    watch: 'It changes where panels sit and how they are cut up, not only the split ratios, and it does it once. Wide footage tends to put pictures side by side, tall footage stacks them, and a portrait monitor flips the whole arrangement. Compare with Auto resize, which leaves every panel where it is. Undo brings the previous layout back.',
+    steps: [['Switch the footage to 2.39:1 (nothing moves)', () => act.footage(2.39)], ['Press Auto layout', () => act.autoLayout()], ['Switch the footage to 9:16', () => act.footage(9 / 16)], ['Press Auto layout', () => act.autoLayout()], ['Change the monitor to portrait 9:16', () => act.stage(9 / 16)], ['Press Auto layout', () => act.autoLayout()], ['Move a divider by hand', () => act.nudge()], ['Press Auto layout again to tidy up', () => act.autoLayout()]] },
+  { name: 'Pages', setup: () => { act.resetAll(); act.stage(16 / 9); act.footage(16 / 9); act.startPage('Grade (all 7 panels)'); },
+    text: 'A page is a saved layout with its own panels, focus and undo. Switch with the tabs above the Window or Alt+1 to 9.',
+    watch: 'Each page keeps its own arrangement. A page made from a template is arranged once, for the footage at that moment. Footage and monitor shape belong to the Window, so after changing them each page needs its own Auto layout press. Double-click a tab to rename it.',
+    steps: [['Add a "Scopes" page', () => act.addPage('Scopes')], ['Add a "Picture views" page', () => act.addPage('Picture views')], ['Go back to the first page', () => act.go(0)], ['Add a copy of this page', () => act.addPage('copy')], ['Switch the footage to 2.39:1 (no page moves)', () => act.footage(2.39)], ['Press Auto layout on this page', () => act.autoLayout()], ['Delete this page', () => act.delPage()]] },
+];
+let wi = 0, ws = 0;
+function renderW() {
+  $('wtabs').innerHTML = W.map((w, i) => `<button class="${i === wi ? 'on' : ''}" data-i="${i}">${w.name}</button>`).join('');
+  const w = W[wi];
+  $('wbody').innerHTML = `<p>${w.text}</p><p class="watch">${w.watch}</p><div class="steps">${w.steps.map((s, i) => `<button data-s="${i}" class="${i < ws ? 'done' : i === ws ? 'next' : ''}">${i + 1}. ${s[0]}</button>`).join('')}</div>`;
+}
+$('wtabs').onclick = e => { const b = e.target.closest('button'); if (!b) return; wi = +b.dataset.i; ws = 0; W[wi].setup(); renderW(); };
+$('wbody').onclick = e => { const b = e.target.closest('button'); if (!b) return; const i = +b.dataset.s; W[wi].steps[i][1](); ws = i + 1; renderW(); };
+
+// ---- start in a realistic state: the default layout ----
+buildScene(); sizeStage();
+S.pages = [mkPage('Grade', Tiler.KINDS), mkPage('Pictures', TEMPLATES['Picture views']), mkPage('Scopes', TEMPLATES['Scopes'])];
+pageLoad(0); note('Three pages, each arranged once by Auto layout when it was made.'); renderW(); render();
+</script>
