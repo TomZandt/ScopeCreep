@@ -9,7 +9,7 @@ use scopecreep::display::{DisplayContext, DisplaySet, ScopeHandles};
 use scopecreep::panel_grid::PanelLayout;
 use scopecreep::settings::PanelSettings;
 use scopecreep::skin_tone::SKIN_TONE_LINE_DEGREES;
-use scopecreep::vectorscope::{HIGHLIGHTS_FROM, PlotSquare, Plots, SHADOWS_BELOW, Tonal, VectorscopeCounts, VectorscopePlots, Zoom, halves};
+use scopecreep::vectorscope::{HIGHLIGHTS_FROM, PlotSquare, Plots, SHADOWS_BELOW, Tonal, VectorscopeCounts, VectorscopePlots, Zoom};
 use scopecreep_accuracy::colorchecker::{ColorChecker, TimelineSpace};
 use scopecreep_accuracy::transfer::bt709_oetf;
 
@@ -69,7 +69,7 @@ impl Bench {
 
     /// The square of the 100 % plot (`which` 0) or the 200 % plot (1) in a rendered Panel.
     fn square(&self, panels: &[PanelLayout], which: usize) -> PlotSquare {
-        PlotSquare::new(halves(panels[self.index(V)].content)[which], 1.0)
+        PlotSquare::pair(panels[self.index(V)].content, 1.0)[which]
     }
 
     fn play(&mut self, width: u32, height: u32, pixels: &[f32]) {
@@ -479,20 +479,81 @@ fn the_menu_offers_trace_brightness_targets_and_the_skin_tone_line_with_sensible
 }
 
 #[test]
-fn the_two_plots_sit_side_by_side_each_square_and_centred_in_its_half() {
-    for (width, height) in [(900.0f32, 300.0f32), (400.0, 400.0), (200.0, 500.0), (1001.0, 333.0)] {
+fn the_two_plots_are_joined_edge_to_edge_square_equal_and_centred_as_one_pair() {
+    // Narrower than 2:1, about 2:1 and wider.
+    for (width, height) in [(200.0f32, 500.0f32), (400.0, 400.0), (912.0, 456.0), (900.0, 300.0), (2001.0, 333.0), (3000.0, 200.0)] {
         let area = [20.0, 30.0, width, height];
-        let [left, right] = halves(area);
-        assert_eq!(left[0], area[0], "100 % on the left");
-        assert_eq!(left[0] + left[2], right[0], "200 % right beside it");
-        assert_eq!(right[0] + right[2], area[0] + width, "and together they fill the Panel");
-        for half in [left, right] {
-            let plot = PlotSquare::new(half, 1.0);
+        let [one, two] = PlotSquare::pair(area, 1.0);
+        let side = one.plot[2];
+        assert_eq!(side, ((width / 2.0).min(height) - 12.0).floor().max(1.0), "{width}x{height}: the smaller of half the width and the height, margin once");
+        for plot in [one, two] {
             assert_eq!(plot.plot[2], plot.plot[3], "square");
-            let [cx, cy] = plot.centre();
-            assert!((cx - (half[0] + half[2] / 2.0)).abs() <= 1.0 && (cy - (half[1] + half[3] / 2.0)).abs() <= 1.0, "centred in its half: {half:?} {plot:?}");
-            assert!(plot.plot[0] >= half[0] && plot.plot[0] + plot.plot[2] <= half[0] + half[2], "inside its half");
+            assert_eq!(plot.plot[2], side, "equal");
+            assert_eq!(plot.plot[1], one.plot[1], "on one row");
         }
+        assert_eq!(one.plot[0] + side, two.plot[0], "{width}x{height}: no gap between the plots");
+        let (pair_left, pair_right) = (one.plot[0], two.plot[0] + side);
+        assert!(((pair_left - area[0]) - (area[0] + width - pair_right)).abs() <= 1.0, "centred across: {one:?} {two:?}");
+        assert!(((one.plot[1] - area[1]) - (area[1] + height - (one.plot[1] + side))).abs() <= 1.0, "centred down");
+        assert!(pair_left >= area[0] && pair_right <= area[0] + width, "inside the Panel");
+    }
+    // The pair scales as a unit: twice the Panel, twice the plots (give or take the margin).
+    let small = PlotSquare::pair([0.0, 0.0, 600.0, 400.0], 1.0)[0].plot[2];
+    let big = PlotSquare::pair([0.0, 0.0, 1200.0, 800.0], 1.0)[0].plot[2];
+    assert!((big + 12.0 - 2.0 * (small + 12.0)).abs() <= 2.0);
+    // The margin is a logical size, so it grows with the scale.
+    assert!(PlotSquare::pair([0.0, 0.0, 912.0, 456.0], 2.0)[0].plot[2] < PlotSquare::pair([0.0, 0.0, 912.0, 456.0], 1.0)[0].plot[2]);
+}
+
+#[test]
+fn the_pair_has_one_background_and_a_divider_at_the_join_that_follows_graticule_brightness() {
+    let mut b = Bench::new("join");
+    let width = 2000;
+    let sample = |b: &Bench| {
+        let (image, panels) = b.render(width, 900, 1.0);
+        let [one, two] = PlotSquare::pair(panels[b.index(V)].content, 1.0);
+        let join = two.plot[0];
+        let y = one.plot[1] + 1.0;
+        let at = |x: f32| pixel(&image, width, [x, y])[0] as i32;
+        (at(join - 6.0), at(join + 6.0), at(join - 1.0).max(at(join)))
+    };
+    b.play(64, 36, &solid(64, 36, [0.0; 3]));
+    let (left, right, divider) = sample(&b);
+    assert_eq!(left, right, "one background across the pair, no seam");
+    assert!(divider > left + 8, "a divider at the join: {divider} on a background of {left}");
+    b.choose(V, "graticule", "20");
+    let (_, _, dim) = sample(&b);
+    b.choose(V, "graticule", "300");
+    let (_, _, bright) = sample(&b);
+    assert!(dim < divider && divider < bright, "graticule brightness moves the divider: {dim} < {divider} < {bright}");
+    // One plot alone has no divider.
+    b.choose(V, "graticule", "100");
+    b.choose(V, "plots", "100");
+    let (image, panels) = b.render(width, 900, 1.0);
+    let whole = PlotSquare::new(panels[b.index(V)].content, 1.0);
+    let y = whole.plot[1] + 1.0;
+    let mid = (whole.plot[0] + whole.plot[2] / 2.0).floor();
+    let row: Vec<u8> = (-3..=3).map(|d| pixel(&image, width, [mid + 20.0 + d as f32, y])[0]).collect();
+    assert!(row.iter().all(|v| *v == row[0]), "no divider in a single plot: {row:?}");
+}
+
+#[test]
+fn a_wide_panel_leaves_its_spare_room_outside_the_pair_never_between_the_plots() {
+    let mut b = Bench::new("join wide");
+    let width = 2000;
+    b.play(64, 36, &solid(64, 36, [0.0; 3]));
+    let (image, panels) = b.render(width, 240, 1.0);
+    let content = panels[b.index(V)].content;
+    let [one, two] = PlotSquare::pair(content, 1.0);
+    assert!(one.plot[0] > content[0] + 20.0, "a wide Panel leaves room outside the pair");
+    let y = one.plot[1] + 1.0;
+    let plot_bg = pixel(&image, width, [one.plot[0] + 20.0, y]);
+    for x in (one.plot[0] as u32 + 20)..(two.plot[0] + two.plot[2]) as u32 - 20 {
+        // Not on the join's divider or either plot's vertical axis.
+        if [two.plot[0], one.centre()[0], two.centre()[0]].iter().any(|m| (x as f32 - m).abs() <= 2.0) {
+            continue;
+        }
+        assert_eq!(pixel(&image, width, [x as f32, y]), plot_bg, "the pair's background is unbroken at x {x}");
     }
 }
 
@@ -599,9 +660,10 @@ fn the_plots_chip_shows_one_plot_filling_the_panel_or_both() {
     let area = [10.0, 20.0, 900.0, 400.0];
     assert_eq!(Plots::from_setting(None), Plots::Both);
     assert_eq!(Plots::from_setting(Some("garbage")), Plots::Both);
-    assert_eq!(Plots::Both.areas(area), vec![(Zoom::X1, halves(area)[0]), (Zoom::X2, halves(area)[1])]);
-    assert_eq!(Plots::from_setting(Some("100")).areas(area), vec![(Zoom::X1, area)]);
-    assert_eq!(Plots::from_setting(Some("200")).areas(area), vec![(Zoom::X2, area)]);
+    let pair = PlotSquare::pair(area, 1.0);
+    assert_eq!(Plots::Both.squares(area, 1.0), vec![(Zoom::X1, pair[0]), (Zoom::X2, pair[1])]);
+    assert_eq!(Plots::from_setting(Some("100")).squares(area, 1.0), vec![(Zoom::X1, PlotSquare::new(area, 1.0))], "100 % only fills the Panel as before");
+    assert_eq!(Plots::from_setting(Some("200")).squares(area, 1.0), vec![(Zoom::X2, PlotSquare::new(area, 1.0))]);
 
     let mut b = Bench::new("plots");
     let width = 2000;
@@ -613,7 +675,7 @@ fn the_plots_chip_shows_one_plot_filling_the_panel_or_both() {
     b.choose(V, "plots", "200");
     let (image, panels) = b.render(width, 900, 1.0);
     let whole = PlotSquare::new(panels[b.index(V)].content, 1.0);
-    assert!(whole.plot[2] > b.square(&panels, 1).plot[2], "one plot is bigger than a half");
+    assert!(whole.plot[2] > b.square(&panels, 1).plot[2], "one plot is bigger than one of the pair");
     assert!(brightest_near(&image, width, whole.position(cb, cr, Zoom::X2)) > 60, "the 200 % plot is drawn, filling the Panel");
     assert_eq!(b.plots().x1.total(), b.plots().x2.total(), "both are still measured");
     assert!(b.label(V).starts_with("Vectorscope 200 %  ·"), "{}", b.label(V));
@@ -622,7 +684,7 @@ fn the_plots_chip_shows_one_plot_filling_the_panel_or_both() {
     let (image, panels) = b.render(width, 900, 1.0);
     let whole = PlotSquare::new(panels[b.index(V)].content, 1.0);
     assert!(brightest_near(&image, width, whole.position(cb, cr, Zoom::X1)) > 60);
-    // Back to both: the halves again.
+    // Back to both: the joined pair again.
     b.choose(V, "plots", "both");
     let (image, panels) = b.render(width, 900, 1.0);
     assert!(brightest_near(&image, width, b.square(&panels, 1).position(cb, cr, Zoom::X2)) > 60);

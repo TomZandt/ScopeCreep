@@ -61,14 +61,7 @@ impl Zoom {
 /// milestone 2 is read as this one ([`crate::settings`]).
 pub const NAME: &str = "Vectorscope";
 
-/// The two plots' areas inside the Panel's display area: 100 % on the left, 200 % on the right, each half the width
-/// (left, top, width, height in pixels). The halves are fixed.
-pub fn halves([left, top, width, height]: [f32; 4]) -> [[f32; 4]; 2] {
-    let first = (width / 2.0).floor();
-    [[left, top, first, height], [left + first, top, width - first, height]]
-}
-
-/// Which plots a Panel shows (#123): both side by side as ever, or one filling the Panel.
+/// Which plots a Panel shows (#123): both joined into one scope (#174), or one filling the Panel.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Plots {
     Both,
@@ -85,11 +78,15 @@ impl Plots {
         }
     }
 
-    /// The plots drawn in a Panel's display area, each with its zoom and its area (left, top, width, height).
-    pub fn areas(self, area: [f32; 4]) -> Vec<(Zoom, [f32; 4])> {
+    /// The plots drawn in a Panel's display area, each with its zoom and its square. Both are the joined pair; one
+    /// fills the Panel.
+    pub fn squares(self, area: [f32; 4], scale: f32) -> Vec<(Zoom, PlotSquare)> {
         match self {
-            Plots::Both => [Zoom::X1, Zoom::X2].into_iter().zip(halves(area)).collect(),
-            Plots::Only(zoom) => vec![(zoom, area)],
+            Plots::Both => {
+                let [one, two] = PlotSquare::pair(area, scale);
+                vec![(Zoom::X1, one), (Zoom::X2, two)]
+            }
+            Plots::Only(zoom) => vec![(zoom, PlotSquare::new(area, scale))],
         }
     }
 }
@@ -259,6 +256,15 @@ impl PlotSquare {
         let side = (width.min(height) - 2.0 * MARGIN * scale).max(1.0).floor();
         PlotSquare { plot: [(left + (width - side) / 2.0).floor(), (top + (height - side) / 2.0).floor(), side, side] }
     }
+    /// The 100 % and 200 % plots joined as one scope (#174): the Panel's area is one 2:1 region, the plots are equal
+    /// squares edge to edge with no gap, sized from the smaller of half the width and the height with the margin
+    /// taken once, and the pair is centred as a unit.
+    pub fn pair([left, top, width, height]: [f32; 4], scale: f32) -> [PlotSquare; 2] {
+        let side = ((width / 2.0).min(height) - 2.0 * MARGIN * scale).max(1.0).floor();
+        let first = (left + (width - 2.0 * side) / 2.0).floor();
+        let y = (top + (height - side) / 2.0).floor();
+        [PlotSquare { plot: [first, y, side, side] }, PlotSquare { plot: [first + side, y, side, side] }]
+    }
     pub fn centre(&self) -> [f32; 2] {
         [self.plot[0] + self.plot[2] / 2.0, self.plot[1] + self.plot[3] / 2.0]
     }
@@ -396,7 +402,7 @@ fn measure(@builtin(global_invocation_id) id: vec3<u32>) {
 /// Hue-angle bins for clipping, after the plot's bins.
 const CLIP_BINS: u32 = 720;
 const PARAMS_BYTES: u64 = 64;
-const DRAW_UNIFORM_BYTES: u64 = 192;
+const DRAW_UNIFORM_BYTES: u64 = 208;
 
 const DRAW_SHADER: &str = r#"
 struct Placement {
@@ -407,6 +413,7 @@ struct Placement {
     rings: vec4<f32>,     // the outer ring as a fraction of the plot's radius, soft spread in device pixels (0 off), where this plot's bins start, mono trace on
     targets: array<vec4<f32>, 6>,   // Cb, Cr of each colour target, then Cb, Cr of its second box (the same again when there is one set)
     weights: vec4<f32>,   // luma weights for R, G, B, to turn a position back into a colour, the graticule gain
+    join: vec4<f32>,      // the joined pair's divider: 1 on the right edge, -1 on the left, 0 none
 };
 @group(0) @binding(0) var<uniform> placement: Placement;
 @group(0) @binding(1) var<storage, read> bins: array<u32>;
@@ -499,6 +506,10 @@ fn fs(@builtin(position) position: vec4<f32>) -> @location(0) vec4<f32> {
     var base = PLOT;
     let outer = placement.rings.x * radius;
     if (abs(q.x) <= half_line || abs(q.y) <= half_line || abs(r - outer / 2.0) <= half_line) {
+        base = graticule(GRID, placement.weights.w);
+    }
+    // The joined pair's divider: a line on the edge that touches the other plot, in the graticule tone.
+    if (placement.join.x != 0.0 && abs(q.x - placement.join.x * radius) <= half_line) {
         base = graticule(GRID, placement.weights.w);
     }
     // The outer ring is a hue wheel: each point is the colour that lands there, muted so it never competes with the
@@ -775,10 +786,10 @@ impl Display for Vectorscope {
         let config = self.config();
         let clip = |px: f32, size: f32| px / size * 2.0 - 1.0;
         pass.set_pipeline(&self.draw);
-        for (zoom, half) in config.plots.areas(area) {
+        let joined = config.plots == Plots::Both;
+        for (zoom, square) in config.plots.squares(area, scale) {
             let i = if zoom == Zoom::X1 { 0 } else { 1 };
-            let [left, top, width, height] = half;
-            let square = PlotSquare::new(half, scale);
+            let [left, top, width, height] = square.plot;
             let mut placement = [0f32; (DRAW_UNIFORM_BYTES / 4) as usize];
             placement[..4].copy_from_slice(&[clip(left, surface[0]), -clip(top, surface[1]), clip(left + width, surface[0]), -clip(top + height, surface[1])]);
             placement[4..8].copy_from_slice(&square.plot);
@@ -798,6 +809,7 @@ impl Display for Vectorscope {
             }
             let w = config.measurement.weights();
             placement[44..48].copy_from_slice(&[w[0] as f32, w[1] as f32, w[2] as f32, config.graticule]);
+            placement[48] = if !joined { 0.0 } else if zoom == Zoom::X1 { 1.0 } else { -1.0 };
             self.queue.write_buffer(&self.placement[i], 0, bytemuck::cast_slice(&placement));
             pass.set_bind_group(0, &state.draw_bound.as_ref().unwrap()[i], &[]);
             pass.draw(0..4, 0..1);

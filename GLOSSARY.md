@@ -161,7 +161,7 @@ A display that measures the Feed's pixel values, such as a waveform, RGB parade 
 _Avoid_: Monitor, meter, graph
 
 **Vectorscope**:
-A Scope that plots each pixel's colour as Cb across and Cr up, so hue is the angle and saturation the distance from the middle. One Panel shows it twice, side by side: at 100 % (left) the whole picture, at 200 % (right) the same data at twice the radius. One label, one right-click menu and one set of settings serve both. Cb/Cr use the Measured Space's luma weights.
+A Scope that plots each pixel's colour as Cb across and Cr up, so hue is the angle and saturation the distance from the middle. One Panel shows it twice, joined as one scope: at 100 % (left) the whole picture, at 200 % (right) the same data at twice the radius. The two equal square plots touch with no gap, share one background with a faint divider at the join (graticule tone), and are sized and centred together as one 2:1 pair, so spare room in the Panel is outside the pair; a single plot (100 % only or 200 % only) fills the Panel. One label, one right-click menu and one set of settings serve both. Cb/Cr use the Measured Space's luma weights.
 _Avoid_: Chroma scope, colour wheel
 
 **Tonal range**:

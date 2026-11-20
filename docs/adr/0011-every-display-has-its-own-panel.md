@@ -26,3 +26,7 @@ The vectorscope at 100 % and at 200 % is one Panel, not two. They are one scope 
 ## Note, 2026-11-19 (#162)
 
 The Channel view is out of the Window (ADR 0034): the clean picture's Y R G B chips and Loupe do its job, so the Window shows 7 Panels. Its module, tests and saved settings are kept.
+
+## Note, 2026-11-20 (#174)
+
+The two plots are now joined as one scope: edge to edge with no gap, one background with a faint divider at the join (graticule tone), sized from the smaller of half the Panel's width and its height and centred as a pair, so the pair scales as a unit. The Panel is still two grid cells wide with one label, menu and measurement; only the layout of the plots inside it changed. A single plot still fills the Panel.
