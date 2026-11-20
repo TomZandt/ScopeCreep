@@ -148,6 +148,8 @@ fn non_default_settings_that_change_what_is_measured_are_tags_and_defaults_are_n
     assert_eq!(title("Skin tone", Some(ACES_709), &[("tolerance", "10")]).tags, ["±10°"]);
     assert!(title("Skin tone", Some(ACES_709), &[("tolerance", "5")]).tags.is_empty());
     assert_eq!(title("Vectorscope", Some(ACES_709), &[("targets", "100")]).tags, ["100 % targets"]);
+    assert_eq!(title("Vectorscope", Some(ACES_709), &[("targets", "75")]).tags, ["75 % targets"]);
+    assert!(title("Vectorscope", Some(ACES_709), &[("targets", "both")]).tags.is_empty(), "both is the default");
     assert_eq!(title("Channel view", Some(ACES_709), &[("channel", "red"), ("loupe_zoom", "400")]).tags, ["Red", "400 %"]);
     assert_eq!(title("Stops False Colour", Some(ACES_709), &[("mode", "grey-plus-one")]).tags, ["grey and +1 stop"]);
 }

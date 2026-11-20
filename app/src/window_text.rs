@@ -134,10 +134,12 @@ pub fn panel_title(display_name: &str, context: &DisplayContext, full: String) -
         "Black and white" => ("Black and white".into(), measurement_tags(context)),
         "ARRI False Colour" => ("ARRI False Colour".into(), bw_tag(context, true).into_iter().chain(measurement_tags(context)).collect()),
         crate::vectorscope::NAME => {
-            // Both zooms are drawn side by side by default; a single plot is tagged.
+            // Both target sets are drawn by default; a single set is tagged. Plots are joined by default; one plot is tagged.
             let mut tags = measurement_tags(context);
-            if setting(crate::vectorscope::TARGETS_SETTING) == Some("100") {
-                tags.push("100 % targets".into());
+            match setting(crate::vectorscope::TARGETS_SETTING) {
+                Some("75") => tags.push("75 % targets".into()),
+                Some("100") => tags.push("100 % targets".into()),
+                _ => {}
             }
             // The plots shown are a reading (#123); the trace colour is not.
             if let crate::vectorscope::Plots::Only(zoom) = crate::vectorscope::Plots::from_setting(setting(crate::vectorscope::PLOTS_SETTING)) {

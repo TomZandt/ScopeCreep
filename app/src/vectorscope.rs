@@ -228,7 +228,6 @@ pub static TOOLBAR: [ToolbarDef; 3] = [
 #[derive(Clone, Copy, Debug, PartialEq)]
 struct Config {
     measurement: Measurement,
-    /// 0.75 or 1.0.
     /// The levels of the two target boxes per hue (0.75 and/or 1.0); the same twice when one set shows.
     bars: [f64; 2],
     skin_line: bool,
@@ -508,10 +507,6 @@ fn fs(@builtin(position) position: vec4<f32>) -> @location(0) vec4<f32> {
     if (abs(q.x) <= half_line || abs(q.y) <= half_line || abs(r - outer / 2.0) <= half_line) {
         base = graticule(GRID, placement.weights.w);
     }
-    // The joined pair's divider: a line on the edge that touches the other plot, in the graticule tone.
-    if (placement.join.x != 0.0 && abs(q.x - placement.join.x * radius) <= half_line) {
-        base = graticule(GRID, placement.weights.w);
-    }
     // The outer ring is a hue wheel: each point is the colour that lands there, muted so it never competes with the
     // trace (the graticule brightness scales the muting, to at most 0.9 so the clipping marks stay the brightest).
     if (abs(r - outer) <= half_line * 2.0) {
@@ -562,7 +557,13 @@ fn fs(@builtin(position) position: vec4<f32>) -> @location(0) vec4<f32> {
             trace = tint((spot.x - 0.5) * 2.0 * placement.info.x, (0.5 - spot.y) * 2.0 * placement.info.x);
         }
     }
-    return vec4<f32>(mix(base, trace, shown), 1.0);
+    var colour = mix(base, trace, shown);
+    // The joined pair's divider, drawn last so no target box or trace pixel breaks it: a line on the edge that touches
+    // the other plot, in the graticule tone. Each plot draws its own half, the same width.
+    if (placement.join.x != 0.0 && abs(q.x - placement.join.x * radius) <= half_line) {
+        colour = graticule(GRID, placement.weights.w);
+    }
+    return vec4<f32>(colour, 1.0);
 }
 "#;
 

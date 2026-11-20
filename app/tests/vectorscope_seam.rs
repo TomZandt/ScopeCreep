@@ -538,6 +538,36 @@ fn the_pair_has_one_background_and_a_divider_at_the_join_that_follows_graticule_
 }
 
 #[test]
+fn a_target_box_or_trace_on_the_plot_edge_never_breaks_the_divider_and_both_halves_match() {
+    let mut b = Bench::new("divider_edge");
+    let width = 2000;
+    // 100 % red/magenta boxes sit on the plot edge at 100 % zoom; a saturated frame puts trace there too.
+    for scale in [1.0f32, 1.5, 2.0, 2.5] {
+        for frame in [[0.0f32; 3], [1.0, 0.0, 0.0], [1.0, 0.0, 1.0]] {
+            b.play(64, 36, &solid(64, 36, frame));
+            let (image, panels) = b.render(width, 900, scale);
+            let [one, two] = PlotSquare::pair(panels[b.index(V)].content, scale);
+            let join = two.plot[0];
+            let first = pixel(&image, width, [join - 1.0, one.plot[1] + 1.0]);
+            let mut widths = None;
+            for dy in 1..one.plot[3] as u32 - 1 {
+                let y = one.plot[1] + dy as f32;
+                let tone = |x: f32| pixel(&image, width, [x, y]);
+                assert_eq!(tone(join - 1.0), first, "scale {scale}: the divider is unbroken at row {dy}");
+                // The horizontal axis is the same tone and runs into the divider; measure the width off it.
+                if (y - (one.plot[1] + one.plot[3] / 2.0)).abs() <= 3.0 * scale { continue; }
+                let mut l = 0;
+                while tone(join - 1.0 - l as f32) == first { l += 1; }
+                let mut r = 0;
+                while tone(join + r as f32) == first { r += 1; }
+                assert_eq!(l, r, "scale {scale}: both plots draw the same divider width at row {dy}");
+                assert_eq!(*widths.get_or_insert(l), l, "scale {scale}: the same width on every row");
+            }
+        }
+    }
+}
+
+#[test]
 fn a_wide_panel_leaves_its_spare_room_outside_the_pair_never_between_the_plots() {
     let mut b = Bench::new("join wide");
     let width = 2000;
