@@ -89,6 +89,7 @@ What we learned by testing, kept in the repo so it isn't lost when an issue thre
 | [146](146-commands-and-hotkeys.md) | Are the layout shortcuts named commands with default hotkeys that behave as before, and do assign, clear, reset, conflicts, reserved keys and the hotkeys file behave (pure command and hotkey seam)? |
 | [147](147-menu-bar.md) | Is the menu bar thin and hit where drawn at 1x and 2x, does it open, switch and close like a desktop menu, does each Layout menu entry run the command its shown hotkey runs, and do the menus fit a small Window (pure UI seam)? |
 | [148](148-hotkeys-panel.md) | Does the Hotkeys panel capture, cancel, clear, refuse reserved keys, ask replace or cancel on a conflict and reset one or all, with the menus following at once and the change surviving a restart (panel and command seams)? |
+| [169](169-zoom-fit-hotkey.md) | Does Z take a picture Panel to Fit and back to its last zoom and spot (all of them with Link on, none over a Scope), and is it a reassignable hotkey (zoom model, Feed, command and Hotkeys panel seams)? |
 
 ## Adding findings
 

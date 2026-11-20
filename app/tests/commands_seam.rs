@@ -57,7 +57,11 @@ fn other_keys_do_nothing_by_default() {
 #[test]
 fn every_slot_has_a_show_and_a_save_command() {
     let all = Command::all();
-    assert_eq!(all.len(), 1 + 2 * SLOTS);
+    assert_eq!(
+        all.len(),
+        1 + 2 * SLOTS + 1,
+        "Default layout, show and save each slot, the Fit toggle"
+    );
     for slot in 0..SLOTS {
         assert!(all.contains(&Command::RecallLayout(slot)));
         assert!(all.contains(&Command::SaveLayout(slot)));
@@ -267,4 +271,25 @@ fn a_saved_replace_reads_back_whichever_order_the_lines_are_in() {
     let mut lines: Vec<&str> = text.lines().collect();
     lines[1..].reverse();
     assert_eq!(Hotkeys::from_text(&lines.join("\n")), hotkeys);
+}
+
+#[test]
+fn z_is_the_fit_toggle_by_default_and_can_be_changed_like_any_hotkey() {
+    let mut hotkeys = Hotkeys::default();
+    assert_eq!(
+        hotkeys.command_for(Hotkey::new(key("Z"))),
+        Some(Command::ZoomFit)
+    );
+    assert_eq!(Command::ZoomFit.label(), "Zoom: Fit / last zoom");
+    hotkeys
+        .assign(Command::ZoomFit, Hotkey::new(key("Z")).with_shift())
+        .unwrap();
+    assert_eq!(hotkeys.command_for(Hotkey::new(key("Z"))), None);
+    hotkeys.clear(Command::ZoomFit);
+    assert_eq!(hotkeys.get(Command::ZoomFit), None);
+    hotkeys.reset(Command::ZoomFit);
+    assert_eq!(hotkeys, Hotkeys::default());
+    let mut saved = Hotkeys::default();
+    saved.assign(Command::ZoomFit, ctrl("Z")).unwrap();
+    assert_eq!(Hotkeys::from_text(&saved.to_text()), saved);
 }

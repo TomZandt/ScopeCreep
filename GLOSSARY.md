@@ -127,7 +127,7 @@ _Avoid_: Magnify (that is the Loupe), scale
 Moving a zoomed picture inside its Panel by dragging with the middle mouse button, as in Resolve's Viewer. The picture moves exactly as far as the pointer; its edge stops at the Panel's edge, so the Panel is never left empty, and an axis on which the picture is smaller than the Panel stays centred. Nothing to pan at Fit. Not saved.
 
 **Fit**:
-The zoom that shows the whole frame in the Panel, as a picture Panel always did. The zoom chip says how much that scales the frame: "Fit 23 %". A frame already larger than 100 % at Fit (a small frame in a big Panel) starts at Fit and zooms on in whole steps.
+The zoom that shows the whole frame in the Panel, as a picture Panel always did. The zoom chip says how much that scales the frame: "Fit 23 %". A frame already larger than 100 % at Fit (a small frame in a big Panel) starts at Fit and zooms on in whole steps. Z (a Hotkey) toggles the picture Panel under the pointer between Fit and the zoom and spot it last left, like Resolve's Shift+Z.
 
 **Link**:
 One Window-wide switch, a link chip beside the zoom chip on every picture Panel (lit on all of them while on). It is on in a first session; a saved choice wins. With Link on, every picture Panel shares one zoom and one centre point in picture coordinates, so Panels of different sizes look at the same pixels and each fits its own Panel at Fit; scroll, middle-drag and the zoom chip's Fit on any of them move all of them. Turning it on brings every Panel to the zoom and spot of the Panel it was clicked on; turning it off leaves each where it is. Link is remembered between sessions; zoom and pan are not (ADR 0035, 0015).
@@ -149,7 +149,7 @@ Something the app does that a menu entry offers and a Hotkey can trigger, such a
 _Avoid_: Action, shortcut
 
 **Hotkey**:
-A key, by its position on the keyboard, with Ctrl, Shift or Alt held, that triggers a Command while the app's window has focus. Each Command has at most one and no two share one; the defaults are Ctrl+1 to 9 (show a layout) and Ctrl+Shift+1 to 9 (save one). Assigned, cleared and reset in the Hotkeys panel (Settings, then Hotkeys…) by pressing the combination. Changes are kept in the config folder beside the layouts. Escape, and plain Enter, Backspace and Delete are reserved.
+A key, by its position on the keyboard, with Ctrl, Shift or Alt held, that triggers a Command while the app's window has focus. Each Command has at most one and no two share one; the defaults are Ctrl+1 to 9 (show a layout), Ctrl+Shift+1 to 9 (save one) and Z (the Fit toggle). Assigned, cleared and reset in the Hotkeys panel (Settings, then Hotkeys…) by pressing the combination. Changes are kept in the config folder beside the layouts. Escape, and plain Enter, Backspace and Delete are reserved.
 _Avoid_: Shortcut, keybinding, accelerator
 
 **Menu bar**:

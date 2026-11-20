@@ -146,3 +146,71 @@ fn a_panel_whose_fit_is_above_the_shared_zoom_still_pans_and_steps_the_shared_vi
     wheel(&a, BIG, [400.0, 225.0], -1.0);
     assert_eq!(text(&b, SMALL), "25 %");
 }
+
+// ---- The Fit toggle (Z, #169)
+
+fn g(area: [f32; 4]) -> Option<Geometry> {
+    Some(Geometry::new(area, FRAME, 0.0))
+}
+
+#[test]
+fn z_goes_to_fit_and_back_to_the_last_zoom_and_spot() {
+    let z = PanelZoom::default();
+    wheel(&z, BIG, [600.0, 100.0], 3.0);
+    drag(&z, BIG, [400.0, 200.0], [350.0, 230.0]);
+    let (zoomed, spot) = (text(&z, BIG), middle(&z, BIG));
+    assert!(!zoomed.starts_with("Fit"));
+    assert!(z.toggle_fit(g(BIG)));
+    assert!(text(&z, BIG).starts_with("Fit"));
+    assert!(z.toggle_fit(g(BIG)));
+    assert_eq!(text(&z, BIG), zoomed);
+    assert_eq!(middle(&z, BIG), spot, "the same spot, not the middle");
+}
+
+#[test]
+fn z_at_fit_with_no_last_zoom_does_nothing() {
+    let z = PanelZoom::default();
+    assert!(!z.toggle_fit(g(BIG)));
+    assert!(text(&z, BIG).starts_with("Fit"));
+    // Z to Fit and back uses the last zoom up; at Fit by the chip there is then nothing to go back to.
+    wheel(&z, BIG, [400.0, 225.0], 2.0);
+    z.toggle_fit(g(BIG));
+    z.toggle_fit(g(BIG));
+    z.set_percent(0.0, g(BIG));
+    assert!(text(&z, BIG).starts_with("Fit"));
+    assert!(!z.toggle_fit(g(BIG)), "nothing left to go back to");
+}
+
+#[test]
+fn z_before_a_frame_has_arrived_does_nothing() {
+    assert!(!PanelZoom::default().toggle_fit(None));
+}
+
+#[test]
+fn with_link_on_z_on_one_panel_moves_every_panel_and_back() {
+    let (a, b, link) = pair();
+    link.set(true, None);
+    wheel(&a, BIG, [400.0, 225.0], 3.0);
+    let (before, spot) = (text(&b, SMALL), middle(&b, SMALL));
+    assert!(!before.starts_with("Fit"));
+    assert!(a.toggle_fit(g(BIG)));
+    assert!(text(&a, BIG).starts_with("Fit") && text(&b, SMALL).starts_with("Fit"));
+    assert!(
+        b.toggle_fit(g(SMALL)),
+        "Z on the other Panel goes back for both"
+    );
+    assert_eq!(text(&b, SMALL), before);
+    assert_eq!(middle(&b, SMALL), spot);
+}
+
+#[test]
+fn with_link_off_z_moves_only_its_own_panel() {
+    let (a, b, link) = pair();
+    link.set(false, None);
+    wheel(&a, BIG, [400.0, 225.0], 3.0);
+    wheel(&b, SMALL, [160.0, 90.0], 3.0);
+    let other = text(&b, SMALL);
+    a.toggle_fit(g(BIG));
+    assert!(text(&a, BIG).starts_with("Fit"));
+    assert_eq!(text(&b, SMALL), other);
+}

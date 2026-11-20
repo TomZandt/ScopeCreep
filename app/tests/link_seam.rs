@@ -331,3 +331,40 @@ fn link_is_remembered_and_zoom_is_not() {
         );
     }
 }
+
+// ---- The Fit toggle (Z, #169)
+
+#[test]
+fn z_takes_every_linked_panel_to_fit_and_back_to_the_same_pixels() {
+    let b = Bench::new("link-z");
+    b.wheel_to(0, "200 %");
+    b.drag(0, 30.0);
+    let before: Vec<Vec<u8>> = (0..4).map(|i| b.render(i)).collect();
+    assert!(
+        b.set.toggle_fit(2, AREAS[2], 1.0),
+        "Z over any picture Panel"
+    );
+    for i in 0..4 {
+        assert!(b.text(i).starts_with("Fit"), "Panel {i}: {}", b.text(i));
+    }
+    assert!(b.set.toggle_fit(3, AREAS[3], 1.0));
+    for (i, image) in before.iter().enumerate() {
+        assert_eq!(b.text(i), "200 %");
+        assert!(
+            b.render(i) == *image,
+            "Panel {i} is back on the same pixels"
+        );
+    }
+}
+
+#[test]
+fn z_over_a_scope_does_nothing() {
+    let rig = Rig::new("z-scope");
+    let mut set = DisplaySet::default();
+    set.register(Arc::new(scopecreep::waveform::Waveform::new(
+        &rig.device,
+        &rig.queue,
+        TARGET,
+    )));
+    assert!(!set.toggle_fit(0, AREAS[0], 1.0));
+}

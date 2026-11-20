@@ -59,6 +59,8 @@ pub struct ZoomModel {
     pub centre: Option<[f32; 2]>,
     /// The part of a wheel notch turned so far.
     pending: f32,
+    /// The zoom and centre the Fit toggle (Z, #169) left, to go back to.
+    last: Option<(Zoom, Option<[f32; 2]>)>,
 }
 
 /// Where the picture is drawn in its Panel and which part of it.
@@ -334,6 +336,28 @@ impl ZoomModel {
         self.zoom != before
     }
 
+    /// The Fit toggle (Z, like Resolve's Shift+Z, #169): zoomed in, go to Fit and remember the zoom and spot; at
+    /// Fit, go back to the zoom and spot Z last left. At Fit with nothing to go back to, nothing happens. Returns
+    /// whether the view changed.
+    pub fn toggle_fit(&mut self, g: Geometry) -> bool {
+        let Some(fit) = g.fit() else { return false };
+        if !self.at_fit(fit) {
+            self.last = Some((self.zoom, self.centre));
+            self.zoom = Zoom::Fit;
+            self.pending = 0.0;
+            return true;
+        }
+        match self.last.take() {
+            Some((zoom, centre)) => {
+                self.zoom = zoom;
+                self.centre = centre;
+                self.pending = 0.0;
+                true
+            }
+            None => false,
+        }
+    }
+
     /// Set the zoom from the slider (Fit to 800 %): free below 100 %, whole steps above, nothing beyond the top.
     /// At or below Fit is Fit.
     pub fn set_percent(&mut self, percent: f32, g: Geometry) {
@@ -492,6 +516,12 @@ impl PanelZoom {
     /// What the zoom chip says (see [`ZoomModel::readout`]); `None` before a frame has arrived.
     pub fn readout(&self, geometry: Option<Geometry>) -> Option<Readout> {
         self.with(|m| m.readout(geometry?))
+    }
+
+    /// The Fit toggle (see [`ZoomModel::toggle_fit`]); on the shared view while Link is on, so every picture Panel
+    /// moves. Returns whether the view changed.
+    pub fn toggle_fit(&self, geometry: Option<Geometry>) -> bool {
+        geometry.is_some_and(|g| self.with(|m| m.toggle_fit(g)))
     }
 
     /// Set the zoom from the chip's slider (see [`ZoomModel::set_percent`]).

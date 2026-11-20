@@ -12,6 +12,7 @@ The format follows [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/
 
 ### Fixed
 - Menu bar: a menu never moves up over the bar in a short Window, a Panel's popover pushed over the bar keeps its clicks, nothing stays lit once the pointer leaves the Window, an entry shows pressed while the button is down, and a middle-button drag keeps following the pointer when a menu opens (#147 review).
+- Picture Panels: Z toggles the picture Panel under the pointer between Fit and the zoom and spot it was at, like Resolve's Shift+Z (every picture Panel while Link is on; over a Scope it does nothing). It is "Zoom: Fit / last zoom" in the Hotkeys panel, so it can be changed or cleared. The last zoom is not saved, like zoom itself (#169, ADR 0035).
 
 ### Removed
 - The layout menu on a right-click of the status line, with its Shift-click and right-click and its hint line: the Layout menu on the menu bar does all of it (#147).

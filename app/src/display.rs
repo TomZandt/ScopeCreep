@@ -158,6 +158,12 @@ pub trait Display: Send + Sync {
             z.panel_zoom().set_percent(percent, z.geometry(area, scale));
         }
     }
+    /// The Fit toggle (Z, #169) on a picture Panel whose content is `area`; a display that does not zoom does
+    /// nothing. Returns whether the view changed.
+    fn toggle_fit(&self, area: [f32; 4], scale: f32) -> bool {
+        self.picture_zoom()
+            .is_some_and(|z| z.panel_zoom().toggle_fit(z.geometry(area, scale)))
+    }
     /// Join the Window's Link (#168): the display set hands every display the one [`crate::zoom::Link`] on
     /// registering.
     fn link_to(&self, link: &crate::zoom::Link) {
@@ -424,6 +430,12 @@ impl DisplaySet {
     /// The zoom chip's click: the display in Panel `index` back to Fit (every picture Panel while Link is on).
     pub fn zoom_to_fit(&self, index: usize, area: [f32; 4], scale: f32) {
         self.displays[index].set_zoom(area, scale, 0.0);
+    }
+
+    /// The Fit toggle (Z, #169) on the display in Panel `index`: Fit and back to the last zoom and spot; every
+    /// picture Panel while Link is on, nothing over a Scope. Returns whether anything changed.
+    pub fn toggle_fit(&self, index: usize, area: [f32; 4], scale: f32) -> bool {
+        self.displays[index].toggle_fit(area, scale)
     }
 
     /// Set the zoom of the display in Panel `index` to `percent` (tests set a zoom this way; 0 is Fit).

@@ -931,6 +931,20 @@ impl AppWindow {
                 Some(grid) => self.grid = grid,
                 None => return,
             },
+            Command::ZoomFit => {
+                // The Panel under the pointer; over a Scope, or off the Panels, nothing.
+                if let Some(panel) = self
+                    .contents
+                    .iter()
+                    .position(|c| Menu::contains(*c, self.cursor))
+                    && self
+                        .displays
+                        .toggle_fit(panel, self.contents[panel], self.scale)
+                {
+                    self.window.request_redraw();
+                }
+                return;
+            }
             Command::SaveLayout(slot) => {
                 self.layouts.save(slot, &self.grid, &names);
                 self.save_layouts();

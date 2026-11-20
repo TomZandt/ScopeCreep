@@ -311,3 +311,15 @@ fn the_panel_fits_the_default_window_under_the_bar_at_1x_and_2x() {
         assert!(r[1] + r[3] <= window[1] + 0.01 && r[0] + r[2] <= window[0] + 0.01);
     }
 }
+
+#[test]
+fn the_fit_toggle_is_listed_with_z_and_can_be_reassigned_there() {
+    let (mut panel, mut hotkeys) = (HotkeysPanel::default(), Hotkeys::default());
+    assert_eq!(
+        row(&panel.menu(&hotkeys), "Zoom: Fit / last zoom").1.hotkey,
+        "Z"
+    );
+    click(&mut panel, &mut hotkeys, "Zoom: Fit / last zoom");
+    assert!(panel.key(plain("F"), &mut hotkeys));
+    assert_eq!(hotkeys.command_for(plain("F")), Some(Command::ZoomFit));
+}

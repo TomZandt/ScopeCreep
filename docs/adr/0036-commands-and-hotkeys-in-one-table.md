@@ -8,7 +8,7 @@ Every app command (Default layout, show a layout slot, save into a slot) is one 
 
 A hotkey is a key by its position on the keyboard (winit's physical key, as ADR 0030 already did for the digits) plus Ctrl, Shift and Alt. A key with Super held is never a hotkey, and winit gives keys only to the focused window, so the app never takes keys from Resolve.
 
-The defaults are the shortcuts the app had: Ctrl+1 to 9 show a layout, Ctrl+Shift+1 to 9 save one. Escape, and plain Enter, Backspace and Delete are reserved: the app uses them to close, accept and clear, so they can't be assigned.
+The defaults are the shortcuts the app had: Ctrl+1 to 9 show a layout, Ctrl+Shift+1 to 9 save one; Z is the Fit toggle (#169). A hotkey may be a key with no modifier, like Z: while a name is typed or a hotkey captured, keys go there first. Escape, and plain Enter, Backspace and Delete are reserved: the app uses them to close, accept and clear, so they can't be assigned.
 
 No two commands share a hotkey. Assigning one another command holds is refused and names that command; the user then replaces (the other command is left with none) or cancels. Resetting a command to its default takes that default from whoever holds it.
 
