@@ -23,3 +23,9 @@ Each Panel's own GPU time per UHD frame (user story 85) was not measured here; i
 - The benchmark project `scopecreep-test-bench50` is kept in Resolve's scopecreep folder, and exported to `~/scopecreep-testdata/drp/scopecreep-test-bench50.drp` for next time.
 - Raw captures: `~/scopecreep-testdata/bench/uhd50-20261117-190058/` (not in git).
 - `run.py` now tolerates an existing output folder (`os.makedirs(..., exist_ok=True)`); the first run in a session tripped over one.
+
+## Re-run on v0.3.1 (2026-11-20)
+
+The release build of v0.3.1 (7 Panels, the joined Vectorscope with both target sets, the menu bar), same project and method. **Pass**: Resolve's readout showed a green 50 in all 36 samples (byte-identical crops), the Sender rendered 49.99 frames a second with and without the app, and the app read 3,775 frames with no gap in the sequence (publish to read median 0.54 ms, 99th percentile 3.53 ms, maximum 23.6 ms). Raw captures: `~/scopecreep-testdata/bench/uhd50-20261120-011837/` (not in git).
+
+- Resolve must be visible on a monitor for the run. Two first attempts with Resolve on a workspace that wasn't shown played nothing (the Sender saw about 1 render a second, the "off" case can't tell). The run that passed moved Resolve to the left 4K monitor, where `run.py`'s default fps-readout crop (1395,255) sits; `SCOPECREEP_BENCH_GRAB` now sets the crop when Resolve is elsewhere.

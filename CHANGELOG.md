@@ -6,20 +6,29 @@ The format follows [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/
 
 ## [Unreleased]
 
+## [0.3.1] - 2026-11-20
+
+A menu bar and hotkeys you can change: the Layout menu replaces the right-click on the status line, Settings holds the Hotkeys panel, Z toggles a picture Panel between Fit and its last zoom, and Ctrl+F lets one Panel fill the Window.
+
 ### Added
 - A thin menu bar across the very top of the Window, above the Colour Setup line. Its Layout menu lists Default layout and the nine layout slots by name (empty ones say so, and the layout on screen is marked): click a saved one to show it, or an empty one to save the arrangement on screen into it. "Save current layout into…" lists the slots to save into (a saved one keeps its name) and "Rename layout…" the saved ones to rename, typed into the row. Each entry shows its hotkey. Menus open on a click, follow the pointer along the bar while open, and close on a second click, a click elsewhere or Escape. The Panels lose the bar's height (#147).
 - Settings, then Hotkeys…: every command with its hotkey. Click one and press the combination you want; Escape cancels, Backspace or Delete clears it. A combination another command has names that command and offers Replace or Cancel; Escape, Enter, Backspace and Delete are kept by the app. A command can be reset to its default while it is chosen, and every command from "Reset all to defaults". The menus show a change at once, and it is remembered in `~/.config/scopecreep/hotkeys` (#148, ADR 0036).
-
-### Fixed
-- Menu bar: a menu never moves up over the bar in a short Window, a Panel's popover pushed over the bar keeps its clicks, nothing stays lit once the pointer leaves the Window, an entry shows pressed while the button is down, and a middle-button drag keeps following the pointer when a menu opens (#147 review).
 - Picture Panels: Z toggles the picture Panel under the pointer between Fit and the zoom and spot it was at, like Resolve's Shift+Z (every picture Panel while Link is on; over a Scope it does nothing). It is "Zoom: Fit / last zoom" in the Hotkeys panel, so it can be changed or cleared. The last zoom is not saved, like zoom itself (#169, ADR 0035).
 - Ctrl+F makes the Panel under the pointer fill the Window (the menu bar, Colour Setup line and status line stay); Ctrl+F again or Escape puts the grid back, and so does showing a layout. Its chips, popover, zoom and Loupe work as usual; borders and title bars can't be dragged meanwhile. It is "Panel: fill the Window" in the Hotkeys panel, so it can be changed or cleared, and it is never saved (#180).
+
+### Changed
+- Layouts: Ctrl+1 to 9 (show a layout) and Ctrl+Shift+1 to 9 (save one) are now hotkeys of named commands, and behave as before. Changed hotkeys are kept in `~/.config/scopecreep/hotkeys` beside the layouts; a line the app can't read keeps that command's default, and two commands never share a hotkey (#146, ADR 0036).
 
 ### Removed
 - The layout menu on a right-click of the status line, with its Shift-click and right-click and its hint line: the Layout menu on the menu bar does all of it (#147).
 
-### Changed
-- Layouts: Ctrl+1 to 9 (show a layout) and Ctrl+Shift+1 to 9 (save one) are now hotkeys of named commands, and behave as before. Changed hotkeys are kept in `~/.config/scopecreep/hotkeys` beside the layouts; a line the app can't read keeps that command's default, and two commands never share a hotkey (#146, ADR 0036).
+### Known limitations
+
+- Ctrl+F has not been checked at the app yet (#181).
+- A saved Panel grid dragged to the minimum in a window much taller than the default can be refused at the next start, giving the default layout (#179).
+- The Window has no minimum size, so a very short Window cuts off the foot of a menu (#172).
+- What alpha reaches the Sender from Resolve has not been checked (#156).
+- Performance: the UHD 50 check passed on this build (Resolve at 50 fps throughout, the Sender at 49.99 renders a second, the app read 3,775 frames with no gap).
 
 ## [0.3.0] - 2026-11-20
 
