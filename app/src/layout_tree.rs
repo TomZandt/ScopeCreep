@@ -70,6 +70,12 @@ impl Node {
         }
     }
 
+    /// A page with nothing on it.
+    const EMPTY: Node = Node::Leaf {
+        tabs: Vec::new(),
+        active: 0,
+    };
+
     fn at(&self, path: &[bool]) -> Option<&Node> {
         match (path.split_first(), self) {
             (None, _) => Some(self),
@@ -141,6 +147,39 @@ impl Node {
         }
     }
 
+    /// The Panel that takes over from `panel` when it closes: another tab of its tab group, else the first Panel
+    /// of its sibling.
+    fn neighbour(&self, panel: usize) -> Option<usize> {
+        match self {
+            Node::Leaf { tabs, active } => {
+                if !tabs.contains(&panel) {
+                    return None;
+                }
+                tabs.get(*active)
+                    .filter(|t| **t != panel)
+                    .or_else(|| tabs.iter().find(|t| **t != panel))
+                    .copied()
+            }
+            Node::Split { a, b, .. } => {
+                let (inside, other) = if a.holds(panel) { (a, b) } else { (b, a) };
+                let alone = matches!(&**inside, Node::Leaf { tabs, .. } if tabs.len() == 1);
+                if alone {
+                    let mut list = Vec::new();
+                    other.panels(&mut list);
+                    list.first().copied()
+                } else {
+                    inside.neighbour(panel)
+                }
+            }
+        }
+    }
+
+    fn holds(&self, panel: usize) -> bool {
+        let mut list = Vec::new();
+        self.panels(&mut list);
+        list.contains(&panel)
+    }
+
     fn map_panels(&mut self, f: &impl Fn(usize) -> usize) {
         match self {
             Node::Leaf { tabs, .. } => tabs.iter_mut().for_each(|t| *t = f(*t)),
@@ -177,6 +216,7 @@ impl Node {
 
     fn write(&self, names: &[&str], text: &mut String) {
         match self {
+            Node::Leaf { tabs, .. } if tabs.is_empty() => *text += "empty\n",
             Node::Leaf { tabs, active } => {
                 let list: Vec<&str> = tabs
                     .iter()
@@ -231,6 +271,11 @@ const DEFAULT_PLACES: [(&str, [usize; 4]); 7] = [
     ("Saturation heatmap", [0, 3, 3, 1]),
     ("Skin tone", [3, 3, 2, 1]),
 ];
+
+/// The names of the displays the default layout is made for, in the order the default layout lists them.
+pub fn default_names() -> Vec<&'static str> {
+    DEFAULT_PLACES.iter().map(|(name, _)| *name).collect()
+}
 
 /// A Panel's cell of a grid: its first column and row, and how many columns and rows it spans.
 #[derive(Clone, Copy)]
@@ -339,10 +384,37 @@ fn tree_from_grid(columns: &[f32], rows: &[f32], cells: &[Cell]) -> Option<Node>
     grid.build(cells, (0, columns.len()), (0, rows.len()))
 }
 
-/// The layout: a tree of tab groups filling the Panel area.
-#[derive(Clone, Debug, PartialEq)]
+/// The layout: a tree of tab groups filling the Panel area. A Panel the Window has but the tree does not hold is
+/// closed (not on the page); a page with no Panel at all is empty.
+#[derive(Clone, Debug)]
 pub struct LayoutTree {
     root: Node,
+    /// The Panel that has the focus (Add panel splits its tab group). Session only: never saved, and not part of
+    /// which layout this is.
+    focus: Option<usize>,
+    /// How many Panels the Window has, closed ones included: [`LayoutTree::cells`] has a cell for each.
+    total: usize,
+}
+
+impl PartialEq for LayoutTree {
+    /// The same arrangement: the focus does not make a layout another layout.
+    fn eq(&self, other: &LayoutTree) -> bool {
+        self.root == other.root
+    }
+}
+
+/// An add that does not fit: a split would leave a Panel under its minimum size.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct NoRoom;
+
+impl NoRoom {
+    /// What the Window tells the colourist: names the least size a Panel can be (logical pixels).
+    pub fn notice(&self) -> String {
+        format!(
+            "No room for another Panel here: a Panel needs at least {} x {}.",
+            MIN_PANEL[0], MIN_PANEL[1]
+        )
+    }
 }
 
 impl LayoutTree {
@@ -368,15 +440,19 @@ impl LayoutTree {
                 b: Box::new(go(lo + first, hi, wb, hb)),
             }
         }
+        let root = if panels == 0 {
+            Node::EMPTY
+        } else {
+            go(0, panels, REFERENCE_AREA[0], REFERENCE_AREA[1])
+        };
+        LayoutTree::new(root, panels)
+    }
+
+    fn new(root: Node, total: usize) -> LayoutTree {
         LayoutTree {
-            root: if panels == 0 {
-                Node::Leaf {
-                    tabs: Vec::new(),
-                    active: 0,
-                }
-            } else {
-                go(0, panels, REFERENCE_AREA[0], REFERENCE_AREA[1])
-            },
+            root,
+            focus: None,
+            total,
         }
     }
 
@@ -403,7 +479,7 @@ impl LayoutTree {
             .and_then(|c| tree_from_grid(&DEFAULT_COLUMNS, &DEFAULT_ROWS, &c))
             .map_or_else(
                 || LayoutTree::automatic(names.len()),
-                |root| LayoutTree { root },
+                |root| LayoutTree::new(root, names.len()),
             )
     }
 
@@ -431,7 +507,12 @@ impl LayoutTree {
     /// Each Panel's rectangle, in display order, filling `area` with `gap` between Panels. A Panel in a tab group
     /// that is not the shown one has an empty cell far off screen.
     pub fn cells(&self, area: [f32; 4], gap: f32) -> Vec<[f32; 4]> {
-        let count = self.panel_list().into_iter().max().map_or(0, |m| m + 1);
+        let count = self
+            .panel_list()
+            .into_iter()
+            .max()
+            .map_or(0, |m| m + 1)
+            .max(self.total);
         let mut out = vec![off_screen(); count];
         self.root
             .walk(area, gap, &mut Vec::new(), &mut |node, rect, _| {
@@ -529,6 +610,98 @@ impl LayoutTree {
         });
     }
 
+    /// Whether the page holds Panel `panel` (a Panel that is not on it is closed).
+    pub fn contains(&self, panel: usize) -> bool {
+        self.panel_list().contains(&panel)
+    }
+
+    /// The Panel with the focus: the one last clicked or added, else the first Panel of the page. None on an empty
+    /// page.
+    pub fn focused(&self) -> Option<usize> {
+        let all = self.panel_list();
+        self.focus
+            .filter(|f| all.contains(f))
+            .or_else(|| all.first().copied())
+    }
+
+    /// Give Panel `panel` the focus (nothing happens when it is not on the page).
+    pub fn set_focus(&mut self, panel: usize) {
+        if self.contains(panel) {
+            self.focus = Some(panel);
+        }
+    }
+
+    /// Add Panel `panel` to the page: the focused tab group is split along its longer side (wider than tall: the new
+    /// Panel on the right; otherwise below) at 50/50, and the new Panel has the focus. On an empty page it fills
+    /// `area`. A Panel already on the page is only focused. When half of the focused cell would be under `min`
+    /// (one Panel's least width and height) the tree is left as it was and [`NoRoom`] says so.
+    pub fn add(
+        &mut self,
+        panel: usize,
+        area: [f32; 4],
+        gap: f32,
+        min: [f32; 2],
+    ) -> Result<(), NoRoom> {
+        if self.contains(panel) {
+            self.focus = Some(panel);
+            return Ok(());
+        }
+        let Some(target) = self.focused() else {
+            self.root = Node::leaf(panel);
+            self.focus = Some(panel);
+            self.total = self.total.max(panel + 1);
+            return Ok(());
+        };
+        let mut found = None;
+        self.root
+            .walk(area, gap, &mut Vec::new(), &mut |node, rect, path| {
+                if let Node::Leaf { tabs, .. } = node
+                    && tabs.contains(&target)
+                {
+                    found = Some((path.to_vec(), rect));
+                }
+            });
+        let (path, rect) = found.ok_or(NoRoom)?;
+        let dir = if rect[2] >= rect[3] {
+            Dir::Row
+        } else {
+            Dir::Col
+        };
+        let (along, least) = match dir {
+            Dir::Row => (rect[2], min[0]),
+            Dir::Col => (rect[3], min[1]),
+        };
+        if (along - gap) / 2.0 < least - 0.001 {
+            return Err(NoRoom);
+        }
+        let node = self.root.at_mut(&path).ok_or(NoRoom)?;
+        let old = std::mem::replace(node, Node::EMPTY);
+        *node = Node::Split {
+            dir,
+            ratio: 0.5,
+            a: Box::new(old),
+            b: Box::new(Node::leaf(panel)),
+        };
+        self.focus = Some(panel);
+        self.total = self.total.max(panel + 1);
+        Ok(())
+    }
+
+    /// Close Panel `panel`: its sibling takes its space. When it had the focus, its neighbour has it now. The last
+    /// Panel closed leaves an empty page. Nothing happens when the Panel is not on the page.
+    pub fn close(&mut self, panel: usize) {
+        if !self.contains(panel) {
+            return;
+        }
+        let had_focus = self.focused() == Some(panel);
+        let neighbour = self.root.neighbour(panel);
+        let root = std::mem::replace(&mut self.root, Node::EMPTY);
+        self.root = root.pruned(&|p| p == panel).unwrap_or(Node::EMPTY);
+        if had_focus {
+            self.focus = neighbour;
+        }
+    }
+
     /// Move `border` to `to`: only the split it belongs to changes, so who is next to whom stays as it was, and
     /// neither side goes under what its Panels need (`min` is one Panel's least width and height).
     pub fn drag(&mut self, border: &Border, to: [f32; 2], area: [f32; 4], gap: f32, min: [f32; 2]) {
@@ -583,7 +756,8 @@ impl LayoutTree {
     fn parse(names: &[&str], text: &str) -> Option<LayoutTree> {
         let mut lines = text.lines();
         let known = |name: &str| names.iter().position(|n| *n == name).unwrap_or(UNKNOWN);
-        let root = match lines.next()? {
+        let header = lines.next()?;
+        let root = match header {
             HEADER => {
                 let mut leaves = 0;
                 let root = parse_node(&mut lines, &known, 0, &mut leaves)?;
@@ -592,12 +766,20 @@ impl LayoutTree {
             OLD_HEADER => parse_old(&mut lines, &known)?,
             _ => return None,
         };
+        // An empty page is saved as such.
+        if matches!(&root, Node::Leaf { tabs, .. } if tabs.is_empty()) {
+            return Some(LayoutTree::new(Node::EMPTY, names.len()));
+        }
         let root = root.pruned(&|p| p == UNKNOWN)?;
-        // Exactly these displays, each once.
-        let mut tree = LayoutTree { root };
+        // Some of these displays (the others are closed), each once.
+        let mut tree = LayoutTree::new(root, names.len());
         let mut all = tree.panel_list();
         all.sort_unstable();
-        if all != (0..names.len()).collect::<Vec<_>>() {
+        if all.windows(2).any(|w| w[0] == w[1]) {
+            return None;
+        }
+        // A grid saved before the tree held every display, so one that lacks a display is not one to keep.
+        if header == OLD_HEADER && all != (0..names.len()).collect::<Vec<_>>() {
             return None;
         }
         tree.hold_minimums()?;
@@ -656,6 +838,9 @@ fn parse_node<'a>(
         return None;
     }
     let line = lines.next()?;
+    if line == "empty" {
+        return (depth == 0).then_some(Node::EMPTY);
+    }
     if let Some(rest) = line.strip_prefix("leaf ") {
         *leaves += 1;
         if *leaves > MAX_LEAVES {

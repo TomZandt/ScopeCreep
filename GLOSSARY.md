@@ -108,7 +108,7 @@ _Avoid_: Vertical legend
 The legend strip of ARRI False Colour and the saturation heatmap: a bar proportional to a range (0 to 100 % of Output Luma, or 0 to the heatmap's scale), tick numbers along its top and marks under it at the meaningful points. Ticks thin out and marks drop out on a small Panel; text never overlaps.
 
 **Panel**:
-One area of the Window that shows one Scope or Picture View. Every display in the Window has its own Panel, so everything can be seen at once (7 Panels; the gamut/legal warning, Highlight Neutrals, CIE plot, Black and white, Colour Waveform and Channel view are out of the Window but their code and saved settings are kept); the Panels sit in an ordered grid whose borders the user can drag.
+One area of the Window that shows one Scope or Picture View. Every display in the Window has its own Panel, so everything can be seen at once, unless it is closed (Close in the Panel's popover or the Layout menu; Add panel brings it back) (7 Panels; the gamut/legal warning, Highlight Neutrals, CIE plot, Black and white, Colour Waveform and Channel view are out of the Window but their code and saved settings are kept); the Panels sit in an ordered grid whose borders the user can drag.
 _Avoid_: Pane, view, tile, window (for one display)
 
 **Display**:
@@ -161,7 +161,7 @@ A Panel is one instance of a display with a stable id, so a display can be on th
 _Avoid_: Copy (for the id), clone
 
 **Add panel**:
-A Command that splits the focused tab group along its longer side (wider than tall: the new Panel on the right; otherwise below) at 50/50 and focuses it. A **+** on each edge of a tab group (hover) does the same on a chosen side. A new Panel that has no room joins the focused tab group as a tab instead, with a notice that says so and names the minimum.
+A Command (Layout menu, reassignable in the Hotkeys panel, no default hotkey) that opens the list of displays; picking one splits the focused tab group along its longer side (wider than tall: the new Panel on the right; otherwise below) at 50/50 and focuses it. The focused Panel is the one last clicked or added, and has a quiet outline. A page with no Panels shows one large Add panel button. Built in #206: an add with no room is refused with a notice that names the minimum Panel size, and a display already on the page is greyed until Panels can be copied (#208). A **+** on each edge of a tab group (hover) does the same on a chosen side. Once tab groups arrive (#211), a new Panel that has no room joins the focused tab group as a tab instead, with a notice that says so and names the minimum.
 _Avoid_: Insert, new window
 
 **Dock**:

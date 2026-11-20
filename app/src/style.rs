@@ -150,6 +150,9 @@ pub const SPACE_MENU_HOTKEY_GAP: f32 = 28.0;
 /// The settings button on a title bar (square), and the gap between a name and its tags.
 pub const SPACE_SETTINGS_BUTTON: f32 = 20.0;
 pub const SPACE_TAG_GAP: f32 = 10.0;
+/// The empty page's Add panel button: width and height.
+pub const SPACE_ADD_BUTTON_WIDTH: f32 = 200.0;
+pub const SPACE_ADD_BUTTON_HEIGHT: f32 = 48.0;
 /// A legend strip: the colour bar's height and the whole strip's (bar, then labels beneath).
 pub const SPACE_LEGEND_BAR: f32 = 8.0;
 pub const SPACE_LEGEND_HEIGHT: f32 = 26.0;

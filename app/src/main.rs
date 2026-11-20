@@ -30,7 +30,7 @@ use scopecreep::hotkeys_panel::HotkeysPanel;
 use scopecreep::layout::MARGIN;
 use scopecreep::layout_tree::{Border, Dir, LayoutTree, Press};
 use scopecreep::layouts::{Layouts, Rename};
-use scopecreep::menu_bar::{self, BarState, Current, LayoutMode, MenuAction};
+use scopecreep::menu_bar::{self, AddEntry, BarState, Current, LayoutMode, MenuAction};
 use scopecreep::monitor::Monitor;
 use scopecreep::output_conversion::OutputConversion;
 use scopecreep::panel_grid::{self, PanelLayout, min_panel_size};
@@ -283,6 +283,10 @@ struct AppWindow {
     pointer_panel: Option<usize>,
     /// The Panel a middle-button press went down on, which gets the movement until the button is let go.
     middle_panel: Option<usize>,
+    /// A notice from the layout (an add with no room), shown until the next click or key.
+    layout_notice: Option<String>,
+    /// Where the empty page's Add panel button was last drawn (device pixels), while the page is empty.
+    add_button: Option<[f32; 4]>,
     /// The border being dragged, if any.
     drag: Option<Border>,
     /// The Panel being dragged by its title bar, to swap with the one it is let go on.
@@ -525,6 +529,8 @@ impl AppWindow {
             contents: Vec::new(),
             pointer_panel: None,
             middle_panel: None,
+            layout_notice: None,
+            add_button: None,
             drag: None,
             panel_drag: None,
             state_unsaved: false,
@@ -658,7 +664,7 @@ impl AppWindow {
             Some(toolbar) => self.displays.popover_for(panel, toolbar),
             None => self.displays.popover_defs(panel),
         };
-        self.menu = Menu::new(panel, &defs, &current).map(|menu| (menu, at));
+        self.menu = Some((Menu::for_panel(panel, &defs, &current), at));
     }
 
     /// The strip's Fit: every picture Panel back to Fit. Zoom is display state: it is never put in the settings or
@@ -793,6 +799,9 @@ impl AppWindow {
     /// The open bar menu, as it is now.
     fn bar_menu(&self) -> Option<menu_bar::Menu> {
         match self.bar.open? {
+            menu_bar::LAYOUT if self.layout_mode == LayoutMode::Add => {
+                Some(menu_bar::add_menu(&self.add_entries()))
+            }
             menu_bar::LAYOUT => Some(menu_bar::layout_menu(
                 &self.layouts,
                 &self.hotkeys,
@@ -877,8 +886,13 @@ impl AppWindow {
         // Any click in the menu ends a name being typed, keeping it.
         self.finish_rename(true);
         match action {
+            Some(MenuAction::Run(Command::AddPanel)) => self.layout_mode = LayoutMode::Add,
             Some(MenuAction::Run(command)) => {
                 self.run(command);
+                self.close_bar();
+            }
+            Some(MenuAction::Add(panel)) => {
+                self.add_panel(panel);
                 self.close_bar();
             }
             Some(MenuAction::Mode(mode)) => self.layout_mode = mode,
@@ -980,7 +994,18 @@ impl AppWindow {
         if matches!(command, Command::DefaultLayout | Command::RecallLayout(_)) {
             self.full = None;
         }
+        self.layout_notice = None;
         match command {
+            Command::AddPanel => {
+                self.open_add_list();
+                return;
+            }
+            Command::ClosePanel => {
+                if let Some(panel) = self.grid.focused() {
+                    self.close_panel(panel);
+                }
+                return;
+            }
             Command::FillWindow => {
                 self.full = match self.full {
                     Some(_) => None,
@@ -1029,6 +1054,59 @@ impl AppWindow {
         self.window.request_redraw();
     }
 
+    /// What the Add list offers: every display, those not on the page now enabled (ADR 0038, #206).
+    fn add_entries(&self) -> Vec<AddEntry> {
+        self.displays
+            .names()
+            .into_iter()
+            .enumerate()
+            .map(|(panel, name)| AddEntry {
+                panel,
+                name: name.to_string(),
+                enabled: !self.grid.contains(panel),
+            })
+            .collect()
+    }
+
+    /// Open the Add list, dropped from the Layout title.
+    fn open_add_list(&mut self) {
+        self.menu = None;
+        self.hover = None;
+        self.finish_rename(true);
+        self.hotkeys_panel = None;
+        self.bar.open = Some(menu_bar::LAYOUT);
+        self.layout_mode = LayoutMode::Add;
+        self.window.request_redraw();
+    }
+
+    /// Add Panel `panel` beside the focused one, and remember the layout. With no room the layout stays as it was
+    /// and a notice names the least size of a Panel.
+    fn add_panel(&mut self, panel: usize) {
+        self.full = None;
+        match self.grid.add(
+            panel,
+            self.grid_area,
+            self.grid_gap,
+            min_panel_size(self.scale),
+        ) {
+            Ok(()) => {
+                self.layout_notice = None;
+                self.save_grid();
+            }
+            Err(no_room) => self.layout_notice = Some(no_room.notice()),
+        }
+        self.window.request_redraw();
+    }
+
+    /// Close Panel `panel`: its sibling takes the space. The layout is remembered.
+    fn close_panel(&mut self, panel: usize) {
+        self.full = None;
+        self.layout_notice = None;
+        self.grid.close(panel);
+        self.save_grid();
+        self.window.request_redraw();
+    }
+
     fn menu_rect(&self) -> Option<[f32; 4]> {
         let (menu, at) = self.menu.as_ref()?;
         Some(menu.rect(
@@ -1053,6 +1131,11 @@ impl AppWindow {
         }
         if let Some((key, value)) = menu.reset_at(rect, cursor, scale) {
             self.choose(panel, key, &Amount::store(value));
+            return;
+        }
+        if menu.close_at(rect, cursor, scale) {
+            self.menu = None;
+            self.close_panel(panel);
             return;
         }
         let choice = menu.choice_at(rect, cursor, scale);
@@ -1211,6 +1294,22 @@ impl AppWindow {
         }
         match state {
             ElementState::Pressed => {
+                self.layout_notice = None;
+                // The empty page's one button.
+                if let Some(button) = self.add_button
+                    && components::contains(button, self.cursor)
+                {
+                    self.open_add_list();
+                    return;
+                }
+                // A click on any Panel focuses it.
+                if let Some(panel) = self
+                    .grid
+                    .panel_at(self.grid_area, self.grid_gap, self.cursor)
+                {
+                    self.grid.set_focus(panel);
+                    self.window.request_redraw();
+                }
                 // A chip or the settings button on a title bar takes the press before the bar can be dragged.
                 match self.toolbar_hit() {
                     Some(ToolbarHit::Chip(panel, chip)) => {
@@ -1269,7 +1368,9 @@ impl AppWindow {
         let texts = self.texts.lock().unwrap().clone();
         // Along the bottom, under the Panels: the status line, and above it, while a picture is on screen, a
         // notice in the same quiet size (it never covers the picture).
-        let notice_in_status = texts.has_picture && texts.notice.is_some();
+        let notice_text = self.layout_notice.clone().or_else(|| texts.notice.clone());
+        let notice_in_status =
+            notice_text.is_some() && (texts.has_picture || self.layout_notice.is_some());
         let row = style::SPACE_STATUS_ROW * scale;
         let status_height = row * if notice_in_status { 2.0 } else { 1.0 };
         // The Panels fill the window above the status line, with a margin round them and between them.
@@ -1310,13 +1411,9 @@ impl AppWindow {
                 title.tags.push(zoom);
             }
             let mut toolbar = self.displays.toolbar(i, &settings_now);
-            toolbar.fit_to(
-                panel.title[2],
-                !self.displays.popover_defs(i).is_empty(),
-                scale,
-            );
-            // Chips that did not fit are in the popover, so the settings button is there for them too.
-            let has_popover = !self.displays.popover_for(i, &toolbar).is_empty();
+            toolbar.fit_to(panel.title[2], true, scale);
+            // Every Panel's popover holds Close, so every title bar has the settings button.
+            let has_popover = true;
             let (l, tags, all_shown) = window_text::lay_out_toolbar_title(
                 &title,
                 &toolbar.chips,
@@ -1409,7 +1506,7 @@ impl AppWindow {
         };
         self.notice.set(
             &mut self.font_system,
-            texts.notice.as_deref().unwrap_or(""),
+            notice_text.as_deref().unwrap_or(""),
             notice_style,
             scale,
             notice_width,
@@ -1591,6 +1688,7 @@ impl AppWindow {
         // The right-click menu, drawn as the popover component, over everything: its rectangles, then its own text
         // (so it sits above the Panels' text).
         let mut rects: Vec<([f32; 4], [f32; 4])> = Vec::new();
+        let mut over_empty: Vec<Prim> = Vec::new();
         // The top bar: its fill and the line under it.
         rects.push((
             [0.0, bar_height, width, top_height],
@@ -1611,6 +1709,35 @@ impl AppWindow {
                 rects.push((edge, style::rgba(style::LINE_BORDER)));
             }
         }
+        // The focused Panel has a quiet outline.
+        if !self.grid.is_empty()
+            && let Some(focused) = self.grid.focused().filter(|f| *f < cells.len())
+            && panel_grid::shown(cells[focused])
+        {
+            for prim in components::focus_outline(cells[focused], scale) {
+                if let Prim::Rect { rect, colour } = prim {
+                    rects.push((rect, [colour[0], colour[1], colour[2], 1.0]));
+                }
+            }
+        }
+        // A page with no Panel: one large Add panel button.
+        self.add_button = self
+            .grid
+            .is_empty()
+            .then(|| components::add_panel_button_rect(area, scale));
+        if self.add_button.is_some() {
+            let state = if self.bar.open.is_none()
+                && self.menu.is_none()
+                && self
+                    .add_button
+                    .is_some_and(|b| components::contains(b, self.cursor))
+            {
+                State::Hover
+            } else {
+                State::Normal
+            };
+            over_empty = components::add_panel_button(area, state, scale);
+        }
         // While a Panel is dragged, the Panel it would swap with is outlined, quietly.
         if let Some(target) = self.panel_drag.and_then(|from| {
             self.grid
@@ -1628,7 +1755,7 @@ impl AppWindow {
         }
         let mut menu_areas: Vec<(usize, f32, f32, [u8; 3])> = Vec::new();
         // The menu over the Panels, or else the hover of what the pointer rests on, over everything.
-        let mut over: Vec<Prim> = Vec::new();
+        let mut over: Vec<Prim> = over_empty;
         // Each title bar's chips and settings button, lit under the pointer.
         let pointer_over = if self.menu.is_some() || self.bar.open.is_some() {
             None

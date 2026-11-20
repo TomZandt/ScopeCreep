@@ -550,6 +550,19 @@ pub fn popover(menu: &Menu, area: [f32; 4], cursor: [f32; 2], scale: f32) -> Vec
                     Align::Left,
                 ));
             }
+            MenuRow::Close => {
+                if contains(row_rect, cursor) {
+                    prims.push(rect(row_rect, style::STATE_HOVER));
+                }
+                let left = area[0] + style::SPACE_MENU_TEXT_LEFT * scale;
+                prims.push(text(
+                    "Close",
+                    [left, top, text_width, row_rect[3]],
+                    Face::Label,
+                    style::TEXT_PRIMARY,
+                    Align::Left,
+                ));
+            }
             MenuRow::Choice {
                 text: label, on, ..
             } => {
@@ -580,6 +593,50 @@ pub fn popover(menu: &Menu, area: [f32; 4], cursor: [f32; 2], scale: f32) -> Vec
         }
     }
     prims
+}
+
+// ---- Panel focus and the empty page (ADR 0038, #206) ----
+
+/// The quiet outline round the focused Panel: four thin edges just inside its `frame`.
+pub fn focus_outline(frame: [f32; 4], scale: f32) -> Vec<Prim> {
+    let weight = (style::LINE_WEIGHT * scale).max(1.0);
+    let [left, top, width, height] = frame;
+    [
+        [left, top, width, weight],
+        [left, top + height - weight, width, weight],
+        [left, top, weight, height],
+        [left + width - weight, top, weight, height],
+    ]
+    .into_iter()
+    .map(|edge| rect(edge, style::STATE_FOCUS))
+    .collect()
+}
+
+/// The empty page's one large button, in the middle of the Panel `area` (never larger than it).
+pub fn add_panel_button_rect(area: [f32; 4], scale: f32) -> [f32; 4] {
+    let w = (style::SPACE_ADD_BUTTON_WIDTH * scale).min(area[2]);
+    let h = (style::SPACE_ADD_BUTTON_HEIGHT * scale).min(area[3]);
+    [
+        area[0] + (area[2] - w) / 2.0,
+        area[1] + (area[3] - h) / 2.0,
+        w,
+        h,
+    ]
+}
+
+/// The empty page's Add panel button.
+pub fn add_panel_button(area: [f32; 4], state: State, scale: f32) -> Vec<Prim> {
+    let button = add_panel_button_rect(area, scale);
+    vec![
+        rect(button, fill(state, false, style::ACCENT)),
+        text(
+            "Add panel",
+            button,
+            Face::Label,
+            ink(state, false),
+            Align::Centre,
+        ),
+    ]
 }
 
 // ---- Tooltip ----

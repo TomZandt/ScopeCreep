@@ -523,7 +523,6 @@ fn rubbish_gives_the_default_layout() {
         String::new(),
         "not a layout".into(),
         "layout 2".into(),
-        "layout 2\nleaf 0 Clean picture\n".into(),
         good.clone() + "leaf 0 Skin tone\n",
         good.replace("leaf 0 Skin tone", "leaf 0 Clean picture"),
         good.replace("leaf 0 Skin tone", "leaf 1 Skin tone"),
@@ -538,8 +537,6 @@ fn rubbish_gives_the_default_layout() {
         good.replacen(&first_split, "split row x", 1),
         good.replacen(&first_split, "split row", 1),
     ];
-    // A Panel missing from the layout.
-    bad.push(good.replace("leaf 0 Skin tone", "leaf 0 Gamut/legal warning"));
     // Nested far deeper than any layout.
     let mut deep = String::from("layout 2\n");
     for _ in 0..200 {
@@ -549,6 +546,21 @@ fn rubbish_gives_the_default_layout() {
     for text in bad {
         assert_eq!(LayoutTree::from_text(&NAMES, &text), default, "{text:?}");
     }
+}
+
+#[test]
+fn a_layout_without_some_displays_keeps_them_closed() {
+    let one = LayoutTree::from_text(&NAMES, "layout 2\nleaf 0 Clean picture\n");
+    assert_eq!(one.len(), 1);
+    assert!(one.contains(index("Clean picture")));
+    assert_eq!(one.cells(AREA, GAP).len(), NAMES.len());
+    assert_eq!(one.cells(AREA, GAP)[index("Clean picture")], AREA);
+    // A display that does not exist is dropped, and the layout keeps the rest.
+    let good = default_tree().to_text(&NAMES);
+    let without = good.replace("leaf 0 Skin tone", "leaf 0 Gamut/legal warning");
+    let tree = LayoutTree::from_text(&NAMES, &without);
+    assert_eq!(tree.len(), 6);
+    assert!(!tree.contains(index("Skin tone")));
 }
 
 #[test]

@@ -58,6 +58,8 @@ pub enum LayoutMode {
     Show,
     Save,
     Rename,
+    /// The list of displays to add as a Panel (ADR 0038, #206).
+    Add,
 }
 
 /// What a click on a menu entry does.
@@ -69,6 +71,8 @@ pub enum MenuAction {
     Mode(LayoutMode),
     /// Start typing a new name for the layout in a slot; the menu stays open.
     Rename(usize),
+    /// Add Panel `.0` to the page.
+    Add(usize),
     /// Show the Hotkeys panel in place of the Settings menu.
     OpenHotkeys,
     /// Something in the Hotkeys panel.
@@ -153,7 +157,8 @@ pub fn layout_menu(
     };
     let filled = |slot: usize| layouts.name(slot).is_some();
     match mode {
-        LayoutMode::Show => {
+        // The Add list is [`add_menu`], which needs to know what is on the page; as a mode it opens as Show.
+        LayoutMode::Show | LayoutMode::Add => {
             let default = Command::DefaultLayout;
             menu.push(
                 item(
@@ -191,6 +196,16 @@ pub fn layout_menu(
                 item("Rename layout…".to_string(), None, any, false),
                 Some(MenuAction::Mode(LayoutMode::Rename)),
             );
+            menu.push(MenuEntry::Separator, None);
+            for (label, command) in [
+                ("Add panel…", Command::AddPanel),
+                ("Close panel", Command::ClosePanel),
+            ] {
+                menu.push(
+                    item(label.to_string(), Some(command), true, false),
+                    Some(MenuAction::Run(command)),
+                );
+            }
         }
         LayoutMode::Save => {
             menu.push(
@@ -230,6 +245,37 @@ pub fn layout_menu(
             );
         }
     }
+    menu
+}
+
+/// A display the Add list offers: the Panel it would bring onto the page, its name, and whether it can be added now
+/// (a display already on the page cannot be added again until Panels can be copied, ADR 0039).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct AddEntry {
+    pub panel: usize,
+    pub name: String,
+    pub enabled: bool,
+}
+
+/// The Add list (ADR 0038, #206): each display, then "Back" to the Layout menu.
+pub fn add_menu(entries: &[AddEntry]) -> Menu {
+    let mut menu = Menu::new();
+    for e in entries {
+        menu.push(
+            MenuEntry::Item(MenuItem {
+                label: e.name.clone(),
+                hotkey: String::new(),
+                enabled: e.enabled,
+                on: false,
+            }),
+            Some(MenuAction::Add(e.panel)),
+        );
+    }
+    menu.push(MenuEntry::Separator, None);
+    menu.push(
+        MenuEntry::Item(MenuItem::new("Back", "")),
+        Some(MenuAction::Mode(LayoutMode::Show)),
+    );
     menu
 }
 
@@ -281,6 +327,17 @@ pub fn largest_menus() -> Vec<DropMenu> {
         .map(|mode| layout_menu(&layouts, &hotkeys, None, mode, typing.as_ref()).drop)
         .collect();
     menus.push(settings_menu().drop);
+    let names = crate::layout_tree::default_names();
+    let all: Vec<AddEntry> = names
+        .iter()
+        .enumerate()
+        .map(|(panel, name)| AddEntry {
+            panel,
+            name: name.to_string(),
+            enabled: true,
+        })
+        .collect();
+    menus.push(add_menu(&all).drop);
     // The longest name with the widest hotkey beside it is the widest row.
     let longest = Command::all()
         .into_iter()

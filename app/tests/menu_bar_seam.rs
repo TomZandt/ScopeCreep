@@ -300,7 +300,12 @@ fn the_layout_menu_lists_default_layout_and_the_nine_slots_empty_or_by_name() {
     assert_eq!(labels[9], "9  empty");
     assert_eq!(
         &labels[10..],
-        ["Save current layout into…", "Rename layout…"]
+        [
+            "Save current layout into…",
+            "Rename layout…",
+            "Add panel…",
+            "Close panel"
+        ]
     );
 }
 

@@ -25,6 +25,10 @@ pub enum Command {
     FillWindow,
     /// Every Panel's legend on, or off when they all are (the View menu, #191). No default hotkey.
     ToggleLegends,
+    /// Open the list of displays to add as a new Panel beside the focused one (ADR 0038, #206). No default hotkey.
+    AddPanel,
+    /// Close the focused Panel: its neighbour takes its space (ADR 0038, #206). No default hotkey.
+    ClosePanel,
 }
 
 impl Command {
@@ -37,6 +41,8 @@ impl Command {
         all.push(Command::ZoomFit);
         all.push(Command::FillWindow);
         all.push(Command::ToggleLegends);
+        all.push(Command::AddPanel);
+        all.push(Command::ClosePanel);
         all
     }
 
@@ -49,6 +55,8 @@ impl Command {
             Command::ZoomFit => "zoom-fit".to_string(),
             Command::FillWindow => "panel-fill".to_string(),
             Command::ToggleLegends => "legends-toggle".to_string(),
+            Command::AddPanel => "panel-add".to_string(),
+            Command::ClosePanel => "panel-close".to_string(),
         }
     }
 
@@ -61,15 +69,21 @@ impl Command {
             Command::ZoomFit => "Zoom: Fit / last zoom".to_string(),
             Command::FillWindow => "Panel: fill the Window".to_string(),
             Command::ToggleLegends => "Legends: show / hide".to_string(),
+            Command::AddPanel => "Panel: add".to_string(),
+            Command::ClosePanel => "Panel: close".to_string(),
         }
     }
 
     /// The hotkey the command has until the user changes it: Ctrl+1 to 9 to show a layout, Ctrl+Shift+1 to 9 to
-    /// save one, Z for the Fit toggle, Ctrl+F to fill the Window with a Panel. Default layout and the legends have none.
+    /// save one, Z for the Fit toggle, Ctrl+F to fill the Window with a Panel. Default layout, the legends and
+    /// adding and closing a Panel have none.
     pub fn default_hotkey(self) -> Option<Hotkey> {
         let digit = |slot: usize| Key::named(&(slot + 1).to_string());
         match self {
-            Command::DefaultLayout | Command::ToggleLegends => None,
+            Command::DefaultLayout
+            | Command::ToggleLegends
+            | Command::AddPanel
+            | Command::ClosePanel => None,
             Command::RecallLayout(slot) => digit(slot).map(Hotkey::ctrl),
             Command::SaveLayout(slot) => digit(slot).map(|k| Hotkey::ctrl(k).with_shift()),
             Command::ZoomFit => Key::named("Z").map(Hotkey::new),

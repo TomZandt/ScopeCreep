@@ -59,8 +59,8 @@ fn every_slot_has_a_show_and_a_save_command() {
     let all = Command::all();
     assert_eq!(
         all.len(),
-        1 + 2 * SLOTS + 3,
-        "Default layout, show and save each slot, the Fit toggle, fill the Window, the legends"
+        1 + 2 * SLOTS + 5,
+        "Default layout, show and save each slot, the Fit toggle, fill the Window, the legends, add and close a Panel"
     );
     for slot in 0..SLOTS {
         assert!(all.contains(&Command::RecallLayout(slot)));

@@ -191,16 +191,18 @@ fn a_layout_naming_a_panel_that_no_longer_exists_drops_it() {
 }
 
 #[test]
-fn a_layout_missing_a_display_the_window_has_gives_the_default_layout() {
-    // Saved while the Window had 7 displays; it has 8 now, so this is not the layout those displays were saved
-    // with. The default layout for the 8 fills the Window.
+fn a_layout_missing_a_display_the_window_has_keeps_that_display_closed() {
+    // Saved while the Window had 7 displays; it has 8 now. The saved arrangement comes back and the new display is
+    // not on the page (Add panel brings it on).
     let mut layouts = Layouts::default();
     layouts.save(0, &arranged(), &NAMES);
     let mut more = NAMES.to_vec();
     more.push("New display");
     let grid = layouts.recall(0, &more).unwrap();
-    assert_eq!(grid, LayoutTree::default_for(&more));
+    assert_eq!(grid, arranged());
     assert_eq!(grid.cells(AREA, GAP).len(), 8);
+    assert!(!grid.contains(7));
+    assert_eq!(grid.len(), 7);
 }
 
 #[test]

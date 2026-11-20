@@ -297,6 +297,8 @@ pub enum MenuRow {
         amount: Amount,
         value: f32,
     },
+    /// Closes the Panel (ADR 0038, #206): the last row of every Panel's popover.
+    Close,
     /// The way back to an amount's default, under its slider.
     Reset {
         key: &'static str,
@@ -347,6 +349,24 @@ impl Menu {
             }
         }
         Some(Menu { panel, rows })
+    }
+
+    /// A Panel's popover: its settings (when it has any) and, last, the Panel section with Close (#206). A Panel
+    /// with no settings still has a popover, so it can be closed.
+    pub fn for_panel(panel: usize, defs: &[SettingDef], current: &Settings) -> Menu {
+        let mut menu = Menu::new(panel, defs, current).unwrap_or(Menu {
+            panel,
+            rows: Vec::new(),
+        });
+        menu.rows.push(MenuRow::Heading("Panel".to_string()));
+        menu.rows.push(MenuRow::Close);
+        menu
+    }
+
+    /// Whether `point` is on the Close row.
+    pub fn close_at(&self, rect: [f32; 4], point: [f32; 2], scale: f32) -> bool {
+        self.row_at(rect, point, scale)
+            .is_some_and(|row| self.rows.get(row) == Some(&MenuRow::Close))
     }
 
     /// Where the menu sits when opened at `at` in a window of `window` device pixels at `scale`: the whole menu

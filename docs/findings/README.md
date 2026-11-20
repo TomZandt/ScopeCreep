@@ -104,6 +104,7 @@ What we learned by testing, kept in the repo so it isn't lost when an issue thre
 | [128](128-reference-level-lines.md) | Do the waveforms' Low and High reference-level sliders draw dashed lines at the right codes in each scale unit, off by default, Low never above High, without changing a count (headless)? |
 | [130](130-hue-vectors.md) | Does a Standard / Hue vectors graticule choice on the Vectorscope draw a neutral spoke to each of the six colour targets on both plots, follow graticule brightness, and leave the default, the trace, the clipping marks and the skin-tone line unchanged (Feed seam)? |
 | [204](204-layout-tree.md) | Does the Window draw from a layout tree that looks and behaves as the grid did, and do old and named layouts still recall (headless)? |
+| [206](206-add-close.md) | Does Add panel split the focused cell 50/50 along its longer side and focus the new Panel, is an add with no room refused with a notice naming the minimum, does Close give the space to its sibling and leave an empty page, and do closed Panels survive a restart (headless)? |
 
 ## Adding findings
 
