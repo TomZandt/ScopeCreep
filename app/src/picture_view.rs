@@ -10,7 +10,7 @@ use crate::loupe::{self, Loupe};
 use crate::output_conversion::Plan;
 use crate::picture_stage::{PictureStage, Rule};
 use crate::settings::SettingDef;
-use crate::zoom::{PanelZoom, Readout};
+use crate::zoom::{PanelZoom, PictureZoom};
 use crate::toolbar::{CHANNEL_DEF, CHANNEL_SETTING, CHANNEL_TOOLBAR, LOUPE_DEF, LOUPE_TOOLBAR, ToolbarDef, channel_of};
 use std::sync::{Arc, Mutex};
 
@@ -106,6 +106,16 @@ impl PictureView {
     }
 }
 
+impl PictureZoom for PictureView {
+    fn panel_zoom(&self) -> &PanelZoom {
+        &self.zoom
+    }
+
+    fn picture_size(&self) -> Option<[u32; 2]> {
+        self.frame_size()
+    }
+}
+
 impl Display for PictureView {
     fn name(&self) -> &'static str {
         "Clean picture"
@@ -146,10 +156,10 @@ impl Display for PictureView {
                     return result;
                 }
             }
-            return self.zoom.pointer(area, self.frame_size(), 0.0, event).unwrap_or_default();
+            return self.zoom.pointer(self.geometry(area, scale), event).unwrap_or_default();
         }
         // The middle button pans the zoomed picture; its movement is the pan's, whatever the Loupe is doing.
-        if let Some(result) = self.zoom.pointer(area, self.frame_size(), 0.0, event) {
+        if let Some(result) = self.zoom.pointer(self.geometry(area, scale), event) {
             return result;
         }
         if !loupe {
@@ -158,20 +168,8 @@ impl Display for PictureView {
         self.loupe.pointer(area, scale, event)
     }
 
-    fn zoom(&self, area: [f32; 4], _scale: f32) -> Option<Readout> {
-        self.zoom.readout(area, self.frame_size(), 0.0)
-    }
-
-    fn set_zoom(&self, area: [f32; 4], _scale: f32, percent: f32) {
-        self.zoom.set_percent(percent, area, self.frame_size(), 0.0);
-    }
-
-    fn link_to(&self, link: &crate::zoom::Link) {
-        self.zoom.link_to(link);
-    }
-
-    fn zoom_model(&self) -> Option<crate::zoom::ZoomModel> {
-        Some(self.zoom.model())
+    fn picture_zoom(&self) -> Option<&dyn crate::zoom::PictureZoom> {
+        Some(self)
     }
 
     fn label(&self) -> String {

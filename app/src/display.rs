@@ -127,25 +127,41 @@ pub trait Display: Send + Sync {
     fn state_keys(&self) -> &'static [&'static str] {
         &[]
     }
-    /// The pointer over the display's `area` (see [`Display::draw`]). Ignored by default.
-    fn pointer(&self, _area: [f32; 4], _scale: f32, _event: Pointer) -> PointerResult {
-        PointerResult::default()
+    /// A picture Panel's zoom (spec #163): the display itself, for a display that zooms (see
+    /// [`crate::zoom::PictureZoom`]). The pointer's wheel and middle button, the zoom chip and slider and Link all
+    /// follow from it. `None` for a display that does not zoom (every Scope).
+    fn picture_zoom(&self) -> Option<&dyn crate::zoom::PictureZoom> {
+        None
+    }
+    /// The pointer over the display's `area` (see [`Display::draw`]). A zooming display's wheel and middle button
+    /// zoom and pan; anything else is ignored by default.
+    fn pointer(&self, area: [f32; 4], scale: f32, event: Pointer) -> PointerResult {
+        self.picture_zoom().and_then(|z| z.panel_zoom().pointer(z.geometry(area, scale), event)).unwrap_or_default()
     }
     /// What the zoom chip on the title bar says for a picture Panel whose content is `area` (spec #163): `None`
     /// for a display that does not zoom (every Scope), and before a frame has arrived.
-    fn zoom(&self, _area: [f32; 4], _scale: f32) -> Option<crate::zoom::Readout> {
-        None
+    fn zoom(&self, area: [f32; 4], scale: f32) -> Option<crate::zoom::Readout> {
+        let z = self.picture_zoom()?;
+        z.panel_zoom().readout(z.geometry(area, scale))
     }
     /// Set the zoom from the chip's slider, in percent of source pixels (see [`crate::zoom::ZoomModel::set_percent`]).
-    /// Zoom is not a setting and is never saved. Nothing by default.
-    fn set_zoom(&self, _area: [f32; 4], _scale: f32, _percent: f32) {}
+    /// Zoom is not a setting and is never saved.
+    fn set_zoom(&self, area: [f32; 4], scale: f32, percent: f32) {
+        if let Some(z) = self.picture_zoom() {
+            z.panel_zoom().set_percent(percent, z.geometry(area, scale));
+        }
+    }
     /// Join the Window's Link (#168): the display set hands every display the one [`crate::zoom::Link`] on
-    /// registering. Nothing by default (a Scope does not zoom).
-    fn link_to(&self, _link: &crate::zoom::Link) {}
+    /// registering.
+    fn link_to(&self, link: &crate::zoom::Link) {
+        if let Some(z) = self.picture_zoom() {
+            z.panel_zoom().link_to(link);
+        }
+    }
     /// The view of a picture Panel now (what Link takes when it is turned on from this Panel); `None` for a display
     /// that does not zoom.
     fn zoom_model(&self) -> Option<crate::zoom::ZoomModel> {
-        None
+        self.picture_zoom().map(|z| z.panel_zoom().model())
     }
     /// The quiet label: what the display shows, and how far it can be trusted (ADR 0007).
     fn label(&self) -> String;

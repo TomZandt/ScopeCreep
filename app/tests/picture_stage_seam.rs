@@ -217,7 +217,7 @@ fn nothing_is_drawn_before_a_frame_arrives_and_the_size_follows_the_frame() {
 
 // ---- zoom (#165, spec #163)
 
-use scopecreep::zoom::{Zoom, ZoomModel};
+use scopecreep::zoom::{Geometry, Zoom, ZoomModel};
 
 /// The rule of a Picture View that reads the frame the smoothed way, so zoom must make it exact.
 const SMOOTH_RULE: &str = r#"
@@ -255,7 +255,7 @@ fn runs(values: &[u8]) -> Vec<usize> {
 
 fn zoomed(percent: f32) -> ZoomModel {
     let mut m = ZoomModel::default();
-    m.set_percent(percent, [0.0, 0.0, W as f32, H as f32], [160, 100], 0.0);
+    m.set_percent(percent, Geometry::new([0.0, 0.0, W as f32, H as f32], [160, 100], 0.0));
     assert_eq!(m.zoom, Zoom::Percent(percent));
     m
 }
@@ -302,7 +302,7 @@ fn zoomed_in_the_mattes_stay_black_and_the_legend_strip_is_untouched() {
     let legend = Legend { strip: 20.0, bar_offset: 5.0, bar: 10.0 };
     let area = [0.0, 0.0, 120.0, 100.0];
     let mut model = ZoomModel::default();
-    model.set_percent(200.0, area, [160, 100], 20.0);
+    model.set_percent(200.0, Geometry::new(area, [160, 100], 20.0));
     model.centre = Some([30.0, 50.0]);
     let image = rig.render(W, H, |pass| stage.draw_zoomed(pass, area, [W as f32, H as f32], &ID, Some(legend), &model));
     // The picture shows its first 60 columns: 20 black picture columns are 40 black device columns.

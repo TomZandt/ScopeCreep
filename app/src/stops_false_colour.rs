@@ -636,17 +636,21 @@ impl StopsFalseColour {
     }
 }
 
-impl StopsFalseColour {
-    /// The height the legend takes under the picture in a Panel of content `area`: what zoom keeps free.
-    fn strip(&self, area: [f32; 4], scale: f32) -> f32 {
-        let config = self.config.lock().unwrap();
-        Geometry::new(area, scale, config.mode, config.legend).legend.map_or(0.0, |l| l.strip)
+impl crate::zoom::PictureZoom for StopsFalseColour {
+    fn panel_zoom(&self) -> &crate::zoom::PanelZoom {
+        &self.zoom
     }
 
     /// The size of the picture on screen, when there is one to zoom (not while a message fills the Panel).
-    fn zoomable(&self) -> Option<[u32; 2]> {
+    fn picture_size(&self) -> Option<[u32; 2]> {
         let measurable = self.state.lock().unwrap().source(&self.config.lock().unwrap()).is_some();
         if measurable { self.stage.size() } else { None }
+    }
+
+    /// The height the legend takes under the picture: what zoom keeps free.
+    fn strip(&self, area: [f32; 4], scale: f32) -> f32 {
+        let config = self.config.lock().unwrap();
+        Geometry::new(area, scale, config.mode, config.legend).legend.map_or(0.0, |l| l.strip)
     }
 }
 
@@ -724,24 +728,8 @@ impl Display for StopsFalseColour {
         }
     }
 
-    fn pointer(&self, area: [f32; 4], scale: f32, event: crate::display::Pointer) -> crate::display::PointerResult {
-        self.zoom.pointer(area, self.zoomable(), self.strip(area, scale), event).unwrap_or_default()
-    }
-
-    fn zoom(&self, area: [f32; 4], scale: f32) -> Option<crate::zoom::Readout> {
-        self.zoom.readout(area, self.zoomable(), self.strip(area, scale))
-    }
-
-    fn set_zoom(&self, area: [f32; 4], scale: f32, percent: f32) {
-        self.zoom.set_percent(percent, area, self.zoomable(), self.strip(area, scale));
-    }
-
-    fn link_to(&self, link: &crate::zoom::Link) {
-        self.zoom.link_to(link);
-    }
-
-    fn zoom_model(&self) -> Option<crate::zoom::ZoomModel> {
-        Some(self.zoom.model())
+    fn picture_zoom(&self) -> Option<&dyn crate::zoom::PictureZoom> {
+        Some(self)
     }
 
     /// The legend's numbers and captions, or the message when nothing can be measured.

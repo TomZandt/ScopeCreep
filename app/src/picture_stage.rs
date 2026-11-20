@@ -422,7 +422,7 @@ impl PictureStage {
         let guard = self.bound.lock().unwrap();
         let Some(bound) = guard.as_ref() else { return };
         let strip = legend.map_or(0.0, |l| l.strip);
-        let Some(view) = zoom.view(area, [bound.width, bound.height], strip) else { return };
+        let Some(view) = zoom.view(crate::zoom::Geometry::new(area, [bound.width, bound.height], strip)) else { return };
         self.write_values(values);
         self.write_stage(&self.picture_stage, bound, view.visible, surface, 0.0, view.window, view.nearest);
         pass.set_pipeline(&self.pipeline);

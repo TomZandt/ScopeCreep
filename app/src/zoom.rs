@@ -28,6 +28,11 @@ pub fn link_remembered(settings: &crate::settings::PanelSettings) -> bool {
     settings.state_of(LINK_STATE_PANEL, &[LINK_KEY]).get(LINK_KEY).is_some_and(|v| v == "on")
 }
 
+/// Remember Link as `on` (the same "on" and "off" [`link_remembered`] reads). Whether the saved state changed.
+pub fn remember_link(settings: &mut crate::settings::PanelSettings, on: bool) -> bool {
+    settings.set_state(LINK_STATE_PANEL, LINK_KEY, if on { "on" } else { crate::toolbar::TOGGLE_OFF })
+}
+
 /// How much of the picture a Panel shows.
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub enum Zoom {
@@ -65,8 +70,10 @@ pub struct View {
 /// What the zoom chip and its slider say.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Readout {
-    /// "Fit 23 %" or "200 %".
+    /// The long text: "Fit 23 %" or "200 %".
     pub text: String,
+    /// The short text, for a title bar with no room for the word Fit: "23 %" or "200 %".
+    pub short: String,
     /// The zoom now, in percent.
     pub percent: f32,
     /// What Fit is, in percent: the bottom of the slider.
@@ -75,26 +82,50 @@ pub struct Readout {
     pub max: f32,
 }
 
-impl ZoomModel {
+/// Where a picture goes: what travels together through every zoom question.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Geometry {
+    /// The Panel's content (left, top, width, height) in device pixels.
+    pub area: [f32; 4],
+    /// The picture's size in source pixels (width, height).
+    pub picture: [u32; 2],
+    /// The height kept free at the bottom of `area` for a legend.
+    pub strip: f32,
+}
+
+impl Geometry {
+    pub fn new(area: [f32; 4], picture: [u32; 2], strip: f32) -> Geometry {
+        Geometry { area, picture, strip }
+    }
+
     /// The picture area: `area` less the `strip` kept free at the bottom.
-    fn room(area: [f32; 4], strip: f32) -> [f32; 4] {
-        [area[0], area[1], area[2], area[3] - strip]
+    fn room(&self) -> [f32; 4] {
+        let [left, top, width, height] = self.area;
+        [left, top, width, height - self.strip]
+    }
+
+    /// The middle of the frame, in source pixels.
+    fn middle(&self) -> [f32; 2] {
+        [self.picture[0] as f32 / 2.0, self.picture[1] as f32 / 2.0]
     }
 
     /// What Fit is, in percent of source pixels, exactly. `None` when nothing is left to draw in.
-    fn fit(area: [f32; 4], picture: [u32; 2], strip: f32) -> Option<f32> {
-        let [_, _, w, h] = Self::room(area, strip);
-        (w >= 1.0 && h >= 1.0 && picture[0] != 0 && picture[1] != 0).then(|| (w / picture[0] as f32).min(h / picture[1] as f32) * 100.0)
+    fn fit(&self) -> Option<f32> {
+        let [_, _, w, h] = self.room();
+        let [pw, ph] = self.picture;
+        (w >= 1.0 && h >= 1.0 && pw != 0 && ph != 0).then(|| (w / pw as f32).min(h / ph as f32) * 100.0)
     }
+}
 
+impl ZoomModel {
     /// The top of the range: 400 %, or Fit when that is more.
     fn top(fit: f32) -> f32 {
         MAX_PERCENT.max(fit)
     }
 
     /// The zoom now in percent of source pixels (Fit's own percent at Fit). `None` when nothing is left to draw in.
-    pub fn percent(&self, area: [f32; 4], picture: [u32; 2], strip: f32) -> Option<f32> {
-        let fit = Self::fit(area, picture, strip)?;
+    pub fn percent(&self, g: Geometry) -> Option<f32> {
+        let fit = g.fit()?;
         Some(match self.zoom {
             Zoom::Percent(p) if p > fit => p.min(Self::top(fit)),
             _ => fit,
@@ -115,17 +146,18 @@ impl ZoomModel {
         !matches!(self.zoom, Zoom::Percent(p) if p > fit)
     }
 
-    /// Where the `picture` (width, height) goes in `area` (left, top, width, height) less a `strip` kept free at
-    /// the bottom for a legend, in whole device pixels. At zoom it runs past the Panel: [`ZoomModel::view`] gives
-    /// the part that is drawn. `None` when nothing is left to draw in.
-    pub fn placement(&self, area: [f32; 4], picture: [u32; 2], strip: f32) -> Option<Placement> {
-        let fit = Self::fit(area, picture, strip)?;
+    /// Where the picture goes in the Panel (less the strip kept free at the bottom for a legend), in whole device
+    /// pixels. At zoom it runs past the Panel: [`ZoomModel::view`] gives the part that is drawn. `None` when
+    /// nothing is left to draw in.
+    pub fn placement(&self, g: Geometry) -> Option<Placement> {
+        let fit = g.fit()?;
         if self.at_fit(fit) {
-            return place(area, picture, strip);
+            return place(g.area, g.picture, g.strip);
         }
-        let k = self.percent(area, picture, strip)? / 100.0;
-        let [left, top, width, height] = Self::room(area, strip);
-        let centre = self.centre.unwrap_or([picture[0] as f32 / 2.0, picture[1] as f32 / 2.0]);
+        let k = self.percent(g)? / 100.0;
+        let [left, top, width, height] = g.room();
+        let picture = g.picture;
+        let centre = self.centre.unwrap_or(g.middle());
         let axis = |from: f32, room: f32, size: u32, c: f32| {
             let drawn = (size as f32 * k).round();
             let origin = if drawn <= room {
@@ -143,14 +175,14 @@ impl ZoomModel {
 
     /// Where the picture goes and which part of it is drawn: the [`placement`](Self::placement) clipped to the
     /// Panel's picture area. `None` when nothing is left to draw.
-    pub fn view(&self, area: [f32; 4], picture: [u32; 2], strip: f32) -> Option<View> {
-        let p = self.placement(area, picture, strip)?;
-        let fit = Self::fit(area, picture, strip)?;
+    pub fn view(&self, g: Geometry) -> Option<View> {
+        let p = self.placement(g)?;
+        let fit = g.fit()?;
         if self.at_fit(fit) {
             // The whole frame, as it always was drawn.
             return Some(View { placement: p, visible: [p.x, p.y, p.w, p.h], window: [0.0, 0.0, 1.0, 1.0], nearest: false });
         }
-        let [left, top, width, height] = Self::room(area, strip);
+        let [left, top, width, height] = g.room();
         let (x0, y0) = (p.x.max(left), p.y.max(top));
         let (x1, y1) = ((p.x + p.w).min(left + width), (p.y + p.h).min(top + height));
         if x1 <= x0 || y1 <= y0 {
@@ -160,13 +192,13 @@ impl ZoomModel {
             placement: p,
             visible: [x0, y0, x1 - x0, y1 - y0],
             window: [(x0 - p.x) / p.w, (y0 - p.y) / p.h, (x1 - p.x) / p.w, (y1 - p.y) / p.h],
-            nearest: self.percent(area, picture, strip)? > 100.0,
+            nearest: self.percent(g)? > 100.0,
         })
     }
 
     /// What Fit is: the whole percent of a source pixel's size the frame is drawn at when fitted (23 for "Fit 23 %").
-    pub fn fit_percent(&self, area: [f32; 4], picture: [u32; 2], strip: f32) -> Option<u32> {
-        Some(Self::fit(area, picture, strip)?.round() as u32)
+    pub fn fit_percent(&self, g: Geometry) -> Option<u32> {
+        Some(g.fit()?.round() as u32)
     }
 
     /// The next zoom in from `s` percent: free below 100 %, landing on it, then whole steps; never past `top`.
@@ -181,22 +213,23 @@ impl ZoomModel {
     }
 
     /// Zoom to `percent` keeping the picture pixel under the device point `at` there.
-    fn zoom_about(&mut self, percent: f32, keep: bool, fit: f32, area: [f32; 4], picture: [u32; 2], strip: f32, at: [f32; 2]) {
-        let Some(before) = self.placement(area, picture, strip) else { return };
-        let (k0, [left, top, width, height]) = (before.w / picture[0] as f32, Self::room(area, strip));
+    fn zoom_about(&mut self, percent: f32, keep: bool, fit: f32, g: Geometry, at: [f32; 2]) {
+        let Some(before) = self.placement(g) else { return };
+        let (k0, [left, top, width, height]) = (before.w / g.picture[0] as f32, g.room());
         let under = [(at[0] - before.x) / k0, (at[1] - before.y) / k0];
         // A shared zoom already at or below this Panel's Fit (Link) stays what it is (`keep`); else at or below Fit is Fit.
         self.zoom = if percent <= fit + 1e-3 && !keep { Zoom::Fit } else { Zoom::Percent(percent) };
         let k = if self.zoom == Zoom::Fit { percent.max(fit) } else { percent } / 100.0;
         self.centre = Some([under[0] - (at[0] - (left + width / 2.0)) / k, under[1] - (at[1] - (top + height / 2.0)) / k]);
-        self.hold(area, picture, strip);
+        self.hold(g);
     }
 
     /// Keep the centre inside the picture, so a pan can never leave the Panel empty.
-    fn hold(&mut self, area: [f32; 4], picture: [u32; 2], strip: f32) {
-        let (Some(fit), Some(c)) = (Self::fit(area, picture, strip), self.centre) else { return };
+    fn hold(&mut self, g: Geometry) {
+        let (Some(fit), Some(c)) = (g.fit(), self.centre) else { return };
         let k = self.held_percent(fit) / 100.0;
-        let [_, _, width, height] = Self::room(area, strip);
+        let [_, _, width, height] = g.room();
+        let picture = g.picture;
         // Under this Panel's own Fit (a shared view, Link) it has no edge to stop at: the other Panels' placement does
         // that, so only keep the centre in the picture.
         let under_fit = self.held_percent(fit) < fit;
@@ -210,24 +243,24 @@ impl ZoomModel {
     /// The picture was dragged by `delta` device pixels (spec #163, #166): it moves exactly as far as the pointer, and
     /// is held so the Panel is never left empty (a picture smaller than the Panel on an axis stays centred). At Fit
     /// there is nothing to pan. Returns whether the picture moved.
-    pub fn pan(&mut self, area: [f32; 4], picture: [u32; 2], strip: f32, delta: [f32; 2]) -> bool {
-        let Some(fit) = Self::fit(area, picture, strip) else { return false };
+    pub fn pan(&mut self, g: Geometry, delta: [f32; 2]) -> bool {
+        let Some(fit) = g.fit() else { return false };
         if self.zoom == Zoom::Fit {
             return false;
         }
         let k = self.held_percent(fit) / 100.0;
         let before = self.centre;
-        let c = before.unwrap_or([picture[0] as f32 / 2.0, picture[1] as f32 / 2.0]);
+        let c = before.unwrap_or(g.middle());
         self.centre = Some([c[0] - delta[0] / k, c[1] - delta[1] / k]);
-        self.hold(area, picture, strip);
+        self.hold(g);
         self.centre != before
     }
 
     /// The scroll wheel turned `lines` over the device point `at` (positive zooms in): whole notches step the
     /// zoom, parts of one wait for the rest. The picture pixel under `at` stays under it. Returns whether the zoom
     /// changed.
-    pub fn wheel(&mut self, area: [f32; 4], picture: [u32; 2], strip: f32, at: [f32; 2], lines: f32) -> bool {
-        let Some(fit) = Self::fit(area, picture, strip) else { return false };
+    pub fn wheel(&mut self, g: Geometry, at: [f32; 2], lines: f32) -> bool {
+        let Some(fit) = g.fit() else { return false };
         self.pending += lines;
         let notches = self.pending.trunc();
         self.pending -= notches;
@@ -239,7 +272,7 @@ impl ZoomModel {
             let now = self.held_percent(fit);
             let next = if notches > 0.0 { Self::step_in(now, Self::top(fit)) } else { Self::step_out(now) };
             if (next - now).abs() > 1e-3 {
-                self.zoom_about(next, now <= fit + 1e-3, fit, area, picture, strip, at);
+                self.zoom_about(next, now <= fit + 1e-3, fit, g, at);
             }
         }
         self.zoom != before
@@ -247,22 +280,24 @@ impl ZoomModel {
 
     /// Set the zoom from the slider (Fit to 400 %): free below 100 %, whole steps above, nothing beyond the top.
     /// At or below Fit is Fit.
-    pub fn set_percent(&mut self, percent: f32, area: [f32; 4], picture: [u32; 2], strip: f32) {
-        let Some(fit) = Self::fit(area, picture, strip) else { return };
+    pub fn set_percent(&mut self, percent: f32, g: Geometry) {
+        let Some(fit) = g.fit() else { return };
         let snapped = if (99.5..100.5).contains(&percent) {
             100.0
         } else if percent < 100.0 { percent } else { ((percent / 100.0).round() * 100.0).min(Self::top(fit)) };
-        let [left, top, width, height] = Self::room(area, strip);
+        let [left, top, width, height] = g.room();
         // About the middle of the Panel's picture area (the slider has no pointer).
-        self.zoom_about(snapped.max(0.0), false, fit, area, picture, strip, [left + width / 2.0, top + height / 2.0]);
+        self.zoom_about(snapped.max(0.0), false, fit, g, [left + width / 2.0, top + height / 2.0]);
     }
 
     /// What the zoom chip and its slider say. `None` when nothing is left to draw in.
-    pub fn readout(&self, area: [f32; 4], picture: [u32; 2], strip: f32) -> Option<Readout> {
-        let fit = Self::fit(area, picture, strip)?;
-        let percent = self.percent(area, picture, strip)?;
-        let text = if self.at_fit(fit) { format!("Fit {} %", self.fit_percent(area, picture, strip)?) } else { format!("{} %", percent.round() as u32) };
-        Some(Readout { text, percent, fit, max: Self::top(fit) })
+    pub fn readout(&self, g: Geometry) -> Option<Readout> {
+        let fit = g.fit()?;
+        let percent = self.percent(g)?;
+        let short = if self.at_fit(fit) { self.fit_percent(g)? } else { percent.round() as u32 };
+        let short = format!("{short} %");
+        let text = if self.at_fit(fit) { format!("Fit {short}") } else { short.clone() };
+        Some(Readout { text, short, percent, fit, max: Self::top(fit) })
     }
 }
 
@@ -339,15 +374,15 @@ impl PanelZoom {
         self.with(|m| *m)
     }
 
-    /// The wheel (zooms toward the pointer) and the middle button (pans) over a Panel of content `area` showing a
-    /// `picture` (`None` before a frame has arrived) with `strip` kept free under it. `None` for any other event
-    /// (the display's own), or when there is no picture.
-    pub fn pointer(&self, area: [f32; 4], picture: Option<[u32; 2]>, strip: f32, event: Pointer) -> Option<PointerResult> {
+    /// The wheel (zooms toward the pointer) and the middle button (pans) over a Panel showing a picture (`geometry`
+    /// is `None` before a frame has arrived). `None` for any other event (the display's own), or when there is no
+    /// picture.
+    pub fn pointer(&self, geometry: Option<Geometry>, event: Pointer) -> Option<PointerResult> {
         let used = PointerResult { used: true, remember: Vec::new() };
         match event {
             Pointer::Wheel { at, lines } => {
-                let picture = picture?;
-                self.with(|m| m.wheel(area, picture, strip, at, lines));
+                let g = geometry?;
+                self.with(|m| m.wheel(g, at, lines));
                 Some(used)
             }
             Pointer::MiddleDown(at) => {
@@ -357,9 +392,9 @@ impl PanelZoom {
             Pointer::MiddleUp => Some(PointerResult { used: self.pan_from.lock().unwrap().take().is_some(), remember: Vec::new() }),
             Pointer::Move(at) => {
                 let mut from = self.pan_from.lock().unwrap();
-                let (last, picture) = (from.as_ref().copied()?, picture?);
+                let (last, g) = (from.as_ref().copied()?, geometry?);
                 *from = Some(at);
-                self.with(|m| m.pan(area, picture, strip, [at[0] - last[0], at[1] - last[1]]));
+                self.with(|m| m.pan(g, [at[0] - last[0], at[1] - last[1]]));
                 Some(used)
             }
             _ => None,
@@ -367,14 +402,32 @@ impl PanelZoom {
     }
 
     /// What the zoom chip says (see [`ZoomModel::readout`]); `None` before a frame has arrived.
-    pub fn readout(&self, area: [f32; 4], picture: Option<[u32; 2]>, strip: f32) -> Option<Readout> {
-        self.with(|m| m.readout(area, picture?, strip))
+    pub fn readout(&self, geometry: Option<Geometry>) -> Option<Readout> {
+        self.with(|m| m.readout(geometry?))
     }
 
     /// Set the zoom from the chip's slider (see [`ZoomModel::set_percent`]).
-    pub fn set_percent(&self, percent: f32, area: [f32; 4], picture: Option<[u32; 2]>, strip: f32) {
-        if let Some(picture) = picture {
-            self.with(|m| m.set_percent(percent, area, picture, strip));
+    pub fn set_percent(&self, percent: f32, geometry: Option<Geometry>) {
+        if let Some(g) = geometry {
+            self.with(|m| m.set_percent(percent, g));
         }
+    }
+}
+
+/// What a picture display gives the [`crate::display::Display`] trait so that zooming needs no code of its own: its
+/// [`PanelZoom`], the size of its picture and the strip it keeps free under it. A display implements this and returns
+/// itself from `Display::picture_zoom`; the wheel, middle-drag, chip, slider and Link then all follow.
+pub trait PictureZoom {
+    /// The Panel's zoom.
+    fn panel_zoom(&self) -> &PanelZoom;
+    /// The picture's size in source pixels; `None` before a frame has arrived (or while a message fills the Panel).
+    fn picture_size(&self) -> Option<[u32; 2]>;
+    /// The height the legend takes under the picture in a Panel of content `area`. No strip by default.
+    fn strip(&self, _area: [f32; 4], _scale: f32) -> f32 {
+        0.0
+    }
+    /// Where the picture goes in a Panel of content `area`; `None` before a frame has arrived.
+    fn geometry(&self, area: [f32; 4], scale: f32) -> Option<Geometry> {
+        Some(Geometry::new(area, self.picture_size()?, self.strip(area, scale)))
     }
 }

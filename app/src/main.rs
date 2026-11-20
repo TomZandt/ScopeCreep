@@ -27,7 +27,7 @@ use scopecreep::panel_grid::{Border, PanelGrid, PanelLayout, Press, min_panel_si
 use scopecreep::resolve_helper::ScriptHelper;
 use scopecreep::flat_rects::FlatRects;
 use scopecreep::components::{self, Align, BarKind, Prim, State, Tooltip};
-use scopecreep::toolbar::Toolbar;
+use scopecreep::toolbar::{ChipAction, Toolbar};
 use scopecreep::window_text;
 use scopecreep::settings::{Amount, Menu, PanelSettings};
 use scopecreep::style;
@@ -464,7 +464,7 @@ impl AppWindow {
     /// remember it; zoom and pan are not remembered.
     fn set_link(&mut self, panel: usize, on: bool) {
         self.displays.set_link(on, panel);
-        let changed = self.settings.lock().unwrap().set_state(scopecreep::zoom::LINK_STATE_PANEL, scopecreep::zoom::LINK_KEY, if on { "on" } else { scopecreep::toolbar::TOGGLE_OFF });
+        let changed = scopecreep::zoom::remember_link(&mut self.settings.lock().unwrap(), on);
         if changed {
             self.save_settings();
         }
@@ -807,16 +807,16 @@ impl AppWindow {
                 // A chip or the settings button on a title bar takes the press before the bar can be dragged.
                 match self.toolbar_hit() {
                     Some(ToolbarHit::Chip(panel, chip)) => {
-                        if let Some((key, value)) = self.toolbars.get(panel).and_then(|t| t.click(chip)).map(|(k, v)| (k, v.to_string())) {
-                            if key == scopecreep::zoom::ZOOM_KEY {
-                                if let Some(r) = self.title_layouts.get(panel).and_then(|l| l.chips.get(chip)).copied() {
-                                    self.open_zoom_popover(panel, [r[0], r[1] + r[3]]);
-                                    self.window.request_redraw();
+                        if let Some(action) = self.toolbars.get(panel).and_then(|t| t.action(chip)).cloned() {
+                            match action {
+                                ChipAction::Zoom { .. } => {
+                                    if let Some(r) = self.title_layouts.get(panel).and_then(|l| l.chips.get(chip)).copied() {
+                                        self.open_zoom_popover(panel, [r[0], r[1] + r[3]]);
+                                        self.window.request_redraw();
+                                    }
                                 }
-                            } else if key == scopecreep::zoom::LINK_KEY {
-                                self.set_link(panel, value == "on");
-                            } else {
-                                self.choose(panel, key, &value);
+                                ChipAction::Link(on) => self.set_link(panel, on),
+                                ChipAction::Set(key, value) => self.choose(panel, key, &value),
                             }
                         }
                         return;

@@ -1,7 +1,7 @@
 //! Link at the zoom model seam (spec #163, ticket #168): picture Panels of different sizes share one zoom and one
 //! centre point in picture coordinates. No GPU.
 use scopecreep::display::Pointer;
-use scopecreep::zoom::{Link, PanelZoom};
+use scopecreep::zoom::{Geometry, Link, PanelZoom};
 
 const BIG: [f32; 4] = [0.0, 0.0, 800.0, 450.0];
 const SMALL: [f32; 4] = [0.0, 0.0, 320.0, 180.0];
@@ -15,22 +15,22 @@ fn pair() -> (PanelZoom, PanelZoom, Link) {
 }
 
 fn wheel(z: &PanelZoom, area: [f32; 4], at: [f32; 2], lines: f32) {
-    z.pointer(area, Some(FRAME), 0.0, Pointer::Wheel { at, lines });
+    z.pointer(Some(Geometry::new(area, FRAME, 0.0)), Pointer::Wheel { at, lines });
 }
 
 fn drag(z: &PanelZoom, area: [f32; 4], from: [f32; 2], to: [f32; 2]) {
-    z.pointer(area, Some(FRAME), 0.0, Pointer::MiddleDown(from));
-    z.pointer(area, Some(FRAME), 0.0, Pointer::Move(to));
-    z.pointer(area, Some(FRAME), 0.0, Pointer::MiddleUp);
+    z.pointer(Some(Geometry::new(area, FRAME, 0.0)), Pointer::MiddleDown(from));
+    z.pointer(Some(Geometry::new(area, FRAME, 0.0)), Pointer::Move(to));
+    z.pointer(Some(Geometry::new(area, FRAME, 0.0)), Pointer::MiddleUp);
 }
 
 fn text(z: &PanelZoom, area: [f32; 4]) -> String {
-    z.readout(area, Some(FRAME), 0.0).unwrap().text
+    z.readout(Some(Geometry::new(area, FRAME, 0.0))).unwrap().text
 }
 
 /// The picture point at the middle of the Panel.
 fn middle(z: &PanelZoom, area: [f32; 4]) -> [f32; 2] {
-    let p = z.model().placement(area, FRAME, 0.0).unwrap();
+    let p = z.model().placement(Geometry::new(area, FRAME, 0.0)).unwrap();
     let k = p.w / FRAME[0] as f32;
     [(area[0] + area[2] / 2.0 - p.x) / k, (area[1] + area[3] / 2.0 - p.y) / k]
 }
@@ -69,7 +69,7 @@ fn scroll_drag_and_the_slider_on_either_panel_move_both() {
     assert_ne!(text(&a, BIG), "Fit 50 %");
     drag(&b, SMALL, [100.0, 100.0], [60.0, 90.0]);
     assert!(near(middle(&a, BIG), middle(&b, SMALL)), "same spot: {:?} {:?}", middle(&a, BIG), middle(&b, SMALL));
-    a.set_percent(300.0, BIG, Some(FRAME), 0.0);
+    a.set_percent(300.0, Some(Geometry::new(BIG, FRAME, 0.0)));
     assert_eq!(text(&b, SMALL), "300 %");
 }
 

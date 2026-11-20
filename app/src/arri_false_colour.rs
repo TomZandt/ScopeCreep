@@ -138,8 +138,16 @@ impl ArriFalseColour {
     }
 }
 
-impl ArriFalseColour {
-    /// The height the legend takes under the picture in a Panel of content `area`: what zoom keeps free.
+impl crate::zoom::PictureZoom for ArriFalseColour {
+    fn panel_zoom(&self) -> &crate::zoom::PanelZoom {
+        &self.zoom
+    }
+
+    fn picture_size(&self) -> Option<[u32; 2]> {
+        self.stage.size()
+    }
+
+    /// The height the legend takes under the picture: what zoom keeps free.
     fn strip(&self, area: [f32; 4], scale: f32) -> f32 {
         BAR.layout(self.state.lock().unwrap().legend, area, scale, false).map_or(0.0, |l| l.legend.strip)
     }
@@ -178,24 +186,8 @@ impl Display for ArriFalseColour {
         &TOOLBAR
     }
 
-    fn pointer(&self, area: [f32; 4], scale: f32, event: crate::display::Pointer) -> crate::display::PointerResult {
-        self.zoom.pointer(area, self.stage.size(), self.strip(area, scale), event).unwrap_or_default()
-    }
-
-    fn zoom(&self, area: [f32; 4], scale: f32) -> Option<crate::zoom::Readout> {
-        self.zoom.readout(area, self.stage.size(), self.strip(area, scale))
-    }
-
-    fn set_zoom(&self, area: [f32; 4], scale: f32, percent: f32) {
-        self.zoom.set_percent(percent, area, self.stage.size(), self.strip(area, scale));
-    }
-
-    fn link_to(&self, link: &crate::zoom::Link) {
-        self.zoom.link_to(link);
-    }
-
-    fn zoom_model(&self) -> Option<crate::zoom::ZoomModel> {
-        Some(self.zoom.model())
+    fn picture_zoom(&self) -> Option<&dyn crate::zoom::PictureZoom> {
+        Some(self)
     }
 
     fn label(&self) -> String {

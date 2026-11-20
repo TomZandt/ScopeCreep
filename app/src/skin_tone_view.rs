@@ -98,6 +98,16 @@ impl SkinTone {
     }
 }
 
+impl crate::zoom::PictureZoom for SkinTone {
+    fn panel_zoom(&self) -> &crate::zoom::PanelZoom {
+        &self.zoom
+    }
+
+    fn picture_size(&self) -> Option<[u32; 2]> {
+        self.stage.size()
+    }
+}
+
 impl Display for SkinTone {
     fn name(&self) -> &'static str {
         "Skin tone"
@@ -127,24 +137,8 @@ impl Display for SkinTone {
         &TOOLBAR
     }
 
-    fn pointer(&self, area: [f32; 4], _scale: f32, event: crate::display::Pointer) -> crate::display::PointerResult {
-        self.zoom.pointer(area, self.stage.size(), 0.0, event).unwrap_or_default()
-    }
-
-    fn zoom(&self, area: [f32; 4], _scale: f32) -> Option<crate::zoom::Readout> {
-        self.zoom.readout(area, self.stage.size(), 0.0)
-    }
-
-    fn set_zoom(&self, area: [f32; 4], _scale: f32, percent: f32) {
-        self.zoom.set_percent(percent, area, self.stage.size(), 0.0);
-    }
-
-    fn link_to(&self, link: &crate::zoom::Link) {
-        self.zoom.link_to(link);
-    }
-
-    fn zoom_model(&self) -> Option<crate::zoom::ZoomModel> {
-        Some(self.zoom.model())
+    fn picture_zoom(&self) -> Option<&dyn crate::zoom::PictureZoom> {
+        Some(self)
     }
 
     /// States only what is proven (ADR 0007): the bands in degrees from the line, and that the line's angle is

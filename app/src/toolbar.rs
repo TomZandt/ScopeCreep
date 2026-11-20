@@ -107,8 +107,19 @@ pub struct Toolbar {
     pub chips: Vec<Chip>,
     pub on: Vec<bool>,
     pub tooltips: Vec<String>,
-    /// Where a click on chip `i` leads: the setting's key and the value it sets.
-    pub picks: Vec<(&'static str, String)>,
+    /// What a click on chip `i` does.
+    pub picks: Vec<ChipAction>,
+}
+
+/// What a click on a title-bar chip does.
+#[derive(Clone, Debug, PartialEq)]
+pub enum ChipAction {
+    /// Set a Panel setting: its key and the value it takes.
+    Set(&'static str, String),
+    /// Ask for the zoom popover. `short` is what the chip says when the bar has no room for the word Fit.
+    Zoom { short: String },
+    /// Switch the Window's Link to this state.
+    Link(bool),
 }
 
 /// The tip on a picture Panel's zoom chip.
@@ -120,43 +131,38 @@ pub const LINK_TOOLTIP: &str = "Link zoom across Panels";
 
 impl Toolbar {
     /// The toolbar with the zoom chip first when the Panel zooms (`readout` is `Some`): lit while zoomed in, and a
-    /// click on it asks for the zoom popover (the key [`crate::zoom::ZOOM_KEY`], no value).
+    /// click on it asks for the zoom popover ([`ChipAction::Zoom`]).
     pub fn with_zoom(mut self, readout: Option<&crate::zoom::Readout>) -> Toolbar {
         let Some(r) = readout else { return self };
         self.chips.insert(0, Chip::new(&r.text));
         self.on.insert(0, r.percent > r.fit + 0.01);
         self.tooltips.insert(0, ZOOM_TOOLTIP.to_string());
-        self.picks.insert(0, (crate::zoom::ZOOM_KEY, String::new()));
+        self.picks.insert(0, ChipAction::Zoom { short: r.short.clone() });
         self
     }
 
     /// The toolbar with the link chip beside the zoom chip (second) when the Panel zooms: lit on every picture Panel
-    /// while Link is on, and a click on it asks to switch it (the key [`crate::zoom::LINK_KEY`] and the value it
-    /// would then have).
+    /// while Link is on, and a click on it asks to switch it ([`ChipAction::Link`], to the state it would
+    /// then have).
     pub fn with_link(mut self, on: bool) -> Toolbar {
-        if !self.picks.first().is_some_and(|p| p.0 == crate::zoom::ZOOM_KEY) {
+        if !matches!(self.picks.first(), Some(ChipAction::Zoom { .. })) {
             return self;
         }
         self.chips.insert(1, Chip::new(LINK_CHIP));
         self.on.insert(1, on);
         self.tooltips.insert(1, LINK_TOOLTIP.to_string());
-        self.picks.insert(1, (crate::zoom::LINK_KEY, if on { TOGGLE_OFF } else { "on" }.to_string()));
+        self.picks.insert(1, ChipAction::Link(!on));
         self
     }
 
     /// On a title bar `bar_width` wide (device pixels), shorten the zoom chip to its number ("23 %" for "Fit 23 %")
     /// when the chips and the settings button would not fit with it long. It stays first, so it stays on the bar.
     pub fn fit_to(&mut self, bar_width: f32, settings_button: bool, scale: f32) {
-        let zoom = self.picks.first().is_some_and(|p| p.0 == crate::zoom::ZOOM_KEY);
-        if !zoom {
-            return;
-        }
+        let Some(ChipAction::Zoom { short }) = self.picks.first() else { return };
         let button = if settings_button { (crate::style::SPACE_SETTINGS_BUTTON + crate::style::SPACE_CHIP_GAP) * scale } else { 0.0 };
         let needed = crate::components::chip_row_width(&self.chips, scale) + button + 2.0 * crate::style::SPACE_BAR_PAD * scale;
         if needed > bar_width {
-            if let Some(number) = self.chips[0].text.strip_prefix("Fit ") {
-                self.chips[0].text = number.to_string();
-            }
+            self.chips[0].text = short.clone();
         }
     }
 
@@ -176,13 +182,13 @@ impl Toolbar {
                     _ => stored == Some(chip.value),
                 });
                 toolbar.tooltips.push(chip.tooltip.to_string());
-                toolbar.picks.push((def.key, chip.value.to_string()));
+                toolbar.picks.push(ChipAction::Set(def.key, chip.value.to_string()));
             }
             if matches!(def.mode, ChipMode::Toggle | ChipMode::OneOrNone) {
                 // A click on a toggle (or a one-or-none chip) that is on turns it off.
                 for i in first..toolbar.on.len() {
                     if toolbar.on[i] {
-                        toolbar.picks[i].1 = TOGGLE_OFF.to_string();
+                        toolbar.picks[i] = ChipAction::Set(def.key, TOGGLE_OFF.to_string());
                     }
                 }
             }
@@ -192,7 +198,7 @@ impl Toolbar {
                 for i in 0..def.chips.len() {
                     let next = crate::components::clicked(def.mode, &on, i);
                     let value: String = def.chips.iter().zip(&next).filter(|(_, on)| **on).map(|(c, _)| c.value).collect();
-                    toolbar.picks[first + i].1 = value;
+                    toolbar.picks[first + i] = ChipAction::Set(def.key, value);
                 }
             }
         }
@@ -202,7 +208,16 @@ impl Toolbar {
     /// What clicking chip `index` sets: the setting and its new value. Clicking the chip already on keeps it on
     /// (a single choice is never empty), and the last chip on of a combination stays on.
     pub fn click(&self, index: usize) -> Option<(&'static str, &str)> {
-        self.picks.get(index).map(|(key, value)| (*key, value.as_str()))
+        self.picks.get(index).map(|action| match action {
+            ChipAction::Set(key, value) => (*key, value.as_str()),
+            ChipAction::Zoom { .. } => (crate::zoom::ZOOM_KEY, ""),
+            ChipAction::Link(on) => (crate::zoom::LINK_KEY, if *on { "on" } else { TOGGLE_OFF }),
+        })
+    }
+
+    /// What clicking chip `index` does, for the Window to act on.
+    pub fn action(&self, index: usize) -> Option<&ChipAction> {
+        self.picks.get(index)
     }
 }
 
