@@ -44,6 +44,7 @@ pub mod skin_tone;
 pub mod skin_tone_view;
 pub mod stops_false_colour;
 pub mod style;
+pub mod tab_strip;
 pub mod toolbar;
 pub mod vectorscope;
 pub mod view_strip;

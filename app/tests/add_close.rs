@@ -1,7 +1,7 @@
 //! Add panel and Close on the layout tree at the pure seam (ADR 0038, #206): where an added Panel goes, that it is
 //! focused, what happens with no room, closing, the empty page, and remembering a layout with Panels closed. No GPU,
 //! no window. Rectangles are left, top, width, height in device pixels.
-use scopecreep::layout_tree::LayoutTree;
+use scopecreep::layout_tree::{LayoutTree, Placed};
 use scopecreep::panel_grid::{MIN_PANEL, min_panel_size};
 
 const AREA: [f32; 4] = [12.0, 12.0, 1256.0, 716.0];
@@ -38,7 +38,7 @@ fn an_empty_page_gets_one_panel_that_fills_the_area_and_has_the_focus() {
     let mut tree = LayoutTree::automatic(0);
     assert!(tree.is_empty());
     assert_eq!(tree.focused(), None);
-    tree.add(3, AREA, GAP, min_panel_size(1.0)).unwrap();
+    tree.add(3, AREA, GAP, min_panel_size(1.0));
     assert_eq!(tree.cells(AREA, GAP)[3], AREA);
     assert_eq!(tree.focused(), Some(3));
     assert!(tree.contains(3));
@@ -47,7 +47,7 @@ fn an_empty_page_gets_one_panel_that_fills_the_area_and_has_the_focus() {
 #[test]
 fn an_add_on_a_wide_cell_goes_on_the_right_at_fifty_fifty_and_is_focused() {
     let mut tree = LayoutTree::automatic(1);
-    tree.add(1, AREA, GAP, min_panel_size(1.0)).unwrap();
+    tree.add(1, AREA, GAP, min_panel_size(1.0));
     let half = (AREA[2] - GAP) / 2.0;
     let cells = tree.cells(AREA, GAP);
     assert!(
@@ -65,7 +65,7 @@ fn an_add_on_a_wide_cell_goes_on_the_right_at_fifty_fifty_and_is_focused() {
 fn an_add_on_a_tall_cell_goes_below_at_fifty_fifty() {
     let tall = [0.0, 0.0, 600.0, 900.0];
     let mut tree = LayoutTree::automatic(1);
-    tree.add(1, tall, GAP, min_panel_size(1.0)).unwrap();
+    tree.add(1, tall, GAP, min_panel_size(1.0));
     let half = (tall[3] - GAP) / 2.0;
     let cells = tree.cells(tall, GAP);
     assert!(near(cells[0], [0.0, 0.0, 600.0, half]), "{cells:?}");
@@ -76,7 +76,7 @@ fn an_add_on_a_tall_cell_goes_below_at_fifty_fifty() {
 fn a_square_cell_counts_as_wide() {
     let square = [0.0, 0.0, 700.0, 700.0];
     let mut tree = LayoutTree::automatic(1);
-    tree.add(1, square, GAP, min_panel_size(1.0)).unwrap();
+    tree.add(1, square, GAP, min_panel_size(1.0));
     assert!(
         tree.cells(square, GAP)[1][0] > 0.0,
         "the new Panel is on the right"
@@ -90,7 +90,7 @@ fn an_add_splits_the_focused_cell_only() {
     tree.close(skin);
     let before = tree.cells(AREA, GAP);
     tree.set_focus(vectorscope);
-    tree.add(skin, AREA, GAP, min_panel_size(1.0)).unwrap();
+    tree.add(skin, AREA, GAP, min_panel_size(1.0));
     let after = tree.cells(AREA, GAP);
     let old = before[vectorscope];
     let (first, second) = if old[2] >= old[3] {
@@ -121,33 +121,40 @@ fn an_add_splits_the_focused_cell_only() {
 }
 
 #[test]
-fn an_add_with_no_room_leaves_the_tree_unchanged_and_the_notice_names_the_minimum() {
+fn an_add_with_no_room_joins_the_focused_group_as_a_tab_and_the_notice_names_the_minimum() {
     // Wide, but half of it is under the minimum width.
     let narrow = [0.0, 0.0, 2.0 * MIN_PANEL[0] + GAP - 1.0, 150.0];
     let mut tree = LayoutTree::automatic(1);
-    let before = tree.clone();
-    let refused = tree.add(1, narrow, GAP, min_panel_size(1.0)).unwrap_err();
-    assert_eq!(tree, before);
-    assert_eq!(tree.cells(narrow, GAP), before.cells(narrow, GAP));
-    assert_eq!(tree.focused(), before.focused());
-    let notice = refused.notice();
+    let placed = tree.add(1, narrow, GAP, min_panel_size(1.0));
+    assert_eq!(placed, Placed::Tabbed);
+    let group = tree.tab_group(0).unwrap();
+    assert_eq!((group.tabs.clone(), group.active), (vec![0, 1], 1));
+    assert_eq!(tree.focused(), Some(1));
+    // The new Panel fills the cell, the first is hidden: nothing is lost.
+    let cells = tree.cells(narrow, GAP);
+    assert!(shown(cells[1]) && !shown(cells[0]));
+    let notice = placed.notice().unwrap();
     assert!(
-        notice.contains(&format!("{} x {}", MIN_PANEL[0], MIN_PANEL[1])),
+        notice.contains(&format!("{} x {}", MIN_PANEL[0], MIN_PANEL[1])) && notice.contains("tab"),
         "{notice}"
     );
     // Tall, but half of it is under the minimum height.
     let short = [0.0, 0.0, 200.0, 2.0 * MIN_PANEL[1] + GAP - 1.0];
-    assert!(tree.add(1, short, GAP, min_panel_size(1.0)).is_err());
+    let mut tree = LayoutTree::automatic(1);
+    assert_eq!(tree.add(1, short, GAP, min_panel_size(1.0)), Placed::Tabbed);
     // Just enough room is enough.
     let exact = [0.0, 0.0, 2.0 * MIN_PANEL[0] + GAP, 150.0];
-    assert!(tree.add(1, exact, GAP, min_panel_size(1.0)).is_ok());
+    let mut tree = LayoutTree::automatic(1);
+    let placed = tree.add(1, exact, GAP, min_panel_size(1.0));
+    assert_eq!(placed, Placed::Split);
+    assert_eq!(placed.notice(), None);
 }
 
 #[test]
 fn a_panel_already_on_the_page_is_only_focused() {
     let mut tree = default_tree();
     let before = tree.clone();
-    tree.add(2, AREA, GAP, min_panel_size(1.0)).unwrap();
+    tree.add(2, AREA, GAP, min_panel_size(1.0));
     assert_eq!(tree, before);
     assert_eq!(tree.focused(), Some(2));
 }
@@ -248,7 +255,7 @@ fn a_panel_closed_and_added_again_is_in_the_text_where_it_went() {
     let mut tree = default_tree();
     let skin = index("Skin tone");
     tree.close(skin);
-    tree.add(skin, AREA, GAP, min_panel_size(1.0)).unwrap();
+    tree.add(skin, AREA, GAP, min_panel_size(1.0));
     let restored = LayoutTree::from_text(&NAMES, &tree.to_text(&NAMES));
     assert_eq!(restored, tree);
     assert_eq!(restored.len(), 7);
@@ -270,7 +277,7 @@ fn duplicate_right_and_below_split_the_cell_in_half_beside_the_original() {
         } else {
             Edge::Bottom
         };
-        tree.add_at_edge(new, target, edge, AREA, GAP, min).unwrap();
+        tree.add_at_edge(new, target, edge, AREA, GAP, min);
         let cells = tree.cells(AREA, GAP);
         let (a, b) = (cells[target], cells[new]);
         if check == 0 {
@@ -294,12 +301,12 @@ fn duplicate_right_and_below_split_the_cell_in_half_beside_the_original() {
 
 #[test]
 fn a_duplicate_with_no_room_leaves_the_tree_alone() {
-    let mut tree = LayoutTree::automatic(1);
+    let tree = LayoutTree::automatic(1);
     let before = tree.clone();
     let tiny = [0.0, 0.0, 200.0, 150.0];
     let min = min_panel_size(1.0);
     assert!(!tree.has_room_beside(0, Dir::Row, tiny, GAP, min));
-    assert!(tree.add_at_edge(1, 0, Edge::Right, tiny, GAP, min).is_err());
+    // Only Duplicate refuses; an edge add there would have become a tab, so the tree is checked before it.
     assert_eq!(tree, before);
     assert_eq!(tree.len(), before.len());
 }

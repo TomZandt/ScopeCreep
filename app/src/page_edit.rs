@@ -45,7 +45,7 @@ pub fn duplicate(
         Dir::Row => Edge::Right,
         Dir::Col => Edge::Bottom,
     };
-    tree.add_at_edge(new, panel, edge, area, gap, min)?;
+    tree.add_at_edge(new, panel, edge, area, gap, min);
     settings.copy_panel(&displays.key(panel), &displays.key(new));
     Ok(new)
 }

@@ -153,7 +153,7 @@ The arrangement of one Page: a binary tree whose leaves are Tab groups and whose
 _Avoid_: Grid (for the new model), dock, split view
 
 **Tab group**:
-A leaf of the Layout tree: one or more Panels sharing one area, one shown (its title bar holds a tab for each when there is more than one). Only the shown Panel measures and draws. A tab group with one Panel looks as a Panel does today.
+A leaf of the Layout tree: one or more Panels sharing one area, one shown (its title bar holds a tab for each when there is more than one). Only the shown Panel measures and draws. A tab group with one Panel looks as a Panel does today. Built in #211: the middle of a Panel is where a dragged title joins as a tab ("Tab here"), a click on a tab shows that Panel, a tab dragged out docks elsewhere with the others staying, and a hidden Panel is handed no frame; when the tabs do not all fit the shown tab stays and a "+N" chip counts the rest.
 _Avoid_: Pane, stack, container
 
 **Panel instance**:
@@ -161,7 +161,7 @@ A Panel is one instance of a display with a stable id, so a display can be on th
 _Avoid_: Copy (for the id), clone
 
 **Add panel**:
-A Command (Layout menu, reassignable in the Hotkeys panel, no default hotkey) that opens the list of displays; picking one splits the focused tab group along its longer side (wider than tall: the new Panel on the right; otherwise below) at 50/50 and focuses it. The focused Panel is the one last clicked or added, and has a quiet outline. A page with no Panels shows one large Add panel button. Built in #206: an add with no room is refused with a notice that names the minimum Panel size, and a display already on the page is greyed until Panels can be copied (#208). The **edge +** (built in #209): a **+** on each edge of a Panel, shown only while the pointer is over it, lists the same displays and puts the one picked on that side at 50/50 (the same operation as Add panel with a chosen side, with the same no-room notice, one undo step). Once tab groups arrive (#211), a new Panel that has no room joins the focused tab group as a tab instead, with a notice that says so and names the minimum.
+A Command (Layout menu, reassignable in the Hotkeys panel, no default hotkey) that opens the list of displays; picking one splits the focused tab group along its longer side (wider than tall: the new Panel on the right; otherwise below) at 50/50 and focuses it. The focused Panel is the one last clicked or added, and has a quiet outline. A page with no Panels shows one large Add panel button. Built in #206: an add with no room is refused with a notice that names the minimum Panel size, and a display already on the page is greyed until Panels can be copied (#208). The **edge +** (built in #209): a **+** on each edge of a Panel, shown only while the pointer is over it, lists the same displays and puts the one picked on that side at 50/50 (the same operation as Add panel with a chosen side, with the same no-room notice, one undo step). Built in #211: a new Panel that has no room (Add panel, edge add or side dock) joins the focused (or target) tab group as a tab instead, with a notice that says so and names the minimum, as one undo step; only Duplicate still refuses.
 _Avoid_: Insert, new window
 
 **Dock**:

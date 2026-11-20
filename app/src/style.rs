@@ -154,6 +154,14 @@ pub const SPACE_MENU_HOTKEY_GAP: f32 = 28.0;
 /// The settings button on a title bar (square), and the gap between a name and its tags.
 pub const SPACE_SETTINGS_BUTTON: f32 = 20.0;
 pub const SPACE_TAG_GAP: f32 = 10.0;
+/// A tab in a tab group's title bar (#211): side padding, least and greatest width, the gap between tabs, the
+/// active tab's underline, and the overflow chip's width when the tabs do not all fit.
+pub const SPACE_TAB_PAD: f32 = 8.0;
+pub const SPACE_TAB_MIN_WIDTH: f32 = 34.0;
+pub const SPACE_TAB_MAX_WIDTH: f32 = 160.0;
+pub const SPACE_TAB_GAP: f32 = 2.0;
+pub const SPACE_TAB_UNDERLINE: f32 = 2.0;
+pub const SPACE_TAB_OVERFLOW_WIDTH: f32 = 28.0;
 /// The empty page's Add panel button: width and height.
 pub const SPACE_ADD_BUTTON_WIDTH: f32 = 200.0;
 pub const SPACE_ADD_BUTTON_HEIGHT: f32 = 48.0;

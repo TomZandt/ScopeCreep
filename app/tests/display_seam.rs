@@ -700,3 +700,42 @@ fn a_saved_layout_names_panels_by_key_and_one_that_names_displays_still_recalls(
     before.save(1, &old_grid, old);
     assert_eq!(before.recall(1, &keys[..keys.len() - 1]), Some(old_grid));
 }
+
+#[test]
+fn a_panel_in_a_hidden_tab_is_handed_no_frame_and_measures_again_when_shown() {
+    use scopecreep::layout_tree::LayoutTree;
+    let mut b = Bench::new("hidden_tab");
+    let new = || {
+        Arc::new(Recorder {
+            frames: Default::default(),
+            context: Default::default(),
+        })
+    };
+    let (first, second) = (new(), new());
+    b.set.register(first.clone());
+    b.set.register(second.clone());
+    let count = b.set.len();
+    // The last two Panels share a tab group: the second is the tab shown.
+    let mut tree = LayoutTree::automatic(count);
+    tree.join_tab(count - 1, count - 2);
+    let generation = b.set.generation();
+    b.set.set_shown(&tree.shown_panels());
+    assert_ne!(b.set.generation(), generation, "the Feed thread is told");
+    assert!(!b.set.is_shown(count - 2) && b.set.is_shown(count - 1));
+    b.play(64, 36, &solid(64, 36, [0.5; 3]));
+    assert!(
+        first.frames.lock().unwrap().is_empty(),
+        "a hidden tab does no per-frame work"
+    );
+    assert!(!second.frames.lock().unwrap().is_empty());
+    // The shown built-in displays still measured the frame.
+    assert_eq!(b.scopes.luma_waveform.counts().total(), 64 * 36);
+    // Settings and the Colour Setup are still given to it, so it is as it was left when shown again.
+    b.set
+        .configure(&DisplayContext::default(), &PanelSettings::default());
+    assert!(first.context.lock().unwrap().is_some());
+    tree.show(count - 2);
+    b.set.set_shown(&tree.shown_panels());
+    b.play(64, 36, &solid(64, 36, [0.25; 3]));
+    assert!(!first.frames.lock().unwrap().is_empty());
+}

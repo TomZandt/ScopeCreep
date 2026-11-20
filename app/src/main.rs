@@ -40,6 +40,7 @@ use scopecreep::panel_grid::{self, PanelLayout, min_panel_size};
 use scopecreep::resolve_helper::ScriptHelper;
 use scopecreep::settings::{Amount, Menu, PanelAction, PanelSettings};
 use scopecreep::style;
+use scopecreep::tab_strip;
 use scopecreep::toolbar::{ChipAction, Toolbar};
 use scopecreep::view_strip::{self, StripPart, ViewStrip};
 use scopecreep::window_text;
@@ -302,6 +303,11 @@ struct AppWindow {
     /// be a drag (a press that never does is a click and changes nothing).
     panel_drag_start: [f32; 2],
     panel_drag_live: bool,
+    /// The press behind `panel_drag` was on a tab: a click that is no drag shows that tab (#211).
+    panel_drag_tab: bool,
+    /// The tab strip of each Panel that is the shown one of a tab group with more than one Panel, and where it is
+    /// (device pixels), for the pointer. None for every other Panel.
+    tab_strips: Vec<Option<(tab_strip::TabStrip, [f32; 4])>>,
     /// Remembered display state (a Loupe's position) changed and is not written yet.
     state_unsaved: bool,
     cursor: [f32; 2],
@@ -548,6 +554,8 @@ impl AppWindow {
             panel_drag: None,
             panel_drag_start: [0.0; 2],
             panel_drag_live: false,
+            panel_drag_tab: false,
+            tab_strips: Vec::new(),
             state_unsaved: false,
             cursor: [0.0, 0.0],
             grid_area: [0.0; 4],
@@ -589,6 +597,22 @@ impl AppWindow {
     }
 
     /// What a press at the pointer would start: a border drag or a Panel drag.
+    /// The tab or overflow chip under the pointer: the Panel shown by its tab group, and what was hit. A tab is
+    /// named by its Panel.
+    fn tab_hit(&self) -> Option<(usize, tab_strip::TabHit)> {
+        self.tab_strips.iter().enumerate().find_map(|(shown, s)| {
+            let (strip, area) = s.as_ref()?;
+            let group = self.grid.tab_group(shown)?;
+            Some((
+                shown,
+                match strip.hit(*area, self.cursor, self.scale)? {
+                    tab_strip::TabHit::Tab(n) => tab_strip::TabHit::Tab(*group.tabs.get(n)?),
+                    tab_strip::TabHit::Overflow => tab_strip::TabHit::Overflow,
+                },
+            ))
+        })
+    }
+
     fn press_under_pointer(&self) -> Option<Press> {
         // A Panel filling the Window has no borders to drag and nothing to swap with.
         if self.full.is_some() {
@@ -1131,13 +1155,8 @@ impl AppWindow {
                 .layout_history
                 .change(&mut self.grid, |g| g.add(panel, area, gap, min)),
         };
-        match added {
-            Ok(()) => {
-                self.layout_notice = None;
-                self.save_grid();
-            }
-            Err(no_room) => self.layout_notice = Some(no_room.notice()),
-        }
+        self.layout_notice = added.notice();
+        self.save_grid();
         self.window.request_redraw();
     }
 
@@ -1404,25 +1423,39 @@ impl AppWindow {
                 let live = std::mem::take(&mut self.panel_drag_live);
                 // A drag let go on another Panel: Shift swaps the two, else the outer quarter of an edge docks on
                 // it. Anywhere else (or a press that never became a drag) changes nothing.
+                let tabs_of_from = self.grid.tab_group(from).map_or(0, |g| g.tabs.len());
                 let over = self
                     .grid
                     .panel_at(self.grid_area, self.grid_gap, self.cursor)
-                    .filter(|to| live && *to != from);
+                    // A Panel dropped on itself does nothing, unless it is a tab: dragged out to an edge it docks.
+                    .filter(|to| live && (*to != from || tabs_of_from > 1));
+                if !live && self.panel_drag_tab {
+                    // A click on a tab shows that Panel.
+                    self.layout_notice = None;
+                    self.grid.show(from);
+                }
                 if let Some(to) = over {
                     self.layout_notice = None;
                     if self.modifiers.shift_key() {
                         self.layout_history
                             .change(&mut self.grid, |g| g.swap(from, to));
                         self.save_grid();
-                    } else if let Zone::Edge(edge) = dock::zone_at(self.cells[to], self.cursor) {
-                        let (area, gap, min) =
-                            (self.grid_area, self.grid_gap, min_panel_size(self.scale));
-                        match self
-                            .layout_history
-                            .change(&mut self.grid, |g| g.dock(from, to, edge, area, gap, min))
-                        {
-                            Ok(()) => self.save_grid(),
-                            Err(no_room) => self.layout_notice = Some(no_room.dock_notice()),
+                    } else {
+                        match dock::zone_at(self.cells[to], self.cursor) {
+                            Zone::Edge(edge) => {
+                                let (area, gap, min) =
+                                    (self.grid_area, self.grid_gap, min_panel_size(self.scale));
+                                let placed = self.layout_history.change(&mut self.grid, |g| {
+                                    g.dock(from, to, edge, area, gap, min)
+                                });
+                                self.layout_notice = placed.dock_notice();
+                                self.save_grid();
+                            }
+                            Zone::Middle => {
+                                self.layout_history
+                                    .change(&mut self.grid, |g| g.join_tab(from, to));
+                                self.save_grid();
+                            }
                         }
                     }
                 }
@@ -1535,6 +1568,33 @@ impl AppWindow {
                     self.pointer_panel = Some(panel);
                     return;
                 }
+                // A tab: a click shows it, a drag takes it out to dock elsewhere (the others stay).
+                if self.full.is_none()
+                    && let Some(hit) = self.tab_hit()
+                {
+                    match hit {
+                        (_, tab_strip::TabHit::Tab(panel)) => {
+                            self.panel_drag = Some(panel);
+                            self.panel_drag_tab = true;
+                            self.panel_drag_start = self.cursor;
+                            self.panel_drag_live = false;
+                            self.window.set_cursor(CursorIcon::Grabbing);
+                        }
+                        (shown, tab_strip::TabHit::Overflow) => {
+                            if let Some(Some((strip, area))) = self.tab_strips.get(shown) {
+                                let group = self.grid.tab_group(shown);
+                                let layout = strip.layout(*area, self.scale);
+                                if let (Some(group), Some(next)) =
+                                    (group, strip.next_hidden(&layout.hidden))
+                                {
+                                    self.grid.show(group.tabs[next]);
+                                }
+                            }
+                        }
+                    }
+                    self.window.request_redraw();
+                    return;
+                }
                 match self.press_under_pointer() {
                     Some(Press::Border(border)) => {
                         self.layout_history.begin_drag(&self.grid);
@@ -1542,6 +1602,7 @@ impl AppWindow {
                     }
                     Some(Press::Panel(panel)) => {
                         self.panel_drag = Some(panel);
+                        self.panel_drag_tab = false;
                         self.panel_drag_start = self.cursor;
                         self.panel_drag_live = false;
                         self.window.set_cursor(CursorIcon::Grabbing);
@@ -1593,6 +1654,9 @@ impl AppWindow {
         let settings_now = self.settings.lock().unwrap().clone();
         let mut toolbars: Vec<Toolbar> = Vec::new();
         let mut layouts: Vec<components::TitleLayout> = Vec::new();
+        let mut tab_strips: Vec<Option<(tab_strip::TabStrip, [f32; 4])>> = Vec::new();
+        // Only the shown Panel of each tab group measures and draws (ADR 0038).
+        self.displays.set_shown(&self.grid.shown_panels());
         let max_chars = ((width / (style::SPACE_CHAR_WIDTH * scale)) as usize)
             .saturating_sub(8)
             .clamp(40, 110);
@@ -1616,6 +1680,32 @@ impl AppWindow {
                 scale,
             );
             toolbars.push(toolbar);
+            // A tab group of more than one Panel shows its tabs where the name would be.
+            let strip = self
+                .grid
+                .tab_group(i)
+                .filter(|g| g.tabs.len() > 1 && panel_grid::shown(*cell) && g.tabs[g.active] == i)
+                .map(|g| {
+                    let labels = g
+                        .tabs
+                        .iter()
+                        .map(|t| {
+                            texts
+                                .titles
+                                .get(*t)
+                                .map(|t| t.name.clone())
+                                .unwrap_or_default()
+                        })
+                        .collect();
+                    (
+                        tab_strip::TabStrip {
+                            labels,
+                            active: g.active,
+                        },
+                        tab_strip::room(&l, scale),
+                    )
+                });
+            tab_strips.push(strip);
             self.panel_texts[i].label.set(
                 &mut self.font_system,
                 &title.name,
@@ -1651,6 +1741,7 @@ impl AppWindow {
         self.title_bars = panels.iter().map(|p| p.title).collect();
         self.toolbars = toolbars;
         self.title_layouts = layouts;
+        self.tab_strips = tab_strips;
         self.contents = panels.iter().map(|p| p.content).collect();
         // Hidden cells have no content, so no zoom to read.
         self.view_strip = self.displays.view_strip(&self.contents, scale);
@@ -1806,9 +1897,15 @@ impl AppWindow {
             custom_glyphs: &[],
         });
         let tags_line = style::TYPE_SCALE * scale * style::TYPE_SCALE_LINE;
-        for ((panel, text), (name, tags)) in panels.iter().zip(&self.panel_texts).zip(&title_parts)
+        for (i, ((panel, text), (name, tags))) in panels
+            .iter()
+            .zip(&self.panel_texts)
+            .zip(&title_parts)
+            .enumerate()
         {
-            if !panel_grid::shown(panel.frame) {
+            if !panel_grid::shown(panel.frame)
+                || self.tab_strips.get(i).is_some_and(Option::is_some)
+            {
                 continue;
             }
             let [left, top, w, h] = panel.title;
@@ -1933,21 +2030,26 @@ impl AppWindow {
         }
         // While a Panel is dragged, the drop is shown before release, quietly: with Shift the Panel it would swap
         // with is outlined, else the exact half an edge dock would give the dragged Panel.
+        // The middle of a tab group is a tab: the whole Panel is outlined and says "Tab here".
+        let mut drop_label: Option<(&'static str, [f32; 4])> = None;
         if let Some(outline) = self
             .panel_drag
             .filter(|_| self.panel_drag_live)
             .and_then(|from| {
+                let tabs = self.grid.tab_group(from).map_or(0, |g| g.tabs.len());
                 let to = self
                     .grid
                     .panel_at(area, margin, self.cursor)
-                    .filter(|to| *to != from)?;
+                    .filter(|to| *to != from || tabs > 1)?;
                 if self.modifiers.shift_key() {
                     return Some(cells[to]);
                 }
-                match dock::zone_at(cells[to], self.cursor) {
-                    Zone::Middle => None,
-                    zone => Some(dock::overlay(cells[to], zone, margin)),
+                let zone = dock::zone_at(cells[to], self.cursor);
+                if zone == Zone::Middle && to == from {
+                    return None;
                 }
+                drop_label = zone.label().map(|l| (l, cells[to]));
+                Some(dock::overlay(cells[to], zone, margin))
             })
         {
             let weight = (style::LINE_WEIGHT * scale).max(1.0);
@@ -1962,6 +2064,38 @@ impl AppWindow {
         let mut menu_areas: Vec<(usize, f32, f32, [u8; 3])> = Vec::new();
         // The menu over the Panels, or else the hover of what the pointer rests on, over everything.
         let mut over: Vec<Prim> = over_empty;
+        if let Some((label, cell)) = drop_label {
+            over.push(components::text(
+                label,
+                cell,
+                components::Face::Label,
+                style::TEXT_PRIMARY,
+                Align::Centre,
+            ));
+        }
+        // Each tab group's tabs, the one under the pointer lit.
+        let tab_pointer = if self.menu.is_some() || self.bar.open.is_some() {
+            None
+        } else {
+            self.tab_hit()
+        };
+        for (shown, strip) in self.tab_strips.iter().enumerate() {
+            if let Some((strip, at)) = strip {
+                let hover = tab_pointer.and_then(|(s, h)| {
+                    if s != shown {
+                        return None;
+                    }
+                    let group = self.grid.tab_group(shown)?;
+                    Some(match h {
+                        tab_strip::TabHit::Tab(p) => {
+                            tab_strip::TabHit::Tab(group.tabs.iter().position(|t| *t == p)?)
+                        }
+                        tab_strip::TabHit::Overflow => tab_strip::TabHit::Overflow,
+                    })
+                });
+                over.extend(strip.draw(*at, hover, scale));
+            }
+        }
         // The + on each edge of the Panel under the pointer, quiet until then.
         if self.full.is_none()
             && self.menu.is_none()

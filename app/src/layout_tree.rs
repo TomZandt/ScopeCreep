@@ -164,9 +164,14 @@ impl Node {
                 if !tabs.contains(&panel) {
                     return None;
                 }
-                tabs.get(*active)
-                    .filter(|t| **t != panel)
-                    .or_else(|| tabs.iter().find(|t| **t != panel))
+                let shown = tabs.get(*active).copied();
+                if shown != Some(panel) {
+                    return shown;
+                }
+                // The tab that takes the closed one's place: the next, else the one before.
+                let at = tabs.iter().position(|t| *t == panel)?;
+                tabs.get(at + 1)
+                    .or_else(|| at.checked_sub(1).and_then(|b| tabs.get(b)))
                     .copied()
             }
             Node::Split { a, b, .. } => {
@@ -178,6 +183,26 @@ impl Node {
                     list.first().copied()
                 } else {
                     inside.neighbour(panel)
+                }
+            }
+        }
+    }
+
+    /// The tab group holding `panel`: its tabs and which one is shown.
+    fn group_mut(&mut self, panel: usize) -> Option<(&mut Vec<usize>, &mut usize)> {
+        match self {
+            Node::Leaf { tabs, active } => {
+                if tabs.contains(&panel) {
+                    Some((tabs, active))
+                } else {
+                    None
+                }
+            }
+            Node::Split { a, b, .. } => {
+                if a.holds(panel) {
+                    a.group_mut(panel)
+                } else {
+                    b.group_mut(panel)
                 }
             }
         }
@@ -206,9 +231,10 @@ impl Node {
             Node::Leaf { tabs, active } => {
                 let shown = tabs.get(active).copied();
                 let tabs: Vec<usize> = tabs.into_iter().filter(|t| !gone(*t)).collect();
+                // The shown tab stays shown; when it is the one that goes, the tab that takes its place is.
                 let active = shown
                     .and_then(|s| tabs.iter().position(|t| *t == s))
-                    .unwrap_or(0);
+                    .unwrap_or_else(|| active.min(tabs.len().saturating_sub(1)));
                 (!tabs.is_empty()).then_some(Node::Leaf { tabs, active })
             }
             Node::Split { dir, ratio, a, b } => match (a.pruned(gone), b.pruned(gone)) {
@@ -412,7 +438,40 @@ impl PartialEq for LayoutTree {
     }
 }
 
-/// An add that does not fit: a split would leave a Panel under its minimum size.
+/// Where an add or a dock put the Panel. With no room for a split (it would leave a Panel under its minimum size)
+/// the Panel joins the target tab group as a new tab, so no Panel is refused or lost (ADR 0038).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Placed {
+    /// A new tab group beside the target.
+    Split,
+    /// A new tab of the target tab group, for want of room.
+    Tabbed,
+}
+
+impl Placed {
+    /// What the Window tells the colourist after an add: names the least size a Panel can be (logical pixels).
+    /// None when the Panel got a place of its own.
+    pub fn notice(self) -> Option<String> {
+        (self == Placed::Tabbed).then(|| {
+            format!(
+                "No room for another Panel here, so it opened as a tab: a Panel needs at least {} x {}.",
+                MIN_PANEL[0], MIN_PANEL[1]
+            )
+        })
+    }
+
+    /// The same, for a dock.
+    pub fn dock_notice(self) -> Option<String> {
+        (self == Placed::Tabbed).then(|| {
+            format!(
+                "No room to dock here, so it joined as a tab: a Panel needs at least {} x {}.",
+                MIN_PANEL[0], MIN_PANEL[1]
+            )
+        })
+    }
+}
+
+/// A Duplicate that does not fit: it is refused, since a copy as a tab beside its own original helps no one.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct NoRoom;
 
@@ -424,14 +483,13 @@ impl NoRoom {
             MIN_PANEL[0], MIN_PANEL[1]
         )
     }
+}
 
-    /// The same, for a dock that does not fit.
-    pub fn dock_notice(&self) -> String {
-        format!(
-            "No room to dock here: a Panel needs at least {} x {}.",
-            MIN_PANEL[0], MIN_PANEL[1]
-        )
-    }
+/// A tab group as the title bar shows it: its Panels in tab order and the index of the shown one.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct TabGroup {
+    pub tabs: Vec<usize>,
+    pub active: usize,
 }
 
 impl LayoutTree {
@@ -524,12 +582,7 @@ impl LayoutTree {
     /// Each Panel's rectangle, in display order, filling `area` with `gap` between Panels. A Panel in a tab group
     /// that is not the shown one has an empty cell far off screen.
     pub fn cells(&self, area: [f32; 4], gap: f32) -> Vec<[f32; 4]> {
-        let count = self
-            .panel_list()
-            .into_iter()
-            .max()
-            .map_or(0, |m| m + 1)
-            .max(self.total);
+        let count = self.cells_len();
         let mut out = vec![off_screen(); count];
         self.root
             .walk(area, gap, &mut Vec::new(), &mut |node, rect, _| {
@@ -629,9 +682,10 @@ impl LayoutTree {
 
     /// Dock Panel `dragged` on `edge` of the tab group that shows Panel `target` (#210): that edge is split 50/50
     /// with the dragged Panel taking the half on `edge`, and the dragged Panel's old tab group gives up its space to
-    /// its neighbour (or just loses the tab). A drop on the Panel's own single-Panel tab group does nothing. When
-    /// half of the target would be under `min` the tree is left as it was and [`NoRoom`] says so. The dragged Panel
-    /// has the focus after.
+    /// its neighbour (or just loses the tab; a tab dragged out leaves the others as they were). A drop on the
+    /// Panel's own single-Panel tab group does nothing. When half of the target would be under `min` the dragged
+    /// Panel joins the target tab group as a tab instead ([`Placed::Tabbed`]). The dragged Panel has the focus
+    /// after.
     pub fn dock(
         &mut self,
         dragged: usize,
@@ -640,9 +694,9 @@ impl LayoutTree {
         area: [f32; 4],
         gap: f32,
         min: [f32; 2],
-    ) -> Result<(), NoRoom> {
+    ) -> Placed {
         if !self.contains(dragged) || !self.contains(target) {
-            return Ok(());
+            return Placed::Split;
         }
         // A Panel of the target tab group that stays put, to find it again once the dragged Panel has left.
         let mut group = Vec::new();
@@ -655,7 +709,7 @@ impl LayoutTree {
                 }
             });
         let Some(anchor) = group.iter().copied().find(|p| *p != dragged) else {
-            return Ok(());
+            return Placed::Split;
         };
         let active_target = group.contains(&target) && target != dragged;
         let mut next = self.clone();
@@ -671,15 +725,23 @@ impl LayoutTree {
                     found = Some((path.to_vec(), rect));
                 }
             });
-        let (path, rect) = found.ok_or(NoRoom)?;
+        let Some((path, rect)) = found else {
+            return Placed::Split;
+        };
         let (dir, along, least) = match edge {
             Edge::Left | Edge::Right => (Dir::Row, rect[2], min[0]),
             Edge::Top | Edge::Bottom => (Dir::Col, rect[3], min[1]),
         };
         if (along - gap) / 2.0 < least - 0.001 {
-            return Err(NoRoom);
+            // No room to split: the dragged Panel becomes a tab of the target group.
+            let mut tabbed = self.clone();
+            tabbed.join_tab(dragged, target);
+            *self = tabbed;
+            return Placed::Tabbed;
         }
-        let node = next.root.at_mut(&path).ok_or(NoRoom)?;
+        let Some(node) = next.root.at_mut(&path) else {
+            return Placed::Split;
+        };
         let old = std::mem::replace(node, Node::EMPTY);
         let new = Box::new(Node::leaf(dragged));
         let (a, b) = match edge {
@@ -694,7 +756,88 @@ impl LayoutTree {
         };
         next.focus = Some(dragged);
         *self = next;
-        Ok(())
+        Placed::Split
+    }
+
+    /// Dock Panel `dragged` in the middle of the tab group that shows Panel `target`: it becomes a tab there and is
+    /// the one shown (#211). Its old tab group gives up its space to its neighbour, or just loses the tab. Dropped
+    /// on its own tab group it is only shown.
+    pub fn join_tab(&mut self, dragged: usize, target: usize) {
+        if !self.contains(dragged) || !self.contains(target) {
+            return;
+        }
+        let same = self
+            .root
+            .group_mut(dragged)
+            .is_some_and(|(tabs, _)| tabs.contains(&target));
+        if same {
+            self.show(dragged);
+            return;
+        }
+        let root = std::mem::replace(&mut self.root, Node::EMPTY);
+        self.root = root.pruned(&|p| p == dragged).unwrap_or(Node::EMPTY);
+        self.push_tab(dragged, target);
+    }
+
+    /// Put `panel` last among the tabs of the group holding `target`, shown and focused.
+    fn push_tab(&mut self, panel: usize, target: usize) {
+        if let Some((tabs, active)) = self.root.group_mut(target) {
+            tabs.push(panel);
+            *active = tabs.len() - 1;
+            self.focus = Some(panel);
+            self.total = self.total.max(panel + 1);
+        }
+    }
+
+    /// Show Panel `panel` in its tab group and give it the focus (a click on its tab). Nothing happens when it is
+    /// not on the page.
+    pub fn show(&mut self, panel: usize) {
+        if let Some((tabs, active)) = self.root.group_mut(panel)
+            && let Some(at) = tabs.iter().position(|t| *t == panel)
+        {
+            *active = at;
+            self.focus = Some(panel);
+        }
+    }
+
+    /// The tab group holding Panel `panel`: its tabs in order and the index of the shown one.
+    pub fn tab_group(&self, panel: usize) -> Option<TabGroup> {
+        let mut found = None;
+        self.root
+            .walk([0.0; 4], 0.0, &mut Vec::new(), &mut |node, _, _| {
+                if let Node::Leaf { tabs, active } = node
+                    && tabs.contains(&panel)
+                {
+                    found = Some(TabGroup {
+                        tabs: tabs.clone(),
+                        active: *active,
+                    });
+                }
+            });
+        found
+    }
+
+    /// Which Panels are shown (one per tab group; none closed, none in a hidden tab), in display order. Only
+    /// these measure and draw (ADR 0038).
+    pub fn shown_panels(&self) -> Vec<bool> {
+        let mut out = vec![false; self.cells_len()];
+        self.root
+            .walk([0.0; 4], 0.0, &mut Vec::new(), &mut |node, _, _| {
+                if let Node::Leaf { tabs, active } = node
+                    && let Some(p) = tabs.get(*active)
+                {
+                    out[*p] = true;
+                }
+            });
+        out
+    }
+
+    fn cells_len(&self) -> usize {
+        self.panel_list()
+            .into_iter()
+            .max()
+            .map_or(0, |m| m + 1)
+            .max(self.total)
     }
 
     /// Whether the page holds Panel `panel` (a Panel that is not on it is closed).
@@ -721,32 +864,29 @@ impl LayoutTree {
     /// Add Panel `panel` to the page: the focused tab group is split along its longer side (wider than tall: the new
     /// Panel on the right; otherwise below) at 50/50, and the new Panel has the focus. On an empty page it fills
     /// `area`. A Panel already on the page is only focused. When half of the focused cell would be under `min`
-    /// (one Panel's least width and height) the tree is left as it was and [`NoRoom`] says so.
-    pub fn add(
-        &mut self,
-        panel: usize,
-        area: [f32; 4],
-        gap: f32,
-        min: [f32; 2],
-    ) -> Result<(), NoRoom> {
+    /// (one Panel's least width and height) the new Panel joins the focused tab group as a tab ([`Placed::Tabbed`]).
+    pub fn add(&mut self, panel: usize, area: [f32; 4], gap: f32, min: [f32; 2]) -> Placed {
         if self.contains(panel) {
-            self.focus = Some(panel);
-            return Ok(());
+            self.show(panel);
+            return Placed::Split;
         }
         let Some(target) = self.focused() else {
             self.root = Node::leaf(panel);
             self.focus = Some(panel);
             self.total = self.total.max(panel + 1);
-            return Ok(());
+            return Placed::Split;
         };
-        let dir = self.long_side(target, area, gap).ok_or(NoRoom)?;
+        let Some(dir) = self.long_side(target, area, gap) else {
+            self.push_tab(panel, target);
+            return Placed::Tabbed;
+        };
         self.split_beside(panel, target, dir, false, area, gap, min)
     }
 
     /// Add Panel `panel` on the `edge` side of the tab group holding Panel `target` (the **+** on a Panel's edge):
     /// the new tab group takes half of it on that side (net of the gap) and has the focus. A Panel already on the
-    /// page is only focused. When half of the cell would be under `min` the tree is left as it was and [`NoRoom`]
-    /// says so.
+    /// page is only shown. When half of the cell would be under `min` the new Panel joins that tab group as a tab
+    /// ([`Placed::Tabbed`]).
     pub fn add_at_edge(
         &mut self,
         panel: usize,
@@ -755,10 +895,13 @@ impl LayoutTree {
         area: [f32; 4],
         gap: f32,
         min: [f32; 2],
-    ) -> Result<(), NoRoom> {
+    ) -> Placed {
         if self.contains(panel) {
-            self.focus = Some(panel);
-            return Ok(());
+            self.show(panel);
+            return Placed::Split;
+        }
+        if !self.contains(target) {
+            return self.add(panel, area, gap, min);
         }
         let (dir, first) = match edge {
             Edge::Left => (Dir::Row, true),
@@ -785,7 +928,7 @@ impl LayoutTree {
         };
         self.clone()
             .add_at_edge(usize::MAX - 1, target, edge, area, gap, min)
-            .is_ok()
+            == Placed::Split
     }
 
     /// Replace (ADR 0039): Panel `new` takes Panel `old`'s place and size in the tree (and its focus). Nothing
@@ -833,7 +976,7 @@ impl LayoutTree {
     }
 
     /// Split the tab group holding `target` in `dir` at 50/50, the new Panel first (left or above) or second, and
-    /// focus it; nothing changes when half of the cell would be under `min`.
+    /// focus it; when half of the cell would be under `min` the new Panel is a tab of that group instead.
     #[allow(clippy::too_many_arguments)]
     fn split_beside(
         &mut self,
@@ -844,7 +987,7 @@ impl LayoutTree {
         area: [f32; 4],
         gap: f32,
         min: [f32; 2],
-    ) -> Result<(), NoRoom> {
+    ) -> Placed {
         let mut found = None;
         self.root
             .walk(area, gap, &mut Vec::new(), &mut |node, rect, path| {
@@ -854,15 +997,19 @@ impl LayoutTree {
                     found = Some((path.to_vec(), rect));
                 }
             });
-        let (path, rect) = found.ok_or(NoRoom)?;
+        let Some((path, rect)) = found else {
+            self.push_tab(panel, target);
+            return Placed::Tabbed;
+        };
         let (along, least) = match dir {
             Dir::Row => (rect[2], min[0]),
             Dir::Col => (rect[3], min[1]),
         };
-        if (along - gap) / 2.0 < least - 0.001 {
-            return Err(NoRoom);
-        }
-        let node = self.root.at_mut(&path).ok_or(NoRoom)?;
+        let node = self.root.at_mut(&path);
+        let Some(node) = node.filter(|_| (along - gap) / 2.0 >= least - 0.001) else {
+            self.push_tab(panel, target);
+            return Placed::Tabbed;
+        };
         let old = std::mem::replace(node, Node::EMPTY);
         let new = Node::leaf(panel);
         let (a, b) = if new_first { (new, old) } else { (old, new) };
@@ -874,7 +1021,7 @@ impl LayoutTree {
         };
         self.focus = Some(panel);
         self.total = self.total.max(panel + 1);
-        Ok(())
+        Placed::Split
     }
 
     /// Close Panel `panel`: its sibling takes its space. When it had the focus, its neighbour has it now. The last

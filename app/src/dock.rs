@@ -9,8 +9,15 @@ use crate::style;
 pub enum Zone {
     /// The outer quarter nearest an edge: the dropped Panel splits that edge and takes that half.
     Edge(Edge),
-    /// Anywhere else (a tab, #211): nothing is docked yet.
+    /// Anywhere else: the dropped Panel becomes a tab of the tab group (#211).
     Middle,
+}
+
+impl Zone {
+    /// The words the drop overlay carries: only the middle needs them (an edge shows the half it would take).
+    pub fn label(self) -> Option<&'static str> {
+        matches!(self, Zone::Middle).then_some("Tab here")
+    }
 }
 
 /// Whether the pointer has moved far enough from where it was pressed to be a drag (`scale` device pixels per

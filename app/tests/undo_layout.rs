@@ -41,7 +41,7 @@ fn undo_steps_back_through_close_and_add_one_step_each() {
     history.change(&mut tree, |t| t.close(5));
     let closed = tree.clone();
     assert_ne!(closed, start);
-    history.change(&mut tree, |t| t.add(5, AREA, GAP, min()).unwrap());
+    history.change(&mut tree, |t| t.add(5, AREA, GAP, min()));
     assert!(history.can_undo());
     assert!(history.undo(&mut tree));
     assert_eq!(tree, closed);
@@ -102,17 +102,22 @@ fn a_change_that_changes_nothing_is_not_a_step() {
     let mut tree = default_tree();
     let mut history = LayoutHistory::default();
     // Panel 0 is on the page: adding it only focuses it.
-    history.change(&mut tree, |t| t.add(0, AREA, GAP, min()).unwrap());
+    history.change(&mut tree, |t| t.add(0, AREA, GAP, min()));
     assert!(!history.can_undo());
 }
 
 #[test]
-fn a_refused_add_is_not_a_step() {
-    let mut tree = LayoutTree::automatic(1);
+fn an_add_with_no_room_is_one_step_and_undo_takes_the_tab_away() {
+    let mut tree = LayoutTree::automatic(2);
+    tree.close(1);
+    let before = tree.clone();
     let mut history = LayoutHistory::default();
     let tiny = [0.0, 0.0, 100.0, 100.0];
-    let refused = history.change(&mut tree, |t| t.add(1, tiny, GAP, min()));
-    assert!(refused.is_err());
+    let placed = history.change(&mut tree, |t| t.add(1, tiny, GAP, min()));
+    assert_eq!(placed, scopecreep::layout_tree::Placed::Tabbed);
+    assert!(tree.contains(1));
+    assert!(history.undo(&mut tree));
+    assert_eq!(tree, before);
     assert!(!history.can_undo());
 }
 
@@ -151,7 +156,7 @@ fn undo_leaves_the_focus_on_a_panel_that_is_on_the_page() {
     let mut tree = default_tree();
     let mut history = LayoutHistory::default();
     history.change(&mut tree, |t| t.close(5));
-    history.change(&mut tree, |t| t.add(5, AREA, GAP, min()).unwrap());
+    history.change(&mut tree, |t| t.add(5, AREA, GAP, min()));
     assert_eq!(tree.focused(), Some(5));
     history.undo(&mut tree);
     let focus = tree.focused().expect("the page has Panels");

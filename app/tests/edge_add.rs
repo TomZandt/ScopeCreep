@@ -1,7 +1,7 @@
 //! Edge add on the layout tree at the pure seam (ADR 0038, #209): the new tab group goes on the chosen side of
 //! the chosen Panel at 50/50 and is focused; a side with no room leaves the tree unchanged and gives the notice.
 //! No GPU, no window. Rectangles are left, top, width, height in device pixels.
-use scopecreep::layout_tree::{Edge, LayoutTree};
+use scopecreep::layout_tree::{Edge, LayoutTree, Placed};
 use scopecreep::panel_grid::{MIN_PANEL, min_panel_size};
 
 const AREA: [f32; 4] = [12.0, 12.0, 1256.0, 716.0];
@@ -37,8 +37,7 @@ fn each_side_puts_the_new_panel_there_at_fifty_fifty_and_focuses_it() {
     ];
     for (edge, old_cell, new_cell) in cases {
         let mut tree = LayoutTree::automatic(1);
-        tree.add_at_edge(1, 0, edge, AREA, GAP, min_panel_size(1.0))
-            .unwrap();
+        tree.add_at_edge(1, 0, edge, AREA, GAP, min_panel_size(1.0));
         let cells = tree.cells(AREA, GAP);
         assert!(near(cells[0], old_cell), "{edge:?}: old {:?}", cells[0]);
         assert!(near(cells[1], new_cell), "{edge:?}: new {:?}", cells[1]);
@@ -52,8 +51,7 @@ fn an_edge_add_on_a_panel_in_a_bigger_layout_moves_only_that_panel() {
     tree.close(6);
     let target = 0;
     let before = tree.cells(AREA, GAP);
-    tree.add_at_edge(6, target, Edge::Bottom, AREA, GAP, min_panel_size(1.0))
-        .unwrap();
+    tree.add_at_edge(6, target, Edge::Bottom, AREA, GAP, min_panel_size(1.0));
     let after = tree.cells(AREA, GAP);
     let old = before[target];
     assert!(old[3] >= 2.0 * MIN_PANEL[1] + GAP, "{old:?} has room");
@@ -73,19 +71,19 @@ fn a_side_that_would_break_a_minimum_leaves_the_tree_alone_and_names_it() {
     for edge in [Edge::Left, Edge::Right] {
         let mut tree = LayoutTree::automatic(1);
         let (before, focus) = (tree.clone(), tree.focused());
-        let err = tree
-            .add_at_edge(1, 0, edge, narrow, GAP, min_panel_size(1.0))
-            .unwrap_err();
-        assert_eq!(tree, before);
-        assert_eq!(tree.focused(), focus);
-        assert!(!tree.contains(1));
-        let notice = err.notice();
+        let placed = tree.add_at_edge(1, 0, edge, narrow, GAP, min_panel_size(1.0));
+        // No room to split: the new Panel is a tab of the target's group (#211).
+        assert_eq!(placed, Placed::Tabbed);
+        assert_ne!(tree, before);
+        assert_eq!(tree.tab_group(0).unwrap().tabs, vec![0, 1]);
+        assert_eq!(tree.focused(), Some(1));
+        let _ = focus;
+        let notice = placed.notice().unwrap();
         assert!(notice.contains("120") && notice.contains("105"), "{notice}");
     }
     for edge in [Edge::Top, Edge::Bottom] {
         let mut tree = LayoutTree::automatic(1);
-        tree.add_at_edge(1, 0, edge, narrow, GAP, min_panel_size(1.0))
-            .unwrap();
+        tree.add_at_edge(1, 0, edge, narrow, GAP, min_panel_size(1.0));
         assert!(tree.contains(1));
     }
 }
@@ -100,8 +98,7 @@ fn exactly_twice_the_minimum_plus_the_gap_is_enough() {
     ];
     for edge in [Edge::Left, Edge::Right, Edge::Top, Edge::Bottom] {
         let mut tree = LayoutTree::automatic(1);
-        tree.add_at_edge(1, 0, edge, exact, GAP, min_panel_size(1.0))
-            .unwrap();
+        tree.add_at_edge(1, 0, edge, exact, GAP, min_panel_size(1.0));
         assert!(tree.contains(1), "{edge:?}");
     }
 }
@@ -110,8 +107,7 @@ fn exactly_twice_the_minimum_plus_the_gap_is_enough() {
 fn a_panel_already_on_the_page_is_only_focused() {
     let mut tree = LayoutTree::automatic(2);
     let before = tree.clone();
-    tree.add_at_edge(0, 1, Edge::Left, AREA, GAP, min_panel_size(1.0))
-        .unwrap();
+    tree.add_at_edge(0, 1, Edge::Left, AREA, GAP, min_panel_size(1.0));
     assert_eq!(tree, before);
     assert_eq!(tree.focused(), Some(0));
 }
@@ -122,7 +118,6 @@ fn an_edge_add_is_one_change_to_the_tree() {
     let mut tree = LayoutTree::automatic(1);
     let count = |t: &LayoutTree| t.cells(AREA, GAP).iter().filter(|c| c[2] > 0.0).count();
     assert_eq!(count(&tree), 1);
-    tree.add_at_edge(1, 0, Edge::Right, AREA, GAP, min_panel_size(1.0))
-        .unwrap();
+    tree.add_at_edge(1, 0, Edge::Right, AREA, GAP, min_panel_size(1.0));
     assert_eq!(count(&tree), 2);
 }

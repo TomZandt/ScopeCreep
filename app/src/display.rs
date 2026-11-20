@@ -294,13 +294,34 @@ struct Shared {
     /// The instance each display is, in the same order as `displays`.
     instances: Vec<Instance>,
     next_id: u64,
-    /// Goes up whenever a Panel is made or removed.
+    /// Goes up whenever a Panel is made or removed, or shown or hidden.
     generation: u64,
+    /// Which Panels are hidden, by index (one not listed is shown): they are handed no frame.
+    off: Vec<bool>,
 }
 
 impl DisplaySet {
     fn read(&self) -> RwLockReadGuard<'_, Shared> {
         self.shared.read().unwrap()
+    }
+
+    /// Say which Panels are shown (`shown`, in Panel order; a Panel past its end is shown). A hidden Panel (closed,
+    /// or a tab that is not shown, ADR 0038) keeps its settings and state but is handed no frame: it costs nothing
+    /// until shown again. A change bumps the generation, so the Feed thread measures the frame on screen again.
+    pub fn set_shown(&self, shown: &[bool]) {
+        let mut shared = self.shared.write().unwrap();
+        let off: Vec<bool> = (0..shared.displays.len())
+            .map(|i| !shown.get(i).copied().unwrap_or(true))
+            .collect();
+        if shared.off != off {
+            shared.off = off;
+            shared.generation += 1;
+        }
+    }
+
+    /// Whether Panel `index` is shown (measures and draws).
+    pub fn is_shown(&self, index: usize) -> bool {
+        !self.read().off.get(index).copied().unwrap_or(false)
     }
 
     /// The displays the app shows, in Panel order. A new display is one module that implements [`Display`], and
@@ -506,6 +527,9 @@ impl DisplaySet {
         let mut shared = self.shared.write().unwrap();
         shared.displays.remove(index);
         shared.instances.remove(index);
+        if index < shared.off.len() {
+            shared.off.remove(index);
+        }
         shared.generation += 1;
     }
 
@@ -602,15 +626,21 @@ impl DisplaySet {
 
     /// Hand `frame` to every display.
     pub fn on_frame(&self, encoder: &mut wgpu::CommandEncoder, frame: &GpuFrame) {
-        for display in &self.read().displays {
-            display.on_frame(encoder, frame);
+        let shared = self.read();
+        for (i, display) in shared.displays.iter().enumerate() {
+            if !shared.off.get(i).copied().unwrap_or(false) {
+                display.on_frame(encoder, frame);
+            }
         }
     }
 
     /// Hand the Timeline Colour Space frame (before Output Conversion) to every display.
     pub fn on_timeline_frame(&self, encoder: &mut wgpu::CommandEncoder, frame: &GpuFrame) {
-        for display in &self.read().displays {
-            display.on_timeline_frame(encoder, frame);
+        let shared = self.read();
+        for (i, display) in shared.displays.iter().enumerate() {
+            if !shared.off.get(i).copied().unwrap_or(false) {
+                display.on_timeline_frame(encoder, frame);
+            }
         }
     }
 
