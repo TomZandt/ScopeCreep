@@ -157,6 +157,10 @@ pub const SPACE_TAG_GAP: f32 = 10.0;
 /// The empty page's Add panel button: width and height.
 pub const SPACE_ADD_BUTTON_WIDTH: f32 = 200.0;
 pub const SPACE_ADD_BUTTON_HEIGHT: f32 = 48.0;
+/// The edge + on a hovered Panel: its square, and how far it sits in from the Panel's edge (clear of the dividers'
+/// grab zone).
+pub const SPACE_EDGE_PLUS: f32 = 20.0;
+pub const SPACE_EDGE_PLUS_INSET: f32 = 5.0;
 /// A legend strip: the colour bar's height and the whole strip's (bar, then labels beneath).
 pub const SPACE_LEGEND_BAR: f32 = 8.0;
 pub const SPACE_LEGEND_HEIGHT: f32 = 26.0;

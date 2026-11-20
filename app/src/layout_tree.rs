@@ -33,7 +33,7 @@ pub enum Dir {
     Col,
 }
 
-/// The edge of a tab group a Panel is docked on (ADR 0038).
+/// A side of a tab group: where a Panel is docked, or where an edge add puts the new tab group (ADR 0038).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Edge {
     Left,
@@ -739,6 +739,68 @@ impl LayoutTree {
             self.total = self.total.max(panel + 1);
             return Ok(());
         };
+        let dir = self.long_side(target, area, gap).ok_or(NoRoom)?;
+        self.split_beside(panel, target, dir, false, area, gap, min)
+    }
+
+    /// Add Panel `panel` on the `edge` side of the tab group holding Panel `target` (the **+** on a Panel's edge):
+    /// the new tab group takes half of it on that side (net of the gap) and has the focus. A Panel already on the
+    /// page is only focused. When half of the cell would be under `min` the tree is left as it was and [`NoRoom`]
+    /// says so.
+    pub fn add_at_edge(
+        &mut self,
+        panel: usize,
+        target: usize,
+        edge: Edge,
+        area: [f32; 4],
+        gap: f32,
+        min: [f32; 2],
+    ) -> Result<(), NoRoom> {
+        if self.contains(panel) {
+            self.focus = Some(panel);
+            return Ok(());
+        }
+        let (dir, first) = match edge {
+            Edge::Left => (Dir::Row, true),
+            Edge::Right => (Dir::Row, false),
+            Edge::Top => (Dir::Col, true),
+            Edge::Bottom => (Dir::Col, false),
+        };
+        self.split_beside(panel, target, dir, first, area, gap, min)
+    }
+
+    /// The longer side of the tab group holding `panel`.
+    fn long_side(&self, panel: usize, area: [f32; 4], gap: f32) -> Option<Dir> {
+        let mut found = None;
+        self.root
+            .walk(area, gap, &mut Vec::new(), &mut |node, rect, _| {
+                if let Node::Leaf { tabs, .. } = node
+                    && tabs.contains(&panel)
+                {
+                    let dir = if rect[2] >= rect[3] {
+                        Dir::Row
+                    } else {
+                        Dir::Col
+                    };
+                    found = Some(dir);
+                }
+            });
+        found
+    }
+
+    /// Split the tab group holding `target` in `dir` at 50/50, the new Panel first (left or above) or second, and
+    /// focus it; nothing changes when half of the cell would be under `min`.
+    #[allow(clippy::too_many_arguments)]
+    fn split_beside(
+        &mut self,
+        panel: usize,
+        target: usize,
+        dir: Dir,
+        new_first: bool,
+        area: [f32; 4],
+        gap: f32,
+        min: [f32; 2],
+    ) -> Result<(), NoRoom> {
         let mut found = None;
         self.root
             .walk(area, gap, &mut Vec::new(), &mut |node, rect, path| {
@@ -749,11 +811,6 @@ impl LayoutTree {
                 }
             });
         let (path, rect) = found.ok_or(NoRoom)?;
-        let dir = if rect[2] >= rect[3] {
-            Dir::Row
-        } else {
-            Dir::Col
-        };
         let (along, least) = match dir {
             Dir::Row => (rect[2], min[0]),
             Dir::Col => (rect[3], min[1]),
@@ -763,11 +820,13 @@ impl LayoutTree {
         }
         let node = self.root.at_mut(&path).ok_or(NoRoom)?;
         let old = std::mem::replace(node, Node::EMPTY);
+        let new = Node::leaf(panel);
+        let (a, b) = if new_first { (new, old) } else { (old, new) };
         *node = Node::Split {
             dir,
             ratio: 0.5,
-            a: Box::new(old),
-            b: Box::new(Node::leaf(panel)),
+            a: Box::new(a),
+            b: Box::new(b),
         };
         self.focus = Some(panel);
         self.total = self.total.max(panel + 1);

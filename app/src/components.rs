@@ -7,6 +7,8 @@
 //! The drawing is renderer-neutral: the app turns the prims into flat rectangles and glyphon text
 //! (`main.rs`), and the showcase example (`examples/style_showcase.rs`) draws every component in every state to
 //! an image.
+use crate::layout_tree::Edge;
+use crate::panel_grid::PanelLayout;
 use crate::settings::{MENU_ROW, Menu, MenuRow};
 use crate::style::{self, Rgb};
 
@@ -637,6 +639,62 @@ pub fn add_panel_button(area: [f32; 4], state: State, scale: f32) -> Vec<Prim> {
             Align::Centre,
         ),
     ]
+}
+
+// ---- The edge + (ADR 0038, #209) ----
+
+/// The four **+** hit areas of the Panel in `frame`, each a square against its own side: left and right in the
+/// middle of the display's height, top and bottom in the middle of its width. All sit inside the Panel, under the
+/// title bar and off the dividers' grab zone.
+pub fn edge_plus_rects(frame: [f32; 4], scale: f32) -> [(Edge, [f32; 4]); 4] {
+    let layout = PanelLayout::new(frame, scale);
+    let content = layout.content;
+    let size = style::SPACE_EDGE_PLUS * scale;
+    let inset = style::SPACE_EDGE_PLUS_INSET * scale;
+    let (cx, cy) = (
+        content[0] + (content[2] - size) / 2.0,
+        content[1] + (content[3] - size) / 2.0,
+    );
+    [
+        (Edge::Left, [frame[0] + inset, cy, size, size]),
+        (
+            Edge::Right,
+            [frame[0] + frame[2] - inset - size, cy, size, size],
+        ),
+        (Edge::Top, [cx, content[1], size, size]),
+        (
+            Edge::Bottom,
+            [cx, frame[1] + frame[3] - inset - size, size, size],
+        ),
+    ]
+}
+
+/// The side whose **+** is at `point` on the Panel in `frame`, if any.
+pub fn edge_plus_at(frame: [f32; 4], point: [f32; 2], scale: f32) -> Option<Edge> {
+    edge_plus_rects(frame, scale)
+        .into_iter()
+        .find(|(_, r)| contains(*r, point))
+        .map(|(edge, _)| edge)
+}
+
+/// Whether the **+** signs show: only while the pointer is over the Panel.
+pub fn edge_plus_shown(frame: [f32; 4], pointer: [f32; 2]) -> bool {
+    contains(frame, pointer)
+}
+
+/// The four **+** signs, quiet, the one on `lit` lighter (the pointer is on it).
+pub fn edge_plus_draw(frame: [f32; 4], lit: Option<Edge>, scale: f32) -> Vec<Prim> {
+    let mut prims = Vec::new();
+    for (edge, r) in edge_plus_rects(frame, scale) {
+        let state = if lit == Some(edge) {
+            State::Hover
+        } else {
+            State::Normal
+        };
+        prims.push(rect(r, fill(state, false, style::ACCENT)));
+        prims.push(text("+", r, Face::Label, ink(state, false), Align::Centre));
+    }
+    prims
 }
 
 // ---- Tooltip ----

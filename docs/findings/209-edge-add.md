@@ -1,0 +1,9 @@
+# #209: Edge +: add a Panel from any edge
+
+What ticket #209 showed on 2026-11-20, at the pure layout seam (`app/tests/edge_add.rs`) and the pure UI seam (`app/tests/edge_plus_ui.rs`), headless. Nothing was checked at the app or in Resolve: how the + looks and feels on a real monitor, and that the click opens the list, is still to be seen by a person.
+
+- An edge add puts the new Panel on the chosen side of the target Panel at exactly 50/50 (net of the gap) and gives it the focus: Left and Top put it first, Right and Bottom second. Only the target cell changes. A Panel already on the page is only focused.
+- A side with no room (half of the cell under the minimum width for Left and Right, the minimum height for Top and Bottom) leaves the tree, the focus and the cells untouched and gives the same notice as Add panel ("a Panel needs at least 120 x 105"). Each axis is judged alone: a cell one minimum wide cannot take a side add but can take one above or below. Exactly twice the minimum plus the gap is enough. Until #211 there is no joining as a tab.
+- The four + squares (20 logical px) sit inside the Panel: left and right against their sides in the middle of the display's height, top and bottom in the middle of its width. They are inside the Panel and 5 logical px in from the border (past the dividers' 3 px grab zone), start under the title bar, do not overlap each other down to the smallest Panel (120 x 105), and are the same at 1x and 2x. They show only while the pointer is in the Panel's cell and light under the pointer.
+- The click opens the same Add list as Add panel (same entries, same greyed displays); the pick goes on the clicked side of the clicked Panel, not beside the focus. Closing the menu, or opening the list any other way, forgets the side.
+- An edge add is one call that changes the tree once, so it is one undo step once undo exists (#210); no undo is tested here.

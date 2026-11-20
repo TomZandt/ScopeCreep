@@ -30,7 +30,7 @@ use scopecreep::gpu_frame::FrameUploader;
 use scopecreep::hotkeys_panel::HotkeysPanel;
 use scopecreep::layout::MARGIN;
 use scopecreep::layout_history::LayoutHistory;
-use scopecreep::layout_tree::{Border, Dir, LayoutTree, Press};
+use scopecreep::layout_tree::{Border, Dir, Edge, LayoutTree, Press};
 use scopecreep::layouts::{Layouts, Rename};
 use scopecreep::menu_bar::{self, AddEntry, BarState, Current, LayoutMode, MenuAction};
 use scopecreep::monitor::Monitor;
@@ -291,6 +291,8 @@ struct AppWindow {
     layout_notice: Option<String>,
     /// Where the empty page's Add panel button was last drawn (device pixels), while the page is empty.
     add_button: Option<[f32; 4]>,
+    /// The side of a Panel whose edge + opened the Add list: the display picked goes there, not beside the focus.
+    edge_add: Option<(usize, Edge)>,
     /// The border being dragged, if any.
     drag: Option<Border>,
     /// The Panel being dragged by its title bar, to swap with the one it is let go on.
@@ -540,6 +542,7 @@ impl AppWindow {
             middle_panel: None,
             layout_notice: None,
             add_button: None,
+            edge_add: None,
             drag: None,
             panel_drag: None,
             panel_drag_start: [0.0; 2],
@@ -761,6 +764,8 @@ impl AppWindow {
             }
             self.window.request_redraw();
         } else {
+            // The edge + signs show and light with the pointer.
+            self.window.request_redraw();
             self.window.set_cursor(match self.press_under_pointer() {
                 Some(Press::Border(Border { dir: Dir::Row, .. })) => CursorIcon::ColResize,
                 Some(Press::Border(Border { dir: Dir::Col, .. })) => CursorIcon::RowResize,
@@ -863,6 +868,7 @@ impl AppWindow {
     /// A bar menu closed or another opened: a name being typed is kept, a hotkey being captured dropped, and each
     /// menu opens as it first shows.
     fn reset_bar_menus(&mut self) {
+        self.edge_add = None;
         self.finish_rename(true);
         self.layout_mode = LayoutMode::Show;
         self.hotkeys_panel = None;
@@ -902,7 +908,10 @@ impl AppWindow {
         // Any click in the menu ends a name being typed, keeping it.
         self.finish_rename(true);
         match action {
-            Some(MenuAction::Run(Command::AddPanel)) => self.layout_mode = LayoutMode::Add,
+            Some(MenuAction::Run(Command::AddPanel)) => {
+                self.edge_add = None;
+                self.layout_mode = LayoutMode::Add;
+            }
             Some(MenuAction::Run(command)) => {
                 self.run(command);
                 self.close_bar();
@@ -1099,6 +1108,7 @@ impl AppWindow {
 
     /// Open the Add list, dropped from the Layout title.
     fn open_add_list(&mut self) {
+        self.edge_add = None;
         self.menu = None;
         self.hover = None;
         self.finish_rename(true);
@@ -1113,10 +1123,15 @@ impl AppWindow {
     fn add_panel(&mut self, panel: usize) {
         self.full = None;
         let (area, gap, min) = (self.grid_area, self.grid_gap, min_panel_size(self.scale));
-        match self
-            .layout_history
-            .change(&mut self.grid, |g| g.add(panel, area, gap, min))
-        {
+        let added = match self.edge_add.take() {
+            Some((target, edge)) => self.layout_history.change(&mut self.grid, |g| {
+                g.add_at_edge(panel, target, edge, area, gap, min)
+            }),
+            None => self
+                .layout_history
+                .change(&mut self.grid, |g| g.add(panel, area, gap, min)),
+        };
+        match added {
             Ok(()) => {
                 self.layout_notice = None;
                 self.save_grid();
@@ -1346,6 +1361,20 @@ impl AppWindow {
                     && components::contains(button, self.cursor)
                 {
                     self.open_add_list();
+                    return;
+                }
+                // The + on a hovered Panel's edge opens the Add list for that side.
+                if self.full.is_none()
+                    && let Some(panel) =
+                        self.grid
+                            .panel_at(self.grid_area, self.grid_gap, self.cursor)
+                    && let Some(edge) = self
+                        .cells
+                        .get(panel)
+                        .and_then(|c| components::edge_plus_at(*c, self.cursor, self.scale))
+                {
+                    self.open_add_list();
+                    self.edge_add = Some((panel, edge));
                     return;
                 }
                 // A click on any Panel focuses it.
@@ -1820,6 +1849,21 @@ impl AppWindow {
         let mut menu_areas: Vec<(usize, f32, f32, [u8; 3])> = Vec::new();
         // The menu over the Panels, or else the hover of what the pointer rests on, over everything.
         let mut over: Vec<Prim> = over_empty;
+        // The + on each edge of the Panel under the pointer, quiet until then.
+        if self.full.is_none()
+            && self.menu.is_none()
+            && self.bar.open.is_none()
+            && self.drag.is_none()
+            && self.panel_drag.is_none()
+            && let Some(hovered) = self.grid.panel_at(area, margin, self.cursor)
+            && let Some(frame) = cells
+                .get(hovered)
+                .copied()
+                .filter(|c| panel_grid::shown(*c) && components::edge_plus_shown(*c, self.cursor))
+        {
+            let lit = components::edge_plus_at(frame, self.cursor, scale);
+            over.extend(components::edge_plus_draw(frame, lit, scale));
+        }
         // Each title bar's chips and settings button, lit under the pointer.
         let pointer_over = if self.menu.is_some() || self.bar.open.is_some() {
             None
