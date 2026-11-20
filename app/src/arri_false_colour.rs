@@ -254,7 +254,7 @@ impl crate::zoom::PictureZoom for ArriFalseColour {
 
 impl Display for ArriFalseColour {
     fn name(&self) -> &'static str {
-        "ARRI False Colour"
+        "False Colour - Arri"
     }
 
     fn on_frame(&self, encoder: &mut wgpu::CommandEncoder, frame: &GpuFrame) {

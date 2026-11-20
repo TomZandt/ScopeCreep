@@ -64,7 +64,7 @@ impl Bench {
 }
 
 const COLOUR: &str = "Colour waveform";
-const LUMA: &str = "Luma waveform";
+const LUMA: &str = "Waveform";
 
 fn index_of(b: &Bench, name: &str) -> usize {
     b.set

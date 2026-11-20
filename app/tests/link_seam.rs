@@ -17,10 +17,10 @@ const W: u32 = 400;
 const H: u32 = 300;
 const SETUP: &str = "timeline=Rec.709 Gamma 2.4\noutput=Rec.709 Gamma 2.4\n";
 const NAMES: [&str; 4] = [
-    "ARRI False Colour",
-    "Stops False Colour",
+    "False Colour - Arri",
+    "False Colour - Stops",
     "Skin Tone",
-    "Saturation heatmap",
+    "Saturation",
 ];
 /// Panels of different sizes: 640 x 360 is Fit 50 % in the first and Fit 31 % in the last.
 const AREAS: [[f32; 4]; 4] = [
@@ -295,7 +295,11 @@ fn the_picture_panels_have_no_link_chip_and_the_strip_shows_link_lit_by_default(
     }
     let strip = b.strip();
     assert!(strip.enabled && strip.link, "lit by default");
-    assert_eq!(strip.readout, "Fit");
+    assert!(
+        strip.readout.ends_with(" %") && strip.readout != "Fit",
+        "the actual zoom as a percentage, not the word Fit: {}",
+        strip.readout
+    );
 }
 
 #[test]
@@ -313,7 +317,11 @@ fn the_readout_says_the_shared_zoom_while_link_is_on_and_mixed_when_it_is_off_an
     b.wheel(1, -30.0);
     assert_eq!(b.strip().readout, "Mixed", "Link off and the Panels differ");
     b.set.fit_all(&AREAS, 1.0);
-    assert_eq!(b.strip().readout, "Fit", "Fit takes every Panel there");
+    let said = b.strip().readout;
+    assert!(
+        said == "Mixed" || said.ends_with(" %"),
+        "Fit takes every Panel to its Fit zoom, said as a percentage (Mixed when their Fit differs): {said}"
+    );
     assert!((0..4).all(|i| b.text(i).starts_with("Fit")));
     b.click_link();
     assert!(b.strip().link && b.set.link_on(), "Link switches back on");

@@ -20,10 +20,10 @@ const H: u32 = 300;
 const AREA: [f32; 4] = [20.0, 20.0, 320.0, 240.0];
 const SETUP: &str = "timeline=Rec.709 Gamma 2.4\noutput=Rec.709 Gamma 2.4\n";
 const NAMES: [&str; 4] = [
-    "ARRI False Colour",
-    "Stops False Colour",
+    "False Colour - Arri",
+    "False Colour - Stops",
     "Skin Tone",
-    "Saturation heatmap",
+    "Saturation",
 ];
 /// 640 x 360 in 320 x 240 is Fit 50 % (less the legend strip, where there is one).
 const FRAME: [u32; 2] = [640, 360];
@@ -423,8 +423,6 @@ fn fit_in_the_view_strip_takes_each_picture_panel_back_to_fit_and_a_scope_has_no
     drop(b);
     let rig = Rig::new("panels-zoom-scope");
     let (set, _) = DisplaySet::standard_with_handles(&rig.device, &rig.queue, TARGET, false);
-    let waveform = (0..set.len())
-        .find(|i| set.name(*i) == "Luma waveform")
-        .unwrap();
+    let waveform = (0..set.len()).find(|i| set.name(*i) == "Waveform").unwrap();
     assert!(set.zoom(waveform, AREA, 1.0).is_none());
 }

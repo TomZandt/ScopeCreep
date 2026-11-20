@@ -8,13 +8,13 @@ use scopecreep::pages::Pages;
 use scopecreep::panel_grid::{min_panel_size, shown};
 
 const NAMES: [&str; 7] = [
-    "Clean picture",
-    "Luma waveform",
-    "ARRI False Colour",
+    "Channel Viewer",
+    "Waveform",
+    "False Colour - Arri",
     "Vectorscope",
-    "Saturation heatmap",
-    "Skin tone",
-    "Stops False Colour",
+    "Saturation",
+    "Skin Tone",
+    "False Colour - Stops",
 ];
 const GAP: f32 = 12.0;
 const WINDOW: [f32; 4] = [0.0, 0.0, 1256.0, 716.0];
@@ -56,18 +56,15 @@ fn the_templates_list_the_panels_the_ticket_names() {
             (
                 "Picture views",
                 vec![
-                    "Clean picture",
-                    "ARRI False Colour",
-                    "Stops False Colour",
-                    "Saturation heatmap",
-                    "Skin tone"
+                    "Channel Viewer",
+                    "False Colour - Arri",
+                    "False Colour - Stops",
+                    "Saturation",
+                    "Skin Tone"
                 ]
             ),
-            (
-                "Scopes",
-                vec!["Clean picture", "Luma waveform", "Vectorscope"]
-            ),
-            ("Picture only", vec!["Clean picture"]),
+            ("Scopes", vec!["Channel Viewer", "Waveform", "Vectorscope"]),
+            ("Picture only", vec!["Channel Viewer"]),
         ]
     );
 }

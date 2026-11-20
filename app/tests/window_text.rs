@@ -43,14 +43,14 @@ fn title(name: &str, setup: Option<&str>, settings: &[(&str, &str)]) -> PanelTit
 }
 
 const NAMES: [&str; 9] = [
-    "Clean picture",
-    "Luma waveform",
+    "Channel Viewer",
+    "Waveform",
     "Channel view",
-    "ARRI False Colour",
+    "False Colour - Arri",
     "Vectorscope",
-    "Saturation heatmap",
-    "Skin tone",
-    "Stops False Colour",
+    "Saturation",
+    "Skin Tone",
+    "False Colour - Stops",
     "Colour waveform",
 ];
 
@@ -123,16 +123,16 @@ fn the_top_bar_drops_its_last_parts_first_and_never_cuts_a_part() {
 fn on_an_exact_setup_with_defaults_a_title_bar_says_only_its_name_and_its_own_state() {
     // Nothing the top bar already says, and none of the defaults the long labels used to repeat.
     for (name, want_name, want_tags) in [
-        ("Clean picture", "Clean picture", vec![]),
-        ("Luma waveform", "Luma waveform", vec![]),
+        ("Channel Viewer", "Channel Viewer", vec![]),
+        ("Waveform", "Waveform", vec![]),
         ("Colour waveform", "Colour waveform", vec![]),
         ("Black and white", "Black and white", vec![]),
-        ("ARRI False Colour", "ARRI False Colour", vec![]),
+        ("False Colour - Arri", "False Colour - Arri", vec![]),
         ("Vectorscope", "Vectorscope", vec![]),
-        ("Saturation heatmap", "Saturation heatmap", vec![]),
-        ("Skin tone", "Skin tone", vec![]),
+        ("Saturation", "Saturation", vec![]),
+        ("Skin Tone", "Skin Tone", vec![]),
         ("Channel view", "Channel view", vec!["Blue", "200 %"]),
-        ("Stops False Colour", "Stops False Colour", vec![]),
+        ("False Colour - Stops", "False Colour - Stops", vec![]),
     ] {
         let t = title(name, Some(ACES_709), &[]);
         assert_eq!(t.name, want_name);
@@ -157,7 +157,7 @@ fn on_an_exact_setup_with_defaults_a_title_bar_says_only_its_name_and_its_own_st
 #[test]
 fn the_full_label_is_what_hovering_the_title_bar_shows() {
     let t = panel_title(
-        "Skin tone",
+        "Skin Tone",
         &context(Some(ACES_709), &[]),
         "Skin tone  ·  yellow within ±5°".into(),
     );
@@ -173,7 +173,7 @@ fn the_full_label_is_what_hovering_the_title_bar_shows() {
 
 #[test]
 fn a_picture_shown_as_sent_is_called_unconverted_and_its_measured_space_assumed() {
-    for name in ["Clean picture", "Skin tone", "Channel view"] {
+    for name in ["Channel Viewer", "Skin Tone", "Channel view"] {
         assert!(
             title(name, None, &[])
                 .tags
@@ -188,12 +188,12 @@ fn a_picture_shown_as_sent_is_called_unconverted_and_its_measured_space_assumed(
         );
     }
     for name in [
-        "Luma waveform",
+        "Waveform",
         "Colour waveform",
         "Black and white",
-        "ARRI False Colour",
+        "False Colour - Arri",
         "Vectorscope",
-        "Saturation heatmap",
+        "Saturation",
     ] {
         let tags = title(name, None, &[]).tags;
         assert!(
@@ -208,14 +208,14 @@ fn a_picture_shown_as_sent_is_called_unconverted_and_its_measured_space_assumed(
 fn an_approximated_output_conversion_is_said_on_every_panel_that_measures_the_converted_picture() {
     let approximated = APPROXIMATED;
     for name in [
-        "Clean picture",
-        "Luma waveform",
+        "Channel Viewer",
+        "Waveform",
         "Colour waveform",
         "Black and white",
-        "ARRI False Colour",
+        "False Colour - Arri",
         "Vectorscope",
-        "Saturation heatmap",
-        "Skin tone",
+        "Saturation",
+        "Skin Tone",
         "Channel view",
     ] {
         assert!(
@@ -232,10 +232,10 @@ fn non_default_settings_that_change_what_is_measured_are_tags_and_defaults_are_n
     let mut c = context(Some(ACES_709), &[]);
     c.luma = LumaWeights::MatchResolve;
     for name in [
-        "Luma waveform",
+        "Waveform",
         "Colour waveform",
         "Black and white",
-        "ARRI False Colour",
+        "False Colour - Arri",
         "Vectorscope",
     ] {
         assert!(
@@ -246,24 +246,24 @@ fn non_default_settings_that_change_what_is_measured_are_tags_and_defaults_are_n
         );
     }
     assert!(
-        title("Luma waveform", Some(ACES_709), &[]).tags.is_empty(),
+        title("Waveform", Some(ACES_709), &[]).tags.is_empty(),
         "the default is not repeated"
     );
     assert_eq!(
-        title("Saturation heatmap", Some(ACES_709), &[("scale", "150")]).tags,
+        title("Saturation", Some(ACES_709), &[("scale", "150")]).tags,
         ["hot 150 %"]
     );
     assert!(
-        title("Saturation heatmap", Some(ACES_709), &[("scale", "75")])
+        title("Saturation", Some(ACES_709), &[("scale", "75")])
             .tags
             .is_empty()
     );
     assert_eq!(
-        title("Skin tone", Some(ACES_709), &[("tolerance", "10")]).tags,
+        title("Skin Tone", Some(ACES_709), &[("tolerance", "10")]).tags,
         ["±10°"]
     );
     assert!(
-        title("Skin tone", Some(ACES_709), &[("tolerance", "5")])
+        title("Skin Tone", Some(ACES_709), &[("tolerance", "5")])
             .tags
             .is_empty()
     );
@@ -292,7 +292,7 @@ fn non_default_settings_that_change_what_is_measured_are_tags_and_defaults_are_n
     );
     assert_eq!(
         title(
-            "Stops False Colour",
+            "False Colour - Stops",
             Some(ACES_709),
             &[("mode", "grey-plus-one")]
         )
@@ -304,12 +304,12 @@ fn non_default_settings_that_change_what_is_measured_are_tags_and_defaults_are_n
 #[test]
 fn the_waveforms_say_levels_that_change_how_to_read_their_scale() {
     assert_eq!(
-        title("Luma waveform", Some(FULL_LEVELS), &[]).tags,
+        title("Waveform", Some(FULL_LEVELS), &[]).tags,
         ["full levels"]
     );
     let unknown_levels = "science=aces\ntimeline=ACEScct\noutput=Rec.709 BT.1886\n";
     assert_eq!(
-        title("Luma waveform", Some(unknown_levels), &[]).tags,
+        title("Waveform", Some(unknown_levels), &[]).tags,
         ["video levels assumed"]
     );
 }
@@ -318,19 +318,19 @@ fn the_waveforms_say_levels_that_change_how_to_read_their_scale() {
 fn stops_false_colour_says_approximated_assumed_and_when_it_cannot_measure() {
     // Scene light decoded from the Timeline Colour Space: nothing to add.
     assert!(
-        title("Stops False Colour", Some(ACES_709), &[])
+        title("False Colour - Stops", Some(ACES_709), &[])
             .tags
             .is_empty()
     );
     // A display curve inverted: approximated.
     assert_eq!(
-        title("Stops False Colour", Some(DWG_709), &[]).tags,
+        title("False Colour - Stops", Some(DWG_709), &[]).tags,
         Vec::<String>::new(),
         "DaVinci Intermediate is a log curve"
     );
     assert!(
         title(
-            "Stops False Colour",
+            "False Colour - Stops",
             Some(
                 "science=rcm\ntimeline=Rec.709 Gamma 2.4\noutput=Rec.709 Gamma 2.4\nlevels=video\n"
             ),
@@ -340,10 +340,10 @@ fn stops_false_colour_says_approximated_assumed_and_when_it_cannot_measure() {
         .contains(&"approximated".to_string())
     );
     // Unknown Colour Setup: the Output picture as sent, through an assumed curve.
-    let t = title("Stops False Colour", None, &[]).tags;
+    let t = title("False Colour - Stops", None, &[]).tags;
     assert_eq!(t, ["approximated", "assumed", "unconverted"]);
     assert_eq!(
-        title("Stops False Colour", Some(UNREADABLE), &[]).tags,
+        title("False Colour - Stops", Some(UNREADABLE), &[]).tags,
         ["not measured"]
     );
 }

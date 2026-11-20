@@ -32,7 +32,7 @@ use scopecreep_accuracy::colour::{AP1, DWG, P3_D65, REC709, REC2020};
 use std::sync::{Arc, Mutex};
 
 /// The display's name, which its settings are kept under.
-pub const NAME: &str = "Stops False Colour";
+pub const NAME: &str = "False Colour - Stops";
 pub const MODE_SETTING: &str = "mode";
 pub const LEGEND_SETTING: &str = "legend";
 

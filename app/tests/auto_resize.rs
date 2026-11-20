@@ -7,13 +7,13 @@ use scopecreep::pages::Pages;
 use scopecreep::panel_grid::PanelLayout;
 
 const NAMES: [&str; 7] = [
-    "Clean picture",
-    "Luma waveform",
-    "ARRI False Colour",
+    "Channel Viewer",
+    "Waveform",
+    "False Colour - Arri",
     "Vectorscope",
-    "Saturation heatmap",
-    "Skin tone",
-    "Stops False Colour",
+    "Saturation",
+    "Skin Tone",
+    "False Colour - Stops",
 ];
 const GAP: f32 = 12.0;
 
@@ -82,7 +82,7 @@ fn a_picture_cell_gets_the_footage_aspect_leaving_room_for_the_title_bar_legend_
     for scale in [1.0, 2.0] {
         for (dir, area, aspect) in cases {
             let area = area.map(|v| v * scale);
-            for panel in ["Clean picture", "Luma waveform", "Skin tone"] {
+            for panel in ["Channel Viewer", "Waveform", "Skin Tone"] {
                 for picture_first in [true, false] {
                     let mut t = if picture_first {
                         two(dir, panel, "Vectorscope")
@@ -125,24 +125,27 @@ fn a_split_with_two_picture_children_or_none_is_left_alone() {
 fn the_vectorscope_is_not_picture_shaped_and_the_luma_waveform_is() {
     assert_eq!(auto_resize::shape_of("Vectorscope"), Shape::Other);
     assert_eq!(auto_resize::shape_of("Colour waveform"), Shape::Other);
-    assert_eq!(auto_resize::shape_of("Luma waveform"), Shape::Waveform);
-    assert_eq!(auto_resize::shape_of("Clean picture"), Shape::Picture);
-    assert_eq!(auto_resize::shape_of("Stops False Colour"), Shape::Picture);
+    assert_eq!(auto_resize::shape_of("Waveform"), Shape::Waveform);
+    assert_eq!(auto_resize::shape_of("Channel Viewer"), Shape::Picture);
+    assert_eq!(
+        auto_resize::shape_of("False Colour - Stops"),
+        Shape::Picture
+    );
 }
 
 #[test]
 fn the_ratio_is_clamped_to_15_to_85_percent() {
     let area = [0.0, 0.0, 1256.0, 716.0];
-    let mut t = two("row", "Clean picture", "Vectorscope");
+    let mut t = two("row", "Channel Viewer", "Vectorscope");
     t.auto_resize(&shapes(), 2.39, area, GAP, 1.0);
     let c = t.cells(area, GAP);
     assert!((c[0][2] / (area[2] - GAP) - 0.85).abs() < 1e-4, "too wide");
     let thin = [0.0, 0.0, 3000.0, 300.0];
-    let mut t = two("row", "Clean picture", "Vectorscope");
+    let mut t = two("row", "Channel Viewer", "Vectorscope");
     t.auto_resize(&shapes(), 9.0 / 16.0, thin, GAP, 1.0);
     let c = t.cells(thin, GAP);
     assert!((c[0][2] / (thin[2] - GAP) - 0.15).abs() < 1e-4, "too thin");
-    let mut t = two("row", "Vectorscope", "Clean picture");
+    let mut t = two("row", "Vectorscope", "Channel Viewer");
     t.auto_resize(&shapes(), 2.39, area, GAP, 1.0);
     let c = t.cells(area, GAP);
     assert!(
@@ -158,10 +161,10 @@ fn it_goes_top_down_so_a_nested_split_sees_its_parents_new_size() {
         "layout 2\nsplit row 0.5\nleaf 0 Clean picture\nsplit col 0.5\nsplit row 0.5\nleaf 0 Skin tone\nleaf 0 Vectorscope\nleaf 0 Saturation heatmap\n",
     );
     t.auto_resize(&shapes(), 16.0 / 9.0, area, GAP, 1.0);
-    assert_aspect(&t, area, "Clean picture", 16.0 / 9.0, 1.0);
+    assert_aspect(&t, area, "Channel Viewer", 16.0 / 9.0, 1.0);
     // The split below the first has two shapes of its own: the Skin tone is fitted in the column that is left.
     let cells = t.cells(area, GAP);
-    let skin = cells[index("Skin tone")];
+    let skin = cells[index("Skin Tone")];
     let scope = cells[index("Vectorscope")];
     let content = PanelLayout::new(skin, 1.0).content;
     let (_, legend) = legend_allowance(Shape::Picture, 1.0);
@@ -180,7 +183,7 @@ fn no_feed_means_16_to_9() {
 #[test]
 fn it_is_one_undo_step_and_a_press_that_changes_nothing_is_none() {
     let area = [0.0, 0.0, 1256.0, 716.0];
-    let mut pages = Pages::new(two("row", "Clean picture", "Vectorscope"));
+    let mut pages = Pages::new(two("row", "Channel Viewer", "Vectorscope"));
     let before = pages.tree().to_text(&NAMES);
     pages.change(|t| t.auto_resize(&shapes(), 2.39, area, GAP, 1.0));
     assert_ne!(pages.tree().to_text(&NAMES), before);
@@ -204,8 +207,8 @@ fn it_never_leaves_a_panel_under_its_least_size_near_the_windows_minimum() {
         // Just wide enough for two Panels at their least size, so the footage's share cannot be had.
         let area = [0.0, 0.0, 2.0 * min[0] + GAP * scale + 30.0, 716.0 * scale];
         for (first, second) in [
-            ("Clean picture", "Vectorscope"),
-            ("Vectorscope", "Luma waveform"),
+            ("Channel Viewer", "Vectorscope"),
+            ("Vectorscope", "Waveform"),
         ] {
             let mut t = two("row", first, second);
             t.auto_resize(&shapes(), 2.39, area, GAP * scale, scale);

@@ -62,6 +62,29 @@ _Avoid_: Onboarding, wizard, warnings panel, status page
 
 ## Displays
 
+The displays, by their name now. Each Panel is one of these (a page can hold the same display more than once: its Panel title then adds the instance number, "Waveform 2", only when the page holds two or more of it). Choosing lists (Add panel, a Panel's edge **+**, Replace with…) list them A to Z. Former names are still read from every saved file (settings, layouts, pages, copies like "Clean picture 2"), and new names are written from the next save on (the rename of the displays, #196).
+
+| Display | Kind | What it is for | Former name |
+|---|---|---|---|
+| Channel Viewer | Picture View | The Output picture untouched, with Y R G B channel chips and the Loupe: the hero | Clean picture |
+| False Colour - Arri | Picture View | The Output picture in ARRI-style luma bands, with a legend | ARRI False Colour |
+| False Colour - Stops | Picture View | The Timeline frame in stops from middle grey (Zones, or Grey +1), with a legend | Stops False Colour |
+| Saturation | Picture View | Luma in grey with saturation laid over it, cool to hot, with a legend | Saturation heatmap |
+| Skin Tone | Picture View | Pixels near the skin-tone line painted solid yellow, green or magenta | Skin tone, Skin Tone Panel |
+| Vectorscope | Scope | Cb across, Cr up: hue is the angle, saturation the distance; 100 % and 200 % side by side | (unchanged) |
+| Waveform | Scope | Luma (and Y R G B, Colorise) per column of the picture | Luma waveform |
+
+Built and tested but kept out of the Window (parked, #121), by the flag `IN_WINDOW` in `app/src/display.rs`:
+
+| Display | Kind | Why it is parked |
+|---|---|---|
+| Gamut/legal warning | Picture View | Parked (#121) |
+| Highlight Neutrals | Picture View | Parked (#121) |
+| CIE plot | Scope | Parked (#121) |
+| Black and white | Picture View | Parked (#121): the Channel Viewer's Y chip does its job |
+| Colour Waveform | Scope | Parked (#121): the Waveform's Colorise chip does its job |
+| Channel view | Picture View | Parked (#121): the Channel Viewer's chips and Loupe do its job |
+
 **Window**:
 The whole scopecreep app on screen: every Panel, the labels and the status line.
 _Avoid_: App (for the screen area), screen, workspace
@@ -98,14 +121,14 @@ _Avoid_: Widget, control (for the whole set)
 A small toggle on a title bar: a letter or short word, grey when off, the accent (or its channel's colour for R, G, B, Y) when on. A row of chips behaves in one of four ways: single (one always on), multiple (any combination, at least one on), toggle (free to be off) or one or none (at most one on; clicking the lit one turns it off).
 
 **Toolbar**:
-The settings a display marks to show as chips on its Panel's title bar (the Channel view's Y R G B, one at a time (out of the Window); the luma waveform's Y R G B, any combination with at least one on; the clean picture's Y R G B, one or none, none being colour, the default, with the channel named as a tag when lit). The chips of one setting are a group, with a wider gap between groups than within one (the Vectorscope: plots, mono, tonal range). The popover holds the settings that are not on the toolbar. On a title bar too narrow for every chip, whole settings leave the bar from the right (only the chips give way, ADR 0040) and the popover offers them first; the settings button stays fixed at the right edge and nothing runs past the bar.
+The settings a display marks to show as chips on its Panel's title bar (the Channel view's Y R G B, one at a time (out of the Window); the Waveform's Y R G B, any combination with at least one on; the Channel Viewer's Y R G B, one or none, none being colour, the default, with the channel named as a tag when lit). The chips of one setting are a group, with a wider gap between groups than within one (the Vectorscope: plots, mono, tonal range). The popover holds the settings that are not on the toolbar. On a title bar too narrow for every chip, whole settings leave the bar from the right (only the chips give way, ADR 0040) and the popover offers them first; the settings button stays fixed at the right edge and nothing runs past the bar.
 
 **Legend strip**:
 The colour scale of a display, always horizontal: under the picture, full width, read left to right.
 _Avoid_: Vertical legend
 
 **Scale bar**:
-The legend strip of ARRI False Colour and the saturation heatmap: a bar proportional to a range (0 to 100 % of Output Luma, or 0 to the heatmap's scale), tick numbers along its top and marks under it at the meaningful points. Ticks thin out and marks drop out on a small Panel; text never overlaps.
+The legend strip of False Colour - Arri and the Saturation: a bar proportional to a range (0 to 100 % of Output Luma, or 0 to the heatmap's scale), tick numbers along its top and marks under it at the meaningful points. Ticks thin out and marks drop out on a small Panel; text never overlaps.
 
 **Panel**:
 One area of the Window that shows one Scope or Picture View. Every display in the Window has its own Panel, so everything can be seen at once, unless it is closed (Close in the Panel's popover or the Layout menu; Add panel brings it back) (7 Panels; the gamut/legal warning, Highlight Neutrals, CIE plot, Black and white, Colour Waveform and Channel view are out of the Window but their code and saved settings are kept); the Panels sit in an ordered grid whose borders the user can drag.
@@ -137,7 +160,7 @@ A black bar around the picture: whole rows at the top and bottom, or whole colum
 _Avoid_: Letterbox (that is one kind of matte), border
 
 **Panel grid**:
-The columns and rows the Panels sit in, each Panel at a cell with a span of columns and rows, every cell used. By default the clean picture spans 3 × 2 at the top left, the luma waveform and the Vectorscope (two columns wide) beside it, and the four other Picture Views fill two rows below (ARRI False Colour 3 wide with Stops False Colour, the Saturation heatmap 3 wide with Skin tone), so all 7 Panels use every cell. Column and row sizes are weights, so border positions the user dragged stay valid at any window size. Each Panel has a thin border and a title bar with its label at its top.
+The columns and rows the Panels sit in, each Panel at a cell with a span of columns and rows, every cell used. Only an old saved grid is one now: it is read and converted to a Layout tree (the old default was the Channel Viewer 3 × 2 at the top left with the Waveform and the Vectorscope beside it). Column and row sizes are weights, so border positions the user dragged stay valid at any window size. Each Panel has a thin border and a title bar with its label at its top.
 _Avoid_: Layout for the grid (a Layout is a saved arrangement of it), dock
 
 Since spec #196 (ADR 0038) the grid is replaced by the **Layout tree** below, built in #204; this entry is kept for the old saved layouts, which convert when they are a sequence of cuts.
@@ -149,7 +172,7 @@ _Avoid_: Preset, workspace, profile
 Since spec #196 (ADR 0041, built in #212) named layouts are **Pages**: the nine slots and their hotkeys are gone, and a saved layout is read once on the first run to make a page. The Layout menu entry above is superseded.
 
 **Layout tree**:
-The arrangement of one Page: a binary tree whose leaves are Tab groups and whose inner nodes are splits, each side by side or stacked with the share of its space (net of the gap) that its first child takes. It always fills the Panel area, so no cell is empty, and a Panel can never be smaller than the minimum Panel size (ADR 0038). Decided in spec #196 and built in #204: the Window draws from it, one Panel per tab group for now, and a saved layout reads "layout 2" (an old grid converts when it is a sequence of cuts, otherwise the default layout is used).
+The arrangement of one Page: a binary tree whose leaves are Tab groups and whose inner nodes are splits, each side by side or stacked with the share of its space (net of the gap) that its first child takes. It always fills the Panel area, so no cell is empty, and a Panel can never be smaller than the minimum Panel size (ADR 0038). Decided in spec #196 and built in #204: the Window draws from it, one Panel per tab group for now, and a saved layout reads "layout 2" (an old grid converts when it is a sequence of cuts, otherwise the default layout is used). The **default layout** is one fixed tree, the same whatever the footage: the Channel Viewer big at the left (about 59 % of the top row's width, 66 % of the height), at its right the Vectorscope beside the Saturation Panel with the Waveform under them, and along the bottom Skin Tone, False Colour - Stops and False Colour - Arri. It is the first page of a fresh Window, the Default layout Command and menu entry, a Default layout new page, and what a missing or unreadable saved layout falls back to.
 _Avoid_: Grid (for the new model), dock, split view
 
 **Tab group**:
@@ -169,11 +192,11 @@ Dragging a Panel's title or tab onto another tab group: the outer quarter neares
 _Avoid_: Snap, drop zone (for the overlay)
 
 **Page**:
-A saved layout shown as a tab in the Page bar under the Colour Setup line: its own Layout tree, focused tab group and undo. The pages and the current page are remembered; only the current page's Panels measure and draw. New pages come from Empty page, Default layout (the 7 Panels), a copy of the current one (each Panel's settings copied) or a template, arranged once with Auto layout for the Feed's aspect (16:9 with no Feed) and named after it: All 7 Panels, Picture views (clean picture, ARRI False Colour, Stops False Colour, Saturation heatmap, Skin tone), Scopes (clean picture, luma waveform, Vectorscope) and Picture only (the clean picture); there are at most 12; Ctrl+1 to 9 go to pages 1 to 9, and the first nine tabs show their number, "[1] Colour" (ADR 0041).
+A saved layout shown as a tab in the Page bar under the Colour Setup line: its own Layout tree, focused tab group and undo. The pages and the current page are remembered; only the current page's Panels measure and draw. New pages come from Empty page, Default layout (the 7 Panels), a copy of the current one (each Panel's settings copied) or a template, arranged once with Auto layout for the Feed's aspect (16:9 with no Feed) and named after it: All 7 Panels, Picture views (Channel Viewer, False Colour - Arri, False Colour - Stops, Saturation, Skin Tone), Scopes (Channel Viewer, Waveform, Vectorscope) and Picture only (the Channel Viewer); there are at most 12; Ctrl+1 to 9 go to pages 1 to 9, and the first nine tabs show their number, "[1] Colour" (ADR 0041).
 _Avoid_: Workspace (Resolve's word for its page arrangement), slot, preset
 
 **Auto layout**:
-A button on the Page bar that re-arranges every Panel on the current Page, for the Feed's aspect and the Window: it keeps the Panels in reading order and picks the cutting of them into splits that gives the most useful area; a repeat press shows the next-best arrangement (the best 8, then back to the best), and any other change to the Page starts again at the best (weights: clean picture 3, luma waveform 1.6, Vectorscope 1.2, anything else 1; a tab group counts as its shown Panel), with no change and a notice when no cutting keeps every Panel at its least size. Above 9 Panels it halves the list instead of searching. Each press is one undo step, so Undo steps back through the variations, and it never runs by itself (ADR 0041).
+A button on the Page bar that re-arranges every Panel on the current Page, for the Feed's aspect and the Window: it keeps the Panels in reading order and picks the cutting of them into splits that gives the most useful area; a repeat press shows the next-best arrangement (the best 8, then back to the best), and any other change to the Page starts again at the best (weights: Channel Viewer 3, Waveform 1.6, Vectorscope 1.2, anything else 1; a tab group counts as its shown Panel), with no change and a notice when no cutting keeps every Panel at its least size. Above 9 Panels it halves the list instead of searching. Each press is one undo step, so Undo steps back through the variations, and it never runs by itself (ADR 0041).
 _Avoid_: Auto-arrange, tidy, auto mode (it is not a mode)
 
 **Auto resize**:
@@ -185,7 +208,7 @@ Ctrl+Z (a Command, also in the Layout menu, greyed when there is nothing to undo
 _Avoid_: Revert, history (for the control)
 
 **View strip**:
-Fit, the shared zoom readout and Link, at the right end of the menu bar row: the Window-wide view controls, always in the same place. A picture Panel keeps a read-only zoom tag (ADR 0040).
+Fit, the zoom readout and Link, at the right end of the menu bar row: the Window-wide view controls, always in the same place. The readout is always a percentage ("62 %"), or "Mixed" when Link is off and picture Panels differ; "Fit" is only the button. A picture Panel keeps a read-only zoom tag (ADR 0040).
 _Avoid_: View toolbar, zoom bar
 
 **Command**:
@@ -234,7 +257,7 @@ _Avoid_: Chroma scope, colour wheel
 A chip on the Vectorscope's title bar (All by default, remembered per Panel, tagged when not All) that plots only the pixels whose Luma is in one third of the signal: Shadows below 30 %, Mids from 30 % to below 70 %, Highlights 70 % and above (Resolve's own Low and High boundaries, of Y with the Measured Space's weights; the Levels do not move them). It changes what is measured: the plot and the ring-clipping counts only include the plotted pixels. Resolve and Tektronix call it a luma-qualified vectorscope.
 _Avoid_: Luma key, qualifier
 
-**Saturation heatmap**:
+**Saturation**:
 A Picture View that draws the Output picture as its Luma in grey with saturation laid over it in a colour that strengthens with saturation, cool to hot: neutral areas show the grey picture, saturated areas a strong colour. Saturation is the distance from neutral on the vectorscope's scale (100 % is the vectorscope's outer ring).
 _Avoid_: Chroma map, saturation false colour
 
@@ -242,9 +265,9 @@ _Avoid_: Chroma map, saturation false colour
 A line on a vectorscope from the middle at a fixed angle, where skin tones sit. Its angle is held in one shared constant (123° in BT.709 Cb/Cr, the angle Resolve 21.2's own vectorscope draws its line at, #60).
 _Avoid_: I-line (that is the composite-video name), flesh line
 
-**Skin Tone Panel**:
-A Picture View of the Output picture in its own colours in which pixels whose hue is near the Skin-tone line are painted solid flat yellow (on the line), green or magenta (either side, out to the outer band); other and near-neutral pixels keep their own colour. Only hue matters, not brightness.
-_Avoid_: Skin tone indicator (Resolve's and others' name for their own tools)
+**Skin Tone**:
+Formerly the Skin Tone Panel. A Picture View of the Output picture in its own colours in which pixels whose hue is near the Skin-tone line are painted solid flat yellow (on the line), green or magenta (either side, out to the outer band); other and near-neutral pixels keep their own colour. Only hue matters, not brightness.
+_Avoid_: Skin Tone indicator (Resolve's and others' name for their own tools)
 
 **Hue vectors**:
 A choice of graticule on the Vectorscope, next to Standard (the default). It adds a quiet neutral spoke from the middle to each of the six Colour targets, at the angle of the target's boxes, so a colour that has drifted off its hue line is easy to see. A drawing aid only: it follows the graticule brightness and never changes the trace, the clipping marks or the Skin-tone line.
@@ -274,23 +297,23 @@ A blur of the trace on the waveforms and the Vectorscope, a Slider in the Panel'
 _Avoid_: Glow, blur, smoothing
 
 **Picture View**:
-A display that shows the Feed as an image, either untouched (the clean picture) or remapped for inspection (false colour, black and white).
+A display that shows the Feed as an image, either untouched (the Channel Viewer) or remapped for inspection (false colour, black and white).
 _Avoid_: Scope (for false colour), filter, LUT view
 
 **Highlight Neutrals**:
 A Picture View that shows the Output picture in Luma grey and pixels whose red, green and blue are nearly equal (within a tolerance, a share of the full signal range, 3 % by default) in green, for checking that whites and greys are balanced.
 _Avoid_: White balance check, neutral finder
 **Black and white**:
-The Picture View that shows the Output picture as greys equal to Luma, with the same weights as the waveform (including its luma weights setting), so a grey on screen lines up with its trace. Not in the Window: the clean picture's Y chip does its job (code and tests kept).
+The Picture View that shows the Output picture as greys equal to Luma, with the same weights as the waveform (including its luma weights setting), so a grey on screen lines up with its trace. Not in the Window: the Channel Viewer's Y chip does its job (code and tests kept).
 _Avoid_: Greyscale, desaturated view, monochrome
 
 **Colour Waveform**:
-A waveform whose trace is tinted by the colour of the pixels plotted at each point, so a green scene gives a green trace. Out of the Window since #145 (the luma waveform's Colorise chip does its job); its code, tests and saved settings are kept.
-Its spots are at the luma waveform's positions; each one's tint is the average colour of the pixels counted there, brought to the neutral trace's strength so grey draws as the luma trace does.
+A waveform whose trace is tinted by the colour of the pixels plotted at each point, so a green scene gives a green trace. Out of the Window since #145 (the Waveform's Colorise chip does its job); its code, tests and saved settings are kept.
+Its spots are at the Waveform's positions; each one's tint is the average colour of the pixels counted there, brought to the neutral trace's strength so grey draws as the luma trace does.
 _Avoid_: Colourised waveform, RGB waveform, parade (that shows channels side by side)
 
 **Colorise**:
-A chip on the luma waveform's title bar (default off, remembered per Panel, never a tag) that works on whichever of Y, R, G and B are showing: Y takes the average colour of the pixels counted at each spot (the Colour Waveform's rule), R, G and B their channel colours; off, every trace is neutral. A drawing choice: counts and edge rows are the same either way. Resolve's own switch is spelt Colorize.
+A chip on the Waveform's title bar (default off, remembered per Panel, never a tag) that works on whichever of Y, R, G and B are showing: Y takes the average colour of the pixels counted at each spot (the Colour Waveform's rule), R, G and B their channel colours; off, every trace is neutral. A drawing choice: counts and edge rows are the same either way. Resolve's own switch is spelt Colorize.
 _Avoid_: Colourise (as a tag or setting that changes the measurement)
 
 **Scale units**:
@@ -305,32 +328,32 @@ _Avoid_: Limits, peak lines (a peak is one of the two), safe levels
 A Picture View that paints each pixel by the band its value falls in, leaving the rest of the picture in grey.
 _Avoid_: Heatmap (for exposure), exposure overlay
 
-**ARRI False Colour**:
+**False Colour - Arri**:
 False Colour with the Rec.709 percentage bands third parties publish as ARRI's (green near middle grey, pink near one stop over), measured on the Output picture. Modelled on ARRI's scheme; not ARRI's own specification.
 _Avoid_: ARRI spec, LogC false colour
 
 **Band**:
-One colour of ARRI False Colour: a range of Output Luma in percent of the full-range signal. A band includes its lower edge and excludes its upper edge; the lowest is open below and the highest open above (ADR 0016).
+One colour of False Colour - Arri: a range of Output Luma in percent of the full-range signal. A band includes its lower edge and excludes its upper edge; the lowest is open below and the highest open above (ADR 0016).
 _Avoid_: Zone (ARRI's and EL Zone's word for their own schemes)
 
-**Stops False Colour**:
+**False Colour - Stops**:
 False Colour by stops above and below middle grey, in scene light decoded from the Timeline Colour Space. When that space is not known or cannot be decoded it measures the Output picture through its display curve instead, labelled approximated (and assumed). Its legend is a horizontal bar of swatches under the picture, with the stop numbers under them and captions over them.
 _Avoid_: EL Zone (a trademark scopecreep does not use), zone system
 
 **Full zones**:
-Stops False Colour's default mode: 17 zones, each in its own colour: black beyond 6 1/2 stops under middle grey, then 15 zones centred on the marks -6 to +6 (whole stops, with -1/2, 18 % and +1/2 beside middle grey), and white beyond 6 1/2 stops over. A zone covers the stops up to the midpoint with its neighbour.
+False Colour - Stops's default mode: 17 zones, each in its own colour: black beyond 6 1/2 stops under middle grey, then 15 zones centred on the marks -6 to +6 (whole stops, with -1/2, 18 % and +1/2 beside middle grey), and white beyond 6 1/2 stops over. A zone covers the stops up to the midpoint with its neighbour.
 
 **Grey and +1 stop**:
-Stops False Colour's chart mode: a black and white picture where pixels within a sixth of a stop of middle grey are green and within a sixth of a stop of one stop over are pink. The ColorChecker routine (neutral 5 green, neutral 6.5 pink).
+False Colour - Stops's chart mode: a black and white picture where pixels within a sixth of a stop of middle grey are green and within a sixth of a stop of one stop over are pink. The ColorChecker routine (neutral 5 green, neutral 6.5 pink).
 
 **Timeline Colour Space frame**:
-The Feed's frame as Resolve sends it, before Output Conversion. Stops False Colour measures this one; every other display sees the Output picture.
+The Feed's frame as Resolve sends it, before Output Conversion. False Colour - Stops measures this one; every other display sees the Output picture.
 
 **Loupe**:
-A movable square on a Picture View that shows the picture under it magnified, so single pixels (and noise) can be seen. Its zoom is of source pixels, in device pixels of the screen: at 200 % each picture pixel is 2 × 2 device pixels, whatever the Panel's size. It is one shared piece any Picture View can use; it is built from the Panel's colour rule, so it shows what the Panel shows. It is on the clean picture (and on the Channel view, which is out of the Window) as a toolbar chip (off by default): the clean picture's Loupe magnifies whatever its chips show (colour or one channel), is dragged anywhere in the Panel, zooms 100 to 800 % with the scroll wheel, takes its size (small, medium, large) from the popover, and is remembered per Panel. While it is on, "Loupe N %" is a tag; while it is off the clean picture takes no pointer events and the wheel zooms the picture (Zoom).
+A movable square on a Picture View that shows the picture under it magnified, so single pixels (and noise) can be seen. Its zoom is of source pixels, in device pixels of the screen: at 200 % each picture pixel is 2 × 2 device pixels, whatever the Panel's size. It is one shared piece any Picture View can use; it is built from the Panel's colour rule, so it shows what the Panel shows. It is on the Channel Viewer (and on the Channel view, which is out of the Window) as a toolbar chip (off by default): the Channel Viewer's Loupe magnifies whatever its chips show (colour or one channel), is dragged anywhere in the Panel, zooms 100 to 800 % with the scroll wheel, takes its size (small, medium, large) from the popover, and is remembered per Panel. While it is on, "Loupe N %" is a tag; while it is off the Channel Viewer takes no pointer events and the wheel zooms the picture (Zoom).
 
 **Channel view**:
-The Panel showing one channel of the Output picture (blue by default, or red, green or Luma) as grey, with the Loupe on top, for inspecting noise. Out of the Window since #162 (the clean picture's Y R G B chips and Loupe do its job, ADR 0034); its code, tests and saved settings are kept.
+The Panel showing one channel of the Output picture (blue by default, or red, green or Luma) as grey, with the Loupe on top, for inspecting noise. Out of the Window since #162 (the Channel Viewer's Y R G B chips and Loupe do its job, ADR 0034); its code, tests and saved settings are kept.
 _Avoid_: PiP, magnifier, zoom window
 
 **ColorChecker frame**:

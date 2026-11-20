@@ -9,13 +9,13 @@ const GAP: f32 = 12.0;
 const EDGES: [Edge; 4] = [Edge::Left, Edge::Right, Edge::Top, Edge::Bottom];
 
 const NAMES: [&str; 7] = [
-    "Clean picture",
-    "Luma waveform",
-    "ARRI False Colour",
+    "Channel Viewer",
+    "Waveform",
+    "False Colour - Arri",
     "Vectorscope",
-    "Saturation heatmap",
-    "Skin tone",
-    "Stops False Colour",
+    "Saturation",
+    "Skin Tone",
+    "False Colour - Stops",
 ];
 
 fn index(name: &str) -> usize {
@@ -36,10 +36,10 @@ fn cell_of(tree: &LayoutTree, name: &str) -> [f32; 4] {
 
 #[test]
 fn a_dock_on_each_edge_gives_the_dragged_panel_that_half() {
-    let target = "Clean picture";
+    let target = "Channel Viewer";
     for edge in EDGES {
         let mut tree = default_tree();
-        let skin = index("Skin tone");
+        let skin = index("Skin Tone");
         let [x, y, w, h] = cell_of(&tree, target);
         tree.dock(skin, index(target), edge, AREA, GAP, min_panel_size(1.0));
         let (hw, hh) = ((w - GAP) / 2.0, (h - GAP) / 2.0);
@@ -49,7 +49,7 @@ fn a_dock_on_each_edge_gives_the_dragged_panel_that_half() {
             Edge::Top => ([x, y, w, hh], [x, y + hh + GAP, w, hh]),
             Edge::Bottom => ([x, y + hh + GAP, w, hh], [x, y, w, hh]),
         };
-        assert!(near(cell_of(&tree, "Skin tone"), mine), "{edge:?}");
+        assert!(near(cell_of(&tree, "Skin Tone"), mine), "{edge:?}");
         assert!(near(cell_of(&tree, target), other), "{edge:?}");
         assert_eq!(tree.focused(), Some(skin));
         assert_eq!(tree.len(), 7);
@@ -59,27 +59,27 @@ fn a_dock_on_each_edge_gives_the_dragged_panel_that_half() {
 #[test]
 fn the_sources_neighbour_takes_its_old_space() {
     let mut tree = default_tree();
-    let before = cell_of(&tree, "Skin tone");
-    // Stops False Colour sits directly above Skin tone in the right-hand column.
-    let above = cell_of(&tree, "Stops False Colour");
+    let before = cell_of(&tree, "Skin Tone");
+    // Stops False Colour sits directly right of Skin tone in the bottom strip.
+    let beside = cell_of(&tree, "False Colour - Stops");
     tree.dock(
-        index("Skin tone"),
-        index("Clean picture"),
+        index("Skin Tone"),
+        index("Channel Viewer"),
         Edge::Right,
         AREA,
         GAP,
         min_panel_size(1.0),
     );
-    let after = cell_of(&tree, "Stops False Colour");
-    assert!((after[1] - above[1]).abs() < 0.01);
-    assert!((after[3] - (above[3] + GAP + before[3])).abs() < 0.01);
+    let after = cell_of(&tree, "False Colour - Stops");
+    assert!((after[0] - before[0]).abs() < 0.01);
+    assert!(after[2] > beside[2], "the strip takes the freed width");
 }
 
 #[test]
 fn a_drop_on_its_own_area_does_nothing() {
     let mut tree = default_tree();
     let was = tree.clone();
-    let skin = index("Skin tone");
+    let skin = index("Skin Tone");
     for edge in EDGES {
         tree.dock(skin, skin, edge, AREA, GAP, min_panel_size(1.0));
         assert_eq!(tree, was);
@@ -116,9 +116,9 @@ fn a_side_dock_that_breaks_a_minimum_changes_nothing_and_says_so() {
 #[test]
 fn shift_swap_still_exchanges_two_places() {
     let mut tree = default_tree();
-    let (a, b) = (index("Luma waveform"), index("Skin tone"));
-    let (ca, cb) = (cell_of(&tree, "Luma waveform"), cell_of(&tree, "Skin tone"));
+    let (a, b) = (index("Waveform"), index("Skin Tone"));
+    let (ca, cb) = (cell_of(&tree, "Waveform"), cell_of(&tree, "Skin Tone"));
     tree.swap(a, b);
-    assert!(near(cell_of(&tree, "Luma waveform"), cb));
-    assert!(near(cell_of(&tree, "Skin tone"), ca));
+    assert!(near(cell_of(&tree, "Waveform"), cb));
+    assert!(near(cell_of(&tree, "Skin Tone"), ca));
 }

@@ -427,7 +427,7 @@ fn title(chips: usize) -> TitleBar {
         Chip::channel("B", Channel::B),
     ];
     TitleBar {
-        name: "Luma waveform".into(),
+        name: "Waveform".into(),
         tags: "Rec.709 weights".into(),
         chips: all[..chips].to_vec(),
         groups: vec![],
@@ -501,10 +501,7 @@ fn the_title_bar_draws_its_name_tags_and_one_chip_each_in_its_state() {
         State::Normal,
         1.0,
     );
-    assert_eq!(
-        texts(&prims),
-        ["Luma waveform", "Rec.709 weights", "Y", "R"]
-    );
+    assert_eq!(texts(&prims), ["Waveform", "Rec.709 weights", "Y", "R"]);
     let lit = fills(&prims);
     assert!(
         lit.contains(&style::rgba(style::CHANNEL_Y)),

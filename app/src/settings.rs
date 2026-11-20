@@ -238,7 +238,9 @@ impl PanelSettings {
                     "Vectorscope 200 %" => continue,
                     other => other,
                 };
-                if (panel, key) == ("Clean picture", "bw") {
+                let panel = modern_key(panel);
+                let panel = panel.as_str();
+                if (panel, key) == ("Channel Viewer", "bw") {
                     legacy_luma |= value == "on";
                     continue;
                 }
@@ -255,13 +257,42 @@ impl PanelSettings {
         if legacy_luma
             && !settings
                 .panels
-                .get("Clean picture")
+                .get("Channel Viewer")
                 .is_some_and(|p| p.contains_key("channel"))
         {
-            settings.set("Clean picture", "channel", "luma");
+            settings.set("Channel Viewer", "channel", "luma");
         }
         settings
     }
+}
+
+/// The displays' former names (before the rename of spec #196's follow-up), and what each is called now. Saved files
+/// written under a former name are still read: [`modern_key`] gives the name a key is kept under today, and files are
+/// written with the new names from the next save on. See the Displays table in GLOSSARY.md.
+pub const FORMER_NAMES: [(&str, &str); 6] = [
+    ("Clean picture", "Channel Viewer"),
+    ("Luma waveform", "Waveform"),
+    ("ARRI False Colour", "False Colour - Arri"),
+    ("Stops False Colour", "False Colour - Stops"),
+    ("Skin tone", "Skin Tone"),
+    ("Saturation heatmap", "Saturation"),
+];
+
+/// The key `key` is kept under today: a display's former name ("Clean picture") or a further instance of it
+/// ("Clean picture 2") becomes the new name ("Channel Viewer", "Channel Viewer 2"); any other key is returned as is.
+pub fn modern_key(key: &str) -> String {
+    for (old, new) in FORMER_NAMES {
+        if key == old {
+            return new.to_string();
+        }
+        if let Some(number) = key.strip_prefix(old).and_then(|r| r.strip_prefix(' '))
+            && !number.is_empty()
+            && number.bytes().all(|b| b.is_ascii_digit())
+        {
+            return format!("{new} {number}");
+        }
+    }
+    key.to_string()
 }
 
 /// The setting every picture Panel with a legend calls it (ARRI False Colour, Stops False Colour, the saturation

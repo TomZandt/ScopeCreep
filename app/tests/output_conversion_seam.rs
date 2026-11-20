@@ -149,7 +149,7 @@ fn a_colour_setup_set_by_hand_does_not_claim_to_be_exact() {
     b.play(16, 9, |_, _| [0.4, 0.4, 0.4]);
     assert_eq!(
         b.label(),
-        "Clean picture  ·  16 × 9  ·  DaVinci WG/Intermediate → Rec.709 Gamma 2.4 (set manually)  ·  Output Conversion approximated: assumes tone and gamut mapping off"
+        "Channel Viewer  ·  16 × 9  ·  DaVinci WG/Intermediate → Rec.709 Gamma 2.4 (set manually)  ·  Output Conversion approximated: assumes tone and gamut mapping off"
     );
 }
 

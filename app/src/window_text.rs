@@ -70,6 +70,35 @@ pub fn top_bar(known: Option<&KnownColourSetup>, unknown: &str) -> String {
     .join(SEP)
 }
 
+/// The Colour Setup bar across the Window at `top`, `width` wide: its fill, the line under it and the text `line`
+/// (already fitted to the width, see [`fit_parts`]), in that order. The text is part of the same list as the fill and
+/// comes after it, so it is drawn over the fill: the Window draws a list's rectangles first and its text over them.
+/// Drawn as the base text layer instead, the fill covered it and the bar was empty (#217).
+pub fn top_bar_prims(line: &str, top: f32, width: f32, scale: f32) -> Vec<crate::components::Prim> {
+    use crate::components::{Align, BarKind, Face, rect, text};
+    let height = BarKind::Top.height(scale);
+    let weight = (crate::style::LINE_WEIGHT * scale).max(1.0);
+    let pad = crate::style::SPACE_BAR_PAD * scale;
+    let mut prims = vec![
+        rect([0.0, top, width, height], crate::style::SURFACE_PANEL),
+        rect(
+            [0.0, top + height - weight, width, weight],
+            crate::style::LINE_BORDER,
+        ),
+    ];
+    // An empty line (a menu is open over the bar: overlay text would show through it) draws no text.
+    if !line.is_empty() {
+        prims.push(text(
+            line,
+            [pad, top, (width - 2.0 * pad).max(1.0), height],
+            Face::Label,
+            crate::style::TEXT_PRIMARY,
+            Align::Left,
+        ));
+    }
+    prims
+}
+
 /// The tags a picture's conversion needs on a Panel: "approximated" when Output Conversion is, "unconverted" when
 /// the picture is shown as sent.
 pub fn conversion_tags(context: &DisplayContext) -> Vec<String> {
@@ -147,8 +176,8 @@ fn waveform_tags(context: &DisplayContext) -> Vec<String> {
 pub fn panel_title(display_name: &str, context: &DisplayContext, full: String) -> PanelTitle {
     let setting = |key: &str| context.settings.get(key).map(String::as_str);
     let (name, tags): (String, Vec<String>) = match display_name {
-        "Clean picture" => (
-            "Clean picture".into(),
+        "Channel Viewer" => (
+            "Channel Viewer".into(),
             channel_tag(context)
                 .into_iter()
                 .chain(crate::loupe::tag(&context.settings))
@@ -165,12 +194,12 @@ pub fn panel_title(display_name: &str, context: &DisplayContext, full: String) -
                 vec![channels.names()]
             };
             tags.extend(waveform_tags(context));
-            ("Luma waveform".into(), tags)
+            ("Waveform".into(), tags)
         }
         crate::waveform::COLOUR_NAME => ("Colour waveform".into(), waveform_tags(context)),
         "Black and white" => ("Black and white".into(), measurement_tags(context)),
-        "ARRI False Colour" => (
-            "ARRI False Colour".into(),
+        "False Colour - Arri" => (
+            "False Colour - Arri".into(),
             bw_tag(context, true)
                 .into_iter()
                 .chain(measurement_tags(context))
@@ -199,7 +228,7 @@ pub fn panel_title(display_name: &str, context: &DisplayContext, full: String) -
             }
             (crate::vectorscope::NAME.into(), tags)
         }
-        "Saturation heatmap" => {
+        "Saturation" => {
             let mut tags = Vec::new();
             let scale = crate::saturation_heatmap::scale_of(setting(
                 crate::saturation_heatmap::SCALE_SETTING,
@@ -213,9 +242,9 @@ pub fn panel_title(display_name: &str, context: &DisplayContext, full: String) -
                 ));
             }
             tags.extend(measurement_tags(context));
-            ("Saturation heatmap".into(), tags)
+            ("Saturation".into(), tags)
         }
-        "Skin tone" => {
+        "Skin Tone" => {
             let mut tags: Vec<String> = bw_tag(context, false)
                 .into_iter()
                 .chain(conversion_tags(context))
@@ -225,7 +254,7 @@ pub fn panel_title(display_name: &str, context: &DisplayContext, full: String) -
             if degrees != amount.default {
                 tags.push(format!("±{}", amount.text(degrees)));
             }
-            ("Skin tone".into(), tags)
+            ("Skin Tone".into(), tags)
         }
         "Channel view" => {
             let channel = match setting("channel") {

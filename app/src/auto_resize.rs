@@ -36,14 +36,14 @@ impl Shape {
 pub fn shape_of(name: &str) -> Shape {
     match name {
         n if n == crate::waveform::NAME => Shape::Waveform,
-        "Clean picture"
-        | "ARRI False Colour"
+        "Channel Viewer"
+        | "False Colour - Arri"
         | "Channel view"
         | "Black and white"
         | "Highlight neutrals"
         | "Gamut/legal warning"
-        | "Saturation heatmap"
-        | "Skin tone"
+        | "Saturation"
+        | "Skin Tone"
         | crate::stops_false_colour::NAME => Shape::Picture,
         _ => Shape::Other,
     }

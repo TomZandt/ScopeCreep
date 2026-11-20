@@ -8,13 +8,13 @@ use scopecreep::panel_grid::{PanelLayout, min_panel_size};
 use scopecreep::style;
 
 const NAMES: [&str; 7] = [
-    "Clean picture",
-    "Luma waveform",
+    "Channel Viewer",
+    "Waveform",
     "Vectorscope",
-    "ARRI False Colour",
-    "Stops False Colour",
-    "Saturation heatmap",
-    "Skin tone",
+    "False Colour - Arri",
+    "False Colour - Stops",
+    "Saturation",
+    "Skin Tone",
 ];
 
 fn minimum() -> [f32; 2] {

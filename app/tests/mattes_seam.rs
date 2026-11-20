@@ -16,10 +16,10 @@ const W: u32 = 160;
 const H: u32 = 90;
 const SETUP: &str = "timeline=Rec.709 Gamma 2.4\noutput=Rec.709 Gamma 2.4\n";
 const NAMES: [&str; 4] = [
-    "ARRI False Colour",
-    "Stops False Colour",
+    "False Colour - Arri",
+    "False Colour - Stops",
     "Skin Tone",
-    "Saturation heatmap",
+    "Saturation",
 ];
 /// A picture colour that is not neutral and not black, so every Panel colours it.
 const PICTURE: [f32; 3] = [0.5, 0.35, 0.3];

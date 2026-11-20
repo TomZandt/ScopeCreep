@@ -41,7 +41,7 @@ fn the_lines_are_off_by_default() {
     for levels in [Levels::Video, Levels::Full] {
         assert_eq!(none.codes(levels), [None, None]);
     }
-    let resolved = PanelSettings::default().resolve("Luma waveform", &DEFS);
+    let resolved = PanelSettings::default().resolve("Waveform", &DEFS);
     assert_eq!(ReferenceLevels::from_settings(&resolved), none);
     // Each unit's sliders show the off ends.
     for unit in UNITS {

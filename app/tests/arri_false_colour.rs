@@ -96,7 +96,7 @@ fn the_display_is_registered_in_the_standard_set() {
     let (device, queue) = (&rig.device, &rig.queue);
     let set = DisplaySet::standard(device, queue, TARGET, false);
     assert!(
-        set.names().contains(&"ARRI False Colour"),
+        set.names().contains(&"False Colour - Arri"),
         "{:?}",
         set.names()
     );

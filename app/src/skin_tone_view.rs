@@ -145,7 +145,7 @@ impl crate::zoom::PictureZoom for SkinTone {
 
 impl Display for SkinTone {
     fn name(&self) -> &'static str {
-        "Skin tone"
+        "Skin Tone"
     }
 
     fn on_frame(&self, encoder: &mut wgpu::CommandEncoder, frame: &GpuFrame) {
@@ -190,12 +190,12 @@ impl Display for SkinTone {
     /// measured in Resolve 21.2 (#60).
     fn label(&self) -> String {
         if !self.stage.has_picture() {
-            return "Skin tone".to_string();
+            return "Skin Tone".to_string();
         }
         let config = self.config.lock().unwrap();
         let t: f32 = config.tolerance;
         format!(
-            "Skin tone  ·  yellow within ±{} of the skin-tone line {SKIN_TONE_LINE_DEGREES}° (as Resolve 21.2 draws it), green or magenta out to ±{}°, the picture's own colour beyond and where saturation is low  ·  {}",
+            "Skin Tone  ·  yellow within ±{} of the skin-tone line {SKIN_TONE_LINE_DEGREES}° (as Resolve 21.2 draws it), green or magenta out to ±{}°, the picture's own colour beyond and where saturation is low  ·  {}",
             TOLERANCE_AMOUNT.text(t),
             t * 6.0,
             config.source

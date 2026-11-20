@@ -272,10 +272,8 @@ struct AppWindow {
     pages: Pages,
     /// The page tab last clicked and when, for a double-click to rename it.
     last_tab_click: Option<(usize, std::time::Instant)>,
-    /// Where the Page bar's **+** and Add panel button were last drawn (device pixels), and the one a bar menu drops
-    /// from instead of its title, while the menu was opened from it.
-    plus_rect: [f32; 4],
-    add_rect: [f32; 4],
+    /// The button (device pixels) a bar menu drops from instead of its title, while the menu was opened from it: the
+    /// Page bar's **+** or Add panel, an edge **+**, or the empty page's button.
     bar_anchor: Option<[f32; 4]>,
     /// Every Panel's settings, shared with the Feed thread (which gives them to the displays).
     settings: Arc<Mutex<PanelSettings>>,
@@ -344,7 +342,6 @@ struct AppWindow {
     text_renderer: TextRenderer,
     panel_texts: Vec<PanelText>,
     status: Text,
-    top_bar: Text,
     notice: Text,
     /// What the pointer rests on that shows a hover (#99).
     hover: Option<Hover>,
@@ -445,7 +442,7 @@ impl AppWindow {
         let read = |path: Option<PathBuf>| path.and_then(|p| std::fs::read_to_string(p).ok());
         let (pages_text, layouts_text, grid_text) =
             (read(pages_file()), read(layouts_file()), read(grid_file()));
-        // Further instances ("Clean picture 2") that a saved page names are made again before it is read.
+        // Further instances ("Channel Viewer 2") that a saved page names are made again before it is read.
         let saved: Vec<&str> = [&pages_text, &layouts_text, &grid_text]
             .into_iter()
             .flatten()
@@ -468,6 +465,11 @@ impl AppWindow {
                     .map_or_else(Layouts::default, Layouts::from_text);
                 Pages::migrate(main, &layouts, &names)
             });
+        // Every page has Panels of its own, Main on the first instances (where the saved settings are kept); what no
+        // page holds is swept.
+        pages.own_instances(&displays.names(), |name| {
+            displays.make_named(name).unwrap_or(0)
+        });
         pages.sweep(&displays, &mut settings.lock().unwrap());
         pages.show_on(&displays);
         write_pages(&pages, &displays.keys());
@@ -491,7 +493,6 @@ impl AppWindow {
             TextRenderer::new(&mut atlas, &device, wgpu::MultisampleState::default(), None);
         let flat = FlatRects::new(&device, &queue, format);
         let status = Text::new(&mut font_system);
-        let top_bar = Text::new(&mut font_system);
         let notice = Text::new(&mut font_system);
         let panel_texts = (0..displays.len())
             .map(|_| PanelText {
@@ -565,8 +566,6 @@ impl AppWindow {
             displays,
             pages,
             last_tab_click: None,
-            plus_rect: [0.0; 4],
-            add_rect: [0.0; 4],
             bar_anchor: None,
             settings,
             menu: None,
@@ -611,7 +610,6 @@ impl AppWindow {
             text_renderer,
             panel_texts,
             status,
-            top_bar,
             notice,
             hover: None,
             title_bars: Vec::new(),
@@ -882,17 +880,16 @@ impl AppWindow {
 
     /// Where the open bar menu drops, under its title.
     fn bar_menu_rect(&self, menu: &menu_bar::Menu) -> Option<[f32; 4]> {
-        let title = match self.bar_anchor {
-            Some(anchor) => anchor,
-            None => *menu_bar::bar()
-                .title_rects(0.0, 0.0, self.scale)
-                .get(self.bar.open?)?,
-        };
-        Some(menu.drop.rect(
-            title,
-            [self.config.width as f32, self.config.height as f32],
-            self.scale,
-        ))
+        let window = [self.config.width as f32, self.config.height as f32];
+        Some(match self.bar_anchor {
+            Some(anchor) => menu.drop.rect_near(anchor, window, self.scale),
+            None => {
+                let title = *menu_bar::bar()
+                    .title_rects(0.0, 0.0, self.scale)
+                    .get(self.bar.open?)?;
+                menu.drop.rect(title, window, self.scale)
+            }
+        })
     }
 
     /// The menu bar's title under the pointer.
@@ -958,8 +955,12 @@ impl AppWindow {
                 self.run(command);
                 self.close_bar();
             }
-            Some(MenuAction::Add(panel)) => {
+            Some(MenuAction::Add(offered)) => {
+                let (panel, made) = self.instance_to_add(offered);
                 self.add_panel(panel);
+                if made {
+                    self.panels_changed();
+                }
                 self.close_bar();
             }
             Some(MenuAction::Mode(mode)) => self.layout_mode = mode,
@@ -1117,6 +1118,16 @@ impl AppWindow {
         )
     }
 
+    /// Where the menu a click on `part` opens drops from.
+    fn bar_anchor_of(&self, part: BarPart) -> Option<[f32; 4]> {
+        self.page_bar().anchor(
+            part,
+            page_bar::top(self.scale),
+            self.config.width as f32,
+            self.scale,
+        )
+    }
+
     /// A click on the Page bar: a tab goes to its page (a second click on it soon after renames it in place), **+**
     /// offers New page from, Add panel opens the Add list.
     fn page_bar_click(&mut self, part: BarPart) {
@@ -1140,11 +1151,11 @@ impl AppWindow {
                 self.bar.open = Some(menu_bar::LAYOUT);
                 self.reset_bar_menus();
                 self.layout_mode = LayoutMode::NewFrom;
-                self.bar_anchor = Some(self.plus_rect);
+                self.bar_anchor = self.bar_anchor_of(part);
             }
             BarPart::AddPanel => {
                 self.open_add_list();
-                self.bar_anchor = Some(self.add_rect);
+                self.bar_anchor = self.bar_anchor_of(part);
             }
             BarPart::AutoResize => self.run(Command::AutoResize),
             BarPart::AutoLayout => self.run(Command::AutoLayout),
@@ -1317,18 +1328,30 @@ impl AppWindow {
         self.panels_changed();
     }
 
-    /// What the Add list offers: every display, those not on the page now enabled (ADR 0038, #206).
+    /// What the Add list offers: each display once, whatever instances there are (ADR 0038, #206).
     fn add_entries(&self) -> Vec<AddEntry> {
-        self.displays
-            .names()
+        let names = self.displays.names();
+        pages::add_offers(&names)
             .into_iter()
-            .enumerate()
-            .map(|(panel, name)| AddEntry {
+            .map(|panel| AddEntry {
                 panel,
-                name: name.to_string(),
-                enabled: !self.pages.tree().contains(panel),
+                name: names[panel].to_string(),
+                enabled: true,
             })
             .collect()
+    }
+
+    /// The instance an Add of the display `offered` stands for puts on the page: one no page holds, else a new one.
+    /// Returns it and whether it was made now.
+    fn instance_to_add(&self, offered: usize) -> (usize, bool) {
+        let names = self.displays.names();
+        match pages::instance_to_add(&names, offered, |i| self.pages.holds(i)) {
+            Some(i) => (i, false),
+            None => (
+                self.displays.make_named(names[offered]).unwrap_or(offered),
+                true,
+            ),
+        }
     }
 
     /// Open the Add list, dropped from the Layout title.
@@ -1723,6 +1746,7 @@ impl AppWindow {
                     && components::contains(button, self.cursor)
                 {
                     self.open_add_list();
+                    self.bar_anchor = Some(button);
                     return;
                 }
                 // The + on a hovered Panel's edge opens the Add list for that side.
@@ -1738,6 +1762,10 @@ impl AppWindow {
                 {
                     self.open_add_list();
                     self.edge_add = Some((panel, edge));
+                    self.bar_anchor = components::edge_plus_rects(self.cells[panel], self.scale)
+                        .into_iter()
+                        .find(|(e, _)| *e == edge)
+                        .map(|(_, r)| r);
                     return;
                 }
                 // A click on any Panel focuses it.
@@ -1859,6 +1887,12 @@ impl AppWindow {
             (height - status_height - area_top).max(1.0),
         ];
         let cells = panel_grid::cells_filled(self.pages.tree(), area, margin, self.full);
+        // A number shows only where the page holds two or more Panels of a display.
+        let shown_names = pages::title_names(
+            &self.displays.names(),
+            &self.displays.keys(),
+            &self.pages.tree().panels(),
+        );
         self.cells = cells.clone();
         self.grid_area = area;
         self.grid_gap = margin;
@@ -1881,6 +1915,9 @@ impl AppWindow {
             .clamp(40, 110);
         for (i, cell) in cells.iter().enumerate() {
             let mut title = texts.titles.get(i).cloned().unwrap_or_default();
+            if let Some(shown) = shown_names.get(i) {
+                title.name.clone_from(shown);
+            }
             let panel = PanelLayout::new(*cell, scale);
             // A picture Panel keeps its zoom as a read-only tag with its other tags (ADR 0040).
             if let Some(zoom) = self.displays.zoom_tag(i, panel.content, scale) {
@@ -1909,13 +1946,7 @@ impl AppWindow {
                     let labels = g
                         .tabs
                         .iter()
-                        .map(|t| {
-                            texts
-                                .titles
-                                .get(*t)
-                                .map(|t| t.name.clone())
-                                .unwrap_or_default()
-                        })
+                        .map(|t| shown_names.get(*t).cloned().unwrap_or_default())
                         .collect();
                     (
                         tab_strip::TabStrip {
@@ -1985,15 +2016,14 @@ impl AppWindow {
             width - 2.0 * style::SPACE_BAR_PAD * scale,
             scale,
         );
-        self.top_bar.set(
-            &mut self.font_system,
-            &top_line,
-            TextStyle {
-                wrap: false,
-                ..TextStyle::LABEL
-            },
+        // The Colour Setup bar is drawn with the overlay (its text above its fill, #217).
+        // Overlay text draws over every fill, so while a menu is open over the bar the line is left out.
+        let bar_covered = self.bar.open.is_some() || self.menu.is_some();
+        let top_bar_prims = window_text::top_bar_prims(
+            if bar_covered { "" } else { &top_line },
+            bar_height,
+            width,
             scale,
-            (width - 2.0 * style::SPACE_BAR_PAD * scale).max(1.0),
         );
         let (notice_style, notice_width) = if notice_in_status {
             (TextStyle::LABEL, status_width)
@@ -2106,16 +2136,6 @@ impl AppWindow {
                 custom_glyphs: &[],
             },
         ];
-        let top_pad = style::SPACE_BAR_PAD * scale;
-        areas.push(TextArea {
-            buffer: &self.top_bar.buffer,
-            left: top_pad,
-            top: bar_height + (top_height - line) / 2.0,
-            scale: 1.0,
-            bounds: whole,
-            default_color: text_colour(style::TEXT_PRIMARY),
-            custom_glyphs: &[],
-        });
         let tags_line = style::TYPE_SCALE * scale * style::TYPE_SCALE_LINE;
         for (i, ((panel, text), (name, tags))) in panels
             .iter()
@@ -2199,20 +2219,6 @@ impl AppWindow {
         // (so it sits above the Panels' text).
         let mut rects: Vec<([f32; 4], [f32; 4])> = Vec::new();
         let mut over_empty: Vec<Prim> = Vec::new();
-        // The top bar: its fill and the line under it.
-        rects.push((
-            [0.0, bar_height, width, top_height],
-            style::rgba(style::SURFACE_PANEL),
-        ));
-        rects.push((
-            [
-                0.0,
-                bar_height + top_height - (style::LINE_WEIGHT * scale).max(1.0),
-                width,
-                (style::LINE_WEIGHT * scale).max(1.0),
-            ],
-            style::rgba(style::LINE_BORDER),
-        ));
         // Each Panel's thin border and the line under its title bar.
         for panel in panels.iter().filter(|p| panel_grid::shown(p.frame)) {
             for edge in panel.lines((style::LINE_WEIGHT * scale).max(1.0)) {
@@ -2290,6 +2296,7 @@ impl AppWindow {
         let mut menu_areas: Vec<(usize, f32, f32, [u8; 3])> = Vec::new();
         // The menu over the Panels, or else the hover of what the pointer rests on, over everything.
         let mut over: Vec<Prim> = over_empty;
+        over.extend(top_bar_prims);
         if let Some((label, cell)) = drop_label {
             over.push(components::text(
                 label,
@@ -2371,9 +2378,6 @@ impl AppWindow {
         // The Page bar between the Colour Setup line and the Panels (ADR 0041).
         let page_bar = self.page_bar();
         let page_top = page_bar::top(scale);
-        let bar_layout = page_bar.layout(page_top, width, scale);
-        self.plus_rect = bar_layout.plus;
-        self.add_rect = bar_layout.add_panel;
         let page_hover = if self.menu.is_some() || self.bar.open.is_some() {
             None
         } else {

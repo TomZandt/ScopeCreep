@@ -1178,6 +1178,20 @@ impl DropMenu {
         ]
     }
 
+    /// Where it drops from a button that is not a bar title (the Page bar's **+** and Add panel, an edge **+**, the
+    /// empty page's button): under `anchor`, its left edge on the button's, moved left to stay inside a window of
+    /// `window` device pixels; above the button instead when it does not fit below and does above.
+    pub fn rect_near(&self, anchor: [f32; 4], window: [f32; 2], scale: f32) -> [f32; 4] {
+        let [w, h] = self.size(scale);
+        let below = anchor[1] + anchor[3];
+        let y = if below + h <= window[1] || anchor[1] - h < 0.0 {
+            below
+        } else {
+            anchor[1] - h
+        };
+        [anchor[0].min(window[0] - w).max(0.0), y, w, h]
+    }
+
     /// Each entry's row inside `area`.
     pub fn entry_rects(&self, area: [f32; 4], scale: f32) -> Vec<[f32; 4]> {
         let mut y = area[1] + style::SPACE_MENU_PAD * scale;

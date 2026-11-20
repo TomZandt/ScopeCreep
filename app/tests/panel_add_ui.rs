@@ -206,12 +206,12 @@ fn the_add_list_offers_each_display_and_greys_the_ones_already_on_the_page() {
     let entries = vec![
         AddEntry {
             panel: 0,
-            name: "Clean picture".into(),
+            name: "Channel Viewer".into(),
             enabled: false,
         },
         AddEntry {
             panel: 1,
-            name: "Luma waveform".into(),
+            name: "Waveform".into(),
             enabled: true,
         },
     ];
@@ -219,8 +219,8 @@ fn the_add_list_offers_each_display_and_greys_the_ones_already_on_the_page() {
     assert_eq!(
         labels(&menu),
         vec![
-            ("Clean picture".to_string(), false),
-            ("Luma waveform".to_string(), true),
+            ("Channel Viewer".to_string(), false),
+            ("Waveform".to_string(), true),
             ("Back".to_string(), true),
         ]
     );
@@ -228,14 +228,14 @@ fn the_add_list_offers_each_display_and_greys_the_ones_already_on_the_page() {
         .drop
         .entries
         .iter()
-        .position(|e| matches!(e, MenuEntry::Item(i) if i.label == "Luma waveform"))
+        .position(|e| matches!(e, MenuEntry::Item(i) if i.label == "Waveform"))
         .unwrap();
     assert_eq!(menu.action(first), Some(MenuAction::Add(1)));
     let greyed = menu
         .drop
         .entries
         .iter()
-        .position(|e| matches!(e, MenuEntry::Item(i) if i.label == "Clean picture"))
+        .position(|e| matches!(e, MenuEntry::Item(i) if i.label == "Channel Viewer"))
         .unwrap();
     assert_eq!(menu.action(greyed), None);
     let back = menu.drop.entries.len() - 1;
@@ -316,7 +316,7 @@ fn the_panel_section_lists_replace_with_duplicate_right_duplicate_below_then_clo
 #[test]
 fn the_replace_list_names_each_display_then_goes_back() {
     use scopecreep::settings::PanelAction;
-    let names = ["Vectorscope".to_string(), "Skin tone".to_string()];
+    let names = ["Vectorscope".to_string(), "Skin Tone".to_string()];
     let menu = Menu::replace_list(3, &names);
     assert_eq!(menu.panel, 3);
     assert_eq!(
@@ -324,7 +324,7 @@ fn the_replace_list_names_each_display_then_goes_back() {
         vec![
             MenuRow::Heading("Replace with".to_string()),
             MenuRow::Panel(PanelAction::ReplaceBy("Vectorscope".to_string())),
-            MenuRow::Panel(PanelAction::ReplaceBy("Skin tone".to_string())),
+            MenuRow::Panel(PanelAction::ReplaceBy("Skin Tone".to_string())),
             MenuRow::Panel(PanelAction::Back),
         ]
     );
@@ -333,9 +333,9 @@ fn the_replace_list_names_each_display_then_goes_back() {
         let top = Menu::row_top(rect, 2, scale);
         assert_eq!(
             menu.panel_action_at(rect, [rect[0] + 20.0 * scale, top + 4.0 * scale], scale),
-            Some(PanelAction::ReplaceBy("Skin tone".to_string()))
+            Some(PanelAction::ReplaceBy("Skin Tone".to_string()))
         );
         let said = texts(&popover(&menu, rect, [0.0, 0.0], scale));
-        assert!(said.contains(&"Skin tone".to_string()) && said.contains(&"Back".to_string()));
+        assert!(said.contains(&"Skin Tone".to_string()) && said.contains(&"Back".to_string()));
     }
 }

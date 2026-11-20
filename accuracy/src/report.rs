@@ -111,7 +111,7 @@ mod tests {
     fn an_exact_label_needs_an_exact_measurement_and_less_may_always_be_claimed() {
         assert_eq!(
             Claim::from_label(
-                "Clean picture  ·  1920 × 1080  ·  … (from project)  ·  Output Conversion exact"
+                "Channel Viewer  ·  1920 × 1080  ·  … (from project)  ·  Output Conversion exact"
             ),
             Claim::Exact
         );

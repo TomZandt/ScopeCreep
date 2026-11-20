@@ -173,7 +173,7 @@ fn the_label_says_what_the_picture_is() {
     b.wait(100 * MS);
     assert_eq!(
         b.label(),
-        "Clean picture  ·  16 × 9  ·  Colour Setup unknown  ·  as sent, no Output Conversion"
+        "Channel Viewer  ·  16 × 9  ·  Colour Setup unknown  ·  as sent, no Output Conversion"
     );
     assert_eq!(
         b.notice(),
@@ -191,7 +191,7 @@ fn with_no_sender_the_app_says_so_and_shows_nothing() {
         b.notice(),
         "No Sender. Put the scopecreep Sender on the last timeline node in Resolve."
     );
-    assert_eq!(b.label(), "Clean picture");
+    assert_eq!(b.label(), "Channel Viewer");
     assert!(b.shown.is_empty());
 }
 

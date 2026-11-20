@@ -56,7 +56,7 @@ fn settings_are_kept_per_panel() {
 #[test]
 fn settings_round_trip_through_the_saved_text() {
     let mut all = PanelSettings::default();
-    all.set("Luma waveform", "luma", "match-resolve");
+    all.set("Waveform", "luma", "match-resolve");
     all.set("Other panel", "spread", "off");
     assert_eq!(PanelSettings::from_text(&all.to_text()), all);
 }
@@ -392,31 +392,31 @@ fn a_saved_clean_picture_b_w_reads_as_luma_or_colour_and_other_panels_keep_their
         "Clean picture\tbw\ton\nARRI False Colour\tbw\toff\nStops False Colour\tbw\ton\n",
     );
     assert_eq!(
-        saved.resolve("Clean picture", &picture_view::SETTINGS)["channel"],
+        saved.resolve("Channel Viewer", &picture_view::SETTINGS)["channel"],
         "luma"
     );
     assert_eq!(
-        saved.resolve("ARRI False Colour", &arri_false_colour::SETTINGS)["bw"],
+        saved.resolve("False Colour - Arri", &arri_false_colour::SETTINGS)["bw"],
         "off"
     );
     assert_eq!(
-        saved.resolve("Stops False Colour", &stops_false_colour::SETTINGS)["bw"],
+        saved.resolve("False Colour - Stops", &stops_false_colour::SETTINGS)["bw"],
         "on"
     );
     let off = PanelSettings::from_text("Clean picture\tbw\toff\n");
     assert_eq!(
-        off.resolve("Clean picture", &picture_view::SETTINGS)["channel"],
+        off.resolve("Channel Viewer", &picture_view::SETTINGS)["channel"],
         "off"
     );
     let chosen = PanelSettings::from_text("Clean picture\tbw\ton\nClean picture\tchannel\tred\n");
     assert_eq!(
-        chosen.resolve("Clean picture", &picture_view::SETTINGS)["channel"],
+        chosen.resolve("Channel Viewer", &picture_view::SETTINGS)["channel"],
         "red",
         "a chosen channel wins"
     );
     let stale = PanelSettings::from_text("Clean picture\tchannel\tpurple\n");
     assert_eq!(
-        stale.resolve("Clean picture", &picture_view::SETTINGS)["channel"],
+        stale.resolve("Channel Viewer", &picture_view::SETTINGS)["channel"],
         "off",
         "no longer offered falls back to colour"
     );
@@ -426,22 +426,22 @@ fn a_saved_clean_picture_b_w_reads_as_luma_or_colour_and_other_panels_keep_their
 fn the_clean_picture_loupe_state_round_trips_and_rubbish_falls_back_to_the_defaults() {
     use scopecreep::picture_view;
     let mut s = PanelSettings::default();
-    s.set("Clean picture", "loupe", "on");
-    s.set("Clean picture", "size", "large");
+    s.set("Channel Viewer", "loupe", "on");
+    s.set("Channel Viewer", "size", "large");
     let back = PanelSettings::from_text(&s.to_text());
-    let own = back.resolve("Clean picture", &picture_view::SETTINGS);
+    let own = back.resolve("Channel Viewer", &picture_view::SETTINGS);
     assert_eq!(
         (own["loupe"].as_str(), own["size"].as_str()),
         ("on", "large")
     );
-    let default = PanelSettings::default().resolve("Clean picture", &picture_view::SETTINGS);
+    let default = PanelSettings::default().resolve("Channel Viewer", &picture_view::SETTINGS);
     assert_eq!(
         (default["loupe"].as_str(), default["size"].as_str()),
         ("off", "medium")
     );
     let rubbish =
         PanelSettings::from_text("Clean picture\tloupe\tmaybe\nClean picture\tsize\thuge\n")
-            .resolve("Clean picture", &picture_view::SETTINGS);
+            .resolve("Channel Viewer", &picture_view::SETTINGS);
     assert_eq!(
         (rubbish["loupe"].as_str(), rubbish["size"].as_str()),
         ("off", "medium")
@@ -452,12 +452,12 @@ fn the_clean_picture_loupe_state_round_trips_and_rubbish_falls_back_to_the_defau
 fn the_clean_picture_loupe_position_and_zoom_round_trip_beside_its_settings() {
     use scopecreep::{loupe, picture_view};
     let mut s = PanelSettings::default();
-    s.set("Clean picture", "loupe", "on");
-    assert!(s.set_state("Clean picture", loupe::X_KEY, "0.25000"));
-    assert!(s.set_state("Clean picture", loupe::Y_KEY, "0.75000"));
-    assert!(s.set_state("Clean picture", loupe::ZOOM_KEY, "500"));
+    s.set("Channel Viewer", "loupe", "on");
+    assert!(s.set_state("Channel Viewer", loupe::X_KEY, "0.25000"));
+    assert!(s.set_state("Channel Viewer", loupe::Y_KEY, "0.75000"));
+    assert!(s.set_state("Channel Viewer", loupe::ZOOM_KEY, "500"));
     let back = PanelSettings::from_text(&s.to_text());
-    let state = back.state_of("Clean picture", loupe::STATE_KEYS);
+    let state = back.state_of("Channel Viewer", loupe::STATE_KEYS);
     assert_eq!(
         (
             state[loupe::X_KEY].as_str(),
@@ -467,12 +467,12 @@ fn the_clean_picture_loupe_position_and_zoom_round_trip_beside_its_settings() {
         ("0.25000", "0.75000", "500")
     );
     assert_eq!(
-        back.resolve("Clean picture", &picture_view::SETTINGS)["loupe"],
+        back.resolve("Channel Viewer", &picture_view::SETTINGS)["loupe"],
         "on",
         "the menu choice survives beside it"
     );
     assert!(
-        back.state_of("Clean picture", &["loupe", "size"])
+        back.state_of("Channel Viewer", &["loupe", "size"])
             .is_empty(),
         "choices are not state"
     );
@@ -485,21 +485,21 @@ fn the_clean_picture_loupe_position_and_zoom_round_trip_beside_its_settings() {
 #[test]
 fn copying_a_panel_copies_settings_and_state_and_forgetting_it_removes_them() {
     let mut s = PanelSettings::default();
-    s.set("Clean picture", "channel", "red");
-    s.set_state("Clean picture", "loupe_zoom", "300");
-    s.copy_panel("Clean picture", "Clean picture 2");
-    assert!(s.to_text().contains("Clean picture 2\tchannel\tred"));
+    s.set("Channel Viewer", "channel", "red");
+    s.set_state("Channel Viewer", "loupe_zoom", "300");
+    s.copy_panel("Channel Viewer", "Channel Viewer 2");
+    assert!(s.to_text().contains("Channel Viewer 2\tchannel\tred"));
     assert!(
         s.to_text()
-            .contains("Clean picture 2\tstate:loupe_zoom\t300")
+            .contains("Channel Viewer 2\tstate:loupe_zoom\t300")
     );
     // Independent afterwards.
-    s.set("Clean picture 2", "channel", "blue");
-    assert!(s.to_text().contains("Clean picture\tchannel\tred"));
-    s.forget_panel("Clean picture 2");
-    assert!(!s.to_text().contains("Clean picture 2"));
-    assert!(s.to_text().contains("Clean picture\tchannel\tred"));
+    s.set("Channel Viewer 2", "channel", "blue");
+    assert!(s.to_text().contains("Channel Viewer\tchannel\tred"));
+    s.forget_panel("Channel Viewer 2");
+    assert!(!s.to_text().contains("Channel Viewer 2"));
+    assert!(s.to_text().contains("Channel Viewer\tchannel\tred"));
     // Copying from a Panel with nothing set leaves the target on defaults.
-    s.copy_panel("Nothing", "Clean picture");
-    assert!(!s.to_text().contains("Clean picture"));
+    s.copy_panel("Nothing", "Channel Viewer");
+    assert!(!s.to_text().contains("Channel Viewer"));
 }

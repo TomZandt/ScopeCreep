@@ -32,7 +32,7 @@ pub struct Item {
 /// The item for the display called `name`.
 pub fn item_of(name: &str) -> Item {
     let (weight, round) = match name {
-        "Clean picture" => (WEIGHT_CLEAN, false),
+        "Channel Viewer" => (WEIGHT_CLEAN, false),
         n if n == crate::waveform::NAME => (WEIGHT_WAVEFORM, false),
         "Vectorscope" => (WEIGHT_VECTORSCOPE, true),
         _ => (WEIGHT_OTHER, false),

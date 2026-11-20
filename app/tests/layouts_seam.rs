@@ -4,13 +4,13 @@ use scopecreep::layouts::{Layouts, Rename, SLOTS};
 use scopecreep::panel_grid::min_panel_size;
 
 const NAMES: [&str; 7] = [
-    "Clean picture",
-    "Luma waveform",
-    "ARRI False Colour",
+    "Channel Viewer",
+    "Waveform",
+    "False Colour - Arri",
     "Vectorscope",
-    "Saturation heatmap",
-    "Skin tone",
-    "Stops False Colour",
+    "Saturation",
+    "Skin Tone",
+    "False Colour - Stops",
 ];
 const AREA: [f32; 4] = [12.0, 12.0, 1256.0, 716.0];
 const GAP: f32 = 12.0;
@@ -259,11 +259,14 @@ fn a_layout_saved_as_a_grid_before_the_tree_still_recalls_as_the_same_arrangemen
     let layouts = Layouts::from_text(old);
     assert_eq!(layouts.name(0), Some("Old grade"));
     let recalled = layouts.recall(0, &NAMES).unwrap();
-    let default = default_grid().cells(AREA, GAP);
-    for (a, b) in recalled.cells(AREA, GAP).iter().zip(default) {
-        assert!(
-            a.iter().zip(b).all(|(x, y)| (x - y).abs() < 0.5),
-            "{a:?} vs {b:?}"
-        );
-    }
+    // The old grid's arrangement, not the new default: the clean picture spans 3 of 5 equal columns and 2 of 4
+    // rows (weights 14 14 11 11).
+    let clean = recalled.cells(AREA, GAP)[0];
+    let (w, h) = (AREA[2] - 4.0 * GAP, AREA[3] - 3.0 * GAP);
+    assert!(
+        (clean[2] - (3.0 * w / 5.0 + 2.0 * GAP)).abs() < 0.5,
+        "{clean:?}"
+    );
+    assert!((clean[3] - (h * 0.56 + GAP)).abs() < 0.5, "{clean:?}");
+    assert_ne!(recalled, default_grid());
 }

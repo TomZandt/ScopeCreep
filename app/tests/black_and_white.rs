@@ -15,7 +15,7 @@ use scopecreep::waveform::WaveformCounts;
 use scopecreep_accuracy::colorchecker::{ColorChecker, TimelineSpace};
 use std::sync::Arc;
 
-const WAVEFORM: &str = "Luma waveform";
+const WAVEFORM: &str = "Waveform";
 const BLACK_AND_WHITE: &str = "Black and white";
 
 /// A stand-in Resolve and Sender, the app's Feed monitor, and the app's GPU side of the Feed, wired as `main.rs`

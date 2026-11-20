@@ -70,7 +70,7 @@ fn fit_the_readout_and_link_are_in_the_same_place_whatever_the_readout_says() {
         let width = 1000.0 * scale;
         let layout = ViewStrip::layout(width, scale);
         for s in [
-            strip(true, "Fit", true),
+            strip(true, "62 %", true),
             strip(true, "200 %", false),
             strip(true, "Mixed", false),
             strip(false, "", true),
@@ -78,7 +78,7 @@ fn fit_the_readout_and_link_are_in_the_same_place_whatever_the_readout_says() {
             assert_eq!(s.parts(width, scale), layout);
         }
         // The readout's slot holds the widest of its texts.
-        for text in ["Fit", "800 %", "Mixed"] {
+        for text in ["62 %", "800 %", "Mixed"] {
             assert!(
                 layout.readout[2] >= text.chars().count() as f32 * style::SPACE_CHAR_WIDTH * scale
             );
@@ -91,7 +91,7 @@ fn only_fit_and_link_are_hit_and_only_while_a_picture_panel_is_shown() {
     for scale in SCALES {
         let width = 1000.0 * scale;
         let l = ViewStrip::layout(width, scale);
-        let on = strip(true, "Fit", true);
+        let on = strip(true, "62 %", true);
         assert_eq!(on.hit(width, centre(l.fit), scale), Some(StripPart::Fit));
         assert_eq!(on.hit(width, centre(l.link), scale), Some(StripPart::Link));
         assert_eq!(on.hit(width, centre(l.readout), scale), None, "read only");
@@ -108,10 +108,10 @@ fn only_fit_and_link_are_hit_and_only_while_a_picture_panel_is_shown() {
 #[test]
 fn the_link_chip_is_lit_while_link_is_on_and_a_disabled_strip_lights_nothing() {
     let lit = style::rgba(style::ACCENT);
-    let on = fills(&strip(true, "Fit", true).draw(1000.0, None, 1.0));
-    let off = fills(&strip(true, "Fit", false).draw(1000.0, None, 1.0));
+    let on = fills(&strip(true, "62 %", true).draw(1000.0, None, 1.0));
+    let off = fills(&strip(true, "62 %", false).draw(1000.0, None, 1.0));
     assert!(on.contains(&lit) && !off.contains(&lit));
-    let hovered = fills(&strip(true, "Fit", false).draw(1000.0, Some(StripPart::Fit), 1.0));
+    let hovered = fills(&strip(true, "62 %", false).draw(1000.0, Some(StripPart::Fit), 1.0));
     assert!(hovered.contains(&style::rgba(style::STATE_HOVER)) || hovered != off);
     let disabled = fills(&strip(false, "", true).draw(1000.0, Some(StripPart::Fit), 1.0));
     assert!(!disabled.contains(&lit));
@@ -128,7 +128,7 @@ fn the_link_chip_is_lit_while_link_is_on_and_a_disabled_strip_lights_nothing() {
 
 #[test]
 fn the_minimum_window_width_counts_the_strip_beside_the_menu_titles() {
-    let names = ["Clean picture", "Luma waveform", "Vectorscope"];
+    let names = ["Channel Viewer", "Waveform", "Vectorscope"];
     let grid = LayoutTree::default_for(&names);
     let [w, _] = min_window(&grid, &largest_menus());
     for scale in SCALES {
@@ -141,7 +141,7 @@ fn the_minimum_window_width_counts_the_strip_beside_the_menu_titles() {
         );
     }
     // With nothing else to set the width, the strip beside the titles does.
-    let one = LayoutTree::default_for(&["Clean picture"]);
+    let one = LayoutTree::default_for(&["Channel Viewer"]);
     let [narrow, _] = min_window(&one, &[]);
     let titles = menu_bar::bar().title_rects(0.0, 0.0, 1.0);
     let last = titles.last().unwrap();

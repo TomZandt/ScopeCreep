@@ -12,7 +12,7 @@ pub const LINK_CHIP: &str = "Link";
 pub const LINK_TOOLTIP: &str = "Link zoom across Panels";
 
 /// The texts the readout can show; the widest sets the readout's slot.
-const READOUTS: [&str; 3] = ["Fit", "800 %", "Mixed"];
+const READOUTS: [&str; 2] = ["800 %", "Mixed"];
 
 /// What a click on the strip can hit.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -34,7 +34,7 @@ pub struct StripLayout {
 pub struct ViewStrip {
     /// A picture Panel is shown: Fit and Link work.
     pub enabled: bool,
-    /// "Fit", "200 %" or "Mixed" (empty while disabled).
+    /// The zoom as a percentage ("62 %", "200 %") or "Mixed" (empty while disabled). "Fit" is only the button.
     pub readout: String,
     /// Link is on.
     pub link: bool,

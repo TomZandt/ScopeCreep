@@ -12,7 +12,7 @@ use scopecreep::page_edit::{self, Room};
 use scopecreep::settings::PanelSettings;
 use std::sync::{Arc, Mutex};
 
-const CLEAN: &str = "Clean picture";
+const CLEAN: &str = "Channel Viewer";
 const AREA: [f32; 4] = [0.0, 0.0, 200.0, 120.0];
 const ROOM: Room = Room {
     area: [0.0, 0.0, 1256.0, 716.0],
@@ -119,11 +119,11 @@ fn two_clean_pictures_keep_separate_settings_and_draw_different_pictures() {
     let mut b = Bench::new("instances-two-clean");
     b.play();
     let second = b.duplicate(CLEAN, Dir::Row);
-    assert_eq!(b.set.key(second), "Clean picture 2");
-    b.set_choice("Clean picture", "channel", "red");
-    b.set_choice("Clean picture 2", "channel", "blue");
+    assert_eq!(b.set.key(second), "Channel Viewer 2");
+    b.set_choice("Channel Viewer", "channel", "red");
+    b.set_choice("Channel Viewer 2", "channel", "blue");
     b.settle();
-    let (first, second) = (b.index(CLEAN), b.index("Clean picture 2"));
+    let (first, second) = (b.index(CLEAN), b.index("Channel Viewer 2"));
     // The picture is a red, a green and a blue third. Drawn as the red channel the left third is bright and the
     // right dark; as the blue channel it is the other way round.
     let (red, blue) = (b.draw(first), b.draw(second));
@@ -191,24 +191,27 @@ fn numbers_are_stable_while_panels_move_close_and_return() {
     let three = b.duplicate(CLEAN, Dir::Row);
     assert_eq!(
         (b.set.key(two), b.set.key(three)),
-        ("Clean picture 2".to_string(), "Clean picture 3".to_string())
+        (
+            "Channel Viewer 2".to_string(),
+            "Channel Viewer 3".to_string()
+        )
     );
     let ids = (b.set.id(two), b.set.id(three));
     // Moving Panels around does not renumber.
     b.tree.swap(two, three);
     b.tree.swap(b.index(CLEAN), two);
-    assert_eq!(b.set.key(two), "Clean picture 2");
-    assert_eq!(b.set.key(three), "Clean picture 3");
+    assert_eq!(b.set.key(two), "Channel Viewer 2");
+    assert_eq!(b.set.key(three), "Channel Viewer 3");
     // Closing the first copy never renumbers the second: its key and id stay, even though its index moved up.
     assert_eq!(b.close(two), vec![two]);
-    let still = b.index("Clean picture 3");
+    let still = b.index("Channel Viewer 3");
     assert_eq!(b.set.id(still), ids.1);
-    assert!(!b.set.keys().contains(&"Clean picture 2".to_string()));
+    assert!(!b.set.keys().contains(&"Channel Viewer 2".to_string()));
     assert!(b.tree.contains(still));
     // A new copy takes the free number; the living one keeps its own.
     let again = b.duplicate(CLEAN, Dir::Col);
-    assert_eq!(b.set.key(again), "Clean picture 2");
-    assert_eq!(b.set.key(b.index("Clean picture 3")), "Clean picture 3");
+    assert_eq!(b.set.key(again), "Channel Viewer 2");
+    assert_eq!(b.set.key(b.index("Channel Viewer 3")), "Channel Viewer 3");
     assert_ne!(b.set.id(again), ids.0, "an id is never reused");
 }
 
@@ -235,7 +238,7 @@ fn closing_a_panel_forgets_its_settings() {
             .lock()
             .unwrap()
             .to_text()
-            .contains("Clean picture\t")
+            .contains("Channel Viewer\t")
     );
     assert!(!b.tree.contains(first));
     assert_eq!(b.set.keys().iter().filter(|k| *k == CLEAN).count(), 1);
@@ -320,7 +323,7 @@ fn replacing_a_panel_another_page_holds_keeps_its_settings() {
     let vec = b.index("Vectorscope");
     b.set_choice("Vectorscope", "targets", "75");
     let mut settings = b.settings.lock().unwrap();
-    page_edit::replace(&b.set, &mut b.tree, &mut settings, vec, "Skin tone", |p| {
+    page_edit::replace(&b.set, &mut b.tree, &mut settings, vec, "Skin Tone", |p| {
         p == vec
     })
     .unwrap();
@@ -364,7 +367,7 @@ fn undoing_the_close_or_replace_of_a_duplicate_brings_it_back() {
         assert!(pages.undo());
         assert!(pages.tree().contains(copy), "replace={replace}: back");
         pages.sweep(&b.set, &mut settings);
-        assert_eq!(b.set.key(copy), "Clean picture 2");
+        assert_eq!(b.set.key(copy), "Channel Viewer 2");
         // Undo the duplicate too: nothing names the copy now, so it goes.
         assert!(pages.undo());
         pages.sweep(&b.set, &mut settings);
@@ -446,7 +449,7 @@ fn a_picture_zoom_and_link_reach_every_picture_instance() {
 }
 
 #[test]
-fn a_copys_title_shows_its_number_and_the_first_does_not() {
+fn the_displays_titles_are_the_plain_names_and_the_window_adds_numbers() {
     let b = Bench::new("instances-titles");
     b.set.duplicate(b.index(CLEAN));
     b.set.duplicate(b.index("Vectorscope"));
@@ -455,14 +458,27 @@ fn a_copys_title_shows_its_number_and_the_first_does_not() {
         .set
         .titles(&Default::default(), &b.settings.lock().unwrap());
     let names: Vec<_> = titles.iter().map(|t| t.name.as_str()).collect();
-    assert_eq!(names.iter().filter(|n| **n == "Clean picture").count(), 1);
+    // The set says the display's name alone; a number is added by the Window only where a page holds two of a
+    // display (pages::title_names).
+    assert_eq!(names.iter().filter(|n| **n == "Channel Viewer").count(), 2);
+    assert_eq!(names.iter().filter(|n| **n == "Vectorscope").count(), 3);
+    let keys = b.set.keys();
+    let shown = scopecreep::pages::title_names(
+        &b.set.names(),
+        &keys,
+        &(0..b.set.len()).collect::<Vec<_>>(),
+    );
     for expected in [
-        "Clean picture 2",
+        "Channel Viewer",
+        "Channel Viewer 2",
         "Vectorscope",
         "Vectorscope 2",
         "Vectorscope 3",
     ] {
-        assert!(names.contains(&expected), "{expected} in {names:?}");
+        assert!(
+            shown.iter().any(|n| n == expected),
+            "{expected} in {shown:?}"
+        );
     }
 }
 
@@ -511,8 +527,8 @@ fn removing_a_display_keeps_the_history_naming_the_same_panels() {
     let mut b = Bench::new("instances-history-shift");
     let mut history = LayoutHistory::default();
     let copy = b.duplicate(CLEAN, Dir::Row);
-    let skin = b.index("Skin tone");
-    // A step taken while the copy (index 7) exists: close "Skin tone".
+    let skin = b.index("Skin Tone");
+    // A step taken while the copy (index 7) exists: close "Skin Tone".
     history.change(&mut b.tree, |t| t.close(skin));
     // The copy is closed and removed (no undo of its own here): indexes above it, none, but history must forget it.
     let mut settings = b.settings.lock().unwrap();

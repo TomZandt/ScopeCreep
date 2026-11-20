@@ -40,23 +40,23 @@ impl PageTemplate {
     pub fn displays(self) -> &'static [&'static str] {
         match self {
             PageTemplate::AllSeven => &[
-                "Clean picture",
-                "Luma waveform",
-                "ARRI False Colour",
+                "Channel Viewer",
+                "Waveform",
+                "False Colour - Arri",
                 "Vectorscope",
-                "Saturation heatmap",
-                "Skin tone",
-                "Stops False Colour",
+                "Saturation",
+                "Skin Tone",
+                "False Colour - Stops",
             ],
             PageTemplate::PictureViews => &[
-                "Clean picture",
-                "ARRI False Colour",
-                "Stops False Colour",
-                "Saturation heatmap",
-                "Skin tone",
+                "Channel Viewer",
+                "False Colour - Arri",
+                "False Colour - Stops",
+                "Saturation",
+                "Skin Tone",
             ],
-            PageTemplate::Scopes => &["Clean picture", "Luma waveform", "Vectorscope"],
-            PageTemplate::PictureOnly => &["Clean picture"],
+            PageTemplate::Scopes => &["Channel Viewer", "Waveform", "Vectorscope"],
+            PageTemplate::PictureOnly => &["Channel Viewer"],
         }
     }
 

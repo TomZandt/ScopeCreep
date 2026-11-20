@@ -27,7 +27,7 @@ Pre-alpha. Nothing to install yet.
 |---|---|---|
 | Feed protocol | `feed/PROTOCOL.md`, `feed/include/scopecreep_feed.h`, `feed/` crate | The shared-memory ring between Sender and app: spec, C header (Sender), Rust reader and synthetic writer (app, tests) |
 | Sender | `sender/` | C++ OFX plugin, Resolve's CUDA render path, async pinned copy into the Feed |
-| App | `app/` | Rust + wgpu: one window with a layout of 7 Panels (Scopes and Picture Views, the clean picture as the hero, one Vectorscope Panel showing 100 % and 200 % side by side), all showing the latest Feed frame (GPU, every pixel, full resolution). The gamut/legal warning, Highlight Neutrals, the CIE plot, the Black and white Panel, the Colour Waveform and the Channel view are built and tested but not in the Window (#95, #118, #145, #162) |
+| App | `app/` | Rust + wgpu: one window of Pages, each a layout of Panels, by default 7 (Scopes and Picture Views: the Channel Viewer as the hero, one Vectorscope Panel showing 100 % and 200 % side by side; every display and its former name is in the [Displays table](GLOSSARY.md#displays)), all showing the latest Feed frame (GPU, every pixel, full resolution). The gamut/legal warning, Highlight Neutrals, the CIE plot, the Black and white Panel, the Colour Waveform and the Channel view are built and tested but not in the Window (#95, #118, #145, #162) |
 
 ```sh
 cargo test                       # Feed protocol (Rust and C against each other) and the app, driven at the Feed seam (waveform tests need a GPU)
@@ -71,7 +71,7 @@ DaVinci Resolve                                 scopecreep app (Rust + wgpu)
 ## Documentation
 
 - [GLOSSARY.md](GLOSSARY.md): the project's vocabulary. Use these terms in code, issues and docs.
-- [docs/adr/](docs/adr/): architecture decisions and why they were made.
+- [docs/adr/](docs/adr/): architecture decisions and why they were made. The displays were renamed later (Clean picture is now Channel Viewer, and so on): older ADRs, findings and the changelog keep the names of their day, and the [Displays table](GLOSSARY.md#displays) in the glossary maps each former name to the new one.
   - [0001](docs/adr/0001-ofx-sender-with-output-conversion.md): the Sender is the primary Feed Source; scopecreep does the Output Conversion
   - [0002](docs/adr/0002-cpp-sender-rust-app.md): C++ Sender, Rust + wgpu app
   - [0003](docs/adr/0003-resolve-never-waits.md): Resolve never waits for scopecreep

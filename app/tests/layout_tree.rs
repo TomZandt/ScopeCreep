@@ -10,13 +10,13 @@ const GAP: f32 = 12.0;
 
 /// The 7 displays the Window shows, in Panel order.
 const NAMES: [&str; 7] = [
-    "Clean picture",
-    "Luma waveform",
-    "ARRI False Colour",
+    "Channel Viewer",
+    "Waveform",
+    "False Colour - Arri",
     "Vectorscope",
-    "Saturation heatmap",
-    "Skin tone",
-    "Stops False Colour",
+    "Saturation",
+    "Skin Tone",
+    "False Colour - Stops",
 ];
 
 fn default_tree() -> LayoutTree {
@@ -137,15 +137,52 @@ fn grid_cells(
         .collect()
 }
 
-/// The old default grid: 5 equal columns, rows 14 14 11 11, the seven Panels in NAMES order.
+/// The default layout's cells worked out by hand from the owner's saved split ratios: the first side of a split gets
+/// `ratio` of the room net of the gap.
+fn default_cells() -> Vec<[f32; 4]> {
+    let halves = |r: [f32; 4], row: bool, ratio: f32| -> ([f32; 4], [f32; 4]) {
+        if row {
+            let w = (r[2] - GAP) * ratio;
+            (
+                [r[0], r[1], w, r[3]],
+                [r[0] + w + GAP, r[1], r[2] - GAP - w, r[3]],
+            )
+        } else {
+            let h = (r[3] - GAP) * ratio;
+            (
+                [r[0], r[1], r[2], h],
+                [r[0], r[1] + h + GAP, r[2], r[3] - GAP - h],
+            )
+        }
+    };
+    let (top, bottom) = halves(AREA, false, 0.65909094);
+    let (clean, right) = halves(top, true, 0.59458417);
+    let (above, luma) = halves(right, false, 0.31868654);
+    let (vector, heat) = halves(above, true, 0.5728693);
+    let (skin, strip) = halves(bottom, true, 0.29629093);
+    let (stops, arri) = halves(strip, true, 0.5);
+    let by = |name: &str| match name {
+        "Channel Viewer" => clean,
+        "Vectorscope" => vector,
+        "Saturation" => heat,
+        "Waveform" => luma,
+        "Skin Tone" => skin,
+        "False Colour - Stops" => stops,
+        _ => arri,
+    };
+    NAMES.iter().map(|n| by(n)).collect()
+}
+
+/// The old default grid (what an old saved grid converts to): 5 equal columns, rows 14 14 11 11, the seven Panels in
+/// NAMES order.
 fn old_default_cells() -> Vec<[f32; 4]> {
     let place = |name: &str| match name {
-        "Clean picture" => [0, 0, 3, 2],
-        "Luma waveform" => [3, 0, 2, 1],
+        "Channel Viewer" => [0, 0, 3, 2],
+        "Waveform" => [3, 0, 2, 1],
         "Vectorscope" => [3, 1, 2, 1],
-        "ARRI False Colour" => [0, 2, 3, 1],
-        "Stops False Colour" => [3, 2, 2, 1],
-        "Saturation heatmap" => [0, 3, 3, 1],
+        "False Colour - Arri" => [0, 2, 3, 1],
+        "False Colour - Stops" => [3, 2, 2, 1],
+        "Saturation" => [0, 3, 3, 1],
         _ => [3, 3, 2, 1],
     };
     let places: Vec<[usize; 4]> = NAMES.iter().map(|n| place(n)).collect();
@@ -155,12 +192,12 @@ fn old_default_cells() -> Vec<[f32; 4]> {
 // ------------------------------------------------------------------ the default layout
 
 #[test]
-fn the_default_layout_draws_the_seven_panels_where_the_grid_did() {
+fn the_default_layout_is_the_owners_arrangement_with_his_split_ratios() {
     let tree = default_tree();
     let cells = tree.cells(AREA, GAP);
     assert_eq!(cells.len(), 7);
-    for ((name, got), want) in NAMES.iter().zip(&cells).zip(old_default_cells()) {
-        assert!(near(*got, want, 0.05), "{name}: {got:?}, was {want:?}");
+    for ((name, got), want) in NAMES.iter().zip(&cells).zip(default_cells()) {
+        assert!(near(*got, want, 0.05), "{name}: {got:?}, want {want:?}");
     }
     assert_fills(&tree, AREA);
 }
@@ -168,10 +205,10 @@ fn the_default_layout_draws_the_seven_panels_where_the_grid_did() {
 #[test]
 fn the_default_layout_has_the_scopes_beside_the_picture_and_the_views_below() {
     let tree = default_tree();
-    let picture = cell_of(&tree, "Clean picture");
+    let picture = cell_of(&tree, "Channel Viewer");
     assert_eq!([picture[0], picture[1]], [AREA[0], AREA[1]], "top left");
-    assert!(picture[2] > 0.55 * AREA[2] && picture[3] > 0.45 * AREA[3]);
-    for name in ["Luma waveform", "Vectorscope"] {
+    assert!(picture[2] > 0.55 * AREA[2] && picture[3] > 0.55 * AREA[3]);
+    for name in ["Vectorscope", "Saturation", "Waveform"] {
         let c = cell_of(&tree, name);
         assert!(
             c[0] >= picture[0] + picture[2],
@@ -179,12 +216,16 @@ fn the_default_layout_has_the_scopes_beside_the_picture_and_the_views_below() {
         );
         assert!(c[1] < picture[1] + picture[3], "{name} beside the picture");
     }
-    for name in [
-        "ARRI False Colour",
-        "Saturation heatmap",
-        "Skin tone",
-        "Stops False Colour",
-    ] {
+    let (vector, heat, luma) = (
+        cell_of(&tree, "Vectorscope"),
+        cell_of(&tree, "Saturation"),
+        cell_of(&tree, "Waveform"),
+    );
+    assert!(
+        heat[0] > vector[0] && luma[1] > vector[1] + vector[3],
+        "scopes on top, the waveform under"
+    );
+    for name in ["Skin Tone", "False Colour - Stops", "False Colour - Arri"] {
         let c = cell_of(&tree, name);
         assert!(c[1] >= picture[1] + picture[3], "{name} below the picture");
     }
@@ -271,7 +312,7 @@ fn border_between(tree: &LayoutTree, a: &str, b: &str) -> (Border, [f32; 2]) {
 fn dragging_a_divider_moves_only_the_two_sides_of_its_split() {
     let mut tree = default_tree();
     let before = tree.cells(AREA, GAP);
-    let (border, point) = border_between(&tree, "Clean picture", "Luma waveform");
+    let (border, point) = border_between(&tree, "Channel Viewer", "Vectorscope");
     assert_eq!(border.dir, Dir::Row);
     tree.drag(
         &border,
@@ -281,56 +322,31 @@ fn dragging_a_divider_moves_only_the_two_sides_of_its_split() {
         min_panel_size(1.0),
     );
     let after = tree.cells(AREA, GAP);
-    for name in ["Clean picture", "ARRI False Colour", "Saturation heatmap"] {
-        let i = index(name);
+    {
+        let (name, i) = ("Channel Viewer", index("Channel Viewer"));
         assert!(
             (after[i][2] - (before[i][2] + 60.0)).abs() < 0.5,
             "{name} grows"
         );
         assert_eq!([after[i][1], after[i][3]], [before[i][1], before[i][3]]);
     }
-    for name in [
-        "Luma waveform",
-        "Vectorscope",
-        "Stops False Colour",
-        "Skin tone",
-    ] {
-        let i = index(name);
+    {
+        let (name, i) = ("Waveform", index("Waveform"));
         assert!(
             (after[i][2] - (before[i][2] - 60.0)).abs() < 0.5,
             "{name} shrinks"
         );
         assert_eq!([after[i][1], after[i][3]], [before[i][1], before[i][3]]);
     }
-    assert_fills(&tree, AREA);
-}
-
-#[test]
-fn dragging_a_stacked_divider_leaves_the_other_side_of_the_window_alone() {
-    let mut tree = default_tree();
-    let before = tree.cells(AREA, GAP);
-    let (border, point) = border_between(&tree, "Clean picture", "ARRI False Colour");
-    assert_eq!(border.dir, Dir::Col);
-    tree.drag(
-        &border,
-        [point[0], point[1] - 50.0],
-        AREA,
-        GAP,
-        min_panel_size(1.0),
-    );
-    let after = tree.cells(AREA, GAP);
-    assert!(
-        (after[index("Clean picture")][3] - (before[index("Clean picture")][3] - 50.0)).abs() < 0.5
-    );
-    let below =
-        |c: &[[f32; 4]]| c[index("ARRI False Colour")][3] + c[index("Saturation heatmap")][3];
-    assert!((below(&after) - (below(&before) + 50.0)).abs() < 0.5);
-    for name in [
-        "Luma waveform",
-        "Vectorscope",
-        "Stops False Colour",
-        "Skin tone",
-    ] {
+    // The scopes column shrinks as a whole; the bottom strip is on the other side of the Window and is untouched.
+    for name in ["Vectorscope", "Saturation"] {
+        let i = index(name);
+        assert!(
+            after[i][0] > before[i][0] + 20.0,
+            "{name} moves right with its column"
+        );
+    }
+    for name in ["Skin Tone", "False Colour - Stops", "False Colour - Arri"] {
         assert_eq!(
             after[index(name)],
             before[index(name)],
@@ -340,18 +356,63 @@ fn dragging_a_stacked_divider_leaves_the_other_side_of_the_window_alone() {
     assert_fills(&tree, AREA);
 }
 
-/// Who is left of whom, and (for Panels in the same column of the tree) who is above whom.
-fn arrangement(tree: &LayoutTree, area: [f32; 4]) -> Vec<(usize, usize, bool, bool)> {
+#[test]
+fn dragging_a_stacked_divider_leaves_the_other_side_of_the_window_alone() {
+    let mut tree = default_tree();
+    let before = tree.cells(AREA, GAP);
+    let (border, point) = border_between(&tree, "Channel Viewer", "Skin Tone");
+    assert_eq!(border.dir, Dir::Col);
+    tree.drag(
+        &border,
+        [point[0], point[1] - 50.0],
+        AREA,
+        GAP,
+        min_panel_size(1.0),
+    );
+    let after = tree.cells(AREA, GAP);
+    // Everything above the divider is 50 shorter and everything below 50 taller; no width changes.
+    let tall = |c: &[[f32; 4]]| c[index("Vectorscope")][3] + c[index("Waveform")][3];
+    assert!(
+        (tall(&after) - (tall(&before) - 50.0)).abs() < 0.5,
+        "the scopes column is shorter"
+    );
+    for name in ["Channel Viewer", "Vectorscope", "Saturation", "Waveform"] {
+        let i = index(name);
+        assert!(after[i][3] < before[i][3], "{name} is shorter");
+        assert_eq!([after[i][0], after[i][2]], [before[i][0], before[i][2]]);
+    }
+    assert!(
+        (after[index("Channel Viewer")][3] - (before[index("Channel Viewer")][3] - 50.0)).abs()
+            < 0.5
+    );
+    for name in ["Skin Tone", "False Colour - Stops", "False Colour - Arri"] {
+        let i = index(name);
+        assert!(
+            (after[i][3] - (before[i][3] + 50.0)).abs() < 0.5,
+            "{name} is taller"
+        );
+        assert_eq!([after[i][0], after[i][2]], [before[i][0], before[i][2]]);
+    }
+    assert_fills(&tree, AREA);
+}
+
+type Row = (usize, usize, bool, bool, bool, bool);
+
+/// Who is left of whom (for Panels that share a row of the Window) and above whom (for those that share a column).
+fn arrangement(tree: &LayoutTree, area: [f32; 4]) -> Vec<Row> {
     let cells = tree.cells(area, GAP);
     let mut out = Vec::new();
     for (i, a) in cells.iter().enumerate() {
         for (j, b) in cells.iter().enumerate() {
-            let same_column = a[0] < b[0] + b[2] - 0.01 && b[0] < a[0] + a[2] - 0.01;
+            let beside = a[1] < b[1] + b[3] - 0.01 && b[1] < a[1] + a[3] - 0.01;
+            let stacked = a[0] < b[0] + b[2] - 0.01 && b[0] < a[0] + a[2] - 0.01;
             out.push((
                 i,
                 j,
                 a[0] + a[2] <= b[0] + 0.01,
-                same_column && a[1] + a[3] <= b[1] + 0.01,
+                a[1] + a[3] <= b[1] + 0.01,
+                beside,
+                stacked,
             ));
         }
     }
@@ -364,21 +425,27 @@ fn a_divider_stops_where_a_panel_would_go_under_its_minimum_and_never_reorders()
     let mut tree = default_tree();
     let order = arrangement(&tree, AREA);
     let borders = [
-        border_between(&tree, "Clean picture", "Luma waveform"),
-        border_between(&tree, "Clean picture", "ARRI False Colour"),
-        border_between(&tree, "Luma waveform", "Vectorscope"),
-        border_between(&tree, "ARRI False Colour", "Saturation heatmap"),
-        border_between(&tree, "Stops False Colour", "Skin tone"),
+        border_between(&tree, "Channel Viewer", "Vectorscope"),
+        border_between(&tree, "Channel Viewer", "Skin Tone"),
+        border_between(&tree, "Vectorscope", "Waveform"),
+        border_between(&tree, "Vectorscope", "Saturation"),
+        border_between(&tree, "Skin Tone", "False Colour - Stops"),
+        border_between(&tree, "False Colour - Stops", "False Colour - Arri"),
     ];
     for (border, _) in &borders {
         for far in [[9000.0, 9000.0], [-9000.0, -9000.0], [9000.0, -9000.0]] {
             tree.drag(border, far, AREA, GAP, min);
             assert_every_panel_at_least_the_minimum(&tree, AREA);
             assert_fills(&tree, AREA);
-            assert_eq!(
-                arrangement(&tree, AREA),
-                order,
-                "who is next to whom is unchanged"
+            let now = arrangement(&tree, AREA);
+            let broken: Vec<_> = order
+                .iter()
+                .zip(&now)
+                .filter(|(o, n)| (o.2 && o.4 && n.4 && !n.2) || (o.3 && o.5 && n.5 && !n.3))
+                .collect();
+            assert!(
+                broken.is_empty(),
+                "who is next to whom is unchanged: {broken:?}"
             );
         }
     }
@@ -387,14 +454,14 @@ fn a_divider_stops_where_a_panel_would_go_under_its_minimum_and_never_reorders()
 #[test]
 fn dragging_a_divider_that_is_not_there_does_nothing() {
     let mut tree = default_tree();
-    let (border, point) = border_between(&tree, "Luma waveform", "Vectorscope");
+    let (border, point) = border_between(&tree, "Vectorscope", "Waveform");
     let mut other = LayoutTree::automatic(2);
     other.drag(&border, point, AREA, GAP, min_panel_size(1.0));
     assert_eq!(other, LayoutTree::automatic(2));
     tree.drag(&border, point, AREA, GAP, min_panel_size(1.0));
     assert!(near(
-        cell_of(&tree, "Clean picture"),
-        cell_of(&default_tree(), "Clean picture"),
+        cell_of(&tree, "Channel Viewer"),
+        cell_of(&default_tree(), "Channel Viewer"),
         0.5
     ));
 }
@@ -408,7 +475,7 @@ fn a_border_is_only_found_in_a_gap_not_through_a_panel() {
         None,
         "no border through the Vectorscope"
     );
-    let hero = cell_of(&tree, "Clean picture");
+    let hero = cell_of(&tree, "Channel Viewer");
     assert_eq!(
         tree.border_at(AREA, GAP, [hero[0] + 30.0, hero[1] + 30.0], 4.0),
         None
@@ -427,15 +494,15 @@ fn title_point(tree: &LayoutTree, name: &str) -> [f32; 2] {
 fn a_press_on_a_title_bar_starts_a_panel_drag() {
     let tree = default_tree();
     assert_eq!(
-        tree.press_at(AREA, GAP, title_point(&tree, "Skin tone"), 3.0, 1.0),
-        Some(Press::Panel(index("Skin tone")))
+        tree.press_at(AREA, GAP, title_point(&tree, "Skin Tone"), 3.0, 1.0),
+        Some(Press::Panel(index("Skin Tone")))
     );
 }
 
 #[test]
 fn a_press_on_a_display_starts_nothing() {
     let tree = default_tree();
-    let c = cell_of(&tree, "Skin tone");
+    let c = cell_of(&tree, "Skin Tone");
     assert_eq!(
         tree.press_at(AREA, GAP, [c[0] + c[2] / 2.0, c[1] + c[3] - 10.0], 3.0, 1.0),
         None
@@ -445,7 +512,7 @@ fn a_press_on_a_display_starts_nothing() {
 #[test]
 fn a_press_in_a_gap_starts_a_border_drag_not_a_panel_drag() {
     let tree = default_tree();
-    let c = cell_of(&tree, "Stops False Colour");
+    let c = cell_of(&tree, "False Colour - Stops");
     let level = c[1] + 10.0;
     assert!(matches!(
         tree.press_at(AREA, GAP, [c[0] - GAP / 2.0, level], 3.0, 1.0),
@@ -460,10 +527,10 @@ fn a_press_in_a_gap_starts_a_border_drag_not_a_panel_drag() {
 #[test]
 fn the_panel_under_a_point_is_found_for_a_drop() {
     let tree = default_tree();
-    let c = cell_of(&tree, "Stops False Colour");
+    let c = cell_of(&tree, "False Colour - Stops");
     assert_eq!(
         tree.panel_at(AREA, GAP, [c[0] + c[2] / 2.0, c[1] + c[3] / 2.0]),
-        Some(index("Stops False Colour"))
+        Some(index("False Colour - Stops"))
     );
     assert_eq!(
         tree.panel_at(AREA, GAP, [c[0] - GAP / 2.0, c[1] + 5.0]),
@@ -475,10 +542,13 @@ fn the_panel_under_a_point_is_found_for_a_drop() {
 #[test]
 fn swapping_two_panels_gives_each_the_others_cell() {
     let mut tree = default_tree();
-    let (hero, skin) = (cell_of(&tree, "Clean picture"), cell_of(&tree, "Skin tone"));
-    tree.swap(0, index("Skin tone"));
-    assert_eq!(cell_of(&tree, "Clean picture"), skin);
-    assert_eq!(cell_of(&tree, "Skin tone"), hero);
+    let (hero, skin) = (
+        cell_of(&tree, "Channel Viewer"),
+        cell_of(&tree, "Skin Tone"),
+    );
+    tree.swap(0, index("Skin Tone"));
+    assert_eq!(cell_of(&tree, "Channel Viewer"), skin);
+    assert_eq!(cell_of(&tree, "Skin Tone"), hero);
     assert_fills(&tree, AREA);
 }
 
@@ -495,9 +565,9 @@ fn swapping_a_panel_with_itself_changes_nothing() {
 fn the_layout_survives_a_restart() {
     let mut tree = default_tree();
     let min = min_panel_size(1.0);
-    let (a, pa) = border_between(&tree, "Clean picture", "Luma waveform");
+    let (a, pa) = border_between(&tree, "Channel Viewer", "Waveform");
     tree.drag(&a, [pa[0] + 70.0, pa[1]], AREA, GAP, min);
-    let (b, pb) = border_between(&tree, "Luma waveform", "Vectorscope");
+    let (b, pb) = border_between(&tree, "Waveform", "Vectorscope");
     tree.drag(&b, [pb[0], pb[1] - 30.0], AREA, GAP, min);
     tree.swap(0, 6);
     assert_ne!(tree.cells(AREA, GAP), default_tree().cells(AREA, GAP));
@@ -523,10 +593,10 @@ fn rubbish_gives_the_default_layout() {
         String::new(),
         "not a layout".into(),
         "layout 2".into(),
-        good.clone() + "leaf 0 Skin tone\n",
-        good.replace("leaf 0 Skin tone", "leaf 0 Clean picture"),
-        good.replace("leaf 0 Skin tone", "leaf 1 Skin tone"),
-        good.replace("leaf 0 Skin tone", "leaf x Skin tone"),
+        good.clone() + "leaf 0 Skin Tone\n",
+        good.replace("leaf 0 Skin Tone", "leaf 0 Channel Viewer"),
+        good.replace("leaf 0 Skin Tone", "leaf 1 Skin Tone"),
+        good.replace("leaf 0 Skin Tone", "leaf x Skin Tone"),
         good.replace("split row", "split diagonal"),
         good.replace("split col", "stack col"),
         good.replacen(&first_split, "split row NaN", 1),
@@ -552,15 +622,15 @@ fn rubbish_gives_the_default_layout() {
 fn a_layout_without_some_displays_keeps_them_closed() {
     let one = LayoutTree::from_text(&NAMES, "layout 2\nleaf 0 Clean picture\n");
     assert_eq!(one.len(), 1);
-    assert!(one.contains(index("Clean picture")));
+    assert!(one.contains(index("Channel Viewer")));
     assert_eq!(one.cells(AREA, GAP).len(), NAMES.len());
-    assert_eq!(one.cells(AREA, GAP)[index("Clean picture")], AREA);
+    assert_eq!(one.cells(AREA, GAP)[index("Channel Viewer")], AREA);
     // A display that does not exist is dropped, and the layout keeps the rest.
     let good = default_tree().to_text(&NAMES);
-    let without = good.replace("leaf 0 Skin tone", "leaf 0 Gamut/legal warning");
+    let without = good.replace("leaf 0 Skin Tone", "leaf 0 Gamut/legal warning");
     let tree = LayoutTree::from_text(&NAMES, &without);
     assert_eq!(tree.len(), 6);
-    assert!(!tree.contains(index("Skin tone")));
+    assert!(!tree.contains(index("Skin Tone")));
 }
 
 #[test]
@@ -587,7 +657,7 @@ fn a_layout_saved_at_the_minimum_in_a_large_window_survives_a_restart() {
     let big = [12.0, 12.0, 2536.0, 1400.0];
     let min = min_panel_size(1.0);
     let mut tree = default_tree();
-    let (border, _) = border_between(&tree, "Clean picture", "Luma waveform");
+    let (border, _) = border_between(&tree, "Channel Viewer", "Waveform");
     tree.drag(&border, [9000.0, 300.0], big, GAP, min);
     let restored = LayoutTree::from_text(&NAMES, &tree.to_text(&NAMES));
     assert_ne!(restored, default_tree());
@@ -640,12 +710,12 @@ fn an_old_grid_that_is_a_sequence_of_cuts_converts_to_the_same_arrangement() {
         .replace("rows 0.28 0.28 0.22 0.22", "rows 0.4 0.2 0.2 0.2");
     let tree = LayoutTree::from_text(&NAMES, &dragged);
     let place = |n: &str| match n {
-        "Clean picture" => [0, 0, 3, 2],
-        "Luma waveform" => [3, 0, 2, 1],
+        "Channel Viewer" => [0, 0, 3, 2],
+        "Waveform" => [3, 0, 2, 1],
         "Vectorscope" => [3, 1, 2, 1],
-        "ARRI False Colour" => [0, 2, 3, 1],
-        "Stops False Colour" => [3, 2, 2, 1],
-        "Saturation heatmap" => [0, 3, 3, 1],
+        "False Colour - Arri" => [0, 2, 3, 1],
+        "False Colour - Stops" => [3, 2, 2, 1],
+        "Saturation" => [0, 3, 3, 1],
         _ => [3, 3, 2, 1],
     };
     let places: Vec<[usize; 4]> = NAMES.iter().map(|n| place(n)).collect();
@@ -698,7 +768,7 @@ fn an_old_grid_saved_with_the_colour_waveform_and_channel_view_recalls_without_t
     assert_eq!(tree.len(), 7);
     assert_fills(&tree, AREA);
     assert_every_panel_at_least_the_minimum(&tree, AREA);
-    let clean = cell_of(&tree, "Clean picture");
+    let clean = cell_of(&tree, "Channel Viewer");
     assert_eq!([clean[0], clean[1]], [AREA[0], AREA[1]], "keeps its corner");
 }
 

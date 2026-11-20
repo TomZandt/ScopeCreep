@@ -26,3 +26,7 @@ The nine named layouts (ADR 0030) are a menu and a hotkey: nothing on screen say
 - Pages are the cheap way to keep an expensive scope off the Feed: a Panel on another page costs nothing (ADR 0038).
 - Auto layout runs on the UI thread and has a budget of about 100 ms at 7 Panels, which the pure seam measures; it must never stall the Feed thread (ADR 0003).
 - **At most nine pages** (product owner's choice, 2026-11-20 review of spec #196): one for each Ctrl+1 to 9, so every page has its number and hotkey. A new page past the ninth is refused with a notice. A user who had all nine named layouts and Main gets Main and the first eight layouts at migration; the ninth is dropped.
+
+## Update: first run and ownership
+
+A fresh Window is one page, Main, holding the default layout (see ADR 0038): migration only adds a page for each layout the user actually saved, so a clean profile has exactly one. Every page owns its Panels: on start-up Main takes the first instance of each display (where the user's saved settings are kept), the next page the next instances, and any instance no page holds is swept. A Panel's title shows an instance number only when the page holds two or more Panels of that display.

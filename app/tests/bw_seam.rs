@@ -15,9 +15,9 @@ use std::sync::{Arc, Mutex};
 const W: u32 = 16;
 const H: u32 = 9;
 const SETUP: &str = "timeline=Rec.709 Gamma 2.4\noutput=Rec.709 Gamma 2.4\n";
-const CLEAN: &str = "Clean picture";
-const ARRI: &str = "ARRI False Colour";
-const STOPS: &str = "Stops False Colour";
+const CLEAN: &str = "Channel Viewer";
+const ARRI: &str = "False Colour - Arri";
+const STOPS: &str = "False Colour - Stops";
 /// Not neutral, and in no band of ARRI's nor within a sixth of a stop of 18 % grey or one stop over it.
 const COLOURFUL: [f32; 3] = [0.6, 0.4, 0.3];
 

@@ -372,26 +372,23 @@ fn halves(dir: Dir, rect: [f32; 4], gap: f32, ratio: f32) -> [[f32; 4]; 2] {
     }
 }
 
-/// The default layout, in whole numbers: columns and rows (as weights), then each Panel by display name at
-/// `(column, row, columns, rows)`. 5 x 4: the clean picture 3 x 2 at the top left, the luma waveform and the
-/// Vectorscope (two cells wide) to its right, then two rows of Picture Views below (ARRI False Colour three wide
-/// with Stops False Colour, Skin tone with the Saturation heatmap three wide), every cell used. It is turned into a
-/// tree by the same conversion an old saved grid goes through.
-const DEFAULT_COLUMNS: [f32; 5] = [1.0, 1.0, 1.0, 1.0, 1.0];
-const DEFAULT_ROWS: [f32; 4] = [14.0, 14.0, 11.0, 11.0];
-const DEFAULT_PLACES: [(&str, [usize; 4]); 7] = [
-    ("Clean picture", [0, 0, 3, 2]),
-    ("Luma waveform", [3, 0, 2, 1]),
-    ("Vectorscope", [3, 1, 2, 1]),
-    ("ARRI False Colour", [0, 2, 3, 1]),
-    ("Stops False Colour", [3, 2, 2, 1]),
-    ("Saturation heatmap", [0, 3, 3, 1]),
-    ("Skin tone", [3, 3, 2, 1]),
+/// The default layout, as an explicit tree (it never depends on the footage): the clean picture big on the left
+/// (about 59 % of the width and 66 % of the height), to its right the Vectorscope beside the Saturation heatmap with
+/// the luma waveform under them, and along the bottom Skin tone, Stops False Colour and ARRI False Colour. The names
+/// are in reading order.
+const DEFAULT_NAMES: [&str; 7] = [
+    "Channel Viewer",
+    "Vectorscope",
+    "Saturation",
+    "Waveform",
+    "Skin Tone",
+    "False Colour - Stops",
+    "False Colour - Arri",
 ];
 
 /// The names of the displays the default layout is made for, in the order the default layout lists them.
 pub fn default_names() -> Vec<&'static str> {
-    DEFAULT_PLACES.iter().map(|(name, _)| *name).collect()
+    DEFAULT_NAMES.to_vec()
 }
 
 /// A Panel's cell of a grid: its first column and row, and how many columns and rows it spans.
@@ -642,28 +639,35 @@ impl LayoutTree {
     /// The default layout for the displays called `names` (in display order). Falls back to [`Self::automatic`]
     /// unless these are exactly the displays the default layout is made for, so the tree fills either way.
     pub fn default_for(names: &[&str]) -> LayoutTree {
-        let cells: Option<Vec<Cell>> = names
+        let place: Option<Vec<usize>> = DEFAULT_NAMES
             .iter()
-            .enumerate()
-            .map(|(panel, name)| {
-                DEFAULT_PLACES.iter().find(|(n, _)| n == name).map(
-                    |(_, [column, row, columns, rows])| Cell {
-                        panel,
-                        column: *column,
-                        row: *row,
-                        columns: *columns,
-                        rows: *rows,
-                    },
-                )
-            })
+            .map(|n| names.iter().position(|m| m == n))
             .collect();
-        cells
-            .filter(|c| c.len() == DEFAULT_PLACES.len())
-            .and_then(|c| tree_from_grid(&DEFAULT_COLUMNS, &DEFAULT_ROWS, &c))
-            .map_or_else(
-                || LayoutTree::automatic(names.len()),
-                |root| LayoutTree::new(root, names.len()),
-            )
+        let Some(p) = place.filter(|_| names.len() == DEFAULT_NAMES.len()) else {
+            return LayoutTree::automatic(names.len());
+        };
+        let split = |dir, ratio, a, b| Node::Split {
+            dir,
+            ratio,
+            a: Box::new(a),
+            b: Box::new(b),
+        };
+        let leaf = |i: usize| Node::leaf(p[i]);
+        let (clean, vector, heat, luma, skin, stops, arri) = (0, 1, 2, 3, 4, 5, 6);
+        let scopes = split(
+            Dir::Col,
+            0.31868654,
+            split(Dir::Row, 0.5728693, leaf(vector), leaf(heat)),
+            leaf(luma),
+        );
+        let top = split(Dir::Row, 0.59458417, leaf(clean), scopes);
+        let bottom = split(
+            Dir::Row,
+            0.29629093,
+            leaf(skin),
+            split(Dir::Row, 0.5, leaf(stops), leaf(arri)),
+        );
+        LayoutTree::new(split(Dir::Col, 0.65909094, top, bottom), names.len())
     }
 
     /// Auto resize (#213): change ratios only, top down. Where a split has exactly one picture-shaped side (a
@@ -1278,7 +1282,10 @@ impl LayoutTree {
 
     fn parse(names: &[&str], text: &str) -> Option<LayoutTree> {
         let mut lines = text.lines();
-        let known = |name: &str| names.iter().position(|n| *n == name).unwrap_or(UNKNOWN);
+        let known = |name: &str| {
+            let name = crate::settings::modern_key(name);
+            names.iter().position(|n| *n == name).unwrap_or(UNKNOWN)
+        };
         let header = lines.next()?;
         let root = match header {
             HEADER => {

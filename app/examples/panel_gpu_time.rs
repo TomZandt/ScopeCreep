@@ -375,7 +375,7 @@ fn main() {
     // the default layout whose cell it draws into.
     let (d, q) = (&device, &queue);
     let luma = Waveform::new(d, q, TARGET);
-    const ARRI: &str = "ARRI False Colour";
+    const ARRI: &str = "False Colour - Arri";
     const LUMA: &str = scopecreep::waveform::NAME;
     type Listed<'a> = (Option<&'a str>, bool, &'a str, Arc<dyn Display>);
     let window = |display: Arc<dyn Display>| -> Listed { (None, true, display.name(), display) };
@@ -402,7 +402,7 @@ fn main() {
             scopecreep::stops_false_colour::StopsFalseColour::new(d, q, TARGET),
         )),
         (
-            Some("Luma waveform, Colorise on"),
+            Some("Waveform, Colorise on"),
             true,
             LUMA,
             Arc::new(Waveform::new(d, q, TARGET)),

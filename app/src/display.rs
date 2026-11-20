@@ -309,10 +309,21 @@ impl DisplaySet {
     /// or a tab that is not shown, ADR 0038) keeps its settings and state but is handed no frame: it costs nothing
     /// until shown again. A change bumps the generation, so the Feed thread measures the frame on screen again.
     pub fn set_shown(&self, shown: &[bool]) {
+        let off_for = |len: usize| -> Vec<bool> {
+            (0..len)
+                .map(|i| !shown.get(i).copied().unwrap_or(true))
+                .collect()
+        };
+        // The Window calls this for every frame it draws: look under the read lock first, so nothing waits for the
+        // Feed thread (which holds a read lock while it measures) unless the Panels shown really changed.
+        {
+            let shared = self.read();
+            if shared.off == off_for(shared.displays.len()) {
+                return;
+            }
+        }
         let mut shared = self.shared.write().unwrap();
-        let off: Vec<bool> = (0..shared.displays.len())
-            .map(|i| !shown.get(i).copied().unwrap_or(true))
-            .collect();
+        let off = off_for(shared.displays.len());
         if shared.off != off {
             shared.off = off;
             shared.generation += 1;
@@ -631,13 +642,9 @@ impl DisplaySet {
                 };
                 own.settings
                     .extend(settings.state_of(&instance.key, display.state_keys()));
-                let mut title =
-                    crate::window_text::panel_title(display.name(), &own, display.label());
-                // A further instance shows its number ("Vectorscope 2").
-                if let Some(number) = instance.key.strip_prefix(display.name()) {
-                    title.name.push_str(number);
-                }
-                title
+                // The display's name alone: a number is added by the Window only where a page holds two of a display
+                // ([`crate::pages::title_names`]).
+                crate::window_text::panel_title(display.name(), &own, display.label())
             })
             .collect()
     }
@@ -764,21 +771,15 @@ impl DisplaySet {
     }
 
     /// The view strip as it reads now (ADR 0040): enabled while a picture Panel is shown; the readout is the shared
-    /// zoom while Link is on ("Fit" or "200 %"), and while it is off the one zoom every picture Panel has, or
+    /// zoom while Link is on (a percentage, "62 %", the first picture Panel's), and while it is off the one zoom every picture Panel has, or
     /// "Mixed" when they differ.
     pub fn view_strip(&self, contents: &[[f32; 4]], scale: f32) -> crate::view_strip::ViewStrip {
-        // Fit, or the zoom rounded to a percent: what the readout can say about one Panel.
+        // The zoom each picture Panel has, rounded to a percent: what the readout can say about one Panel.
         let says: Vec<String> = contents
             .iter()
             .zip(&self.read().displays)
             .filter_map(|(area, d)| d.zoom(*area, scale))
-            .map(|r| {
-                if r.percent > r.fit + 0.01 {
-                    format!("{} %", r.percent.round())
-                } else {
-                    "Fit".to_string()
-                }
-            })
+            .map(|r| format!("{} %", r.percent.round()))
             .collect();
         let link = self.link.on();
         let readout = match says.first() {

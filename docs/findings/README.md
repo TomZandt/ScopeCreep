@@ -52,6 +52,7 @@ What we learned by testing, kept in the repo so it isn't lost when an issue thre
 | [96](96-panel-layout.md) | Panels span cells: the default layout, minimum sizes at 1280 x 760, borders, saved layouts, title bar |
 | [98](98-named-layouts.md) | Named layouts: saved, recalled, renamed and kept at the pure seam; what a recalled layout does when Panels have changed |
 | [99](99-window-text.md) | The Window's text: the Colour Setup once in a top bar, short title bars with only the tags a Panel needs, a performance-only status line |
+| [196](196-integrated-window-first-look.md) | Spec #196 at the real app: why the Colour Setup line was empty (#217), where menus dropped, the freeze (not reproduced; one stall removed), instance numbers and strays |
 | [117](117-luma-waveform-channels.md) | Does the luma waveform measure and draw R, G and B beside Luma at each channel's code, show out-of-range per channel in the edge rows, keep one chip on and remember the choice? |
 | [92](92-one-vectorscope-panel.md) | Does one Vectorscope Panel show both plots with one setting, one measurement and the same clipping, and what happens to old saved layouts and settings (headless)? |
 | [97](97-swap-panels.md) | Does dragging a Panel onto another swap cells and spans, remember it, and never confuse a border drag with a Panel drag (pure seam)? |

@@ -47,7 +47,7 @@ fn bar_room(width: f32, scale: f32) -> [f32; 4] {
 fn the_active_tab_is_highlighted_and_the_others_are_not() {
     for scale in SCALES {
         let area = bar_room(400.0, scale);
-        let s = strip(&["Clean picture", "Luma waveform", "Vectorscope"], 1);
+        let s = strip(&["Channel Viewer", "Waveform", "Vectorscope"], 1);
         let l = s.layout(area, scale);
         assert_eq!(l.tabs.len(), 3);
         assert!(l.overflow.is_none() && l.hidden.is_empty());
@@ -96,10 +96,10 @@ fn at_the_minimum_panel_width_the_shown_tab_stays_and_an_overflow_chip_counts_th
     for scale in SCALES {
         let area = bar_room(MIN_PANEL[0], scale);
         let labels = [
-            "Clean picture",
-            "Luma waveform",
+            "Channel Viewer",
+            "Waveform",
             "Vectorscope",
-            "Skin tone",
+            "Skin Tone",
             "ARRI",
         ];
         for active in [0, 2, 4] {
@@ -141,7 +141,7 @@ fn at_the_minimum_panel_width_the_shown_tab_stays_and_an_overflow_chip_counts_th
 fn tabs_squeeze_to_share_the_room_before_any_overflow() {
     for scale in SCALES {
         let area = bar_room(220.0, scale);
-        let s = strip(&["Clean picture", "Luma waveform", "Vectorscope"], 0);
+        let s = strip(&["Channel Viewer", "Waveform", "Vectorscope"], 0);
         let l = s.layout(area, scale);
         assert_eq!(l.tabs.len(), 3);
         assert!(l.overflow.is_none());
@@ -153,7 +153,7 @@ fn tabs_squeeze_to_share_the_room_before_any_overflow() {
 
 #[test]
 fn the_tab_layout_at_2x_is_the_1x_layout_doubled() {
-    let labels = ["Clean picture", "Luma waveform", "Vectorscope"];
+    let labels = ["Channel Viewer", "Waveform", "Vectorscope"];
     let a = strip(&labels, 1).layout(bar_room(300.0, 1.0), 1.0);
     let b = strip(&labels, 1).layout(bar_room(300.0, 2.0), 2.0);
     for ((i, r), (j, q)) in a.tabs.iter().zip(&b.tabs) {

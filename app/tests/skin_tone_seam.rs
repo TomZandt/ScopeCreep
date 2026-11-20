@@ -288,7 +288,7 @@ fn the_tolerance_is_a_slider_of_degrees_defaulting_to_five_and_the_label_names_t
             .collect::<Vec<f32>>(),
     );
     let label = b.display.label();
-    assert!(label.starts_with("Skin tone"), "{label}");
+    assert!(label.starts_with("Skin Tone"), "{label}");
     assert!(label.contains("±5°") && label.contains("±30°"), "{label}");
     assert!(label.contains("123° (as Resolve 21.2 draws it)"), "{label}");
     assert!(
@@ -336,7 +336,7 @@ fn dragging_the_tolerance_up_only_ever_lights_more_and_old_or_wild_values_are_sa
 fn nothing_is_drawn_before_a_frame_arrives() {
     let b = Bench::new("empty", None);
     assert_eq!(pixel(&b.render(64, 36), 64, 32, 18), [0, 0, 0]);
-    assert_eq!(b.display.label(), "Skin tone");
+    assert_eq!(b.display.label(), "Skin Tone");
 }
 
 #[test]

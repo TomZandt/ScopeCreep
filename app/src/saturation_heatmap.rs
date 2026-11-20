@@ -168,7 +168,7 @@ impl crate::zoom::PictureZoom for SaturationHeatmap {
 
 impl Display for SaturationHeatmap {
     fn name(&self) -> &'static str {
-        "Saturation heatmap"
+        "Saturation"
     }
 
     fn on_frame(&self, encoder: &mut wgpu::CommandEncoder, frame: &GpuFrame) {
@@ -193,7 +193,7 @@ impl Display for SaturationHeatmap {
             .get(LEGEND_SETTING)
             .is_none_or(|v| v == "on");
         state.label = format!(
-            "Saturation heatmap  ·  Output picture, {space}  ·  distance from neutral in Cb/Cr (Y = {:.4} R + {:.4} G + {:.4} B), 100 % = the vectorscope's 100 % ring  ·  grey 0 % to hot {} %",
+            "Saturation  ·  Output picture, {space}  ·  distance from neutral in Cb/Cr (Y = {:.4} R + {:.4} G + {:.4} B), 100 % = the vectorscope's 100 % ring  ·  grey 0 % to hot {} %",
             weights[0],
             weights[1],
             weights[2],

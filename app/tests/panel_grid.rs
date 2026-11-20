@@ -8,13 +8,13 @@ const AREA: [f32; 4] = [12.0, 12.0, 1256.0, 716.0];
 const GAP: f32 = 12.0;
 
 const NAMES: [&str; 7] = [
-    "Clean picture",
-    "Luma waveform",
-    "ARRI False Colour",
+    "Channel Viewer",
+    "Waveform",
+    "False Colour - Arri",
     "Vectorscope",
-    "Saturation heatmap",
-    "Skin tone",
-    "Stops False Colour",
+    "Saturation",
+    "Skin Tone",
+    "False Colour - Stops",
 ];
 
 fn default_grid() -> LayoutTree {

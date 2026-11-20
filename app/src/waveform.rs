@@ -1470,7 +1470,7 @@ impl Waveform {
 }
 
 /// What the luma waveform is called: its Panel's settings are kept under this name.
-pub const NAME: &str = "Luma waveform";
+pub const NAME: &str = "Waveform";
 
 /// The luma waveform's right-click menu: how Luma is weighted (ADR 0004). The label names the weights in use.
 pub const SETTINGS: [SettingDef; 9] = [

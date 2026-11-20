@@ -55,7 +55,7 @@ impl Bench {
         self.settings
             .lock()
             .unwrap()
-            .set("Stops False Colour", key, value);
+            .set("False Colour - Stops", key, value);
         self.rig.step(&mut self.feed);
     }
 

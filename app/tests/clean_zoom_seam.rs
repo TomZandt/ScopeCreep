@@ -13,7 +13,7 @@ const W: u32 = 800;
 const H: u32 = 600;
 /// The Panel's picture area: 600 x 400 at (20, 20).
 const AREA: [f32; 4] = [20.0, 20.0, 600.0, 400.0];
-const NAME: &str = "Clean picture";
+const NAME: &str = "Channel Viewer";
 /// 800 x 450 in 600 x 400 is Fit 75 %.
 const FRAME: [u32; 2] = [800, 450];
 
@@ -201,9 +201,7 @@ fn the_clean_picture_shows_a_read_only_zoom_tag_that_reads_fit_by_default_and_no
 fn a_scope_has_no_zoom_tag() {
     let rig = Rig::new("clean-zoom-scope");
     let (set, _) = DisplaySet::standard_with_handles(&rig.device, &rig.queue, TARGET, false);
-    let waveform = (0..set.len())
-        .find(|i| set.name(*i) == "Luma waveform")
-        .unwrap();
+    let waveform = (0..set.len()).find(|i| set.name(*i) == "Waveform").unwrap();
     assert!(set.zoom(waveform, AREA, 1.0).is_none());
     assert!(set.zoom_tag(waveform, AREA, 1.0).is_none());
 }

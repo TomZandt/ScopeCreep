@@ -170,11 +170,7 @@ fn the_display_is_registered_in_the_standard_set() {
     let rig = Rig::new("registered");
     let (device, queue) = (&rig.device, &rig.queue);
     let set = DisplaySet::standard(device, queue, TARGET, false);
-    assert!(
-        set.names().contains(&"Saturation heatmap"),
-        "{:?}",
-        set.names()
-    );
+    assert!(set.names().contains(&"Saturation"), "{:?}", set.names());
 }
 
 #[test]
@@ -443,7 +439,7 @@ fn the_label_says_what_is_measured_and_that_the_picture_is_assumed_until_the_col
     let b = Bench::new("label");
     b.configure("on", "100");
     let label = b.set.labels()[0].clone();
-    assert!(label.starts_with("Saturation heatmap"), "{label}");
+    assert!(label.starts_with("Saturation"), "{label}");
     assert!(label.contains("Output picture"), "{label}");
     assert!(label.contains("Rec.709 assumed, unconverted"), "{label}");
     assert!(

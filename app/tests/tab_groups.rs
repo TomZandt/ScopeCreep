@@ -8,13 +8,13 @@ use scopecreep::panel_grid::min_panel_size;
 const AREA: [f32; 4] = [12.0, 12.0, 1256.0, 716.0];
 const GAP: f32 = 12.0;
 const NAMES: [&str; 7] = [
-    "Clean picture",
-    "Luma waveform",
-    "ARRI False Colour",
+    "Channel Viewer",
+    "Waveform",
+    "False Colour - Arri",
     "Vectorscope",
-    "Saturation heatmap",
-    "Skin tone",
-    "Stops False Colour",
+    "Saturation",
+    "Skin Tone",
+    "False Colour - Stops",
 ];
 
 fn tree() -> LayoutTree {
@@ -39,7 +39,7 @@ fn a_panel_dropped_in_the_middle_becomes_a_shown_tab_of_that_group() {
     // The dragged Panel is in the target's cell, the target is hidden, and the old cell's neighbour took its space.
     assert_eq!(after[5], before[0]);
     assert!(!shown(after[0]));
-    assert!(after[6][3] > before[6][3]);
+    assert!(after[6][2] > before[6][2]);
 }
 
 #[test]

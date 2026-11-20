@@ -4,8 +4,8 @@ use crate::display::DisplaySet;
 use crate::layout_tree::{Dir, Edge, LayoutTree, NoRoom};
 use crate::settings::PanelSettings;
 
-/// The displays Panel `panel` can be replaced with: every display the Window has, once each, in Panel order, except
-/// the one the Panel already is.
+/// The displays Panel `panel` can be replaced with: every display the Window has, once each, A to Z (case does not
+/// matter), except the one the Panel already is.
 pub fn replace_choices(displays: &DisplaySet, panel: usize) -> Vec<String> {
     let own = displays.name(panel);
     let mut names: Vec<String> = Vec::new();
@@ -14,6 +14,7 @@ pub fn replace_choices(displays: &DisplaySet, panel: usize) -> Vec<String> {
             names.push(name.to_string());
         }
     }
+    names.sort_by_key(|n| n.to_lowercase());
     names
 }
 

@@ -208,6 +208,46 @@ impl Pages {
         self.pages.iter_mut().map(|p| (&mut p.tree, &mut p.history))
     }
 
+    /// Give every page Panels of its own, in page order (Main first): a Panel that an earlier page already holds is
+    /// swapped for the lowest instance of the same display that no earlier page holds, and `make` (the display's
+    /// name, returns the new instance's index) makes one when there is none. So the first page ends up on the first
+    /// instances, which are the ones the user's saved settings are kept under, and the next pages on the next, whatever
+    /// the file said (a migration leaves the named layouts on the same first instances; a page saved on "Clean
+    /// picture 3" comes back on the first free one). Within a page, two Panels of one display get two instances.
+    /// `names` is each display's name by Panel index.
+    pub fn own_instances(&mut self, names: &[&str], mut make: impl FnMut(&str) -> usize) {
+        let mut names: Vec<String> = names.iter().map(|n| n.to_string()).collect();
+        let mut claimed: Vec<usize> = Vec::new();
+        for page in &mut self.pages {
+            let mut map: Vec<(usize, usize)> = Vec::new();
+            for panel in page.tree.panels() {
+                if map.iter().any(|(from, _)| *from == panel) {
+                    continue;
+                }
+                let Some(name) = names.get(panel).cloned() else {
+                    continue;
+                };
+                let own = (0..names.len())
+                    .find(|i| names[*i] == name && !claimed.contains(i))
+                    .unwrap_or_else(|| {
+                        let made = make(&name);
+                        if made >= names.len() {
+                            names.resize(made + 1, String::new());
+                        }
+                        names[made] = name.clone();
+                        made
+                    });
+                claimed.push(own);
+                map.push((panel, own));
+            }
+            page.tree.remap(|p| {
+                map.iter()
+                    .find(|(from, _)| *from == p)
+                    .map_or(p, |(_, to)| *to)
+            });
+        }
+    }
+
     /// Whether a page other than the shown one holds Panel `panel`.
     pub fn holds_elsewhere(&self, panel: usize) -> bool {
         self.pages
@@ -402,27 +442,11 @@ pub fn default_tree(
     tree
 }
 
-/// Make again the further instances ("Clean picture 2") that saved pages or layouts (`texts`) name and the displays do
+/// Make again the further instances ("Channel Viewer 2") that saved pages or layouts (`texts`) name and the displays do
 /// not have yet, so a saved page can be read with its copies. A key that cannot be made is left, and read as a
 /// Panel that no longer exists.
 pub fn recreate_saved_copies(displays: &crate::display::DisplaySet, texts: &[&str]) {
-    let mut wanted: Vec<(usize, String, String)> = Vec::new();
-    for line in texts.iter().flat_map(|t| t.lines()) {
-        let Some((_, list)) = line.strip_prefix("leaf ").and_then(|r| r.split_once(' ')) else {
-            continue;
-        };
-        for key in list.split('|') {
-            let Some((base, n)) = key.rsplit_once(' ') else {
-                continue;
-            };
-            let Ok(n) = n.parse::<usize>() else { continue };
-            if (2..=MAX_COPIES).contains(&n) && !wanted.iter().any(|(_, _, k)| k == key) {
-                wanted.push((n, base.to_string(), key.to_string()));
-            }
-        }
-    }
-    wanted.sort();
-    for (n, base, key) in wanted {
+    for (base, key, n) in wanted_copies(texts) {
         for _ in 0..n {
             if displays.keys().contains(&key) || displays.make_named(&base).is_none() {
                 break;
@@ -431,5 +455,68 @@ pub fn recreate_saved_copies(displays: &crate::display::DisplaySet, texts: &[&st
     }
 }
 
+/// The further instances the saved `texts` name, as (display, key, number), fewest copies first. A key saved under a
+/// display's former name ("Clean picture 2") is the same instance under the new one ("Channel Viewer 2").
+pub fn wanted_copies(texts: &[&str]) -> Vec<(String, String, usize)> {
+    let mut wanted: Vec<(usize, String, String)> = Vec::new();
+    for line in texts.iter().flat_map(|t| t.lines()) {
+        let Some((_, list)) = line.strip_prefix("leaf ").and_then(|r| r.split_once(' ')) else {
+            continue;
+        };
+        for key in list.split('|') {
+            let key = crate::settings::modern_key(key);
+            let Some((base, n)) = key.rsplit_once(' ') else {
+                continue;
+            };
+            let Ok(n) = n.parse::<usize>() else { continue };
+            if (2..=MAX_COPIES).contains(&n) && !wanted.iter().any(|(_, _, k)| *k == key) {
+                wanted.push((n, base.to_string(), key.clone()));
+            }
+        }
+    }
+    wanted.sort();
+    wanted.into_iter().map(|(n, b, k)| (b, k, n)).collect()
+}
+
 /// The most copies of one display a saved page can ask to be made again.
 const MAX_COPIES: usize = 16;
+
+/// What each Panel's title says for the shown page: the display's name, with the instance's number ("Vectorscope 2")
+/// only when the page holds two or more Panels of that display. `names` and `keys` are each Panel's display name and
+/// instance key by index; `on_page` the Panels the page holds. Keys and ids are untouched: only what is shown changes.
+pub fn title_names(names: &[&str], keys: &[String], on_page: &[usize]) -> Vec<String> {
+    (0..names.len())
+        .map(|p| {
+            let twice = on_page
+                .iter()
+                .filter(|q| names.get(**q) == names.get(p))
+                .count()
+                >= 2;
+            match keys.get(p).and_then(|k| k.strip_prefix(names[p])) {
+                Some(number) if twice => format!("{}{}", names[p], number),
+                _ => names[p].to_string(),
+            }
+        })
+        .collect()
+}
+
+/// What the Add list offers: each display once, by its first instance (the Panel that stands for the display),
+/// whatever instances exist, A to Z by name (case does not matter).
+pub fn add_offers(names: &[&str]) -> Vec<usize> {
+    let mut offers: Vec<usize> = (0..names.len())
+        .filter(|i| !names[..*i].contains(&names[*i]))
+        .collect();
+    offers.sort_by_key(|i| names[*i].to_lowercase());
+    offers
+}
+
+/// The instance an Add of the display of Panel `offered` puts on the page: the first instance of that display that no
+/// page holds, or `None` when every instance is held (the caller makes a new one). `holds` says whether any page holds
+/// an instance.
+pub fn instance_to_add(
+    names: &[&str],
+    offered: usize,
+    holds: impl Fn(usize) -> bool,
+) -> Option<usize> {
+    (0..names.len()).find(|i| names[*i] == names[offered] && !holds(*i))
+}

@@ -12,13 +12,13 @@ use scopecreep::style;
 
 const SCALES: [f32; 2] = [1.0, 2.0];
 const NAMES: [&str; 7] = [
-    "Clean picture",
-    "Luma waveform",
-    "ARRI False Colour",
+    "Channel Viewer",
+    "Waveform",
+    "False Colour - Arri",
     "Vectorscope",
-    "Saturation heatmap",
-    "Skin tone",
-    "Stops False Colour",
+    "Saturation",
+    "Skin Tone",
+    "False Colour - Stops",
 ];
 
 fn fills(prims: &[Prim]) -> Vec<[f32; 4]> {

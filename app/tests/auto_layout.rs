@@ -9,13 +9,13 @@ use scopecreep::panel_grid::{MIN_PANEL, min_panel_size, shown};
 use std::time::{Duration, Instant};
 
 const NAMES: [&str; 7] = [
-    "Clean picture",
-    "Luma waveform",
-    "ARRI False Colour",
+    "Channel Viewer",
+    "Waveform",
+    "False Colour - Arri",
     "Vectorscope",
-    "Saturation heatmap",
-    "Skin tone",
-    "Stops False Colour",
+    "Saturation",
+    "Skin Tone",
+    "False Colour - Stops",
 ];
 const GAP: f32 = 12.0;
 /// How many variations a page steps through before it wraps.
@@ -68,7 +68,7 @@ fn reading_order_is_kept() {
 
 #[test]
 fn a_tab_group_stays_one_item_with_its_shown_tab() {
-    let names = ["Clean picture", "Vectorscope", "Skin tone", "Luma waveform"];
+    let names = ["Channel Viewer", "Vectorscope", "Skin Tone", "Waveform"];
     let text = "layout 2\nsplit row 0.5\nleaf 0 Clean picture\nsplit col 0.5\nleaf 1 Vectorscope|Skin tone\nleaf 0 Luma waveform\n";
     let mut t = LayoutTree::parse_text(&names, text).expect("a layout");
     t.auto_layout(&items(&names), 16.0 / 9.0, WINDOW, GAP, 1.0)
@@ -131,7 +131,7 @@ fn successive_presses_give_distinct_arrangements_in_a_fixed_order() {
 
 #[test]
 fn every_variation_keeps_minimums_reading_order_and_tab_groups() {
-    let names = ["Clean picture", "Vectorscope", "Skin tone", "Luma waveform"];
+    let names = ["Channel Viewer", "Vectorscope", "Skin Tone", "Waveform"];
     let text = "layout 2\nsplit row 0.5\nleaf 0 Clean picture\nsplit col 0.5\nleaf 1 Vectorscope|Skin tone\nleaf 0 Luma waveform\n";
     let mut t = LayoutTree::parse_text(&names, text).expect("a layout");
     let mut seen = Vec::new();
@@ -237,8 +237,8 @@ fn a_press_after_an_undo_shows_the_variation_it_undid() {
 
 #[test]
 fn above_nine_panels_a_repeat_press_changes_nothing() {
-    let refs: Vec<&str> = std::iter::once("Clean picture")
-        .chain(std::iter::repeat_n("Skin tone", 11))
+    let refs: Vec<&str> = std::iter::once("Channel Viewer")
+        .chain(std::iter::repeat_n("Skin Tone", 11))
         .collect();
     let area = [0.0, 0.0, 3840.0, 2160.0];
     let mut pages = Pages::new(LayoutTree::automatic(12));
@@ -336,8 +336,8 @@ fn a_cut_that_breaks_a_minimum_is_dropped_but_another_is_kept() {
 
 #[test]
 fn above_nine_panels_a_greedy_halving_runs_and_is_quick() {
-    let refs: Vec<&str> = std::iter::once("Clean picture")
-        .chain(std::iter::repeat_n("Skin tone", 11))
+    let refs: Vec<&str> = std::iter::once("Channel Viewer")
+        .chain(std::iter::repeat_n("Skin Tone", 11))
         .collect();
     let area = [0.0, 0.0, 3840.0, 2160.0];
     let mut t = LayoutTree::automatic(12);
@@ -391,13 +391,13 @@ fn seven_panels_take_well_under_the_budget() {
 #[test]
 fn nine_panels_are_still_searched_within_a_second() {
     let nine = [
-        "Clean picture",
-        "Luma waveform",
+        "Channel Viewer",
+        "Waveform",
         "Vectorscope",
-        "ARRI False Colour",
-        "Saturation heatmap",
-        "Skin tone",
-        "Stops False Colour",
+        "False Colour - Arri",
+        "Saturation",
+        "Skin Tone",
+        "False Colour - Stops",
         "Channel view",
         "Black and white",
     ];

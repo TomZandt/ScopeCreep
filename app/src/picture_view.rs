@@ -110,8 +110,8 @@ impl PictureView {
 
     fn label_with(size: Option<[u32; 2]>, tail: &str) -> String {
         match size {
-            Some([w, h]) => format!("Clean picture  ·  {w} × {h}  ·  {tail}"),
-            None => "Clean picture".to_string(),
+            Some([w, h]) => format!("Channel Viewer  ·  {w} × {h}  ·  {tail}"),
+            None => "Channel Viewer".to_string(),
         }
     }
 
@@ -149,7 +149,7 @@ impl PictureZoom for PictureView {
 
 impl Display for PictureView {
     fn name(&self) -> &'static str {
-        "Clean picture"
+        "Channel Viewer"
     }
 
     fn on_frame(&self, encoder: &mut wgpu::CommandEncoder, frame: &GpuFrame) {

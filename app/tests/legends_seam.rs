@@ -7,11 +7,7 @@ use common::{Rig, TARGET};
 use scopecreep::display::DisplaySet;
 use scopecreep::settings::PanelSettings;
 
-const LEGEND_PANELS: [&str; 3] = [
-    "ARRI False Colour",
-    "Stops False Colour",
-    "Saturation heatmap",
-];
+const LEGEND_PANELS: [&str; 3] = ["False Colour - Arri", "False Colour - Stops", "Saturation"];
 
 fn set(rig: &Rig) -> DisplaySet {
     DisplaySet::standard(&rig.device, &rig.queue, TARGET, false)
@@ -61,14 +57,14 @@ fn a_panel_can_differ_afterwards_and_the_entry_then_shows_off() {
     let set = set(&rig);
     let mut settings = PanelSettings::default();
     set.set_legends(&mut settings, true);
-    settings.set("Stops False Colour", "legend", "off");
+    settings.set("False Colour - Stops", "legend", "off");
     assert!(
         !set.legends_on(&settings),
         "one off, so not every legend is on"
     );
-    assert_eq!(legend_of(&set, &settings, "ARRI False Colour"), "on");
-    assert_eq!(legend_of(&set, &settings, "Stops False Colour"), "off");
-    settings.set("Stops False Colour", "legend", "on");
+    assert_eq!(legend_of(&set, &settings, "False Colour - Arri"), "on");
+    assert_eq!(legend_of(&set, &settings, "False Colour - Stops"), "off");
+    settings.set("False Colour - Stops", "legend", "on");
     assert!(set.legends_on(&settings));
 }
 
@@ -77,10 +73,10 @@ fn only_panels_with_a_legend_get_the_setting_and_no_other_setting_changes() {
     let rig = Rig::new("legends-only");
     let set = set(&rig);
     let mut settings = PanelSettings::default();
-    settings.set("Saturation heatmap", "scale", "120");
+    settings.set("Saturation", "scale", "120");
     set.set_legends(&mut settings, false);
     let text = settings.to_text();
     let legend_lines = text.lines().filter(|l| l.contains("\tlegend\t")).count();
     assert_eq!(legend_lines, LEGEND_PANELS.len(), "{text}");
-    assert!(text.contains("Saturation heatmap\tscale\t120"));
+    assert!(text.contains("Saturation\tscale\t120"));
 }

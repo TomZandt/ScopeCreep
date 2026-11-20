@@ -10,7 +10,7 @@ use std::sync::Arc;
 const W: u32 = 800;
 const H: u32 = 600;
 const AREA: [f32; 4] = [20.0, 20.0, 600.0, 400.0];
-const NAME: &str = "Clean picture";
+const NAME: &str = "Channel Viewer";
 
 struct Bench {
     rig: Rig,

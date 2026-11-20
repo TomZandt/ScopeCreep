@@ -196,7 +196,7 @@ pub fn showcase(scale: f32) -> Showcase {
         Chip::channel("B", Channel::B),
     ];
     let title = TitleBar {
-        name: "Luma waveform".to_string(),
+        name: "Waveform".to_string(),
         tags: "Rec.709 weights, 100 %".to_string(),
         chips: bar_chips,
         groups: Vec::new(),

@@ -95,7 +95,7 @@ fn the_window_shows_seven_panels_without_the_gamut_warning_highlight_neutrals_ci
     assert_eq!(names.len(), 7, "{names:?}");
     assert_eq!(
         names[..3],
-        ["Clean picture", "Luma waveform", "ARRI False Colour"]
+        ["Channel Viewer", "Waveform", "False Colour - Arri"]
     );
     for gone in [
         "Gamut/legal warning",
@@ -260,7 +260,7 @@ fn the_displays_draw_at_the_screens_scale() {
 #[test]
 fn labels_say_what_each_display_shows() {
     let mut b = Bench::new("labels");
-    assert_eq!(b.set.labels()[0], "Clean picture");
+    assert_eq!(b.set.labels()[0], "Channel Viewer");
     b.set.configure(
         &DisplayContext {
             colour_label: "Colour Setup unknown".into(),
@@ -271,7 +271,7 @@ fn labels_say_what_each_display_shows() {
     b.play(1920, 1080, &solid(1920, 1080, [0.5; 3]));
     let labels = b.set.labels();
     assert!(
-        labels[0].starts_with("Clean picture  ·  1920 × 1080  ·  Colour Setup unknown"),
+        labels[0].starts_with("Channel Viewer  ·  1920 × 1080  ·  Colour Setup unknown"),
         "{}",
         labels[0]
     );
@@ -398,11 +398,7 @@ fn the_luma_weights_setting_changes_the_counts_and_the_label_for_a_coloured_fram
 fn every_display_that_shows_luma_follows_the_waveforms_luma_weights() {
     let b = Bench::new("luma-everywhere");
     let waveform = b.set.name(1);
-    let following = [
-        "ARRI-style False Colour",
-        "Saturation heatmap",
-        "Vectorscope",
-    ];
+    let following = ["ARRI-style False Colour", "Saturation", "Vectorscope"];
     let label_of = |b: &Bench, prefix: &str| {
         b.set
             .labels()

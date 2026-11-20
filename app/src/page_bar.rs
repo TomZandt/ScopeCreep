@@ -149,6 +149,17 @@ impl PageBar {
         }
     }
 
+    /// Where a bar menu drops from when `part` opened it: the button's own rectangle (the **+** or Add panel), worked out
+    /// from the bar as it is now, never from where it was last drawn. `None` for a part that opens no menu.
+    pub fn anchor(&self, part: BarPart, top: f32, width: f32, scale: f32) -> Option<[f32; 4]> {
+        let l = self.layout(top, width, scale);
+        match part {
+            BarPart::Plus => Some(l.plus),
+            BarPart::AddPanel => Some(l.add_panel),
+            _ => None,
+        }
+    }
+
     /// The part under `point`.
     pub fn hit(&self, top: f32, width: f32, point: [f32; 2], scale: f32) -> Option<BarPart> {
         let l = self.layout(top, width, scale);

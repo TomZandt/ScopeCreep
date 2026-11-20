@@ -243,7 +243,7 @@ fn bw_state(
 #[test]
 fn the_clean_picture_and_skin_tone_start_in_colour_and_arri_and_stops_start_grey() {
     let (chips, on) = bw_state(
-        "Clean picture",
+        "Channel Viewer",
         &picture_view::SETTINGS,
         &picture_view::TOOLBAR,
         &[],
@@ -257,7 +257,7 @@ fn the_clean_picture_and_skin_tone_start_in_colour_and_arri_and_stops_start_grey
     );
     assert_eq!(
         bw_state(
-            "Skin tone",
+            "Skin Tone",
             &skin_tone_view::SETTINGS,
             &skin_tone_view::TOOLBAR,
             &[]
@@ -267,7 +267,7 @@ fn the_clean_picture_and_skin_tone_start_in_colour_and_arri_and_stops_start_grey
     );
     assert_eq!(
         bw_state(
-            "ARRI False Colour",
+            "False Colour - Arri",
             &arri_false_colour::SETTINGS,
             &arri_false_colour::TOOLBAR,
             &[]
@@ -278,7 +278,7 @@ fn the_clean_picture_and_skin_tone_start_in_colour_and_arri_and_stops_start_grey
     // Stops' toolbar is the mode chips then B/W: Zones (default), Grey +1, B/W.
     assert_eq!(
         bw_state(
-            "Stops False Colour",
+            "False Colour - Stops",
             &stops_false_colour::SETTINGS,
             &stops_false_colour::TOOLBAR,
             &[]
@@ -291,7 +291,7 @@ fn the_clean_picture_and_skin_tone_start_in_colour_and_arri_and_stops_start_grey
 #[test]
 fn the_clean_picture_channel_chips_switch_turn_off_on_a_second_click_and_are_remembered() {
     let mut s = PanelSettings::default();
-    let name = "Clean picture";
+    let name = "Channel Viewer";
     let click = |s: &mut PanelSettings, i: usize| {
         let t = Toolbar::new(
             &picture_view::TOOLBAR,
@@ -313,7 +313,7 @@ fn the_clean_picture_channel_chips_switch_turn_off_on_a_second_click_and_are_rem
     assert_eq!(
         Toolbar::new(
             &skin_tone_view::TOOLBAR,
-            &back.resolve("Skin tone", &skin_tone_view::SETTINGS)
+            &back.resolve("Skin Tone", &skin_tone_view::SETTINGS)
         )
         .on,
         [false],
@@ -376,9 +376,9 @@ fn fit_inside(
 fn clean_picture(set: &[(&str, &str)]) -> Settings {
     let mut s = PanelSettings::default();
     for (k, v) in set {
-        s.set("Clean picture", k, v);
+        s.set("Channel Viewer", k, v);
     }
-    s.resolve("Clean picture", &picture_view::SETTINGS)
+    s.resolve("Channel Viewer", &picture_view::SETTINGS)
 }
 
 #[test]
@@ -393,7 +393,7 @@ fn at_the_minimum_panel_width_only_the_clean_pictures_chips_overflow_and_stay_re
             &picture_view::TOOLBAR,
             small,
             scale,
-            "Clean picture",
+            "Channel Viewer",
         );
         assert!(toolbar.chips.is_empty(), "every chip gave way");
         assert_eq!(toolbar.collapsed, ["channel", "loupe"]);
@@ -448,7 +448,7 @@ fn chips_leave_a_setting_at_a_time_so_a_lit_channel_is_never_hidden_beside_its_n
             &picture_view::TOOLBAR,
             bar(170.0, scale),
             scale,
-            "Clean picture",
+            "Channel Viewer",
         );
         assert_eq!(
             toolbar
@@ -467,7 +467,7 @@ fn chips_leave_a_setting_at_a_time_so_a_lit_channel_is_never_hidden_beside_its_n
             &picture_view::TOOLBAR,
             bar(scopecreep::style::SPACE_MIN_PANEL_WIDTH, scale),
             scale,
-            "Clean picture",
+            "Channel Viewer",
         );
         assert!(toolbar.chips.is_empty(), "never a part of the channel row");
         assert_eq!(toolbar.collapsed, ["channel", "loupe"]);
@@ -486,7 +486,7 @@ fn with_room_the_clean_picture_shows_every_chip_as_before() {
             // Five chips in two groups, the settings button and the pads take 198 px; the Panel's border takes 2 more.
             bar(200.0, scale),
             scale,
-            "Clean picture",
+            "Channel Viewer",
         );
         assert_eq!(
             toolbar
@@ -511,19 +511,19 @@ fn at_the_minimum_panel_width_the_other_picture_panels_chips_overflow_into_the_p
         Settings,
     ); 3] = [
         (
-            "ARRI False Colour",
+            "False Colour - Arri",
             &arri_false_colour::SETTINGS,
             &arri_false_colour::TOOLBAR,
             Settings::default(),
         ),
         (
-            "Skin tone",
+            "Skin Tone",
             &skin_tone_view::SETTINGS,
             &skin_tone_view::TOOLBAR,
             Settings::default(),
         ),
         (
-            "Stops False Colour",
+            "False Colour - Stops",
             &stops_false_colour::SETTINGS,
             stops_false_colour::toolbar_for(&grey),
             grey.clone(),
@@ -575,7 +575,7 @@ fn a_toolbars_chips_are_grouped_by_setting_with_a_gap_twice_that_within_a_group(
 
 #[test]
 fn stops_mode_is_two_chips_one_at_a_time_remembered_and_b_w_follows_grey_and_plus_one() {
-    let name = "Stops False Colour";
+    let name = "False Colour - Stops";
     let toolbar = |s: &PanelSettings| {
         let own = s.resolve(name, &stops_false_colour::SETTINGS);
         Toolbar::new(stops_false_colour::toolbar_for(&own), &own)
@@ -672,7 +672,7 @@ fn the_tags_say_b_w_or_colour_when_the_toggle_is_not_at_its_default() {
     let channel_tags = |v: &str| {
         let settings: Settings = [("channel".to_string(), v.to_string())].into();
         panel_title(
-            "Clean picture",
+            "Channel Viewer",
             &DisplayContext {
                 settings,
                 ..DisplayContext::default()
@@ -689,14 +689,14 @@ fn the_tags_say_b_w_or_colour_when_the_toggle_is_not_at_its_default() {
             .any(|t| matches!(t.as_str(), "Luma" | "Red" | "Green" | "Blue" | "colour")),
         "colour is the default and is not tagged"
     );
-    assert!(tags("Skin tone", "on").contains(&"B/W".to_string()));
-    assert!(tags("ARRI False Colour", "off").contains(&"colour".to_string()));
+    assert!(tags("Skin Tone", "on").contains(&"B/W".to_string()));
+    assert!(tags("False Colour - Arri", "off").contains(&"colour".to_string()));
     assert!(
-        !tags("ARRI False Colour", "on")
+        !tags("False Colour - Arri", "on")
             .iter()
             .any(|t| t == "B/W" || t == "colour")
     );
-    assert!(tags("Stops False Colour", "off").contains(&"colour".to_string()));
+    assert!(tags("False Colour - Stops", "off").contains(&"colour".to_string()));
 }
 
 // ------------------------------------------------------------------ the luma waveform's chips (#117)
@@ -1140,7 +1140,7 @@ fn a_vectorscope_setting_is_a_chip_or_in_the_popover_never_both() {
 
 #[test]
 fn the_clean_picture_loupe_chip_is_off_by_default_toggles_is_remembered_and_tags_only_when_on() {
-    let name = "Clean picture";
+    let name = "Channel Viewer";
     let mut s = PanelSettings::default();
     let toolbar = |s: &PanelSettings| {
         Toolbar::new(

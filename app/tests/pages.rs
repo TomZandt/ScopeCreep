@@ -8,13 +8,13 @@ use scopecreep::layouts::Layouts;
 use scopecreep::pages::{MAX_PAGES, PageRename, Pages};
 
 const NAMES: [&str; 7] = [
-    "Clean picture",
-    "Luma waveform",
-    "ARRI False Colour",
+    "Channel Viewer",
+    "Waveform",
+    "False Colour - Arri",
     "Vectorscope",
-    "Saturation heatmap",
-    "Skin tone",
-    "Stops False Colour",
+    "Saturation",
+    "Skin Tone",
+    "False Colour - Stops",
 ];
 const AREA: [f32; 4] = [12.0, 12.0, 1256.0, 716.0];
 const GAP: f32 = 12.0;
@@ -335,7 +335,7 @@ fn a_default_page_shares_no_panel_with_another_page() {
     assert_eq!(free, default_tree(), "nothing claimed: the first instances");
     let tree = scopecreep::pages::default_tree(&set, |p| p == 0 || p == 3);
     assert_eq!(set.len(), 9, "two new instances were made");
-    assert_eq!(set.keys()[7], "Clean picture 2");
+    assert_eq!(set.keys()[7], "Channel Viewer 2");
     assert_eq!(set.keys()[8], "Vectorscope 2");
     let mut panels = tree.panels();
     panels.sort_unstable();
@@ -352,7 +352,7 @@ fn copies_a_saved_page_names_are_made_again_before_it_is_read() {
         "layout 2\nsplit row 0.5\nleaf 0 Clean picture|Clean picture 2\nleaf 0 Vectorscope 3\n";
     scopecreep::pages::recreate_saved_copies(&set, &[text, "leaf 0 Nonsense 99\n"]);
     let keys = set.keys();
-    assert!(keys.contains(&"Clean picture 2".to_string()), "{keys:?}");
+    assert!(keys.contains(&"Channel Viewer 2".to_string()), "{keys:?}");
     assert!(keys.contains(&"Vectorscope 3".to_string()), "{keys:?}");
     assert!(!keys.iter().any(|k| k.starts_with("Nonsense")));
 }
@@ -383,7 +383,7 @@ fn a_panel_only_a_deleted_page_held_is_removed_and_the_pages_left_keep_their_pan
     assert_eq!(panels, (7..14).collect::<Vec<_>>());
     assert_eq!(
         set.keys()[7],
-        "Clean picture 3",
+        "Channel Viewer 3",
         "a Panel keeps its key when others go"
     );
 }

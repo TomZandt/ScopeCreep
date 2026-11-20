@@ -42,7 +42,9 @@ I couldn't get these: Omniscope's own docs (timeinpixels.com returned 404), a fu
 
 ---
 
-## 1. Clean picture
+> The displays were renamed after this note was written: Clean picture is Channel Viewer, Luma waveform is Waveform, ARRI False Colour is False Colour - Arri, Stops False Colour is False Colour - Stops, Skin tone is Skin Tone and Saturation heatmap is Saturation. The Displays table in GLOSSARY.md has the current names.
+
+## 1. Channel Viewer (was Clean picture)
 
 | Control | Place | Default | Why | Source |
 |---|---|---|---|---|
@@ -52,7 +54,7 @@ I couldn't get these: Omniscope's own docs (timeinpixels.com returned 404), a fu
 | Safe-area / aspect markers | Drop | – | Every hardware scope offers them (Leader §13.4, TEK p. 83), but they are framing tools, not grading tools, and Resolve's Viewer draws them. A colourist won't miss them on a second monitor. | LV; TEK |
 | Brightness / contrast of the picture | Drop | – | Leader has them (§13.2.3–4), but on a grading monitor they would mislead. ADR 0013 says a display can't be set up to mislead. | LV; REPO ADR 0013 |
 
-## 2. Luma waveform
+## 2. Waveform (was Luma waveform)
 
 What real scopes offer:
 - **Resolve's Waveform:** Y / CbCr / RGB modes; in RGB, R, G and B buttons "individually toggled on and off to see any combination of graphs"; Colorize; Extents; a Waveform (trace) brightness slider; a Graticule brightness slider; Show Reference Levels with Low and High sliders (R20 pp. 3019–3020).
@@ -134,7 +136,7 @@ What real scopes offer:
 | Band scheme editing / presets | Drop | – | ARRI's colours are "hard-coded" and "purely categorical". Editable schemes (OmniScope, SmallHD MAP, Pomfort's generator) are a different product, and ADR 0010 already decides naming and licensing. | ARRI Table 1; OMNI; SHD-FC; REPO ADR 0010 |
 | Overlay intensity / opacity | Drop | – | SmallHD has "Intensity". A half-strength band gets mistaken for another band, which misleads. | SHD-FC |
 
-## 8. Stops False Colour
+## 8. False Colour - Stops (was Stops False Colour)
 
 | Control | Place | Default | Why | Source |
 |---|---|---|---|---|
@@ -151,7 +153,7 @@ What real scopes offer:
 | Tolerance (± degrees) | **Popover** slider (#83) | ±5° | Set once to taste. MonoNodes exposes no tolerance at all, which is a sign it isn't adjusted often. | MN; REPO #83 |
 | Line angle | Drop | 123° (shared constant, ADR 0018) | An adjustable angle would turn it into a different tool for each user. | REPO ADR 0018 |
 
-## 10. Saturation heatmap
+## 10. Saturation (was Saturation heatmap)
 
 | Control | Place | Default | Why | Source |
 |---|---|---|---|---|

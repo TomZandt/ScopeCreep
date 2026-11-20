@@ -259,7 +259,7 @@ fn the_project_colour_setup_is_read_once_playback_stops_and_labelled_from_projec
     );
     assert_eq!(
         b.label(),
-        "Clean picture  ·  16 × 9  ·  DaVinci WG/Intermediate → Rec.709 Gamma 2.4 (from project)  ·  Output Conversion exact"
+        "Channel Viewer  ·  16 × 9  ·  DaVinci WG/Intermediate → Rec.709 Gamma 2.4 (from project)  ·  Output Conversion exact"
     );
 }
 
