@@ -53,8 +53,8 @@ fn every_page_up_to_nine_has_a_go_to_command_and_the_save_commands_are_gone() {
     let all = Command::all();
     assert_eq!(
         all.len(),
-        1 + 9 + 3 + 6,
-        "Default layout, go to each of nine pages, new, duplicate and delete page, the Fit toggle, fill the Window, the legends, add and close a Panel, undo a layout change"
+        1 + 9 + 3 + 7,
+        "Default layout, go to each of nine pages, new, duplicate and delete page, auto resize, the Fit toggle, fill the Window, the legends, add and close a Panel, undo a layout change"
     );
     for page in 0..9 {
         assert!(all.contains(&Command::GoToPage(page)));

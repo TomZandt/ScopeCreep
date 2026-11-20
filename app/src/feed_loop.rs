@@ -27,6 +27,8 @@ pub struct Texts {
     pub status_hover: String,
     pub notice: Option<String>,
     pub has_picture: bool,
+    /// The Feed frame's size (width, height), for Auto resize; none with no frame.
+    pub frame: Option<[u32; 2]>,
 }
 
 /// What one step changed. Nothing set means nothing to redraw.
@@ -66,6 +68,7 @@ pub struct FeedLoop {
     /// Said while the last frame measured could not get all the GPU memory it needed; it comes before the Feed's.
     memory_notice: Option<String>,
     has_picture: bool,
+    frame: Option<[u32; 2]>,
     last: Texts,
     /// Frames put on the GPU and handed to the displays.
     pub scope_frames: u64,
@@ -98,6 +101,7 @@ impl FeedLoop {
             notice: None,
             memory_notice: None,
             has_picture: false,
+            frame: None,
             last: Texts::default(),
             scope_frames: 0,
         }
@@ -157,6 +161,7 @@ impl FeedLoop {
             self.top_bar = status.top_bar();
             self.notice = status.notice();
             self.has_picture = status.picture.is_some();
+            self.frame = status.picture.as_ref().map(|p| [p.width, p.height]);
             let now_context = status.display_context();
             if now_context != self.context {
                 self.context = now_context;
@@ -216,6 +221,7 @@ impl FeedLoop {
                 status_hover: self.status_hover.clone(),
                 notice: self.memory_notice.clone().or_else(|| self.notice.clone()),
                 has_picture: self.has_picture,
+                frame: self.frame,
             };
             if now != self.last {
                 *self.texts.lock().unwrap() = now.clone();

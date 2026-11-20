@@ -1,6 +1,7 @@
 //! The scopecreep app. The window and drawing live in the binary (`main.rs`, `picture_view.rs`); this library is
 //! the part with behaviour worth testing: what the app makes of the Feed.
 pub mod arri_false_colour;
+pub mod auto_resize;
 pub mod black_and_white;
 pub mod channel_view;
 pub mod cie;

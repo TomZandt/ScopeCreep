@@ -20,6 +20,7 @@ use glyphon::{
     Attrs, Buffer, Cache, Color, ColorMode, Family, FontSystem, Metrics, Resolution, Shaping,
     SwashCache, TextArea, TextAtlas, TextBounds, TextRenderer, Viewport,
 };
+use scopecreep::auto_resize;
 use scopecreep::commands::{Command, Hotkey, Hotkeys, Key};
 use scopecreep::components::{self, Align, BarKind, MenuBar, Prim, State, Tooltip};
 use scopecreep::display::{DisplaySet, Pointer};
@@ -1109,6 +1110,7 @@ impl AppWindow {
                 self.open_add_list();
                 self.bar_anchor = Some(self.add_rect);
             }
+            BarPart::AutoResize => self.run(Command::AutoResize),
         }
         self.window.request_redraw();
     }
@@ -1233,6 +1235,14 @@ impl AppWindow {
             }
             Command::UndoLayout => {
                 self.pages.undo();
+            }
+            Command::AutoResize => {
+                // The current page only, once, for the footage on screen (16:9 with no Feed): one undo step.
+                let shapes = self.displays.shapes();
+                let aspect = auto_resize::aspect_of(self.texts.lock().unwrap().frame);
+                let (area, gap, scale) = (self.grid_area, self.grid_gap, self.scale);
+                self.pages
+                    .change(|g| g.auto_resize(&shapes, aspect, area, gap, scale));
             }
             Command::ZoomFit => {
                 // The Panel under the pointer; over a Scope, or off the Panels, nothing.

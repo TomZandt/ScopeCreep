@@ -1,0 +1,11 @@
+# #213: Auto resize
+
+What ticket #213 showed on 2026-11-20, at the pure layout seam (`app/tests/auto_resize.rs`) and the pure UI seam (`app/tests/page_bar.rs`, `app/tests/menu_bar_seam.rs`, `app/tests/commands_seam.rs`), headless. Nothing was checked at the app: the button on a real window and the look of a resized page are still to be tried by a person.
+
+- The fit is `LayoutTree::auto_resize(shapes, aspect, area, gap, scale)`, built on pure helpers in `app/src/auto_resize.rs` (`Shape`, `shape_of`, `aspect_of`, `legend_allowance`, `cell_extent`, `share`). Auto layout (#214) and the templates (#215) can call them with any footage aspect.
+- A split is fitted only when exactly one side is one tab group whose shown Panel is picture-shaped and the other side is not (a split below is not a shape). Picture-shaped is by display name (`shape_of`): the Picture Views and the luma waveform; the Vectorscope, the colour waveform and the CIE chart are not. A new display needs a line there.
+- The walk is top down with the rectangles the new ratios give, so a nested split sees its parent's new size. A ratio already within 0.0001 is left as it was, so pressing again changes nothing and is no undo step.
+- The picture's room is the cell less its borders and title bar (`PanelLayout`), the legend strip height always (whether or not that Panel's legend is on) and, for the waveform, the 44 px scale gutter. A picture cell then has the frame's aspect to within 1 % for 16:9, 2.39:1, 4:3, 1:1 and 9:16 at 1x and 2x. The waveform's edge rows above and below its plot are not allowed for.
+- The share is clamped to 15 to 85 %: a 2.39:1 picture beside a Vectorscope in a 1256 x 716 area stops at 85 %, and a 9:16 one in a 3000 x 300 area at 15 %.
+- The footage's aspect is the Feed frame's size (`Texts::frame`, set when a frame is on screen), 16:9 with none. Nothing else calls `auto_resize`: the button, the Layout menu entry and the Command do, once, through `Pages::change` (one undo step on the current page). Changing the footage or the Window leaves a page alone by construction.
+- The Page bar has an Auto resize chip beside Add panel (the tabs give up the room); "Auto resize" is in the Layout menu and is the Command "Page: auto resize", with no default hotkey.

@@ -6,6 +6,7 @@
 //! A Panel is named here by its index (the display's place in the display order). Rectangles are left, top, width,
 //! height in device pixels. What sits inside one Panel (border, title bar, display) is [`crate::panel_grid`].
 
+use crate::auto_resize::{self, Shape};
 use crate::panel_grid::{MIN_PANEL, PanelLayout, off_screen};
 use crate::style;
 
@@ -146,6 +147,47 @@ impl Node {
         }
     }
 
+    /// What this node's cell shows if it is one tab group: the shape of its shown Panel. A split is no shape.
+    fn shape(&self, shapes: &[Shape]) -> Shape {
+        match self {
+            Node::Leaf { tabs, active } => tabs
+                .get(*active)
+                .and_then(|p| shapes.get(*p))
+                .copied()
+                .unwrap_or(Shape::Other),
+            Node::Split { .. } => Shape::Other,
+        }
+    }
+
+    /// Auto resize (#213): top down, set the ratio of each split with exactly one picture-shaped side so that
+    /// side's cell has the footage's aspect; then go on into both sides with the new rectangles.
+    fn fit(&mut self, rect: [f32; 4], gap: f32, fit: &Fit) {
+        let Node::Split { dir, ratio, a, b } = self else {
+            return;
+        };
+        let (sa, sb) = (a.shape(fit.shapes), b.shape(fit.shapes));
+        if sa.is_picture() != sb.is_picture() {
+            let (shape, first) = if sa.is_picture() {
+                (sa, true)
+            } else {
+                (sb, false)
+            };
+            let (along_width, other, total) = match dir {
+                Dir::Row => (true, rect[3], rect[2] - gap),
+                Dir::Col => (false, rect[2], rect[3] - gap),
+            };
+            let needed = auto_resize::cell_extent(shape, fit.aspect, other, along_width, fit.scale);
+            let new = auto_resize::share(needed, total, first);
+            // A split already there to within a hair is not changed, so a second press is no change at all.
+            if (new - *ratio).abs() > 1e-4 {
+                *ratio = new;
+            }
+        }
+        let [ra, rb] = halves(*dir, rect, gap, *ratio);
+        a.fit(ra, gap, fit);
+        b.fit(rb, gap, fit);
+    }
+
     fn panels(&self, out: &mut Vec<usize>) {
         match self {
             Node::Leaf { tabs, .. } => out.extend(tabs),
@@ -267,6 +309,13 @@ impl Node {
             }
         }
     }
+}
+
+/// What Auto resize fits to.
+struct Fit<'a> {
+    shapes: &'a [Shape],
+    aspect: f32,
+    scale: f32,
 }
 
 /// The two sides of a split of `rect`: the first takes `ratio` of the space net of `gap`.
@@ -556,6 +605,26 @@ impl LayoutTree {
                 || LayoutTree::automatic(names.len()),
                 |root| LayoutTree::new(root, names.len()),
             )
+    }
+
+    /// Auto resize (#213): change ratios only, top down. Where a split has exactly one picture-shaped side (a
+    /// Picture View or the luma waveform, by `shapes` in Panel order) its ratio is set so that side's cell leaves
+    /// room for a picture of `aspect` (title bar, legend strip and, for the waveform, the scale gutter taken off),
+    /// clamped to 15 to 85 %. `area`, `gap` and `scale` are the Window's. Places and nesting never change.
+    pub fn auto_resize(
+        &mut self,
+        shapes: &[Shape],
+        aspect: f32,
+        area: [f32; 4],
+        gap: f32,
+        scale: f32,
+    ) {
+        let fit = Fit {
+            shapes,
+            aspect,
+            scale,
+        };
+        self.root.fit(area, gap, &fit);
     }
 
     /// A page with no Panel, for a Window with `total` Panels.

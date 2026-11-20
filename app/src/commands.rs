@@ -23,6 +23,8 @@ pub enum Command {
     DuplicatePage,
     /// Delete the current page; one page always stays (ADR 0041). No default hotkey.
     DeletePage,
+    /// Resize the current page's splits so picture cells match the footage's aspect (ADR 0041, #213). No default hotkey.
+    AutoResize,
     /// The picture Panel under the pointer to Fit and back to its last zoom and spot (every picture Panel while
     /// Link is on), like Resolve's Shift+Z (#169).
     ZoomFit,
@@ -47,6 +49,7 @@ impl Command {
         all.push(Command::NewPage);
         all.push(Command::DuplicatePage);
         all.push(Command::DeletePage);
+        all.push(Command::AutoResize);
         all.push(Command::ZoomFit);
         all.push(Command::FillWindow);
         all.push(Command::ToggleLegends);
@@ -64,6 +67,7 @@ impl Command {
             Command::NewPage => "page-new".to_string(),
             Command::DuplicatePage => "page-duplicate".to_string(),
             Command::DeletePage => "page-delete".to_string(),
+            Command::AutoResize => "page-auto-resize".to_string(),
             Command::ZoomFit => "zoom-fit".to_string(),
             Command::FillWindow => "panel-fill".to_string(),
             Command::ToggleLegends => "legends-toggle".to_string(),
@@ -81,6 +85,7 @@ impl Command {
             Command::NewPage => "Page: new".to_string(),
             Command::DuplicatePage => "Page: duplicate".to_string(),
             Command::DeletePage => "Page: delete".to_string(),
+            Command::AutoResize => "Page: auto resize".to_string(),
             Command::ZoomFit => "Zoom: Fit / last zoom".to_string(),
             Command::FillWindow => "Panel: fill the Window".to_string(),
             Command::ToggleLegends => "Legends: show / hide".to_string(),
@@ -101,7 +106,8 @@ impl Command {
             | Command::ClosePanel
             | Command::NewPage
             | Command::DuplicatePage
-            | Command::DeletePage => None,
+            | Command::DeletePage
+            | Command::AutoResize => None,
             Command::GoToPage(page) => digit(page).map(Hotkey::ctrl),
             Command::ZoomFit => Key::named("Z").map(Hotkey::new),
             Command::FillWindow => Key::named("F").map(Hotkey::ctrl),

@@ -586,6 +586,15 @@ impl DisplaySet {
         self.read().displays.iter().map(|d| d.name()).collect()
     }
 
+    /// What each Panel's display is, for Auto resize (picture-shaped or not), in Panel order.
+    pub fn shapes(&self) -> Vec<crate::auto_resize::Shape> {
+        self.read()
+            .displays
+            .iter()
+            .map(|d| crate::auto_resize::shape_of(d.name()))
+            .collect()
+    }
+
     pub fn labels(&self) -> Vec<String> {
         self.read().displays.iter().map(|d| d.label()).collect()
     }

@@ -1,5 +1,5 @@
 //! The Page bar (#212, spec #196, ADR 0041): between the Colour Setup line and the Panels, a tab for each page, a **+**
-//! after the last one and the Add panel button at its right end. The first nine tabs read "[1] Colour": the number is
+//! after the last one and the Auto resize and Add panel buttons at its right end. The first nine tabs read "[1] Colour": the number is
 //! the tab's position, so the Ctrl+number that goes to it shows, and a tenth page onward has none. Pure: no GPU, no
 //! window. Tabs, "+" and Add panel are chips, so they draw through the style tokens.
 //!
@@ -14,6 +14,8 @@ pub const PLUS_CHIP: &str = "+";
 pub const PLUS_TOOLTIP: &str = "New page from…";
 pub const ADD_CHIP: &str = "Add panel";
 pub const ADD_TOOLTIP: &str = "Add a Panel to this page";
+pub const RESIZE_CHIP: &str = "Auto resize";
+pub const RESIZE_TOOLTIP: &str = "Resize this page's splits to fit the footage";
 
 /// What a click on the bar can hit.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -24,6 +26,8 @@ pub enum BarPart {
     Plus,
     /// The Add panel button.
     AddPanel,
+    /// The Auto resize button (#213).
+    AutoResize,
 }
 
 /// Where the bar's parts are (device pixels): also their hit areas.
@@ -35,6 +39,7 @@ pub struct BarLayout {
     pub tabs: Vec<(usize, [f32; 4])>,
     pub plus: [f32; 4],
     pub add_panel: [f32; 4],
+    pub auto_resize: [f32; 4],
 }
 
 /// What the Page bar says now.
@@ -77,9 +82,10 @@ impl PageBar {
         let gap = style::SPACE_CHIP_GAP * scale;
         2.0 * style::SPACE_BAR_PAD * scale
             + Chip::new(ADD_CHIP).size(scale)[0]
+            + Chip::new(RESIZE_CHIP).size(scale)[0]
             + Chip::new(PLUS_CHIP).size(scale)[0]
             + Chip::new(&tab_label(0, crate::pages::MAIN)).size(scale)[0]
-            + 2.0 * gap
+            + 3.0 * gap
     }
 
     /// Where the parts are, for a bar `width` wide with its top at `top`.
@@ -90,9 +96,14 @@ impl PageBar {
         let chip_top = top + (h - style::SPACE_CHIP_HEIGHT * scale) / 2.0;
         let add = Chip::new(ADD_CHIP);
         let add_panel = add.rect([width - pad - add.size(scale)[0], chip_top], scale);
+        let resize = Chip::new(RESIZE_CHIP);
+        let auto_resize = resize.rect(
+            [add_panel[0] - gap - resize.size(scale)[0], chip_top],
+            scale,
+        );
         let plus_width = Chip::new(PLUS_CHIP).size(scale)[0];
         // Room for tabs: up to the Add panel button, leaving a gap, with the + after the last tab.
-        let limit = add_panel[0] - gap - plus_width - gap;
+        let limit = auto_resize[0] - gap - plus_width - gap;
         let widths: Vec<f32> = (0..self.names.len())
             .map(|i| Chip::new(&self.label(i)).size(scale)[0])
             .collect();
@@ -122,6 +133,7 @@ impl PageBar {
             tabs,
             plus,
             add_panel,
+            auto_resize,
         }
     }
 
@@ -130,6 +142,8 @@ impl PageBar {
         let l = self.layout(top, width, scale);
         if contains(l.add_panel, point) {
             Some(BarPart::AddPanel)
+        } else if contains(l.auto_resize, point) {
+            Some(BarPart::AutoResize)
         } else if contains(l.plus, point) {
             Some(BarPart::Plus)
         } else {
@@ -168,6 +182,12 @@ impl PageBar {
             [l.plus[0], l.plus[1]],
             false,
             state(BarPart::Plus),
+            scale,
+        ));
+        prims.extend(Chip::new(RESIZE_CHIP).draw(
+            [l.auto_resize[0], l.auto_resize[1]],
+            false,
+            state(BarPart::AutoResize),
             scale,
         ));
         prims.extend(Chip::new(ADD_CHIP).draw(

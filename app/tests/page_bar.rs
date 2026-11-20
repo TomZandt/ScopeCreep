@@ -73,9 +73,14 @@ fn the_bar_lays_out_tabs_then_plus_with_add_panel_at_the_right_end_at_1x_and_2x(
         }
         assert!(l.plus[0] >= x, "the + comes after the last tab");
         assert!(
-            l.plus[0] + l.plus[2] <= l.add_panel[0],
-            "and before Add panel"
+            l.plus[0] + l.plus[2] <= l.auto_resize[0],
+            "and before Auto resize"
         );
+        assert!(
+            l.auto_resize[0] + l.auto_resize[2] <= l.add_panel[0],
+            "which is beside Add panel"
+        );
+        assert_eq!(l.auto_resize[1], l.add_panel[1]);
         let right = l.add_panel[0] + l.add_panel[2];
         assert!(
             (width - right - style::SPACE_BAR_PAD * scale).abs() < 0.01,
@@ -112,6 +117,10 @@ fn a_click_finds_a_tab_the_plus_or_add_panel() {
             b.hit(top, width, centre(l.add_panel), scale),
             Some(BarPart::AddPanel)
         );
+        assert_eq!(
+            b.hit(top, width, centre(l.auto_resize), scale),
+            Some(BarPart::AutoResize)
+        );
         assert_eq!(b.hit(top, width, [width / 2.0, top + 1.0], scale), None);
     }
 }
@@ -121,7 +130,16 @@ fn the_current_tab_is_lit_and_drawn_with_its_label() {
     let b = bar(&["Colour", "Pictures"], 1);
     let prims = b.draw(56.0, 1280.0, None, 1.0);
     let drawn = texts(&prims);
-    assert_eq!(drawn, ["[1] Colour", "[2] Pictures", "+", "Add panel"]);
+    assert_eq!(
+        drawn,
+        [
+            "[1] Colour",
+            "[2] Pictures",
+            "+",
+            "Auto resize",
+            "Add panel"
+        ]
+    );
 }
 
 #[test]
@@ -157,7 +175,10 @@ fn with_more_tabs_than_room_the_current_one_is_always_shown() {
             for (_, r) in &l.tabs {
                 assert!(r[0] + r[2] <= l.plus[0] && r[0] >= 0.0);
             }
-            assert!(l.plus[0] + l.plus[2] <= l.add_panel[0], "the + still fits");
+            assert!(
+                l.plus[0] + l.plus[2] <= l.auto_resize[0],
+                "the + still fits"
+            );
         }
     }
 }
