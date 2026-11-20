@@ -1,8 +1,6 @@
-//! Named layouts at the pure seam (#98): saving into slots, recalling, renaming, the menu, and a
-//! layout surviving Panels being added or removed.
-use scopecreep::layouts::{Action, Click, Layouts, Rename, SLOTS, action, menu};
+//! Named layouts at the pure seam (#98): saving into slots, recalling, renaming, and a layout surviving Panels being added or removed.
+use scopecreep::layouts::{Layouts, Rename, SLOTS};
 use scopecreep::panel_grid::{Border, PanelGrid};
-use scopecreep::settings::MenuRow;
 
 const NAMES: [&str; 7] = [
     "Clean picture",
@@ -170,88 +168,7 @@ fn a_panel_missing_from_a_layout_is_placed_in_the_first_free_cell() {
 }
 
 #[test]
-fn a_menu_click_recalls_saves_renames_or_restores_the_default() {
-    let mut layouts = Layouts::default();
-    layouts.save(0, &arranged(), &NAMES);
-    assert_eq!(
-        action(&layouts, "default", Click::Plain),
-        Some(Action::Default)
-    );
-    assert_eq!(action(&layouts, "default", Click::Right), None);
-    assert_eq!(
-        action(&layouts, "1", Click::Plain),
-        Some(Action::Recall(0)),
-        "a saved layout is recalled"
-    );
-    assert_eq!(
-        action(&layouts, "1", Click::Shift),
-        Some(Action::Save(0)),
-        "Shift saves over it"
-    );
-    assert_eq!(action(&layouts, "1", Click::Right), Some(Action::Rename(0)));
-    assert_eq!(
-        action(&layouts, "2", Click::Plain),
-        Some(Action::Save(1)),
-        "an empty slot is filled by a click"
-    );
-    assert_eq!(
-        action(&layouts, "2", Click::Right),
-        None,
-        "there is nothing to rename in it"
-    );
-    assert_eq!(action(&layouts, "10", Click::Plain), None);
-}
-
-fn texts(menu: &scopecreep::settings::Menu) -> Vec<String> {
-    menu.rows
-        .iter()
-        .map(|r| match r {
-            MenuRow::Heading(t) => t.clone(),
-            MenuRow::Choice { text, .. } | MenuRow::Reset { text, .. } => text.clone(),
-            MenuRow::Slider { amount, value, .. } => amount.text(*value),
-        })
-        .collect()
-}
-
-#[test]
-fn the_menu_lists_default_layout_and_the_nine_slots_by_name() {
-    let mut layouts = Layouts::default();
-    layouts.save(1, &arranged(), &NAMES);
-    layouts.rename(1, "Colour pass");
-    let rows = texts(&menu(&layouts, None));
-    assert_eq!(rows[1], "Default layout");
-    assert_eq!(rows[2], "1  empty");
-    assert_eq!(rows[3], "2  Colour pass");
-    assert_eq!(rows[10], "9  empty");
-    assert_eq!(
-        rows.len(),
-        12,
-        "a heading, the default, nine slots, and how to use it"
-    );
-}
-
-#[test]
-fn the_menu_rows_hit_test_like_the_settings_menu() {
-    let layouts = Layouts::default();
-    let m = menu(&layouts, None);
-    let rect = m.rect([100.0, 100.0], [1280.0, 760.0], 1.0);
-    // Row 1 is "Default layout": its centre is on the choice, the heading's is not.
-    let row_centre = |i: usize| {
-        [
-            rect[0] + 10.0,
-            scopecreep::settings::Menu::row_top(rect, i, 1.0) + 2.0,
-        ]
-    };
-    assert_eq!(
-        m.choice_at(rect, row_centre(1), 1.0),
-        Some(("layout", "default"))
-    );
-    assert_eq!(m.choice_at(rect, row_centre(0), 1.0), None);
-    assert_eq!(m.choice_at(rect, row_centre(4), 1.0), Some(("layout", "3")));
-}
-
-#[test]
-fn renaming_types_into_the_menu_row_and_accepting_keeps_the_name() {
+fn renaming_types_a_name_and_accepting_keeps_it() {
     let mut layouts = Layouts::default();
     layouts.save(0, &default_grid(), &NAMES);
     let mut rename = Rename::start(&layouts, 0).unwrap();
@@ -260,7 +177,7 @@ fn renaming_types_into_the_menu_row_and_accepting_keeps_the_name() {
         rename.backspace();
     }
     rename.type_text("Grade\n");
-    assert_eq!(texts(&menu(&layouts, Some(&rename)))[2], "1  Grade|");
+    assert_eq!(rename.text, "Grade");
     assert_eq!(
         layouts.name(0),
         Some("Layout 1"),
@@ -290,7 +207,7 @@ fn a_typed_name_stops_at_its_limit() {
 
 #[test]
 fn default_layout_is_the_default_grid_for_the_displays() {
-    // "Default layout" in the menu is PanelGrid::default_for, whatever has been saved.
+    // "Default layout" (the command) is PanelGrid::default_for, whatever has been saved.
     let mut layouts = Layouts::default();
     layouts.save(0, &arranged(), &NAMES);
     assert_ne!(layouts.recall(0, &NAMES), Some(default_grid()));

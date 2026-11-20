@@ -17,6 +17,7 @@ pub mod layout;
 pub mod layouts;
 pub mod loupe;
 pub mod measurement;
+pub mod menu_bar;
 pub mod monitor;
 pub mod muted_palette;
 pub mod output_conversion;

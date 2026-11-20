@@ -22,3 +22,7 @@ One format and one set of recovery rules, instead of a second grid format that c
 ## Note 2026-11-20
 
 Showing, saving into and the default layout are commands in the command table, and Ctrl+1 to 9 and Ctrl+Shift+1 to 9 are their default hotkeys, which the user can change (ADR 0036, #146).
+
+## Note 2026-11-20 (#147)
+
+The layout menu is no longer opened by right-clicking the status line, and its Shift-click and right-click are gone with its hint heading: the Layout menu on the menu bar lists Default layout and the nine slots (a click shows a saved one, or saves into an empty one), with "Save current layout into…" and "Rename layout…" switching the menu to the slots to save into or rename. Every entry runs a command and shows its hotkey.

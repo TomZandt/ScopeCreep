@@ -1,12 +1,11 @@
-//! Named layouts (#98): the nine slots the user saves arrangements of the Panel grid into, recalls, renames, and
-//! the small menu that lists them. Pure: no GPU, no window, no fonts.
+//! Named layouts (#98): the nine slots the user saves arrangements of the Panel grid into, recalls and renames.
+//! The Layout menu that lists them is in `menu_bar`. Pure: no GPU, no window, no fonts.
 //!
 //! A slot holds the grid as [`PanelGrid::to_text`] writes it, so recalling one goes through [`PanelGrid::from_text`]:
 //! a Panel the layout names that no longer exists is dropped, and a Panel it does not name is placed in the first
 //! free cells. Nothing here is on screen until the user opens the menu or presses a hotkey (the hotkeys are commands, in
 //! `commands`).
 use crate::panel_grid::PanelGrid;
-use crate::settings::{Menu, MenuRow};
 
 /// How many layouts can be saved.
 pub const SLOTS: usize = 9;
@@ -127,7 +126,7 @@ impl Layouts {
     }
 }
 
-/// A name being typed for a slot: the menu shows it with a caret until it is accepted or dropped.
+/// A name being typed for a slot: the Layout menu shows it with a caret until it is accepted or dropped.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Rename {
     pub slot: usize,
@@ -159,78 +158,5 @@ impl Rename {
     /// Accept the name. Returns whether the layout's name changed (an empty name keeps the old one).
     pub fn accept(&self, layouts: &mut Layouts) -> bool {
         layouts.rename(self.slot, &self.text)
-    }
-}
-
-/// How a row of the menu was clicked.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum Click {
-    Plain,
-    /// With Shift held: save into the slot, even if it holds a layout.
-    Shift,
-    /// With the right button: rename.
-    Right,
-}
-
-/// What a click on a row of the menu does.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum Action {
-    /// "Default layout".
-    Default,
-    Recall(usize),
-    Save(usize),
-    Rename(usize),
-}
-
-/// The key of the menu's rows, as [`Menu::choice_at`] returns it; the value is "default" or the slot's number.
-pub const KEY: &str = "layout";
-const VALUES: [&str; SLOTS + 1] = ["default", "1", "2", "3", "4", "5", "6", "7", "8", "9"];
-
-/// What clicking the row whose value is `value` does. A plain click recalls a saved layout, and saves into an
-/// empty slot so a slot is filled with one click; Shift saves over a layout; the right button renames one.
-pub fn action(layouts: &Layouts, value: &str, click: Click) -> Option<Action> {
-    if value == "default" {
-        return (click == Click::Plain).then_some(Action::Default);
-    }
-    let slot = value
-        .parse::<usize>()
-        .ok()
-        .filter(|n| (1..=SLOTS).contains(n))?
-        - 1;
-    let filled = layouts.name(slot).is_some();
-    match click {
-        Click::Plain if filled => Some(Action::Recall(slot)),
-        Click::Plain | Click::Shift => Some(Action::Save(slot)),
-        Click::Right => filled.then_some(Action::Rename(slot)),
-    }
-}
-
-/// The layout menu: a heading, "Default layout", the nine slots by number and name (an empty one says so, and
-/// the one being renamed shows what is typed), and a line saying how to use it. It is the same [`Menu`] the
-/// settings use, so it is drawn and hit-tested the same way.
-pub fn menu(layouts: &Layouts, renaming: Option<&Rename>) -> Menu {
-    let choice = |i: usize, text: String| MenuRow::Choice {
-        key: KEY,
-        value: VALUES[i],
-        text,
-        on: false,
-    };
-    let mut rows = vec![
-        MenuRow::Heading("Layouts".to_string()),
-        choice(0, "Default layout".to_string()),
-    ];
-    for slot in 0..SLOTS {
-        let text = match renaming.filter(|r| r.slot == slot) {
-            Some(r) => format!("{}  {}|", slot + 1, r.text),
-            None => format!("{}  {}", slot + 1, layouts.name(slot).unwrap_or("empty")),
-        };
-        rows.push(choice(slot + 1, text));
-    }
-    rows.push(MenuRow::Heading(
-        "Shift-click saves, right-click renames".to_string(),
-    ));
-    Menu {
-        panel: usize::MAX,
-        rows,
     }
 }

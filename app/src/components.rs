@@ -842,6 +842,294 @@ pub fn bar(
     ]
 }
 
+// ---- Menu bar ----
+
+/// The menu bar across the very top of the Window (#147): the menus' titles, left to right. Thin and quiet: no
+/// icons, the panel's fill, the open menu's title lit.
+#[derive(Clone, Debug, PartialEq)]
+pub struct MenuBar {
+    pub titles: Vec<String>,
+}
+
+impl MenuBar {
+    pub fn height(scale: f32) -> f32 {
+        style::SPACE_MENU_BAR * scale
+    }
+
+    /// Where each title sits (its hit area), left to right from (`left`, `top`).
+    pub fn title_rects(&self, left: f32, top: f32, scale: f32) -> Vec<[f32; 4]> {
+        let pad = style::SPACE_MENU_BAR_ITEM_PAD * scale;
+        let mut x = left + (style::SPACE_BAR_PAD - style::SPACE_MENU_BAR_ITEM_PAD).max(0.0) * scale;
+        self.titles
+            .iter()
+            .map(|t| {
+                let w = text_width(t, scale) + 2.0 * pad;
+                let r = [x, top, w, MenuBar::height(scale)];
+                x += w;
+                r
+            })
+            .collect()
+    }
+
+    /// The title under `point`.
+    pub fn hit(&self, left: f32, top: f32, point: [f32; 2], scale: f32) -> Option<usize> {
+        self.title_rects(left, top, scale)
+            .iter()
+            .position(|r| contains(*r, point))
+    }
+
+    /// The bar across `width`, with the open menu's title pressed and the title under the pointer lit.
+    pub fn draw(
+        &self,
+        left: f32,
+        top: f32,
+        width: f32,
+        open: Option<usize>,
+        hover: Option<usize>,
+        scale: f32,
+    ) -> Vec<Prim> {
+        let h = MenuBar::height(scale);
+        let line = style::LINE_WEIGHT * scale;
+        let mut prims = vec![
+            rect([left, top, width, h], style::SURFACE_PANEL),
+            rect([left, top + h - line, width, line], style::LINE_BORDER),
+        ];
+        for (i, (title, r)) in self
+            .titles
+            .iter()
+            .zip(self.title_rects(left, top, scale))
+            .enumerate()
+        {
+            let state = if open == Some(i) {
+                State::Pressed
+            } else if hover == Some(i) {
+                State::Hover
+            } else {
+                State::Normal
+            };
+            match state {
+                State::Pressed => {
+                    prims.push(rect([r[0], r[1], r[2], r[3] - line], style::STATE_PRESSED))
+                }
+                State::Hover => {
+                    prims.push(rect([r[0], r[1], r[2], r[3] - line], style::STATE_HOVER))
+                }
+                _ => {}
+            }
+            prims.push(text(
+                title,
+                r,
+                Face::Label,
+                style::TEXT_PRIMARY,
+                Align::Centre,
+            ));
+        }
+        prims
+    }
+}
+
+/// One entry of a menu that drops from the menu bar.
+#[derive(Clone, Debug, PartialEq)]
+pub enum MenuEntry {
+    Item(MenuItem),
+    /// A line between groups of entries.
+    Separator,
+    /// A quiet line naming the group under it; not clickable.
+    Heading(String),
+}
+
+/// A clickable entry: its name, its hotkey as the menu shows it (empty for none), whether it can be used now and
+/// whether it is the current one (a small mark, as in the popover).
+#[derive(Clone, Debug, PartialEq)]
+pub struct MenuItem {
+    pub label: String,
+    pub hotkey: String,
+    pub enabled: bool,
+    pub on: bool,
+}
+
+impl MenuItem {
+    pub fn new(label: &str, hotkey: &str) -> MenuItem {
+        MenuItem {
+            label: label.to_string(),
+            hotkey: hotkey.to_string(),
+            enabled: true,
+            on: false,
+        }
+    }
+}
+
+/// A menu dropped from the menu bar: its entries, each with its hotkey at the right.
+#[derive(Clone, Debug, PartialEq)]
+pub struct DropMenu {
+    pub entries: Vec<MenuEntry>,
+}
+
+impl DropMenu {
+    fn entry_height(entry: &MenuEntry, scale: f32) -> f32 {
+        scale
+            * match entry {
+                MenuEntry::Separator => style::SPACE_MENU_SEPARATOR,
+                _ => MENU_ROW,
+            }
+    }
+
+    /// Its size: wide enough for the longest name and hotkey, at least the popover's width.
+    pub fn size(&self, scale: f32) -> [f32; 2] {
+        let widest = self
+            .entries
+            .iter()
+            .map(|e| match e {
+                MenuEntry::Item(item) => {
+                    style::SPACE_MENU_TEXT_LEFT * scale
+                        + text_width(&item.label, scale)
+                        + style::SPACE_MENU_HOTKEY_GAP * scale
+                        + text_width(&item.hotkey, scale)
+                        + style::SPACE_MENU_HEADING_LEFT * scale
+                }
+                MenuEntry::Heading(t) => {
+                    style::SPACE_MENU_HEADING_LEFT * scale * 2.0 + text_width(t, scale)
+                }
+                MenuEntry::Separator => 0.0,
+            })
+            .fold(style::SPACE_MENU_WIDTH * scale, f32::max);
+        let rows: f32 = self
+            .entries
+            .iter()
+            .map(|e| DropMenu::entry_height(e, scale))
+            .sum();
+        [widest, rows + 2.0 * style::SPACE_MENU_PAD * scale]
+    }
+
+    /// Where it drops: under `title` (the bar title it belongs to), its left edge on the title's, moved left and
+    /// up as needed to stay inside a window of `window` device pixels.
+    pub fn rect(&self, title: [f32; 4], window: [f32; 2], scale: f32) -> [f32; 4] {
+        let [w, h] = self.size(scale);
+        [
+            title[0].min(window[0] - w).max(0.0),
+            (title[1] + title[3]).min(window[1] - h).max(0.0),
+            w,
+            h,
+        ]
+    }
+
+    /// Each entry's row inside `area`.
+    pub fn entry_rects(&self, area: [f32; 4], scale: f32) -> Vec<[f32; 4]> {
+        let mut y = area[1] + style::SPACE_MENU_PAD * scale;
+        self.entries
+            .iter()
+            .map(|e| {
+                let h = DropMenu::entry_height(e, scale);
+                let r = [area[0], y, area[2], h];
+                y += h;
+                r
+            })
+            .collect()
+    }
+
+    /// The enabled item under `point`.
+    pub fn hit(&self, area: [f32; 4], point: [f32; 2], scale: f32) -> Option<usize> {
+        self.entry_rects(area, scale)
+            .iter()
+            .zip(&self.entries)
+            .position(|(r, e)| {
+                contains(*r, point) && matches!(e, MenuEntry::Item(item) if item.enabled)
+            })
+    }
+
+    /// The menu in `area`, the enabled item under the pointer lit (pressed while the button is down). A disabled
+    /// item is greyed and never lights.
+    pub fn draw(
+        &self,
+        area: [f32; 4],
+        hover: Option<usize>,
+        pressed: bool,
+        scale: f32,
+    ) -> Vec<Prim> {
+        let mut prims: Vec<Prim> =
+            framed(area, style::LINE_BORDER, style::SURFACE_MENU, scale).into();
+        let line = style::LINE_WEIGHT * scale;
+        let heading_left = style::SPACE_MENU_HEADING_LEFT * scale;
+        for (i, (entry, r)) in self
+            .entries
+            .iter()
+            .zip(self.entry_rects(area, scale))
+            .enumerate()
+        {
+            match entry {
+                MenuEntry::Separator => prims.push(rect(
+                    [
+                        r[0] + heading_left,
+                        r[1] + (r[3] - line) / 2.0,
+                        r[2] - 2.0 * heading_left,
+                        line,
+                    ],
+                    style::LINE_BORDER,
+                )),
+                MenuEntry::Heading(label) => prims.push(text(
+                    label,
+                    [r[0] + heading_left, r[1], r[2] - 2.0 * heading_left, r[3]],
+                    Face::Label,
+                    style::TEXT_SECONDARY,
+                    Align::Left,
+                )),
+                MenuEntry::Item(item) => {
+                    let state = if !item.enabled {
+                        State::Disabled
+                    } else if hover == Some(i) && pressed {
+                        State::Pressed
+                    } else if hover == Some(i) {
+                        State::Hover
+                    } else {
+                        State::Normal
+                    };
+                    match state {
+                        State::Hover => prims.push(rect(r, style::STATE_HOVER)),
+                        State::Pressed => prims.push(rect(r, style::STATE_PRESSED)),
+                        _ => {}
+                    }
+                    if item.on {
+                        let side = style::SPACE_MENU_MARK * scale;
+                        prims.push(rect(
+                            [
+                                r[0] + style::SPACE_MENU_MARK_LEFT * scale,
+                                r[1] + (r[3] - side) / 2.0,
+                                side,
+                                side,
+                            ],
+                            style::STATE_ON,
+                        ));
+                    }
+                    let (ink, quiet) = if item.enabled {
+                        (style::TEXT_PRIMARY, style::TEXT_SECONDARY)
+                    } else {
+                        (style::TEXT_DISABLED, style::TEXT_DISABLED)
+                    };
+                    let left = r[0] + style::SPACE_MENU_TEXT_LEFT * scale;
+                    let inner = r[2] - style::SPACE_MENU_TEXT_LEFT * scale - heading_left;
+                    prims.push(text(
+                        &item.label,
+                        [left, r[1], inner, r[3]],
+                        Face::Label,
+                        ink,
+                        Align::Left,
+                    ));
+                    if !item.hotkey.is_empty() {
+                        prims.push(text(
+                            &item.hotkey,
+                            [left, r[1], inner, r[3]],
+                            Face::Label,
+                            quiet,
+                            Align::Right,
+                        ));
+                    }
+                }
+            }
+        }
+        prims
+    }
+}
+
 // ---- Legend strip ----
 
 /// One colour of a legend and what it says. The colour is data (a false colour band, a heatmap step, a skin

@@ -137,6 +137,12 @@ pub const SPACE_TOOLTIP_GAP: f32 = 6.0;
 /// The top bar and the bars' side padding (the title bar is SPACE_TITLE_BAR above).
 pub const SPACE_TOP_BAR: f32 = 32.0;
 pub const SPACE_BAR_PAD: f32 = 10.0;
+/// The menu bar above the top bar (#147): its height, a title's side padding, a separator row's height in a menu,
+/// and the least gap between an entry's name and its hotkey.
+pub const SPACE_MENU_BAR: f32 = 24.0;
+pub const SPACE_MENU_BAR_ITEM_PAD: f32 = 10.0;
+pub const SPACE_MENU_SEPARATOR: f32 = 9.0;
+pub const SPACE_MENU_HOTKEY_GAP: f32 = 28.0;
 /// The settings button on a title bar (square), and the gap between a name and its tags.
 pub const SPACE_SETTINGS_BUTTON: f32 = 20.0;
 pub const SPACE_TAG_GAP: f32 = 10.0;

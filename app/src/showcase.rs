@@ -225,6 +225,30 @@ pub fn showcase(scale: f32) -> Showcase {
     }
     y += style::SPACE_SHOWCASE_PANEL_STEP * scale;
 
+    prims.push(caption("Menu bar", margin, y, label_w));
+    let menu_bar = MenuBar {
+        titles: vec!["Layout".to_string(), "Settings".to_string()],
+    };
+    prims.extend(menu_bar.draw(margin + label_w, y, column * 4.0, Some(0), None, scale));
+    let title = menu_bar.title_rects(margin + label_w, y, scale)[0];
+    let mut on = MenuItem::new("1  Grade", "Ctrl+1");
+    on.on = true;
+    let mut off = MenuItem::new("Rename layout…", "");
+    off.enabled = false;
+    let drop = DropMenu {
+        entries: vec![
+            MenuEntry::Item(MenuItem::new("Default layout", "")),
+            MenuEntry::Separator,
+            MenuEntry::Item(on),
+            MenuEntry::Item(MenuItem::new("2  empty", "Ctrl+Shift+2")),
+            MenuEntry::Separator,
+            MenuEntry::Item(off),
+        ],
+    };
+    let area = drop.rect(title, [width, f32::MAX], scale);
+    prims.extend(drop.draw(area, Some(3), false, scale));
+    y = area[1] + area[3] + row * 0.5;
+
     prims.push(caption("Top bar", margin, y, label_w));
     prims.extend(bar(
         BarKind::Top,

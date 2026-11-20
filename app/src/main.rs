@@ -3,7 +3,8 @@
 //! along the bottom (Resolve's playback rate, dropped frames, the Sender driving the Feed). The borders between
 //! Panels can be dragged and are remembered. Every display shows the Feed after Output Conversion, in the Output
 //! Colour Space, whenever the Colour Setup has one (`output_conversion.rs`). Right-click a Panel for its settings,
-//! which are remembered per Panel (`~/.config/scopecreep/panel-settings`).
+//! which are remembered per Panel (`~/.config/scopecreep/panel-settings`). The menu bar along the very top holds
+//! the app's own commands (the Layout menu, `menu_bar.rs`).
 //!
 //!   scopecreep [--feed <path>] [--no-scripting]
 //!
@@ -20,13 +21,14 @@ use glyphon::{
     SwashCache, TextArea, TextAtlas, TextBounds, TextRenderer, Viewport,
 };
 use scopecreep::commands::{Command, Hotkey, Hotkeys, Key};
-use scopecreep::components::{self, Align, BarKind, Prim, State, Tooltip};
+use scopecreep::components::{self, Align, BarKind, MenuBar, Prim, State, Tooltip};
 use scopecreep::display::{DisplaySet, Pointer};
 use scopecreep::feed_loop::{FeedLoop, Texts};
 use scopecreep::flat_rects::FlatRects;
 use scopecreep::gpu_frame::FrameUploader;
 use scopecreep::layout::MARGIN;
-use scopecreep::layouts::{self, Action, Click, Layouts, Rename};
+use scopecreep::layouts::{Layouts, Rename};
+use scopecreep::menu_bar::{self, BarState, Current, LayoutMode, MenuAction};
 use scopecreep::monitor::Monitor;
 use scopecreep::output_conversion::OutputConversion;
 use scopecreep::panel_grid::{Border, PanelGrid, PanelLayout, Press, min_panel_size};
@@ -241,13 +243,16 @@ struct AppWindow {
     menu: Option<(Menu, [f32; 2])>,
     /// The key of the slider being dragged in the menu, while the button is down.
     slider_drag: Option<&'static str>,
-    /// The saved layouts (#98), and whether the open menu is their menu (opened by a right-click on the status
-    /// line) and not a Panel's settings.
+    /// The saved layouts (#98).
     layouts: Layouts,
-    layout_menu: bool,
+    /// The menu bar (#147): which of its menus is open, the title under the pointer, and what the Layout menu
+    /// shows. A bar menu and a Panel's popover are never open together.
+    bar: BarState,
+    bar_hover: Option<usize>,
+    layout_mode: LayoutMode,
     /// The hotkey of each command (ADR 0036).
     hotkeys: Hotkeys,
-    /// A layout's name being typed in the layout menu.
+    /// A layout's name being typed in the Layout menu.
     renaming: Option<Rename>,
     modifiers: ModifiersState,
     flat: FlatRects,
@@ -476,7 +481,9 @@ impl AppWindow {
             layouts: layouts_file()
                 .and_then(|path| std::fs::read_to_string(path).ok())
                 .map_or_else(Layouts::default, |text| Layouts::from_text(&text)),
-            layout_menu: false,
+            bar: BarState::default(),
+            bar_hover: None,
+            layout_mode: LayoutMode::Show,
             hotkeys: hotkeys_file()
                 .and_then(|path| std::fs::read_to_string(path).ok())
                 .map_or_else(Hotkeys::default, |text| Hotkeys::from_text(&text)),
@@ -650,6 +657,21 @@ impl AppWindow {
             }
             return;
         }
+        let over_title = self.bar_title_at_pointer();
+        if over_title != self.bar_hover {
+            self.bar_hover = over_title;
+            self.window.request_redraw();
+        }
+        if self.bar.open.is_some() {
+            if let Some(title) = over_title.filter(|t| self.bar.open != Some(*t)) {
+                self.finish_rename(true);
+                self.bar.hover_title(title);
+                self.layout_mode = LayoutMode::Show;
+            }
+            // The entry under the pointer lights.
+            self.window.request_redraw();
+            return;
+        }
         self.update_hover();
         if let Some(panel) = self.pointer_panel.or(self.middle_panel) {
             self.display_pointer(panel, Pointer::Move(self.cursor));
@@ -675,28 +697,13 @@ impl AppWindow {
     }
 
     /// Right button: open the menu of the Panel under the pointer (none for a Panel without settings, or off a
-    /// Panel), or close the one that is open.
+    /// Panel), or close the one that is open. A menu of the menu bar just closes.
     fn right_click(&mut self) {
-        // In the layout menu, a right-click on a saved layout starts renaming it.
-        if self.layout_menu
-            && let (Some((menu, _)), Some(rect)) = (self.menu.as_ref(), self.menu_rect())
-            && let Some((_, value)) = menu.choice_at(rect, self.cursor, self.scale)
-            && let Some(Action::Rename(slot)) = layouts::action(&self.layouts, value, Click::Right)
-        {
-            self.renaming = Rename::start(&self.layouts, slot);
-            self.show_layout_menu();
+        if self.bar.open.is_some() {
+            self.close_bar();
             return;
         }
         let was_open = self.menu.take().is_some();
-        self.layout_menu = false;
-        self.renaming = None;
-        // On the status line: the layout menu.
-        if !was_open && self.cursor[1] >= self.grid_area[1] + self.grid_area[3] {
-            self.layout_menu = true;
-            self.menu = Some((layouts::menu(&self.layouts, None), self.cursor));
-            self.window.request_redraw();
-            return;
-        }
         let hit = self
             .cells
             .iter()
@@ -709,14 +716,6 @@ impl AppWindow {
         }
     }
 
-    /// Draw the layout menu again from the saved layouts, where it opened.
-    fn show_layout_menu(&mut self) {
-        if let Some((menu, _)) = self.menu.as_mut() {
-            *menu = layouts::menu(&self.layouts, self.renaming.as_ref());
-        }
-        self.window.request_redraw();
-    }
-
     /// Remember the named layouts.
     fn save_layouts(&self) {
         if let Some(path) = layouts_file()
@@ -726,54 +725,95 @@ impl AppWindow {
         }
     }
 
-    /// Do one layout action: show a saved layout or the default, or save the arrangement on screen into a slot.
-    fn layout_action(&mut self, action: Action) {
+    /// What is on screen: the default layout, or the first slot whose saved arrangement it is.
+    fn current_layout(&self) -> Option<Current> {
         let names = self.displays.names();
-        match action {
-            Action::Default => self.grid = PanelGrid::default_for(&names),
-            Action::Recall(slot) => match self.layouts.recall(slot, &names) {
-                Some(grid) => self.grid = grid,
-                None => return,
-            },
-            Action::Save(slot) => {
-                self.layouts.save(slot, &self.grid, &names);
-                self.save_layouts();
-                return;
-            }
-            Action::Rename(_) => return,
+        if self.grid == PanelGrid::default_for(&names) {
+            return Some(Current::Default);
         }
-        self.save_grid();
+        (0..scopecreep::layouts::SLOTS)
+            .find(|slot| self.layouts.recall(*slot, &names).as_ref() == Some(&self.grid))
+            .map(Current::Slot)
+    }
+
+    /// The open bar menu, as it is now.
+    fn bar_menu(&self) -> Option<menu_bar::Menu> {
+        match self.bar.open? {
+            menu_bar::LAYOUT => Some(menu_bar::layout_menu(
+                &self.layouts,
+                &self.hotkeys,
+                self.current_layout(),
+                self.layout_mode,
+                self.renaming.as_ref(),
+            )),
+            _ => None,
+        }
+    }
+
+    /// Where the open bar menu drops, under its title.
+    fn bar_menu_rect(&self, menu: &menu_bar::Menu) -> Option<[f32; 4]> {
+        let title = *menu_bar::bar()
+            .title_rects(0.0, 0.0, self.scale)
+            .get(self.bar.open?)?;
+        Some(menu.drop.rect(
+            title,
+            [self.config.width as f32, self.config.height as f32],
+            self.scale,
+        ))
+    }
+
+    /// The menu bar's title under the pointer.
+    fn bar_title_at_pointer(&self) -> Option<usize> {
+        menu_bar::bar().hit(0.0, 0.0, self.cursor, self.scale)
+    }
+
+    /// Close the bar's menu (a name being typed is kept, as a click elsewhere does in any desktop menu).
+    fn close_bar(&mut self) {
+        self.finish_rename(true);
+        self.bar.close();
+        self.layout_mode = LayoutMode::Show;
         self.window.request_redraw();
     }
 
-    /// Left button in the layout menu: a click does what the row says; any click ends a rename being typed.
-    fn layout_menu_click(&mut self) {
-        let (Some((menu, _)), Some(rect)) = (self.menu.as_ref(), self.menu_rect()) else {
+    /// Left button with a bar menu open: a click on a title opens or closes its menu, on an entry does what it
+    /// says, on the menu's padding, a heading or a greyed entry nothing; anywhere else closes the menu.
+    fn bar_click(&mut self) {
+        if let Some(title) = self.bar_title_at_pointer() {
+            self.finish_rename(true);
+            self.bar.click_title(title);
+            self.layout_mode = LayoutMode::Show;
+            self.window.request_redraw();
             return;
-        };
-        let choice = menu.choice_at(rect, self.cursor, self.scale);
-        self.finish_rename(true);
-        let click = if self.modifiers.shift_key() {
-            Click::Shift
-        } else {
-            Click::Plain
-        };
-        if let Some(action) =
-            choice.and_then(|(_, value)| layouts::action(&self.layouts, value, click))
-        {
-            self.layout_action(action);
-            self.close_menu();
-        } else if choice.is_none() && Menu::contains(rect, self.cursor) {
-            self.show_layout_menu();
-        } else {
-            self.close_menu();
         }
+        let Some(menu) = self.bar_menu() else {
+            return self.close_bar();
+        };
+        let Some(rect) = self.bar_menu_rect(&menu) else {
+            return self.close_bar();
+        };
+        if !components::contains(rect, self.cursor) {
+            return self.close_bar();
+        }
+        let action = menu
+            .drop
+            .hit(rect, self.cursor, self.scale)
+            .and_then(|entry| menu.action(entry));
+        // Any click in the menu ends a name being typed, keeping it.
+        self.finish_rename(true);
+        match action {
+            Some(MenuAction::Run(command)) => {
+                self.run(command);
+                self.close_bar();
+            }
+            Some(MenuAction::Mode(mode)) => self.layout_mode = mode,
+            Some(MenuAction::Rename(slot)) => self.renaming = Rename::start(&self.layouts, slot),
+            None => {}
+        }
+        self.window.request_redraw();
     }
 
     fn close_menu(&mut self) {
         self.menu = None;
-        self.layout_menu = false;
-        self.renaming = None;
         self.window.request_redraw();
     }
 
@@ -796,31 +836,28 @@ impl AppWindow {
         }
         if self.renaming.is_some() {
             match &event.logical_key {
-                LogicalKey::Named(NamedKey::Enter) => {
-                    self.finish_rename(true);
-                    self.show_layout_menu();
-                }
-                LogicalKey::Named(NamedKey::Escape) => {
-                    self.renaming = None;
-                    self.show_layout_menu();
-                }
+                LogicalKey::Named(NamedKey::Enter) => self.finish_rename(true),
+                LogicalKey::Named(NamedKey::Escape) => self.renaming = None,
                 LogicalKey::Named(NamedKey::Backspace) => {
                     if let Some(r) = self.renaming.as_mut() {
                         r.backspace();
                     }
-                    self.show_layout_menu();
                 }
                 _ => {
                     if let (Some(r), Some(text)) = (self.renaming.as_mut(), event.text.as_ref()) {
                         r.type_text(text);
-                        self.show_layout_menu();
                     }
                 }
             }
+            self.window.request_redraw();
             return;
         }
-        if event.logical_key == LogicalKey::Named(NamedKey::Escape) && self.menu.is_some() {
-            self.close_menu();
+        if event.logical_key == LogicalKey::Named(NamedKey::Escape) {
+            if self.bar.open.is_some() {
+                self.close_bar();
+            } else if self.menu.is_some() {
+                self.close_menu();
+            }
             return;
         }
         if let PhysicalKey::Code(code) = event.physical_key
@@ -844,11 +881,22 @@ impl AppWindow {
 
     /// Do a command, from its hotkey or its menu entry.
     fn run(&mut self, command: Command) {
+        let names = self.displays.names();
         match command {
-            Command::DefaultLayout => self.layout_action(Action::Default),
-            Command::RecallLayout(slot) => self.layout_action(Action::Recall(slot)),
-            Command::SaveLayout(slot) => self.layout_action(Action::Save(slot)),
+            Command::DefaultLayout => self.grid = PanelGrid::default_for(&names),
+            Command::RecallLayout(slot) => match self.layouts.recall(slot, &names) {
+                Some(grid) => self.grid = grid,
+                None => return,
+            },
+            Command::SaveLayout(slot) => {
+                self.layouts.save(slot, &self.grid, &names);
+                self.save_layouts();
+                self.window.request_redraw();
+                return;
+            }
         }
+        self.save_grid();
+        self.window.request_redraw();
     }
 
     fn menu_rect(&self) -> Option<[f32; 4]> {
@@ -863,9 +911,6 @@ impl AppWindow {
     /// Left button while a menu is open: a click on a choice picks it (and remembers it); a click on a heading or
     /// the menu's padding leaves it open; any other click closes it.
     fn menu_click(&mut self) {
-        if self.layout_menu {
-            return self.layout_menu_click();
-        }
         let (Some((menu, _)), Some(rect)) = (self.menu.as_ref(), self.menu_rect()) else {
             return;
         };
@@ -928,7 +973,7 @@ impl AppWindow {
 
     /// The scroll wheel: over a display that uses it (a Loupe's zoom), else nothing.
     fn wheel(&mut self, lines: f32) {
-        if self.menu.is_some() {
+        if self.menu.is_some() || self.bar.open.is_some() {
             return;
         }
         let panel = self
@@ -957,7 +1002,7 @@ impl AppWindow {
                 }
             }
             ElementState::Pressed => {
-                if self.menu.is_some() {
+                if self.menu.is_some() || self.bar.open.is_some() {
                     return;
                 }
                 let panel = self
@@ -996,6 +1041,20 @@ impl AppWindow {
                 self.window.set_cursor(CursorIcon::Default);
                 self.window.request_redraw();
             }
+            return;
+        }
+        // The menu bar: with one of its menus open, the click is the menu's; on a title, it opens that menu (and
+        // closes a Panel's popover).
+        if self.bar.open.is_some() {
+            self.bar_click();
+            return;
+        }
+        if let Some(title) = self.bar_title_at_pointer() {
+            self.menu = None;
+            self.hover = None;
+            self.bar.click_title(title);
+            self.layout_mode = LayoutMode::Show;
+            self.window.request_redraw();
             return;
         }
         if self.menu.is_some() {
@@ -1069,8 +1128,10 @@ impl AppWindow {
         let status_height = row * if notice_in_status { 2.0 } else { 1.0 };
         // The Panels fill the window above the status line, with a margin round them and between them.
         // The Colour Setup is said once, in the bar across the top.
+        // Over it all, the thin menu bar (#147).
+        let bar_height = MenuBar::height(scale);
         let top_height = BarKind::Top.height(scale);
-        let area_top = top_height + margin;
+        let area_top = bar_height + top_height + margin;
         let area = [
             margin,
             area_top,
@@ -1283,7 +1344,7 @@ impl AppWindow {
         areas.push(TextArea {
             buffer: &self.top_bar.buffer,
             left: top_pad,
-            top: (top_height - line) / 2.0,
+            top: bar_height + (top_height - line) / 2.0,
             scale: 1.0,
             bounds: whole,
             default_color: text_colour(style::TEXT_PRIMARY),
@@ -1364,13 +1425,13 @@ impl AppWindow {
         let mut rects: Vec<([f32; 4], [f32; 4])> = Vec::new();
         // The top bar: its fill and the line under it.
         rects.push((
-            [0.0, 0.0, width, top_height],
+            [0.0, bar_height, width, top_height],
             style::rgba(style::SURFACE_PANEL),
         ));
         rects.push((
             [
                 0.0,
-                top_height - (style::LINE_WEIGHT * scale).max(1.0),
+                bar_height + top_height - (style::LINE_WEIGHT * scale).max(1.0),
                 width,
                 (style::LINE_WEIGHT * scale).max(1.0),
             ],
@@ -1401,7 +1462,7 @@ impl AppWindow {
         // The menu over the Panels, or else the hover of what the pointer rests on, over everything.
         let mut over: Vec<Prim> = Vec::new();
         // Each title bar's chips and settings button, lit under the pointer.
-        let pointer_over = if self.menu.is_some() {
+        let pointer_over = if self.menu.is_some() || self.bar.open.is_some() {
             None
         } else {
             self.toolbar_hit()
@@ -1427,7 +1488,14 @@ impl AppWindow {
                 over.extend(components::settings_button(button, state, scale));
             }
         }
-        if let (Some((menu, _)), Some(rect)) = (self.menu.as_ref(), self.menu_rect()) {
+        over.extend(menu_bar::bar().draw(0.0, 0.0, width, self.bar.open, self.bar_hover, scale));
+        let bar_menu = self
+            .bar_menu()
+            .and_then(|m| self.bar_menu_rect(&m).map(|r| (m, r)));
+        if let Some((menu, rect)) = bar_menu {
+            let hover = menu.drop.hit(rect, self.cursor, scale);
+            over.extend(menu.drop.draw(rect, hover, false, scale));
+        } else if let (Some((menu, _)), Some(rect)) = (self.menu.as_ref(), self.menu_rect()) {
             over.extend(components::popover(menu, rect, self.cursor, scale));
         } else if let Some(hover) = self.hover {
             let (anchor, text) = match hover {

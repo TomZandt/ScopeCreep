@@ -141,7 +141,7 @@ The columns and rows the Panels sit in, each Panel at a cell with a span of colu
 _Avoid_: Layout for the grid (a Layout is a saved arrangement of it), dock
 
 **Layout** (named):
-An arrangement of the Panel grid saved in one of nine slots (Ctrl+Shift+1 to 9 by default), shown again with Ctrl+1 to 9 or from the layout menu (right-click the status line), which also renames layouts and restores the default layout. A layout names its Panels, so one still opens after Panels are added or removed.
+An arrangement of the Panel grid saved in one of nine slots (Ctrl+Shift+1 to 9 by default), shown again with Ctrl+1 to 9 or from the Layout menu on the Menu bar, which also saves, renames layouts and restores the default layout. A layout names its Panels, so one still opens after Panels are added or removed.
 _Avoid_: Preset, workspace, profile
 
 **Command**:
@@ -151,6 +151,10 @@ _Avoid_: Action, shortcut
 **Hotkey**:
 A key, by its position on the keyboard, with Ctrl, Shift or Alt held, that triggers a Command while the app's window has focus. Each Command has at most one and no two share one; the defaults are Ctrl+1 to 9 (show a layout) and Ctrl+Shift+1 to 9 (save one). Changes are kept in the config folder beside the layouts. Escape, and plain Enter, Backspace and Delete are reserved.
 _Avoid_: Shortcut, keybinding, accelerator
+
+**Menu bar**:
+The thin bar across the very top of the Window, above the Colour Setup line, drawn by the app in the style system's quiet chrome. It holds the app's own Commands in menus (Layout), each entry with its Hotkey beside it. A menu opens on a click on its title and closes on a second click, a click elsewhere or Escape. Panel settings stay in each Panel's popover.
+_Avoid_: Toolbar (that is a Panel's title bar chips), main menu
 
 **Panel settings**:
 What a display offers in its Panel's right-click menu (and chips on its title bar). Each is either a short list of choices or an Amount set with a Slider, so a display can't be set up to mislead. Kept per Panel between sessions. A setting that changes what is measured is named in the Panel's label.
