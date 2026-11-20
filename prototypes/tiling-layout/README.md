@@ -10,4 +10,4 @@ A single self-contained HTML page: open `index.html` in a browser. It is a stand
 
 **The logic.** The code between the `<tiler>` markers is a pure module (a plain tree and functions over it) written to be lifted into the app. The page around it is throwaway.
 
-**Verdict.** Judged "really nice and user friendly" by the product owner on 2026-11-20. The decisions are in ADRs 0038 to 0041 and the spec issue for the tiling layout; this branch is kept only as the primary source.
+**Verdict.** Judged "really nice and user friendly" by the product owner on 2026-11-20. The decisions are in ADRs 0038 to 0041 and spec #196; this branch is kept only as the primary source. Related: #194 (help page and layout tutorial, which could grow from these walkthroughs), #195 (readability), #197 (cost of copies of a display).
