@@ -613,7 +613,7 @@ $('footage').onchange = e => act.footage(+e.target.value);
 $('shape').onchange = e => act.stage(+e.target.value);
 addEventListener('resize', () => { sizeStage(); render(); });
 function renderPages() {
-  $('pages').innerHTML = S.pages.map((p, i) => `<button class="pg${i === S.pi ? ' on' : ''}" data-i="${i}" title="Alt+${i + 1}. Double-click to rename.">${esc(p.name)}</button>`).join('') + '<button class="pg" id="addpage" data-menu="1" title="Add a page">+</button>';
+  $('pages').innerHTML = S.pages.map((p, i) => `<button class="pg${i === S.pi ? ' on' : ''}" data-i="${i}" title="Alt+${i + 1}. Double-click to rename.">${i < 9 ? '[' + (i + 1) + '] ' : ''}${esc(p.name)}</button>`).join('') + '<button class="pg" id="addpage" data-menu="1" title="Add a page">+</button>';
   $('delpage').disabled = S.pages.length < 2;
 }
 $('pages').addEventListener('click', e => {
