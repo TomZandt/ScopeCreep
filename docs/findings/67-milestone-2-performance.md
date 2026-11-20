@@ -16,7 +16,7 @@ The fps readout crops of all 36 samples are byte-identical, so Resolve showed th
 
 ## Not measured
 
-Each Panel's own GPU time per UHD frame (user story 85) was not measured here; it is tracked in #82. The app keeps up with every frame, so no Panel is known to break the bar.
+Each Panel's own GPU time per UHD frame (user story 85) was not measured here; [#82](82-panel-gpu-time.md) measured it later (the whole Window about 6.4 ms of the 20 ms frame; the Vectorscope and Colorise over their share).
 
 ## Notes
 
