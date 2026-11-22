@@ -1,11 +1,11 @@
-# scopecreep
+# ScopeCreep
 
 An external monitoring app for DaVinci Resolve: it receives the picture Resolve is playing and shows it alongside professional-grade scopes and picture views on any screen.
 
 ## Language
 
 **Feed**:
-The single stream of frames scopecreep receives from Resolve, equivalent to what Resolve's Video Clean Feed shows. Every Scope and Picture View is derived from the one Feed; nothing takes its own copy from Resolve.
+The single stream of frames ScopeCreep receives from Resolve, equivalent to what Resolve's Video Clean Feed shows. Every Scope and Picture View is derived from the one Feed; nothing takes its own copy from Resolve.
 _Avoid_: Input, stream, signal
 
 **Feed loop**:
@@ -17,7 +17,7 @@ Where the Feed comes from: either the Sender or a Capture.
 _Avoid_: Input, source type, tap
 
 **Sender**:
-The OFX plugin placed in a Resolve project that hands each frame Resolve renders to scopecreep. In Resolve it is called **ScopeCreep** (Effects > OpenFX > ScopeCreep), the name of the app; its OFX identifier is `com.scopecreep.sender`. When several Senders render the same frame, the last one in the frame (in practice the last timeline node) drives the Feed, and the app warns that more than one is active (ADR 0024). Former label, in past findings and changelog entries: "scopecreep Sender" (group "scopecreep"); a development build once also listed a second entry standing in for the Stage 0 probe, now gone.
+The OFX plugin placed in a Resolve project that hands each frame Resolve renders to scopecreep. In Resolve it is called **ScopeCreep** (Effects > OpenFX > ScopeCreep), the name of the app; its OFX identifier is `com.scopecreep.sender`. When several Senders render the same frame, the last one in the frame (in practice the last timeline node) drives the Feed, and the app warns that more than one is active (ADR 0024). Former label, in past findings and changelog entries: "ScopeCreep Sender" (group "ScopeCreep"); a development build once also listed a second entry standing in for the Stage 0 probe, now gone.
 _Avoid_: Connector, link, OFX node, tap
 
 **Viewer Frame**:
@@ -57,7 +57,7 @@ _Avoid_: Range, data range, legal/full (on its own)
 ## Setup
 
 **Setup Checklist**:
-The short list of exact fixes that appears only while something scopecreep needs is missing, and disappears once everything works.
+The short list of exact fixes that appears only while something ScopeCreep needs is missing, and disappears once everything works.
 _Avoid_: Onboarding, wizard, warnings panel, status page
 
 ## Displays
@@ -86,7 +86,7 @@ Built and tested but kept out of the Window (parked, #121; Gamut Warning, Neutra
 | Channel view | Picture View | Parked (#121): the Channel Viewer's chips and Loupe do its job |
 
 **Window**:
-The whole scopecreep app on screen: every Panel, the labels and the status line.
+The whole ScopeCreep app on screen: every Panel, the labels and the status line.
 _Avoid_: App (for the screen area), screen, workspace
 
 **Chrome**:
@@ -338,7 +338,7 @@ _Avoid_: Zone (ARRI's and EL Zone's word for their own schemes)
 
 **False Colour - Stops**:
 False Colour by stops above and below middle grey, in scene light decoded from the Timeline Colour Space. When that space is not known or cannot be decoded it measures the Output picture through its display curve instead, labelled approximated (and assumed). Its legend is a horizontal bar of swatches under the picture, with the stop numbers under them and captions over them.
-_Avoid_: EL Zone (a trademark scopecreep does not use), zone system
+_Avoid_: EL Zone (a trademark ScopeCreep does not use), zone system
 
 **Full zones**:
 False Colour - Stops's default mode: 17 zones, each in its own colour: black beyond 6 1/2 stops under middle grey, then 15 zones centred on the marks -6 to +6 (whole stops, with -1/2, 18 % and +1/2 beside middle grey), and white beyond 6 1/2 stops over. A zone covers the stops up to the midpoint with its neighbour.

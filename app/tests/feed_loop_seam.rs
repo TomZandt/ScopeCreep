@@ -246,7 +246,7 @@ fn when_the_gpu_has_no_memory_for_the_picture_the_window_says_so_and_carries_on_
     assert_eq!(
         notice(&b).as_deref(),
         Some(
-            "Not enough GPU memory for the picture (needs about 1 MB). Close another GPU app; scopecreep will carry on when memory frees up."
+            "Not enough GPU memory for the picture (needs about 1 MB). Close another GPU app; ScopeCreep will carry on when memory frees up."
         ),
     );
     assert_eq!(

@@ -1,6 +1,6 @@
 # The Feed protocol, version 1.2
 
-The Feed is how the **Sender** (inside Resolve) hands frames to the scopecreep app on the same machine. It is one shared-memory file holding a small header and a ring of frame slots. This document is the specification; `include/scopecreep_feed.h` (C, used by the Sender) and the `scopecreep-feed` Rust crate (used by the app) are two implementations of it, tested against each other (`tests/c_interop.rs`).
+The Feed is how the **Sender** (inside Resolve) hands frames to the ScopeCreep app on the same machine. It is one shared-memory file holding a small header and a ring of frame slots. This document is the specification; `include/scopecreep_feed.h` (C, used by the Sender) and the `scopecreep-feed` Rust crate (used by the app) are two implementations of it, tested against each other (`tests/c_interop.rs`).
 
 Think of it as a row of pigeonholes in a corridor between two rooms. The Sender drops a frame in a pigeonhole and walks on without looking up. The app empties pigeonholes when it gets to them. If every pigeonhole is full, the Sender replaces the oldest uncollected frame and makes a tally mark. Nobody ever waits in the corridor.
 

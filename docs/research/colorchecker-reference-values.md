@@ -1,6 +1,6 @@
 # ColorChecker Classic reference values
 
-Desk research for the milestone 2 tests, done on 2026-11-16. The values below were computed from published data, not measured with scopecreep or Resolve. Claims marked *inferred* were not stated by a source.
+Desk research for the milestone 2 tests, done on 2026-11-16. The values below were computed from published data, not measured with ScopeCreep or Resolve. Claims marked *inferred* were not stated by a source.
 
 ## Which data is authoritative
 
@@ -61,6 +61,6 @@ Desk research for the milestone 2 tests, done on 2026-11-16. The values below we
 - **The bands are narrower than the patches are apart.** At true exposure through the plain BT.709 OETF, neutral 5 lands at 42.23 %, just above the ARRI-style green band (38–42 %). Neutral 6.5 lands at 59.92 %, above pink (52–56 %).
   - The two bands are about 0.8 stop apart; the two patches are 0.94 stop apart.
   - Both land only when the picture is pulled down by 0.19–0.27 stop (BT.709 OETF), or 0.61–0.81 stop (pure 2.4), or through a tone-mapped output that rolls off the highlights.
-- **Neutral 5 is 19.06 %, not 18 %.** It sits at +0.08 stops and neutral 6.5 at +1.02 stops, whatever the Timeline Colour Space or output curve. That is why scopecreep's chart check uses stops.
+- **Neutral 5 is 19.06 %, not 18 %.** It sits at +0.08 stops and neutral 6.5 at +1.02 stops, whatever the Timeline Colour Space or output curve. That is why ScopeCreep's chart check uses stops.
 - **The skin patches** are 1 (dark skin) and 2 (light skin), at 120.7° and 117.8°. At true exposure they sit at 27.9 % and 56.2 % luma.
 - **Blackmagic's cameras** describe pink as good exposure for lighter skin and green for darker skin, but publish no levels, and the levels change with camera model and ISO (see [false-colour-and-skin-tools](false-colour-and-skin-tools.md)).

@@ -254,7 +254,7 @@ pub fn showcase(scale: f32) -> Showcase {
         margin + label_w,
         y,
         column * 4.0,
-        "scopecreep",
+        "ScopeCreep",
         "Colour Setup: Rec.709 / Gamma 2.4",
         scale,
     ));

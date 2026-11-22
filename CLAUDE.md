@@ -1,4 +1,4 @@
-# scopecreep
+# ScopeCreep
 
 A personal commercial product for professional colourists and editors, not employer work: do not apply any employer branding, SOPs or skills here.
 

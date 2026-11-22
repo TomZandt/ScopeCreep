@@ -112,7 +112,7 @@ fn write_pages(pages: &Pages, keys: &[String]) {
     if let Some(path) = pages_file()
         && let Err(e) = scopecreep::settings::save(&path, &pages.to_text(&as_strs(keys)))
     {
-        eprintln!("scopecreep: cannot remember the pages: {e}");
+        eprintln!("ScopeCreep: cannot remember the pages: {e}");
     }
 }
 
@@ -141,7 +141,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             "--no-scripting" => scripting = false,
             "--version" => {
                 println!(
-                    "scopecreep {} (Feed protocol {}.{})",
+                    "ScopeCreep {} (Feed protocol {}.{})",
                     env!("CARGO_PKG_VERSION"),
                     scopecreep_feed::VERSION_MAJOR,
                     scopecreep_feed::VERSION_MINOR
@@ -402,7 +402,7 @@ impl AppWindow {
                 info.name, info.backend
             )
         })?;
-        device.on_uncaptured_error(Arc::new(|e| eprintln!("scopecreep: graphics error: {e}")));
+        device.on_uncaptured_error(Arc::new(|e| eprintln!("ScopeCreep: graphics error: {e}")));
         let size = window.inner_size();
         let caps = surface.get_capabilities(&adapter);
         // Not an sRGB surface: the Feed's values are shown as they are, with no extra encoding.
@@ -517,7 +517,7 @@ impl AppWindow {
                 if let Some(path) = std::env::var_os("SCOPECREEP_FRAME_LOG").filter(|p| !p.is_empty()) {
                     match std::fs::File::create(&path) {
                         Ok(f) => monitor.set_trace(Box::new(std::io::LineWriter::new(f))),
-                        Err(e) => eprintln!("scopecreep: cannot write the frame log: {e}"),
+                        Err(e) => eprintln!("ScopeCreep: cannot write the frame log: {e}"),
                     }
                 }
                 // SCOPECREEP_STATUS_LOG=1: one line a second on stderr with what the app made of the Feed (diagnostics).
@@ -945,7 +945,7 @@ impl AppWindow {
         if let Some(path) = hotkeys_file()
             && let Err(e) = scopecreep::settings::save(&path, &self.hotkeys.to_text())
         {
-            eprintln!("scopecreep: cannot remember the hotkeys: {e}");
+            eprintln!("ScopeCreep: cannot remember the hotkeys: {e}");
         }
     }
 
@@ -1627,7 +1627,7 @@ impl AppWindow {
         let Some(path) = settings_file() else { return };
         let text = self.settings.lock().unwrap().to_text();
         if let Err(e) = scopecreep::settings::save(&path, &text) {
-            eprintln!("scopecreep: cannot remember the Panel settings: {e}");
+            eprintln!("ScopeCreep: cannot remember the Panel settings: {e}");
         }
     }
 
@@ -2286,7 +2286,7 @@ impl AppWindow {
             &mut self.swash_cache,
         );
         if let Err(e) = prepared {
-            eprintln!("scopecreep: text could not be prepared: {e}");
+            eprintln!("ScopeCreep: text could not be prepared: {e}");
         }
 
         // The right-click menu, drawn as the popover component, over everything: its rectangles, then its own text
@@ -2572,7 +2572,7 @@ impl AppWindow {
             menu_text_areas,
             &mut self.swash_cache,
         ) {
-            eprintln!("scopecreep: menu text could not be prepared: {e}");
+            eprintln!("ScopeCreep: menu text could not be prepared: {e}");
         }
 
         let frame = match self.surface.get_current_texture() {
@@ -2616,14 +2616,14 @@ impl AppWindow {
                 .text_renderer
                 .render(&self.atlas, &self.viewport, &mut pass)
             {
-                eprintln!("scopecreep: text could not be drawn: {e}");
+                eprintln!("ScopeCreep: text could not be drawn: {e}");
             }
             self.flat.draw(&mut pass);
             if let Err(e) = self
                 .menu_renderer
                 .render(&self.atlas, &self.viewport, &mut pass)
             {
-                eprintln!("scopecreep: menu text could not be drawn: {e}");
+                eprintln!("ScopeCreep: menu text could not be drawn: {e}");
             }
         }
         self.queue.submit([encoder.finish()]);
@@ -2645,7 +2645,7 @@ impl ApplicationHandler<Wake> for App {
             return;
         }
         let attributes = Window::default_attributes()
-            .with_title("scopecreep")
+            .with_title("ScopeCreep")
             .with_inner_size(LogicalSize::new(1280.0, 760.0));
         #[cfg(target_os = "linux")]
         let attributes = {
@@ -2667,7 +2667,7 @@ impl ApplicationHandler<Wake> for App {
         match made {
             Ok(window) => self.window = Some(window),
             Err(e) => {
-                eprintln!("scopecreep: cannot open the window: {e}");
+                eprintln!("ScopeCreep: cannot open the window: {e}");
                 event_loop.exit();
             }
         }

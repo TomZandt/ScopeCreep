@@ -1,13 +1,13 @@
-# scopecreep
+# ScopeCreep
 
 Real-time, professional-grade video scopes for DaVinci Resolve, on their own screen.
 
 <a href="https://www.buymeacoffee.com/tomzandtvalentine"><img src="https://img.buymeacoffee.com/button-api/?text=Buy%20me%20a%20coffee&emoji=%E2%98%95&slug=tomzandtvalentine&button_colour=FFDD00&font_colour=000000&font_family=Cookie&outline_colour=000000&coffee_colour=ffffff" alt="Buy me a coffee" height="48"></a>
 
-scopecreep takes the picture Resolve is playing (the **Feed**) and shows it next to **Scopes** (luma waveform with Colorise, vectorscopes) and **Picture Views** (clean picture with channel chips and a Loupe, false colour, skin tone, saturation) in a separate app. The goals:
+ScopeCreep takes the picture Resolve is playing (the **Feed**) and shows it next to **Scopes** (luma waveform with Colorise, vectorscopes) and **Picture Views** (clean picture with channel chips and a Loupe, false colour, skin tone, saturation) in a separate app. The goals:
 
 - **Accurate.** Every pixel is measured at full resolution in 32-bit float, in the project's actual colour space. Anything that isn't exact is labelled as approximated.
-- **Invisible.** Turning scopecreep on must not change Resolve's playback frame rate.
+- **Invisible.** Turning ScopeCreep on must not change Resolve's playback frame rate.
 - **Cross-platform.** Windows, Linux and macOS, on Resolve 21.x.
 - **Quiet.** A tool, not a sales pitch: no clutter, and sensible defaults read from the Resolve project.
 
@@ -21,6 +21,7 @@ Pre-alpha. Nothing to install yet.
 | 1 | Feed plus clean picture plus luma waveform (Linux, NVIDIA) | Released in v0.1.0 |
 | 2 | Every display in its own Panel: 14 Panels (waveforms, vectorscope, CIE plot, false colour, skin tone and more) | Released in v0.2.0 |
 | 3 | A colourist's Window: the picture as the hero, arranged and saved layouts, title bars and one Colour Setup line, a style system with Panel toolbars and sliders, stronger Skin Tone and heatmap, following the scrub | Partly released in v0.3.1 (menu bar, user-assignable hotkeys, Z for Fit, Ctrl+F to fill the Window, on top of v0.3.0's Panel toolbars and chips, sliders for every amount setting, horizontal legends, waveform Scale units, Vectorscope Tonal range, zoom, pan and Link); in progress. Specs [#94](https://github.com/TomZandt/ScopeCreep/issues/94), [#113](https://github.com/TomZandt/ScopeCreep/issues/113), [#83](https://github.com/TomZandt/ScopeCreep/issues/83), [#106](https://github.com/TomZandt/ScopeCreep/issues/106); backlog [#119](https://github.com/TomZandt/ScopeCreep/issues/119); checks at Resolve [#120](https://github.com/TomZandt/ScopeCreep/issues/120) |
+| 4 | A tiling Window: pages, Panels placed where you want them (add, dock, tabs, copies of a display), Auto layout and Auto resize, popover amounts with value boxes, Gamut Warning, Neutrals and Chromaticity back | On `main`, not yet released (spec #196) |
 | Later | Parade, histogram, HDR, Setup Checklist, Capture, Windows/macOS, installers, licensing | Decided, parked |
 
 ## Development (Linux, NVIDIA)
@@ -68,7 +69,7 @@ DaVinci Resolve                                 scopecreep app (Rust + wgpu)
 └──────────────────────────────┘               └──────────────────────────────┘
 ```
 
-- **Sender:** a small C++ OFX plugin placed on the last timeline node. It hands each rendered frame to scopecreep without ever making Resolve wait.
+- **Sender:** a small C++ OFX plugin placed on the last timeline node. It hands each rendered frame to ScopeCreep without ever making Resolve wait.
 - **App:** reads the Feed, converts it from the Timeline Colour Space to the Output Colour Space when required, and draws the Scopes and Picture Views on the GPU.
 - **Colour Setup:** read from the project by Resolve's scripting API (Studio, external scripting set to Local) while playback is stopped, with a manual override on the Sender node (ADR 0005, ADR 0006).
 
@@ -76,9 +77,9 @@ DaVinci Resolve                                 scopecreep app (Rust + wgpu)
 
 - [GLOSSARY.md](GLOSSARY.md): the project's vocabulary. Use these terms in code, issues and docs.
 - [docs/adr/](docs/adr/): architecture decisions and why they were made. The displays were renamed later (Clean picture is now Channel Viewer, and so on): older ADRs, findings and the changelog keep the names of their day, and the [Displays table](GLOSSARY.md#displays) in the glossary maps each former name to the new one.
-  - [0001](docs/adr/0001-ofx-sender-with-output-conversion.md): the Sender is the primary Feed Source; scopecreep does the Output Conversion
+  - [0001](docs/adr/0001-ofx-sender-with-output-conversion.md): the Sender is the primary Feed Source; ScopeCreep does the Output Conversion
   - [0002](docs/adr/0002-cpp-sender-rust-app.md): C++ Sender, Rust + wgpu app
-  - [0003](docs/adr/0003-resolve-never-waits.md): Resolve never waits for scopecreep
+  - [0003](docs/adr/0003-resolve-never-waits.md): Resolve never waits for ScopeCreep
   - [0004](docs/adr/0004-luma-follows-measured-space.md): luma weights follow the Measured Space
   - [0005](docs/adr/0005-colour-setup-from-scripting-api.md): the Colour Setup comes from Resolve's scripting API and a manual override
   - [0006](docs/adr/0006-colour-setup-helper.md): the app reads the Colour Setup through a helper it owns; only the manual override travels in the Feed

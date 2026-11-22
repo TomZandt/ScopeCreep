@@ -317,7 +317,7 @@ impl Status {
                 found.0, found.1, supported.0
             )),
             FeedState::Busy { pid } => Some(format!(
-                "Another scopecreep app (process {pid}) is already showing this Feed."
+                "Another ScopeCreep app (process {pid}) is already showing this Feed."
             )),
             FeedState::NotAFeed => Some(format!(
                 "The file at {} is not a Feed.",

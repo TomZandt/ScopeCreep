@@ -41,7 +41,7 @@ impl Shortfall {
         };
         let mb = (self.picture + self.scopes).div_ceil(1_000_000);
         Some(format!(
-            "Not enough GPU memory for {what} (needs about {mb} MB). Close another GPU app; scopecreep will carry on when memory frees up."
+            "Not enough GPU memory for {what} (needs about {mb} MB). Close another GPU app; ScopeCreep will carry on when memory frees up."
         ))
     }
 }
