@@ -517,3 +517,31 @@ fn a_panel_with_no_settings_has_a_panel_reset_that_is_dim() {
     let mut menu = menu;
     assert!(!menu.press(rect, middle(icon), 1.0, false).reset_panel);
 }
+
+#[test]
+fn resetting_all_panels_puts_every_instance_back_and_keeps_state_and_link() {
+    let mut settings = PanelSettings::default();
+    // Two instances of one display (on two pages) and another display, all set up.
+    for panel in ["Waveform", "Waveform 2", "Vectorscope"] {
+        settings.set(panel, "units", "percent");
+        remember(&mut settings, panel, "brightness", 150.0);
+        settings.set_state(panel, "zoom", "2");
+    }
+    scopecreep::zoom::remember_link(&mut settings, true);
+    let before = settings.version();
+    settings.reset_all_settings();
+    assert_ne!(settings.version(), before, "readers see it change");
+    for panel in ["Waveform", "Waveform 2"] {
+        let reset = settings.resolve(panel, &DEFS);
+        assert_eq!(reset["units"], "codes");
+        assert_eq!(reset["brightness"], Amount::store(100.0));
+        assert_eq!(settings.state_of(panel, &["zoom"])["zoom"], "2");
+        assert!(menu_for(&settings, panel).panel_at_default);
+    }
+    assert_eq!(settings.resolve("Vectorscope", &DEFS)["units"], "codes");
+    assert!(scopecreep::zoom::link_remembered(&settings), "Link stays");
+    // Nothing to reset: no change is reported.
+    let version = settings.version();
+    settings.reset_all_settings();
+    assert_eq!(settings.version(), version);
+}

@@ -91,6 +91,10 @@ pub enum MenuAction {
     Add(usize),
     /// Show the Hotkeys panel in place of the Settings menu.
     OpenHotkeys,
+    /// Reset all Panels was confirmed (#228).
+    ConfirmReset,
+    /// Reset all Panels was cancelled: back to the Settings menu.
+    CancelReset,
     /// Something in the Hotkeys panel.
     Hotkeys(crate::hotkeys_panel::PanelAction),
 }
@@ -306,6 +310,34 @@ pub fn settings_menu() -> Menu {
         MenuEntry::Item(MenuItem::new("Hotkeys…", "")),
         Some(MenuAction::OpenHotkeys),
     );
+    menu.push(MenuEntry::Separator, None);
+    menu.push(
+        MenuEntry::Item(MenuItem::new("Reset all Panels to defaults…", "")),
+        Some(MenuAction::Run(Command::ResetAllPanels)),
+    );
+    menu
+}
+
+/// The confirm row Reset all Panels asks with, in the Settings menu's place (#228): what goes back, then Cancel
+/// (first, and the one Enter takes) and Reset. Undo never touches display settings, so it asks first.
+pub fn reset_confirm_menu() -> Menu {
+    let mut menu = Menu::new();
+    menu.push(
+        MenuEntry::Heading("Reset all Panels to defaults?".to_string()),
+        None,
+    );
+    menu.push(
+        MenuEntry::Heading("Settings of every Panel on every page go back to default".to_string()),
+        None,
+    );
+    menu.push(
+        MenuEntry::Item(MenuItem::new("Cancel", "")),
+        Some(MenuAction::CancelReset),
+    );
+    menu.push(
+        MenuEntry::Item(MenuItem::new("Reset", "")),
+        Some(MenuAction::ConfirmReset),
+    );
     menu
 }
 
@@ -324,6 +356,7 @@ pub fn largest_menus() -> Vec<DropMenu> {
         .map(|mode| layout_menu(&names, 0, &hotkeys, mode).drop)
         .collect();
     menus.push(settings_menu().drop);
+    menus.push(reset_confirm_menu().drop);
     let names = crate::layout_tree::default_names();
     let all: Vec<AddEntry> = names
         .iter()

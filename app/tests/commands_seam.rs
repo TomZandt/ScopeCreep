@@ -53,8 +53,8 @@ fn every_page_up_to_nine_has_a_go_to_command_and_the_save_commands_are_gone() {
     let all = Command::all();
     assert_eq!(
         all.len(),
-        1 + 9 + 3 + 8,
-        "Default layout, go to each of nine pages, new, duplicate and delete page, auto layout, auto resize, the Fit toggle, fill the Window, the legends, add and close a Panel, undo a layout change"
+        1 + 9 + 3 + 9,
+        "Default layout, go to each of nine pages, new, duplicate and delete page, auto layout, auto resize, the Fit toggle, fill the Window, the legends, add and close a Panel, undo a layout change, reset all Panels"
     );
     for page in 0..9 {
         assert!(all.contains(&Command::GoToPage(page)));
@@ -350,4 +350,13 @@ fn the_legends_command_has_no_hotkey_until_one_is_given_and_it_round_trips() {
     hotkeys.assign(Command::ToggleLegends, ctrl("L")).unwrap();
     hotkeys.reset_all();
     assert_eq!(hotkeys, Hotkeys::default());
+}
+
+#[test]
+fn reset_all_panels_is_a_command_with_no_default_hotkey() {
+    let command = Command::ResetAllPanels;
+    assert_eq!(command.id(), "panels-reset-all");
+    assert_eq!(command.label(), "Panels: reset all to defaults");
+    assert!(Command::all().contains(&command));
+    assert_eq!(Hotkeys::default().get(command), None);
 }

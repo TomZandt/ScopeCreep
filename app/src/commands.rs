@@ -41,6 +41,9 @@ pub enum Command {
     ClosePanel,
     /// Step back through the last 20 layout changes (ADR 0038, #207). Ctrl+Z.
     UndoLayout,
+    /// Put every Panel's settings, on every page, back to its display's defaults, after asking (the Settings menu,
+    /// #228). Leaves the arrangement, zoom, Link and the app's preferences alone. No default hotkey.
+    ResetAllPanels,
 }
 
 impl Command {
@@ -60,6 +63,7 @@ impl Command {
         all.push(Command::AddPanel);
         all.push(Command::ClosePanel);
         all.push(Command::UndoLayout);
+        all.push(Command::ResetAllPanels);
         all
     }
 
@@ -79,6 +83,7 @@ impl Command {
             Command::AddPanel => "panel-add".to_string(),
             Command::ClosePanel => "panel-close".to_string(),
             Command::UndoLayout => "layout-undo".to_string(),
+            Command::ResetAllPanels => "panels-reset-all".to_string(),
         }
     }
 
@@ -98,6 +103,7 @@ impl Command {
             Command::AddPanel => "Panel: add".to_string(),
             Command::ClosePanel => "Panel: close".to_string(),
             Command::UndoLayout => "Layout: undo change".to_string(),
+            Command::ResetAllPanels => "Panels: reset all to defaults".to_string(),
         }
     }
 
@@ -114,7 +120,8 @@ impl Command {
             | Command::DuplicatePage
             | Command::DeletePage
             | Command::AutoLayout
-            | Command::AutoResize => None,
+            | Command::AutoResize
+            | Command::ResetAllPanels => None,
             Command::GoToPage(page) => digit(page).map(Hotkey::ctrl),
             Command::ZoomFit => Key::named("Z").map(Hotkey::new),
             Command::FillWindow => Key::named("F").map(Hotkey::ctrl),

@@ -7,6 +7,7 @@ The format follows [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/
 ## [Unreleased]
 
 ### Added
+- Settings, Reset all Panels to defaults… puts every Panel's settings, on every page, back to its display's defaults, after a confirm row ("Reset all Panels to defaults? Settings of every Panel on every page go back to default", Cancel first, then Reset). It is also a Command (`panels-reset-all`, no default hotkey) in the Hotkeys panel. Arrangement, zoom, Link, pages and tabs are not touched. The Hotkeys panel's extra row makes the Window's least height 669 (was 645) (#228).
 - The glossary calls the page that shows every UI component in every state the Stylesheet (it was the style showcase).
 - Fit, the zoom readout and Link are back on every Panel's title bar as one block at the top right, after a divider from the Panel's own chips and before the settings button; the view strip in the menu bar row is gone. The scopes have the block too, greyed where nothing zooms, so it is always in the same place. Fit takes that Panel (and every picture Panel while Link is on) to Fit; Link stays one Window-wide switch, on in a first session. A Panel's least width is now 176 (was 120) so the block fits, which makes the Window's least size 1015 × 645 (#224, ADR 0042).
 - The Colour Setup line is now at the right end of the menu bar row, so the full-width row under the menu bar is gone and the Panels have its height back. It is cut with an ellipsis before it can meet the menus, and hovering it shows the whole line (#224, ADR 0042).

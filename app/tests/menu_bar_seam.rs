@@ -631,3 +631,80 @@ fn the_view_menu_is_among_the_menus_the_minimum_size_is_worked_out_from_with_its
         "{menus:?}"
     );
 }
+
+#[test]
+fn the_settings_menu_offers_reset_all_panels_which_asks_first() {
+    let menu = menu_bar::settings_menu();
+    let (i, entry) = menu
+        .drop
+        .entries
+        .iter()
+        .enumerate()
+        .find_map(|(i, e)| match e {
+            MenuEntry::Item(it) if it.label == "Reset all Panels to defaults…" => {
+                Some((i, it.clone()))
+            }
+            _ => None,
+        })
+        .expect("a Reset all Panels entry");
+    assert!(entry.enabled);
+    assert_eq!(entry.hotkey, "");
+    assert_eq!(
+        menu.action(i),
+        Some(MenuAction::Run(Command::ResetAllPanels))
+    );
+}
+
+#[test]
+fn the_confirm_row_names_what_goes_back_and_offers_cancel_first_then_reset_at_1x_and_2x() {
+    let menu = menu_bar::reset_confirm_menu();
+    let headings: Vec<&str> = menu
+        .drop
+        .entries
+        .iter()
+        .filter_map(|e| match e {
+            MenuEntry::Heading(t) => Some(t.as_str()),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(
+        headings,
+        [
+            "Reset all Panels to defaults?",
+            "Settings of every Panel on every page go back to default"
+        ]
+    );
+    let items: Vec<(usize, String)> = menu
+        .drop
+        .entries
+        .iter()
+        .enumerate()
+        .filter_map(|(i, e)| match e {
+            MenuEntry::Item(it) => Some((i, it.label.clone())),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(items.len(), 2);
+    assert_eq!(items[0].1, "Cancel", "focus starts on Cancel");
+    assert_eq!(items[1].1, "Reset");
+    assert_eq!(menu.action(items[0].0), Some(MenuAction::CancelReset));
+    assert_eq!(menu.action(items[1].0), Some(MenuAction::ConfirmReset));
+    for scale in SCALES {
+        let title = menu_bar::bar().title_rects(0.0, 0.0, scale)[SETTINGS];
+        let window = [800.0 * scale, 600.0 * scale];
+        let r = menu.drop.rect(title, window, scale);
+        assert!(
+            r[0] + r[2] <= window[0] && r[1] + r[3] <= window[1],
+            "fits at {scale}x"
+        );
+        let rows = menu.drop.entry_rects(r, scale);
+        for (i, _) in &items {
+            assert_eq!(menu.drop.hit(r, centre(rows[*i]), scale), Some(*i));
+        }
+        // The long line is not cut: the menu is wider than the text.
+        assert!(
+            r[2] >= text_width(headings[1], scale),
+            "wide enough at {scale}x"
+        );
+    }
+}

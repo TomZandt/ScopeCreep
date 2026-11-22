@@ -143,6 +143,21 @@ impl PanelSettings {
         }
     }
 
+    /// Put every setting of every Panel back to its default (Reset all Panels, #228). Remembered state (zooms,
+    /// Link) and the Window's own entry are not Panel settings and stay.
+    pub fn reset_all_settings(&mut self) {
+        let window = self.panels.remove(crate::zoom::LINK_STATE_PANEL);
+        let any = !self.panels.is_empty();
+        self.panels.clear();
+        if let Some(window) = window {
+            self.panels
+                .insert(crate::zoom::LINK_STATE_PANEL.to_string(), window);
+        }
+        if any {
+            self.version += 1;
+        }
+    }
+
     /// Forget everything kept for Panel `panel` (it was closed, or replaced, ADR 0039): it starts from the defaults
     /// if it is ever made again.
     pub fn forget_panel(&mut self, panel: &str) {

@@ -302,5 +302,5 @@ fn the_displays_to_choose_from_are_listed_a_to_z_whatever_the_panel_order() {
 #[test]
 fn the_windows_least_size_follows_the_default_layout() {
     let tree = LayoutTree::default_for(&default_names());
-    assert_eq!(min_window(&tree, &largest_menus()), [1015.0, 645.0]);
+    assert_eq!(min_window(&tree, &largest_menus()), [1015.0, 669.0]);
 }

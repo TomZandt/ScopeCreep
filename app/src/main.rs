@@ -290,6 +290,8 @@ struct AppWindow {
     layout_mode: LayoutMode,
     /// The Hotkeys panel, while it shows in place of the Settings menu (#148).
     hotkeys_panel: Option<HotkeysPanel>,
+    /// The Settings menu is asking whether to reset every Panel's settings (#228).
+    confirm_reset: bool,
     /// The left button is down (a menu entry under it shows pressed).
     left_down: bool,
     /// The Panel filling the Window (Ctrl+F, #180), if any. Display state: never saved.
@@ -578,6 +580,7 @@ impl AppWindow {
             bar_hover: None,
             layout_mode: LayoutMode::Show,
             hotkeys_panel: None,
+            confirm_reset: false,
             left_down: false,
             full: None,
             hotkeys: hotkeys_file()
@@ -921,6 +924,7 @@ impl AppWindow {
                 &self.hotkeys,
                 self.displays.legends_on(&self.settings.lock().unwrap()),
             )),
+            menu_bar::SETTINGS if self.confirm_reset => Some(menu_bar::reset_confirm_menu()),
             menu_bar::SETTINGS => Some(match &self.hotkeys_panel {
                 Some(panel) => panel.menu(&self.hotkeys),
                 None => menu_bar::settings_menu(),
@@ -962,6 +966,30 @@ impl AppWindow {
         self.finish_rename(true);
         self.layout_mode = LayoutMode::Show;
         self.hotkeys_panel = None;
+        self.confirm_reset = false;
+        self.window.request_redraw();
+    }
+
+    /// Ask whether to reset every Panel's settings: the Settings menu opens on its confirm row (#228).
+    fn ask_reset_all_panels(&mut self) {
+        self.edge_add = None;
+        self.menu = None;
+        self.hover = None;
+        self.finish_rename(true);
+        self.hotkeys_panel = None;
+        self.bar_anchor = None;
+        self.layout_mode = LayoutMode::Show;
+        self.bar.open = Some(menu_bar::SETTINGS);
+        self.confirm_reset = true;
+        self.window.request_redraw();
+    }
+
+    /// Reset every Panel's settings, on every page, after the confirm row said so (#228). The arrangement, zoom,
+    /// Link and the app's preferences are not touched.
+    fn reset_all_panels(&mut self) {
+        self.settings.lock().unwrap().reset_all_settings();
+        self.save_settings();
+        self.refresh_menu();
         self.window.request_redraw();
     }
 
@@ -1002,6 +1030,12 @@ impl AppWindow {
                 self.edge_add = None;
                 self.layout_mode = LayoutMode::Add;
             }
+            Some(MenuAction::Run(Command::ResetAllPanels)) => self.confirm_reset = true,
+            Some(MenuAction::ConfirmReset) => {
+                self.reset_all_panels();
+                self.close_bar();
+            }
+            Some(MenuAction::CancelReset) => self.close_bar(),
             Some(MenuAction::Run(command)) => {
                 self.run(command);
                 self.close_bar();
@@ -1293,6 +1327,11 @@ impl AppWindow {
             self.window.request_redraw();
             return;
         }
+        // The confirm row's focus is on Cancel: Enter takes it (#228).
+        if self.confirm_reset && event.logical_key == LogicalKey::Named(NamedKey::Enter) {
+            self.close_bar();
+            return;
+        }
         if event.logical_key == LogicalKey::Named(NamedKey::Escape) {
             if self.panel_drag.take().is_some() {
                 // Escape cancels a drag: the layout is as it was.
@@ -1326,6 +1365,10 @@ impl AppWindow {
         match command {
             Command::AddPanel => {
                 self.open_add_list();
+                return;
+            }
+            Command::ResetAllPanels => {
+                self.ask_reset_all_panels();
                 return;
             }
             Command::ClosePanel => {
