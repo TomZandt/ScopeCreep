@@ -17,10 +17,10 @@ const NAMES: [&str; 7] = [
     "Skin Tone",
     "False Colour - Stops",
 ];
-const GAP: f32 = 12.0;
+const GAP: f32 = 8.0;
 /// How many variations a page steps through before it wraps.
 const REROLLS: usize = 8;
-const WINDOW: [f32; 4] = [0.0, 0.0, 1256.0, 716.0];
+const WINDOW: [f32; 4] = [0.0, 0.0, 1424.0, 738.0];
 
 fn items(names: &[&str]) -> Vec<Item> {
     names.iter().map(|n| auto_layout::item_of(n)).collect()
@@ -259,8 +259,8 @@ fn above_nine_panels_a_repeat_press_changes_nothing() {
 #[test]
 fn the_clean_picture_gets_the_most_room() {
     for (aspect, area) in [
-        (16.0 / 9.0, WINDOW),
-        (2.39, WINDOW),
+        (16.0 / 9.0, [0.0, 0.0, 1904.0, 1000.0]),
+        (2.39, [0.0, 0.0, 1904.0, 1000.0]),
         (9.0 / 16.0, [0.0, 0.0, 716.0, 1256.0]),
         (16.0 / 9.0, [0.0, 0.0, 2512.0, 1432.0]),
     ] {

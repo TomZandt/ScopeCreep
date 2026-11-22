@@ -2,8 +2,12 @@
 //! image and a test to check. Layout numbers here are the sheet's own, not chrome, so this file is not in the
 //! style check's list; every colour and size of a component still comes from its own module.
 use crate::components::*;
+use crate::layout_tree::Edge;
+use crate::panel_grid::PanelLayout;
 use crate::settings::Menu;
 use crate::style;
+use crate::tab_strip::{TabHit, TabStrip};
+use crate::view_block::ViewBlock;
 
 /// Every component in every state, laid out on one sheet.
 pub struct Showcase {
@@ -107,7 +111,7 @@ pub fn showcase(scale: f32) -> Showcase {
                 at(i, y)[0],
                 at(i, y)[1],
                 style::SPACE_SETTINGS_BUTTON * scale,
-                style::SPACE_SETTINGS_BUTTON * scale,
+                style::SPACE_CHIP_HEIGHT * scale,
             ],
             *state,
             scale,
@@ -187,45 +191,144 @@ pub fn showcase(scale: f32) -> Showcase {
     ));
     y += popover_rect[3] + row * 0.5;
 
-    // Panel frame with a wide and a narrow title bar.
-    prims.push(caption("Panel frame, title bar", margin, y, label_w));
+    // Panel frames: a focused picture Panel (accent line along its title bar, chips, the rule, the view block), the same
+    // Panel narrow with its chips given way to "+N", and a Scope, which has no view block.
+    prims.push(caption("Title bar: focused, +N, Scope", margin, y, label_w));
     let bar_chips = vec![
         Chip::channel("Y", Channel::Y),
         Chip::channel("R", Channel::R),
         Chip::channel("G", Channel::G),
         Chip::channel("B", Channel::B),
+        Chip::new("B/W"),
     ];
-    let title = TitleBar {
+    let picture = TitleBar {
+        name: "Channel Viewer".to_string(),
+        tags: "Rec.709".to_string(),
+        chips: bar_chips.clone(),
+        groups: vec![0, 0, 0, 0, 1],
+        settings_button: true,
+        view: true,
+    };
+    let overflow = TitleBar {
+        name: "Channel Viewer".to_string(),
+        tags: String::new(),
+        chips: vec![Chip::new("+5")],
+        groups: vec![0],
+        settings_button: true,
+        view: true,
+    };
+    let scope = TitleBar {
         name: "Waveform".to_string(),
         tags: "Rec.709 weights, 100 %".to_string(),
-        chips: bar_chips,
+        chips: bar_chips[..4].to_vec(),
         groups: Vec::new(),
         settings_button: true,
         view: false,
     };
-    let states = [
-        (true, State::Normal),
-        (true, State::Normal),
-        (false, State::Hover),
+    let chip_states = [
         (false, State::Normal),
+        (false, State::Normal),
+        (false, State::Hover),
+        (true, State::Normal),
+        (true, State::Normal),
     ];
-    for (i, panel_width) in [
-        style::SPACE_SHOWCASE_PANEL_WIDE,
-        style::SPACE_SHOWCASE_PANEL_NARROW,
-    ]
-    .into_iter()
-    .enumerate()
-    {
+    let frames = [
+        (
+            &picture,
+            style::SPACE_SHOWCASE_PANEL_WIDE,
+            true,
+            0usize,
+            0.0f32,
+        ),
+        (&overflow, style::SPACE_SHOWCASE_PANEL_NARROW, false, 1, 0.0),
+        (&scope, style::SPACE_SHOWCASE_PANEL_WIDE, false, 0, 1.0),
+    ];
+    let mut x_next = margin + label_w;
+    let mut y_row = y;
+    for (title, panel_width, focused, _, new_row) in frames {
+        if new_row > 0.0 {
+            y_row += style::SPACE_SHOWCASE_PANEL_STEP * scale;
+            x_next = margin + label_w;
+        }
         let frame = [
-            margin + label_w + (style::SPACE_SHOWCASE_PANEL_WIDE * scale + margin) * i as f32,
-            y + 2.0 * scale,
+            x_next,
+            y_row + 2.0 * scale,
             panel_width * scale,
             style::SPACE_SHOWCASE_PANEL_HEIGHT * scale,
         ];
+        x_next += panel_width * scale + margin;
         prims.extend(panel_frame(frame, scale));
-        prims.extend(title.draw(frame, &states, State::Normal, scale));
+        let bar_rect = PanelLayout::new(frame, scale).title;
+        prims.extend(title.draw_focused(
+            bar_rect,
+            &chip_states[..title.chips.len()],
+            State::Normal,
+            focused,
+            scale,
+        ));
+        if let Some(view) = title.layout(bar_rect, scale).view {
+            let block = ViewBlock {
+                enabled: true,
+                readout: "62 %".to_string(),
+                link: true,
+            };
+            prims.extend(block.draw(&view, None, scale));
+        }
     }
+    y = y_row + style::SPACE_SHOWCASE_PANEL_STEP * scale;
+
+    // The accent's other states: a tab group's tabs, the dock overlay with its label, the edge +, and the Appearance
+    // panel with its swatches and the contrast notice.
+    prims.push(caption("Tab strip, edge +", margin, y, label_w));
+    let strip = TabStrip {
+        labels: vec!["Waveform".into(), "Vectorscope".into(), "Saturation".into()],
+        active: 1,
+    };
+    let tabs_frame = [
+        margin + label_w,
+        y + 2.0 * scale,
+        style::SPACE_SHOWCASE_PANEL_WIDE * scale,
+        style::SPACE_SHOWCASE_PANEL_HEIGHT * scale,
+    ];
+    prims.extend(panel_frame(tabs_frame, scale));
+    let tabs_bar = PanelLayout::new(tabs_frame, scale).title;
+    prims.push(rect(tabs_bar, style::SURFACE_PANEL));
+    prims.extend(strip.draw(
+        [
+            tabs_bar[0] + style::SPACE_BAR_PAD * scale,
+            tabs_bar[1],
+            tabs_bar[2] - 2.0 * style::SPACE_BAR_PAD * scale,
+            tabs_bar[3],
+        ],
+        Some(TabHit::Tab(0)),
+        scale,
+    ));
+    let edge_lit = edge_plus_draw(tabs_frame, Some(Edge::Right), scale);
+    prims.extend(edge_lit);
+    let dock_target = [
+        tabs_frame[0] + tabs_frame[2] + margin,
+        tabs_frame[1],
+        style::SPACE_SHOWCASE_PANEL_NARROW * scale / 2.0,
+        tabs_frame[3],
+    ];
+    prims.extend(dock_overlay(dock_target, scale));
+    prims.push(text(
+        "Split right",
+        dock_target,
+        Face::Label,
+        style::TEXT_PRIMARY,
+        Align::Centre,
+    ));
     y += style::SPACE_SHOWCASE_PANEL_STEP * scale;
+
+    prims.push(caption("Appearance: accent", margin, y, label_w));
+    let appearance = crate::appearance_panel::AppearancePanel::default()
+        .menu(crate::accent::current())
+        .drop;
+    let appearance_area =
+        appearance.rect_near([margin + label_w, y, 0.0, 0.0], [width, f32::MAX], scale);
+    prims.extend(appearance.draw(appearance_area, Some(2), false, scale));
+    y = appearance_area[1] + appearance_area[3] + row * 0.5;
 
     prims.push(caption("Menu bar", margin, y, label_w));
     let menu_bar = crate::menu_bar::bar();

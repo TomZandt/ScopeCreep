@@ -225,6 +225,17 @@ pub struct Toolbar {
     /// The settings whose chips did not fit the title bar ([`Toolbar::fit_to`]), in bar order, by
     /// [`ChipAction::key`]: the popover offers them instead ([`popover_with`]).
     pub collapsed: Vec<&'static str>,
+    /// How many chips gave way: the "+N" chip at the bar's end says so, and a click on it opens the Panel's settings,
+    /// where they now are (ADR 0044).
+    pub hidden: usize,
+}
+
+/// The widest the "+N" overflow chip is laid out at (a Panel has fewer than ten chips).
+pub const OVERFLOW_WIDEST: &str = "+9";
+
+/// What the overflow chip says for `hidden` chips.
+pub fn overflow_text(hidden: usize) -> String {
+    format!("+{hidden}")
 }
 
 /// What a click on a title-bar chip does.
@@ -232,6 +243,8 @@ pub struct Toolbar {
 pub enum ChipAction {
     /// Set a Panel setting: its key and the value it takes.
     Set(&'static str, String),
+    /// The "+N" chip: open the Panel's settings, where the chips that gave way now are.
+    More,
 }
 
 impl ChipAction {
@@ -239,6 +252,7 @@ impl ChipAction {
     pub fn key(&self) -> &'static str {
         match self {
             ChipAction::Set(key, _) => key,
+            ChipAction::More => "",
         }
     }
 }
@@ -261,21 +275,43 @@ impl Toolbar {
         reserve: f32,
         scale: f32,
     ) {
-        let needed = |chips: &[Chip], groups: &[usize], button: bool| {
+        self.fit_to_reserving_floor(bar_width, settings_button, reserve, reserve, scale);
+    }
+
+    /// [`Toolbar::fit_to_reserving`] where `reserve` is what the name and tags want at their full width (the chips
+    /// give way before they are cut) and `floor` what is left of it once they have given way (ADR 0044): the "+N"
+    /// chip keeps its place ahead of the tags and the name, so it is shown whenever it fits beside `floor`. Where
+    /// not even that fits the chips are in the Panel's settings and the bar shows none.
+    pub fn fit_to_reserving_floor(
+        &mut self,
+        bar_width: f32,
+        settings_button: bool,
+        reserve: f32,
+        floor: f32,
+        scale: f32,
+    ) {
+        let needed = |chips: &[Chip], groups: &[usize], button: bool, extra: f32, reserve: f32| {
             let button = if button {
-                (crate::style::SPACE_SETTINGS_BUTTON + crate::style::SPACE_CHIP_GAP) * scale
+                crate::components::TitleBar::settings_room(scale)
             } else {
                 0.0
             };
             crate::components::chip_row_width_grouped(chips, groups, scale)
                 + button
                 + reserve
+                + extra
                 + 2.0 * crate::style::SPACE_BAR_PAD * scale
         };
-        if needed(&self.chips, &self.groups, settings_button) <= bar_width {
+        if needed(&self.chips, &self.groups, settings_button, 0.0, reserve) <= bar_width {
             return;
         }
-        while !self.chips.is_empty() && needed(&self.chips, &self.groups, true) > bar_width {
+        // Some chips will give way: the "+N" chip that stands for them takes its room, after a group gap.
+        let overflow =
+            Chip::new(OVERFLOW_WIDEST).size(scale)[0] + crate::style::SPACE_CHIP_GROUP_GAP * scale;
+        let mut hidden = 0;
+        while !self.chips.is_empty()
+            && needed(&self.chips, &self.groups, true, overflow, reserve) > bar_width
+        {
             let key = self.picks.last().map(ChipAction::key);
             while self.picks.last().map(ChipAction::key) == key {
                 self.chips.pop();
@@ -283,8 +319,23 @@ impl Toolbar {
                 self.on.pop();
                 self.tooltips.pop();
                 self.picks.pop();
+                hidden += 1;
             }
             self.collapsed.splice(0..0, key);
+        }
+        let room = needed(&self.chips, &self.groups, true, overflow, reserve) <= bar_width
+            || (self.chips.is_empty()
+                && needed(&self.chips, &self.groups, true, overflow, floor) <= bar_width);
+        if hidden > 0 {
+            self.hidden = hidden;
+        }
+        if hidden > 0 && room {
+            self.groups.push(self.groups.last().map_or(0, |g| g + 1));
+            self.chips.push(Chip::new(&overflow_text(hidden)));
+            self.on.push(false);
+            self.tooltips
+                .push(format!("{hidden} more in this Panel's settings"));
+            self.picks.push(ChipAction::More);
         }
     }
 
@@ -340,8 +391,9 @@ impl Toolbar {
     /// What clicking chip `index` sets: the setting and its new value. Clicking the chip already on keeps it on
     /// (a single choice is never empty), and the last chip on of a combination stays on.
     pub fn click(&self, index: usize) -> Option<(&'static str, &str)> {
-        self.picks.get(index).map(|action| match action {
-            ChipAction::Set(key, value) => (*key, value.as_str()),
+        self.picks.get(index).and_then(|action| match action {
+            ChipAction::Set(key, value) => Some((*key, value.as_str())),
+            ChipAction::More => None,
         })
     }
 

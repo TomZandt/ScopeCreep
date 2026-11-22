@@ -63,6 +63,16 @@ impl TabStrip {
     /// The strip laid out in `area` (a title bar's room for it). Tabs fill the bar's height less the line under it.
     /// When they all fit at their natural width they take it; when they fit only if squeezed they share the room
     /// equally (not under the least width); when not even that, the overflow applies.
+    /// The width the strip takes when every tab has its natural width.
+    pub fn natural_width(&self, scale: f32) -> f32 {
+        let gaps = style::SPACE_TAB_GAP * scale * self.labels.len().saturating_sub(1) as f32;
+        gaps + self
+            .labels
+            .iter()
+            .map(|l| self.natural(l, scale))
+            .sum::<f32>()
+    }
+
     pub fn layout(&self, area: [f32; 4], scale: f32) -> TabStripLayout {
         let n = self.labels.len();
         let gap = style::SPACE_TAB_GAP * scale;
@@ -144,13 +154,16 @@ impl TabStrip {
                 prims.push(rect(*r, style::SURFACE_CONTROL));
                 prims.push(rect(
                     [r[0], r[1] + r[3] - underline, r[2], underline],
-                    style::ACCENT,
+                    style::accent(),
                 ));
             } else if hover == Some(TabHit::Tab(*i)) {
                 prims.push(rect(*r, style::STATE_HOVER));
             }
+            let hovered = hover == Some(TabHit::Tab(*i));
             let ink = if on {
-                style::TEXT_PRIMARY
+                style::accent_text()
+            } else if hovered {
+                style::TEXT_HIGH
             } else {
                 style::TEXT_SECONDARY
             };

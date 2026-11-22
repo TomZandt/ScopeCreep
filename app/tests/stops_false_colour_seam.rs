@@ -308,7 +308,7 @@ fn the_label_says_approximated_on_a_display_referred_timeline_and_not_otherwise(
     }
 }
 
-const FRAME_BAR: u32 = 600;
+const FRAME_BAR: u32 = 700;
 
 /// What the legend's bar shows at the bottom of a Panel `height` tall, one colour per swatch, read at the middle
 /// of the swatch row (a swatch is 16 logical pixels with 3 and a line of text under it).
@@ -547,7 +547,7 @@ fn numbers_and_captions_are_dropped_never_overlapped_when_the_panel_is_narrow() 
         (nums, captions)
     };
     assert_eq!(numbers(900.0).0.len(), 15);
-    let (every_second, _) = numbers(300.0);
+    let (every_second, _) = numbers(380.0);
     assert_eq!(
         every_second,
         ["-5", "-3", "-1", "18 %", "+1", "+3", "+5"],

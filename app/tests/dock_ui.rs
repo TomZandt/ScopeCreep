@@ -3,7 +3,7 @@
 use scopecreep::dock::{Zone, is_drag, overlay, zone_at};
 use scopecreep::layout_tree::Edge;
 
-const GAP: f32 = 12.0;
+const GAP: f32 = 8.0;
 
 fn near(a: [f32; 4], b: [f32; 4]) -> bool {
     a.iter().zip(b).all(|(x, y)| (x - y).abs() < 0.01)

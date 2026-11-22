@@ -4,8 +4,8 @@
 use scopecreep::layout_tree::LayoutTree;
 use scopecreep::panel_grid::{PanelLayout, cells_filled, min_panel_size, shown};
 
-const AREA: [f32; 4] = [12.0, 12.0, 1256.0, 716.0];
-const GAP: f32 = 12.0;
+const AREA: [f32; 4] = [8.0, 8.0, 1424.0, 738.0];
+const GAP: f32 = 8.0;
 
 const NAMES: [&str; 7] = [
     "Channel Viewer",
@@ -27,9 +27,9 @@ fn default_grid() -> LayoutTree {
 fn a_panel_has_a_border_a_title_bar_at_its_top_and_the_display_under_it() {
     let p = PanelLayout::new([100.0, 50.0, 400.0, 300.0], 1.0);
     assert_eq!(p.frame, [100.0, 50.0, 400.0, 300.0]);
-    assert_eq!(p.title, [101.0, 51.0, 398.0, 22.0]);
+    assert_eq!(p.title, [101.0, 51.0, 398.0, 34.0]);
     // Under the title bar and the line beneath it, inside the border.
-    assert_eq!(p.content, [101.0, 74.0, 398.0, 275.0]);
+    assert_eq!(p.content, [101.0, 86.0, 398.0, 263.0]);
     // There is no label strip under the display: it reaches the bottom border.
     assert_eq!(p.content[1] + p.content[3], 50.0 + 300.0 - 1.0);
 }
@@ -42,7 +42,7 @@ fn the_border_is_thin_lines_round_the_panel_and_one_under_the_title_bar() {
     assert_eq!(lines[1], [0.0, 99.0, 200.0, 1.0]);
     assert_eq!(lines[2], [0.0, 0.0, 1.0, 100.0]);
     assert_eq!(lines[3], [199.0, 0.0, 1.0, 100.0]);
-    assert_eq!(lines[4], [1.0, 23.0, 198.0, 1.0]);
+    assert_eq!(lines[4], [1.0, 35.0, 198.0, 1.0]);
 }
 
 #[test]

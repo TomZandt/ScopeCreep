@@ -14,9 +14,25 @@ pub enum Zone {
 }
 
 impl Zone {
-    /// The words the drop overlay carries: only the middle needs them (an edge shows the half it would take).
-    pub fn label(self) -> Option<&'static str> {
-        matches!(self, Zone::Middle).then_some("Tab here")
+    /// The words the drop overlay carries (ADR 0044): what releasing here does, for the `cell` the pointer is over.
+    /// `swap` is Shift held (the Panels trade places), `gap` the gap between Panels and `min` the least Panel size
+    /// (device pixels): an edge with no room for the half says it will join as a tab instead.
+    pub fn label(self, cell: [f32; 4], gap: f32, min: [f32; 2], swap: bool) -> &'static str {
+        if swap {
+            return "Swap places";
+        }
+        let (along, least, words) = match self {
+            Zone::Middle => return "Join as a tab",
+            Zone::Edge(Edge::Left) => (cell[2], min[0], "Split left"),
+            Zone::Edge(Edge::Right) => (cell[2], min[0], "Split right"),
+            Zone::Edge(Edge::Top) => (cell[3], min[1], "Split above"),
+            Zone::Edge(Edge::Bottom) => (cell[3], min[1], "Split below"),
+        };
+        if (along - gap) / 2.0 < least - 0.001 {
+            "No room to split: join as a tab"
+        } else {
+            words
+        }
     }
 }
 

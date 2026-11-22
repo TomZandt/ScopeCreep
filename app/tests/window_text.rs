@@ -7,6 +7,7 @@ use scopecreep::layout_tree::LayoutTree;
 use scopecreep::measurement::LumaWeights;
 use scopecreep::panel_grid::PanelLayout;
 use scopecreep::settings::Settings;
+use scopecreep::style;
 use scopecreep::window_text::{self, PanelTitle, panel_title};
 use scopecreep_feed::SentColourSetup;
 
@@ -348,18 +349,18 @@ fn stops_false_colour_says_approximated_assumed_and_when_it_cannot_measure() {
     );
 }
 
-// A worst case for the narrowest Panels at the default layout at 1280 x 760: the name is never cut, the title
+// A worst case for the narrowest Panels at the default layout at 1440 x 840: the name is never cut, the title
 // is one line, and the tags that fit are shown most important first; the hover holds the rest.
 #[test]
 fn every_title_bar_fits_one_line_at_the_default_layout() {
-    let area = [12.0, 12.0, 1256.0, 716.0];
+    let area = [8.0, 8.0, 1424.0, 738.0];
     // The displays the Window shows today (the Channel view and Colour waveform are out of it).
     let shown: Vec<&str> = NAMES
         .iter()
         .copied()
         .filter(|n| !["Channel view", "Colour waveform"].contains(n))
         .collect();
-    let cells = LayoutTree::default_for(&shown).cells(area, 12.0);
+    let cells = LayoutTree::default_for(&shown).cells(area, 8.0);
     for scale in [1.0, 2.0] {
         for (i, name) in shown.iter().enumerate() {
             let cell = cells[i].map(|v| v * scale);
@@ -378,7 +379,8 @@ fn every_title_bar_fits_one_line_at_the_default_layout() {
                     .tags
                     .map_or(layout.name[0] + layout.name[2], |r| r[0] + r[2]);
                 assert!(
-                    right <= bar[0] + bar[2] + 0.01 && layout.bar[3] == scale * 22.0,
+                    right <= bar[0] + bar[2] + 0.01
+                        && layout.bar[3] == scale * style::SPACE_TITLE_BAR,
                     "{name}: one line, inside the bar"
                 );
             }

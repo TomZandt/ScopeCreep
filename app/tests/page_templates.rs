@@ -16,8 +16,8 @@ const NAMES: [&str; 7] = [
     "Skin Tone",
     "False Colour - Stops",
 ];
-const GAP: f32 = 12.0;
-const WINDOW: [f32; 4] = [0.0, 0.0, 1256.0, 716.0];
+const GAP: f32 = 8.0;
+const WINDOW: [f32; 4] = [0.0, 0.0, 1424.0, 738.0];
 
 fn items() -> Vec<Item> {
     NAMES.iter().map(|n| auto_layout::item_of(n)).collect()

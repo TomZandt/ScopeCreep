@@ -15,7 +15,7 @@ use std::sync::{Arc, Mutex};
 const CLEAN: &str = "Channel Viewer";
 const AREA: [f32; 4] = [0.0, 0.0, 200.0, 120.0];
 const ROOM: Room = Room {
-    area: [0.0, 0.0, 1256.0, 716.0],
+    area: [0.0, 0.0, 1424.0, 738.0],
     gap: 12.0,
     min: [120.0, 105.0],
 };

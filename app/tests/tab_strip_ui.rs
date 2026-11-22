@@ -65,7 +65,7 @@ fn the_active_tab_is_highlighted_and_the_others_are_not() {
         // One fill, on the active tab only; an accent underline sits at its foot.
         assert_eq!(fills, vec![l.tabs[1].1]);
         let underline = prims.iter().any(
-            |p| matches!(p, Prim::Rect { colour, .. } if *colour == style::rgba(style::ACCENT)),
+            |p| matches!(p, Prim::Rect { colour, .. } if *colour == style::rgba(style::accent())),
         );
         assert!(underline);
         for ((_, r), next) in l.tabs.iter().zip(l.tabs.iter().skip(1)) {
@@ -166,9 +166,32 @@ fn the_tab_layout_at_2x_is_the_1x_layout_doubled() {
 }
 
 #[test]
-fn the_middle_of_a_tab_group_is_labelled_tab_here_and_an_edge_is_not() {
-    assert_eq!(Zone::Middle.label(), Some("Tab here"));
-    for edge in [Edge::Left, Edge::Right, Edge::Top, Edge::Bottom] {
-        assert_eq!(Zone::Edge(edge).label(), None);
+fn the_dock_overlay_says_what_a_drop_does() {
+    let cell = [0.0, 0.0, 800.0, 600.0];
+    let (gap, min) = (8.0, [331.0, 117.0]);
+    assert_eq!(Zone::Middle.label(cell, gap, min, false), "Join as a tab");
+    for (edge, words) in [
+        (Edge::Left, "Split left"),
+        (Edge::Right, "Split right"),
+        (Edge::Top, "Split above"),
+        (Edge::Bottom, "Split below"),
+    ] {
+        assert_eq!(Zone::Edge(edge).label(cell, gap, min, false), words);
     }
+    // Shift swaps, whatever the zone.
+    assert_eq!(Zone::Middle.label(cell, gap, min, true), "Swap places");
+    assert_eq!(
+        Zone::Edge(Edge::Left).label(cell, gap, min, true),
+        "Swap places"
+    );
+    // A cell too narrow to halve at the least Panel width joins as a tab.
+    let narrow = [0.0, 0.0, 600.0, 600.0];
+    assert_eq!(
+        Zone::Edge(Edge::Left).label(narrow, gap, min, false),
+        "No room to split: join as a tab"
+    );
+    assert_eq!(
+        Zone::Edge(Edge::Top).label(narrow, gap, min, false),
+        "Split above"
+    );
 }

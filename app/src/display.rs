@@ -752,7 +752,15 @@ impl DisplaySet {
         self.read().displays[index].zoom(area, scale)
     }
 
-    /// The view block of Panel `index` with its content in `area` (ADR 0042): every Panel has one. It is enabled,
+    /// Whether Panel `index` shows a picture (and so has the view block, ADR 0044); a Scope does not.
+    pub fn is_picture(&self, index: usize) -> bool {
+        self.read()
+            .displays
+            .get(index)
+            .is_some_and(|d| d.picture_zoom().is_some())
+    }
+
+    /// The view block of Panel `index` with its content in `area` (ADR 0042): every picture Panel has one. It is enabled,
     /// with the Panel's own zoom as a percentage ("62 %"), where the display zooms (a picture with a frame); a
     /// Scope's, or a picture's before its first frame, is disabled. Link is the Window's one switch.
     pub fn view_block(

@@ -97,6 +97,13 @@ _Avoid_: UI, theme
 The one line at the right end of the menu bar row that says the Colour Setup (it is cut with an ellipsis to the room beside the menus, and its full text is the hover): Timeline → Output, Levels, where it came from, and whether Output Conversion is exact or approximated. The Panels do not repeat it.
 _Avoid_: header, toolbar
 
+**Accent colour**:
+The one colour in the Window's chrome (default #d2ff00, the user's choice in Settings > Appearance > App accent colour). It marks state only, as thin lines and text, small and away from the picture, and is never on measurement data. Hover is never the accent (ADR 0044).
+_Avoid_: Theme colour, highlight colour
+
+**Title bar**:
+The strip across the top of a Panel: its name (or its tabs) and tags, its own chips (a "+N" chip for those that gave way), a rule, the view block on a picture Panel, and the settings button, with an accent line along its top while the Panel has the focus. When narrow the chips give way first, then the tag, then extra tabs, then the name is cut.
+
 **Title bar tag**:
 A short word in a Panel's title bar for state that changes how to read that Panel ("approximated", "unconverted", "Rec.709 assumed", a zoom, a non-default setting). Defaults are not tagged. The Panel's full label is its hover.
 _Avoid_: badge, subtitle
@@ -110,7 +117,7 @@ A named colour or size by role (`TEXT_SECONDARY`, `SPACE_MARGIN`), kept in one m
 _Avoid_: Theme colour, constant
 
 **Stylesheet**:
-The one page that shows every component of the UI (chips, segmented controls, sliders with a value box, the settings button, the popover and tooltip, title bars, the menu bar, the top and status bars, the legend strip) in every state, at 1x and 2x: how every element looks and feels, and the reference a UI change is checked against. `cargo run -p scopecreep --example style_showcase` draws it to PNG images; the style tokens it draws from are the stylesheet's values. Earlier records call it the style showcase (#115).
+The one page that shows every component of the UI (chips, segmented controls, sliders with a value box, the settings button, the popover and tooltip, title bars with the focus line, the "+N" chip and the view block, tab strips, the edge +, the dock overlay, the Appearance panel, the menu bar, the top and status bars, the legend strip) in every state, accent states included, at 1x and 2x: how every element looks and feels, and the reference a UI change is checked against. `cargo run -p scopecreep --example style_showcase` draws it to PNG images; the style tokens it draws from are the stylesheet's values. Earlier records call it the style showcase (#115).
 _Avoid_: Style showcase, theme page
 
 **Measurement colour**:
@@ -220,7 +227,7 @@ Ctrl+Z (a Command, also in the Layout menu, greyed when there is nothing to undo
 _Avoid_: Revert, history (for the control)
 
 **View block**:
-Fit, the Panel's zoom readout and Link, at the top right of every Panel's title bar (scopes too, greyed where nothing zooms), after a divider from the Panel's own chips and before the settings button, so it is always in the same place. The readout is a percentage ("62 %"); "Fit" is only the button; Link is the one Window-wide switch (ADR 0042).
+Fit, the Panel's zoom readout and Link, at the top right of every picture Panel's title bar (never a scope's), after a rule from the Panel's own chips and before the settings button, so it is always in the same place on a picture. The readout is a percentage ("62 %"); "Fit" is only the button; Link is the one Window-wide switch (ADR 0042).
 _Avoid_: View toolbar, zoom bar
 
 **View strip** (former term):

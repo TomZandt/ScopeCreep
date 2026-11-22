@@ -19,3 +19,7 @@ Spec #113 needs one set of parts (chip, segmented control, slider, popover, tool
 ## Consequences
 
 - Wiring the title bar, chips and sliders into the Panels is the later tickets' work (#116 onward); this ticket delivers the parts and the popover.
+
+## Update (ADR 0044, #226)
+
+Chips that are on are accent text with a thin accent line on a lighter grey (not a filled accent), and hover is a neutral lift. The accent is the user's colour (default #d2ff00).

@@ -41,24 +41,42 @@ fn the_new_chrome_tokens_are_neutral_except_the_channel_colours() {
         style::SURFACE_PANEL,
         style::SURFACE_CONTROL,
         style::STATE_PRESSED,
-        style::ACCENT,
+        style::SURFACE_CONTROL_ON,
+        style::SURFACE_CONTROL_PRESSED,
+        style::STATE_ON_HOVER,
+        style::LINE_RULE,
+        style::SURFACE_DOCK_WASH,
         style::STATE_FOCUS,
         style::CHANNEL_Y,
     ] {
         assert!(c[0] == c[1] && c[1] == c[2], "{c:?} tints the eye");
     }
-    for c in [style::TEXT_ON_ACCENT, style::TEXT_DISABLED] {
+    for c in [
+        style::TEXT_ON_ACCENT,
+        style::TEXT_DISABLED,
+        style::TEXT_HIGH,
+        style::TEXT_PRIMARY,
+        style::TEXT_SECONDARY,
+        style::TEXT_MUTED,
+    ] {
         assert!(c[0] == c[1] && c[1] == c[2]);
     }
     // The picture stays the brightest thing: no chrome fill reaches white.
-    assert!(style::ACCENT[0] < 0.9 && style::CHANNEL_R.iter().all(|v| *v < 0.9));
+    assert!(style::CHANNEL_R.iter().all(|v| *v < 0.9));
 }
 
 #[test]
 fn a_chip_has_one_size_description_that_scales_with_the_display() {
     let chip = Chip::new("R");
     let (one, two) = (chip.size(1.0), chip.size(2.0));
-    assert_eq!(one, [style::SPACE_CHIP_MIN_WIDTH, style::SPACE_CHIP_HEIGHT]);
+    let wide = 2.0 * style::SPACE_CHIP_PAD + style::SPACE_CHAR_WIDTH;
+    assert_eq!(
+        one,
+        [
+            style::SPACE_CHIP_MIN_WIDTH.max(wide),
+            style::SPACE_CHIP_HEIGHT
+        ]
+    );
     assert_eq!(two, [one[0] * 2.0, one[1] * 2.0]);
     let long = Chip::new("Heatmap");
     assert!(
@@ -89,10 +107,10 @@ fn every_state_of_a_chip_looks_different_and_on_is_not_off() {
                 let prims = chip.draw([0.0, 0.0], on, state, scale);
                 seen.push((
                     fills(&prims)[0],
-                    match &prims[1] {
-                        Prim::Text { colour, .. } => *colour,
-                        _ => unreachable!(),
-                    },
+                    prims.iter().find_map(|p| match p {
+                        Prim::Text { colour, .. } => Some(*colour),
+                        _ => None,
+                    }),
                 ));
             }
         }
@@ -249,13 +267,17 @@ fn a_segmented_control_marks_the_selected_segment_and_the_one_under_the_pointer(
     assert_ne!(normal, hover);
     assert_eq!(
         normal[1],
-        style::rgba(style::ACCENT),
-        "the selected segment is on"
+        style::rgba(style::SURFACE_CONTROL_ON),
+        "the selected segment is on: a lighter grey with an accent line"
+    );
+    assert!(
+        normal.contains(&style::rgba(style::accent())),
+        "the selected segment has the accent line"
     );
     assert!(
         fills(&control.draw([0.0; 2], 0, 1, State::Disabled, 1.0))
             .iter()
-            .all(|c| *c != style::rgba(style::ACCENT)),
+            .all(|c| *c != style::rgba(style::accent())),
         "disabled: nothing is lit"
     );
 }
@@ -382,7 +404,9 @@ fn the_popover_draws_the_menu_with_its_frame_its_ticks_and_the_row_under_the_poi
             menu.row_top(area, 2, scale) + 2.0 * scale,
         ];
         let lit = popover(&menu, area, over, scale);
-        assert_eq!(fills(&lit).len(), 6);
+        // The row's lift and the accent bar at its left.
+        assert_eq!(fills(&lit).len(), 7);
+        assert!(fills(&lit).contains(&style::rgba(style::accent())));
         assert!(fills(&lit).contains(&style::rgba(style::STATE_HOVER)));
         // A heading never lights.
         let heading = [
@@ -654,7 +678,9 @@ fn the_showcase_draws_every_component_in_every_state_at_both_scales() {
             "Slider with number",
             "Settings button",
             "Popover, Tooltip",
-            "Panel frame, title bar",
+            "Title bar: focused, +N, Scope",
+            "Tab strip, edge +",
+            "Appearance: accent",
             "Top bar",
             "Status bar",
             "Legend strip",

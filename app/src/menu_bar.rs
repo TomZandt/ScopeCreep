@@ -97,6 +97,10 @@ pub enum MenuAction {
     CancelReset,
     /// Something in the Hotkeys panel.
     Hotkeys(crate::hotkeys_panel::PanelAction),
+    /// Show the Appearance panel in place of the Settings menu.
+    OpenAppearance,
+    /// Something in the Appearance panel.
+    Appearance(crate::appearance_panel::AppearanceAction),
 }
 
 /// A menu with what each entry does (`None` for a separator, a heading or a disabled entry).
@@ -303,9 +307,13 @@ pub fn view_menu(hotkeys: &Hotkeys, legends_on: bool) -> Menu {
     menu
 }
 
-/// The Settings menu: Hotkeys, which opens the Hotkeys panel in its place.
+/// The Settings menu: Appearance and Hotkeys, each of which opens its panel in its place.
 pub fn settings_menu() -> Menu {
     let mut menu = Menu::new();
+    menu.push(
+        MenuEntry::Item(MenuItem::new("Appearance…", "")),
+        Some(MenuAction::OpenAppearance),
+    );
     menu.push(
         MenuEntry::Item(MenuItem::new("Hotkeys…", "")),
         Some(MenuAction::OpenHotkeys),
@@ -356,6 +364,14 @@ pub fn largest_menus() -> Vec<DropMenu> {
         .map(|mode| layout_menu(&names, 0, &hotkeys, mode).drop)
         .collect();
     menus.push(settings_menu().drop);
+    let appearance = crate::appearance_panel::AppearancePanel {
+        editing: Some("#ffffff".to_string()),
+    };
+    menus.push(
+        appearance
+            .menu(crate::accent::Accent(crate::accent::DEFAULT))
+            .drop,
+    );
     menus.push(reset_confirm_menu().drop);
     let names = crate::layout_tree::default_names();
     let all: Vec<AddEntry> = names

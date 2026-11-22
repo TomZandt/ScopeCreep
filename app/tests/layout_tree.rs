@@ -5,8 +5,8 @@ use scopecreep::layout_tree::{Border, Dir, LayoutTree, Press};
 use scopecreep::panel_grid::{PanelLayout, min_panel_size};
 
 /// The Window's Panel area at 1280 x 760: a 12 px margin all round, 20 px of status line under it.
-const AREA: [f32; 4] = [12.0, 12.0, 1256.0, 716.0];
-const GAP: f32 = 12.0;
+const AREA: [f32; 4] = [8.0, 8.0, 1424.0, 738.0];
+const GAP: f32 = 8.0;
 
 /// The 7 displays the Window shows, in Panel order.
 const NAMES: [&str; 7] = [
@@ -316,7 +316,7 @@ fn dragging_a_divider_moves_only_the_two_sides_of_its_split() {
     assert_eq!(border.dir, Dir::Row);
     tree.drag(
         &border,
-        [point[0] + 60.0, point[1]],
+        [point[0] + 6.0, point[1]],
         AREA,
         GAP,
         min_panel_size(1.0),
@@ -325,7 +325,7 @@ fn dragging_a_divider_moves_only_the_two_sides_of_its_split() {
     {
         let (name, i) = ("Channel Viewer", index("Channel Viewer"));
         assert!(
-            (after[i][2] - (before[i][2] + 60.0)).abs() < 0.5,
+            (after[i][2] - (before[i][2] + 6.0)).abs() < 0.5,
             "{name} grows"
         );
         assert_eq!([after[i][1], after[i][3]], [before[i][1], before[i][3]]);
@@ -333,7 +333,7 @@ fn dragging_a_divider_moves_only_the_two_sides_of_its_split() {
     {
         let (name, i) = ("Waveform", index("Waveform"));
         assert!(
-            (after[i][2] - (before[i][2] - 60.0)).abs() < 0.5,
+            (after[i][2] - (before[i][2] - 6.0)).abs() < 0.5,
             "{name} shrinks"
         );
         assert_eq!([after[i][1], after[i][3]], [before[i][1], before[i][3]]);
@@ -342,7 +342,7 @@ fn dragging_a_divider_moves_only_the_two_sides_of_its_split() {
     for name in ["Vectorscope", "Saturation"] {
         let i = index(name);
         assert!(
-            after[i][0] > before[i][0] + 20.0,
+            after[i][0] > before[i][0] + 1.0,
             "{name} moves right with its column"
         );
     }

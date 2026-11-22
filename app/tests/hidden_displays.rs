@@ -31,8 +31,8 @@ const SEVEN: [&str; 7] = [
     "False Colour - Stops",
 ];
 const NEW: [&str; 3] = ["Gamut Warning", "Neutrals", "Chromaticity"];
-const AREA: [f32; 4] = [12.0, 12.0, 1256.0, 716.0];
-const GAP: f32 = 12.0;
+const AREA: [f32; 4] = [8.0, 8.0, 1424.0, 738.0];
+const GAP: f32 = 8.0;
 
 fn at(names: &[&str], name: &str) -> usize {
     names.iter().position(|n| *n == name).unwrap()

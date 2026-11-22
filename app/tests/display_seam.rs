@@ -676,7 +676,15 @@ fn a_saved_layout_names_panels_by_key_and_one_that_names_displays_still_recalls(
     b.set.register(Keyed::new());
     let owned = b.set.keys();
     let keys: Vec<&str> = owned.iter().map(String::as_str).collect();
-    let grid = LayoutTree::automatic(keys.len());
+    // Twelve Panels do not fit the reference window at their least size, so all but the first four share a tab group.
+    let tabbed = |n: usize| {
+        let mut grid = LayoutTree::automatic(n);
+        for p in 4..n {
+            grid.join_tab(p, 3);
+        }
+        grid
+    };
+    let grid = tabbed(keys.len());
     let mut layouts = Layouts::default();
     layouts.save(0, &grid, &keys);
     assert!(
@@ -687,7 +695,7 @@ fn a_saved_layout_names_panels_by_key_and_one_that_names_displays_still_recalls(
     assert_eq!(layouts.recall(0, &keys), Some(grid));
     // Saved before instances: the display names, each the first instance's key.
     let old = &b.set.names()[..keys.len() - 1];
-    let old_grid = LayoutTree::automatic(old.len());
+    let old_grid = tabbed(old.len());
     let mut before = Layouts::default();
     before.save(1, &old_grid, old);
     assert_eq!(before.recall(1, &keys[..keys.len() - 1]), Some(old_grid));

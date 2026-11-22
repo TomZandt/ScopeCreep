@@ -444,16 +444,30 @@ fn at_the_minimum_panel_width_only_the_clean_pictures_chips_overflow_and_stay_re
 }
 
 #[test]
-fn chips_leave_a_setting_at_a_time_so_a_lit_channel_is_never_hidden_beside_its_neighbours() {
-    // Without a zoom chip (as the toolbar is built on its own), the Loupe leaves first, then all of Y R G B.
+fn chips_leave_a_setting_at_a_time_and_a_plus_n_chip_stands_for_them() {
+    // The Loupe and Y R G B: when they do not all fit, a whole setting leaves the bar and a "+N" chip says how many
+    // chips are now in the Panel's settings (ADR 0044).
     let own = clean_picture(&[("channel", "blue")]);
     for scale in [1.0, 2.0] {
+        // Room for everything: no "+N".
         let mut toolbar = Toolbar::new(&picture_view::TOOLBAR, &own);
         fit_inside(
             &mut toolbar,
             &picture_view::SETTINGS,
             &picture_view::TOOLBAR,
-            bar(170.0 + components::TitleBar::view_reserve(1.0), scale),
+            bar(212.0 + components::TitleBar::view_reserve(1.0), scale),
+            scale,
+            "Channel Viewer",
+        );
+        assert_eq!(toolbar.chips.len(), 5);
+        assert_eq!(toolbar.hidden, 0);
+        // Short of room for the five, with room for the "+N" chip: only it, never a part of the channel row.
+        let mut toolbar = Toolbar::new(&picture_view::TOOLBAR, &own);
+        fit_inside(
+            &mut toolbar,
+            &picture_view::SETTINGS,
+            &picture_view::TOOLBAR,
+            bar(150.0 + components::TitleBar::view_reserve(1.0), scale),
             scale,
             "Channel Viewer",
         );
@@ -463,10 +477,18 @@ fn chips_leave_a_setting_at_a_time_so_a_lit_channel_is_never_hidden_beside_its_n
                 .iter()
                 .map(|c| c.text.as_str())
                 .collect::<Vec<_>>(),
-            ["Y", "R", "G", "B"]
+            ["+5"]
         );
-        assert_eq!(toolbar.on, [false, false, false, true]);
-        assert_eq!(toolbar.collapsed, ["loupe"]);
+        assert_eq!(toolbar.hidden, 5);
+        assert_eq!(toolbar.on, [false]);
+        assert_eq!(
+            toolbar.action(0),
+            Some(&scopecreep::toolbar::ChipAction::More)
+        );
+        assert_eq!(toolbar.click(0), None, "it sets nothing");
+        assert_eq!(toolbar.collapsed, ["channel", "loupe"]);
+        // At the least Panel width there is no room even for "+N": the chips are in the settings and the bar
+        // shows none.
         let mut toolbar = Toolbar::new(&picture_view::TOOLBAR, &own);
         fit_inside(
             &mut toolbar,
@@ -476,7 +498,7 @@ fn chips_leave_a_setting_at_a_time_so_a_lit_channel_is_never_hidden_beside_its_n
             scale,
             "Channel Viewer",
         );
-        assert!(toolbar.chips.is_empty(), "never a part of the channel row");
+        assert!(toolbar.chips.is_empty());
         assert_eq!(toolbar.collapsed, ["channel", "loupe"]);
     }
 }
@@ -490,9 +512,9 @@ fn with_room_the_clean_picture_shows_every_chip_as_before() {
             &mut toolbar,
             &picture_view::SETTINGS,
             &picture_view::TOOLBAR,
-            // Five chips in two groups, the settings button and the pads take 198 px, and the view block and its
-            // divider the rest; the Panel's border takes 2 more.
-            bar(200.0 + components::TitleBar::view_reserve(1.0), scale),
+            // Five chips in two groups, the settings button and the pads take 204 px, and the view block and its
+            // rule the rest; the Panel's border takes 2 more.
+            bar(212.0 + components::TitleBar::view_reserve(1.0), scale),
             scale,
             "Channel Viewer",
         );

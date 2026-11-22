@@ -63,12 +63,12 @@ impl ViewBlock {
         Chip::new(FIT_CHIP).size(scale)[0]
             + Self::readout_width(scale)
             + Chip::new(LINK_CHIP).size(scale)[0]
-            + 2.0 * style::SPACE_CHIP_GAP * scale
+            + 2.0 * style::SPACE_VIEW_GAP * scale
     }
 
     /// Where the parts are for a block whose right edge is at `right`, centred in the title `bar`.
     pub fn layout(right: f32, bar: [f32; 4], scale: f32) -> BlockLayout {
-        let gap = style::SPACE_CHIP_GAP * scale;
+        let gap = style::SPACE_VIEW_GAP * scale;
         let top = bar[1] + (bar[3] - style::SPACE_CHIP_HEIGHT * scale) / 2.0;
         let left = right - Self::width(scale);
         let fit = Chip::new(FIT_CHIP).rect([left, top], scale);

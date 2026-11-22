@@ -26,7 +26,7 @@ fn text_steps_down_and_the_picture_stays_the_brightest_thing() {
             && STATE_HOVER[0] < LINE_BORDER[0]
     );
     // Chrome never reaches white.
-    assert!(STATE_ON[0] < 0.9 && TEXT_PRIMARY[0] < 200);
+    assert!(STATE_ON[0] < 0.9 && TEXT_HIGH[0] < 240 && TEXT_PRIMARY[0] <= 200);
 }
 
 #[test]
@@ -36,13 +36,13 @@ fn the_type_scale_is_three_sizes_largest_first() {
 
 #[test]
 fn the_tokens_keep_the_values_the_window_already_used() {
-    // No intended visible change (#114): the menu frame, fill, hover and mark, and the window's grey.
+    // The menu frame, fill and the window's grey are as ever; the sizes are the Hairline look's (#226, ADR 0044).
     assert_eq!(rgba(LINE_BORDER), [0.30, 0.30, 0.30, 1.0]);
     assert_eq!(rgba(SURFACE_MENU), [0.11, 0.11, 0.11, 1.0]);
     assert_eq!(clear(SURFACE_WINDOW).r, 0.071f32 as f64);
-    assert_eq!((TYPE_LABEL, TYPE_SCALE, TYPE_NOTICE), (12.5, 11.0, 15.0));
+    assert_eq!((TYPE_LABEL, TYPE_SCALE, TYPE_NOTICE), (13.0, 12.0, 15.0));
     assert_eq!(
         (SPACE_MARGIN, SPACE_MENU_ROW, SPACE_STATUS_ROW),
-        (12.0, 24.0, 20.0)
+        (8.0, 30.0, 26.0)
     );
 }

@@ -36,7 +36,7 @@ fn area(size: [f32; 2], scale: f32) -> [f32; 4] {
 #[test]
 fn the_minimum_is_smaller_than_the_default_window() {
     let [w, h] = minimum();
-    assert!(w < 1280.0 && h < 760.0, "{w} x {h}");
+    assert!(w < 1440.0 && h < 840.0, "{w} x {h}");
     assert!(w > 0.0 && h > 0.0);
 }
 

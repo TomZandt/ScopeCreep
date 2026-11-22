@@ -24,38 +24,43 @@ pub const LINE_BORDER: Rgb = [0.30, 0.30, 0.30];
 // States.
 /// The row under the cursor.
 pub const STATE_HOVER: Rgb = [0.20, 0.20, 0.20];
+/// An on control under the pointer: a lighter grey, never the accent (hover must not read as on).
+pub const STATE_ON_HOVER: Rgb = [0.227, 0.227, 0.227];
 /// The mark of a choice that is on.
 pub const STATE_ON: Rgb = [0.86, 0.86, 0.86];
 
 // Text, rgb 0 to 255.
 /// Notices and menu choices: the brightest chrome text.
-pub const TEXT_PRIMARY: [u8; 3] = [176, 176, 176];
+pub const TEXT_PRIMARY: [u8; 3] = [200, 200, 200];
+/// Text of a control under the pointer (and the brightest chrome text).
+pub const TEXT_HIGH: [u8; 3] = [232, 232, 232];
 /// Labels, the status line and menu headings.
-pub const TEXT_SECONDARY: [u8; 3] = [138, 138, 138];
-/// Scale numbers.
-pub const TEXT_MUTED: [u8; 3] = [112, 112, 112];
+pub const TEXT_SECONDARY: [u8; 3] = [170, 170, 170];
+/// Scale numbers and tags: about 5:1 against the Window (#226; it was #707070, about 3.9:1).
+pub const TEXT_MUTED: [u8; 3] = [150, 150, 150];
 
 // The type scale (size, then line height as a multiple of it).
 pub const TYPE_NOTICE: f32 = 15.0;
 pub const TYPE_NOTICE_LINE: f32 = 1.5;
 /// Labels, the status line and the menu.
-pub const TYPE_LABEL: f32 = 12.5;
+pub const TYPE_LABEL: f32 = 13.0;
 pub const TYPE_LABEL_LINE: f32 = 1.4;
 /// The numbers on a display's scale.
-pub const TYPE_SCALE: f32 = 11.0;
+/// Text is 13 with a floor of 12 (#226).
+pub const TYPE_SCALE: f32 = 12.0;
 pub const TYPE_SCALE_LINE: f32 = 1.3;
 
 // Spacing.
 /// Around the Window's edge and between the Panels.
-pub const SPACE_MARGIN: f32 = 12.0;
+pub const SPACE_MARGIN: f32 = 8.0;
 /// The gutter for a scale's numbers.
 pub const SPACE_GUTTER: f32 = 44.0;
 /// A Panel's title bar, for one line of label.
-pub const SPACE_TITLE_BAR: f32 = 22.0;
+pub const SPACE_TITLE_BAR: f32 = 34.0;
 /// The title bar's text: room left of it.
 pub const SPACE_TITLE_PAD: f32 = 8.0;
 /// One row of the status line.
-pub const SPACE_STATUS_ROW: f32 = 20.0;
+pub const SPACE_STATUS_ROW: f32 = 26.0;
 /// How far from a Panel border's gap a click still grabs it.
 pub const SPACE_GRAB: f32 = 3.0;
 /// How far a pressed title must move before it is a drag and not a click (logical pixels).
@@ -65,14 +70,14 @@ pub const SPACE_DOCK_EDGE: f32 = 0.25;
 /// The least height a display keeps under the title bar, the least width of a Panel, and the least height of a
 /// Panel (the display, the title bar and the border's three lines).
 pub const SPACE_MIN_DISPLAY: f32 = 80.0;
-pub const SPACE_MIN_PANEL_WIDTH: f32 = 176.0;
-pub const SPACE_MIN_PANEL_HEIGHT: f32 = 105.0;
+pub const SPACE_MIN_PANEL_WIDTH: f32 = 255.0;
+pub const SPACE_MIN_PANEL_HEIGHT: f32 = 117.0;
 /// The window the saved border positions are checked against: the default window's Panel area and gap.
-pub const SPACE_REFERENCE_AREA: [f32; 2] = [1256.0, 716.0];
-pub const SPACE_REFERENCE_GAP: f32 = 12.0;
+pub const SPACE_REFERENCE_AREA: [f32; 2] = [1424.0, 738.0];
+pub const SPACE_REFERENCE_GAP: f32 = 8.0;
 /// The menu: width, row height, padding.
 pub const SPACE_MENU_WIDTH: f32 = 230.0;
-pub const SPACE_MENU_ROW: f32 = 24.0;
+pub const SPACE_MENU_ROW: f32 = 30.0;
 pub const SPACE_MENU_PAD: f32 = 6.0;
 /// Inside a menu row: the on-mark's left edge and side, the text's left edge (the heading's is nearer), and the
 /// room the text gives up on the right.
@@ -95,8 +100,30 @@ pub const SURFACE_PANEL: Rgb = [0.09, 0.09, 0.09];
 pub const SURFACE_CONTROL: Rgb = [0.15, 0.15, 0.15];
 /// A control under a press.
 pub const STATE_PRESSED: Rgb = [0.27, 0.27, 0.27];
-/// The one quiet accent: a control that is on, and a slider's filled part.
-pub const ACCENT: Rgb = [0.78, 0.78, 0.78];
+/// The app accent (ADR 0044): the one colour in the chrome, as thin lines and text that mark state. It is the
+/// user's choice (`accent.rs`, default #d2ff00), so it is read here and not a constant.
+pub fn accent() -> Rgb {
+    crate::accent::current().rgb()
+}
+/// The accent as text colour.
+pub fn accent_text() -> [u8; 3] {
+    crate::accent::current().text()
+}
+/// The accent under a press, derived from it.
+pub fn accent_pressed() -> Rgb {
+    crate::accent::current().pressed()
+}
+/// How much of the accent's brightness the pressed accent keeps.
+pub const ACCENT_PRESSED_SHARE: f32 = 0.65;
+/// The fill of a chip that is on: a slightly lighter grey than an off one (the accent is the text and the line).
+pub const SURFACE_CONTROL_ON: Rgb = [0.18, 0.18, 0.18];
+/// A chip under a press: darker than at rest.
+pub const SURFACE_CONTROL_PRESSED: Rgb = [0.11, 0.11, 0.11];
+/// The rule between a title bar's own chips and the view block (a grey, never the accent).
+pub const LINE_RULE: Rgb = [0.36, 0.36, 0.36];
+/// The wash over a dock target (the accent is its dashed outline).
+pub const SURFACE_DOCK_WASH: Rgb = [0.5, 0.5, 0.5];
+pub const DOCK_WASH_ALPHA: f32 = 0.14;
 /// The ring round the control that holds the keyboard focus.
 pub const STATE_FOCUS: Rgb = [0.55, 0.55, 0.55];
 /// How much brighter an "on" control is under the pointer.
@@ -121,23 +148,29 @@ pub const STATUS_ERROR: Rgb = [0.86, 0.36, 0.30];
 // Component sizes, logical pixels.
 /// A chip: height, least width, side padding, the gap between chips, and the width one character of its text is
 /// laid out at (the pure layout cannot shape text).
-pub const SPACE_CHIP_HEIGHT: f32 = 20.0;
-pub const SPACE_CHIP_MIN_WIDTH: f32 = 26.0;
-pub const SPACE_CHIP_PAD: f32 = 8.0;
-pub const SPACE_CHIP_GAP: f32 = 4.0;
+pub const SPACE_CHIP_HEIGHT: f32 = 24.0;
+pub const SPACE_CHIP_MIN_WIDTH: f32 = 24.0;
+pub const SPACE_CHIP_PAD: f32 = 9.0;
+pub const SPACE_CHIP_GAP: f32 = 2.0;
 /// The gap between two groups of chips on a title bar: at least twice the gap within a group (ADR 0040).
-pub const SPACE_CHIP_GROUP_GAP: f32 = 12.0;
-/// The gap on each side of the divider between a title bar's own chips and the view block (ADR 0042).
-pub const SPACE_DIVIDER_GAP: f32 = 8.0;
-pub const SPACE_CHAR_WIDTH: f32 = 7.6;
+pub const SPACE_CHIP_GROUP_GAP: f32 = 8.0;
+/// The air on each side of the title bar's rule between the Panel's own chips and the view block (ADR 0042, 0044), and
+/// the rule's width.
+pub const SPACE_DIVIDER_GAP: f32 = 20.0;
+pub const SPACE_RULE_WIDTH: f32 = 2.0;
+/// The gap between Fit, the readout and Link inside the view block.
+pub const SPACE_VIEW_GAP: f32 = 4.0;
+pub const SPACE_CHAR_WIDTH: f32 = 7.9;
 /// A segmented control: height and side padding of a segment.
 pub const SPACE_SEGMENT_HEIGHT: f32 = 22.0;
 pub const SPACE_SEGMENT_PAD: f32 = 12.0;
 /// A slider: its row, the track's length and thickness, the thumb, and the room for its number.
-pub const SPACE_SLIDER_HEIGHT: f32 = 32.0;
+pub const SPACE_SLIDER_HEIGHT: f32 = 34.0;
 pub const SPACE_SLIDER_TRACK: f32 = 84.0;
-pub const SPACE_SLIDER_TRACK_THICKNESS: f32 = 4.0;
-pub const SPACE_SLIDER_THUMB: f32 = 12.0;
+pub const SPACE_SLIDER_TRACK_THICKNESS: f32 = 2.0;
+pub const SPACE_SLIDER_THUMB: f32 = 8.0;
+/// The thumb's height (a grey bar across the 2 px track).
+pub const SPACE_SLIDER_THUMB_HEIGHT: f32 = 16.0;
 /// The value box beside a slider (#225): the box's whole width, the arrows' column at its right, and the circular
 /// reset icon after it.
 pub const SPACE_VALUE_BOX: f32 = 84.0;
@@ -145,8 +178,8 @@ pub const SPACE_VALUE_ARROWS: f32 = 18.0;
 pub const SPACE_RESET_ICON: f32 = 24.0;
 /// The Panel settings popover (#225): its width, the height of a choice row, the extra room above a group's
 /// heading, the room round the popover, and the label column in front of a slider.
-pub const SPACE_POPOVER_WIDTH: f32 = 392.0;
-pub const SPACE_POPOVER_ROW: f32 = 28.0;
+pub const SPACE_POPOVER_WIDTH: f32 = 400.0;
+pub const SPACE_POPOVER_ROW: f32 = 34.0;
 pub const SPACE_POPOVER_GROUP_GAP: f32 = 10.0;
 pub const SPACE_POPOVER_PAD: f32 = 8.0;
 pub const SPACE_POPOVER_LABEL: f32 = 134.0;
@@ -155,18 +188,23 @@ pub const SPACE_TOOLTIP_PAD: f32 = 6.0;
 pub const SPACE_TOOLTIP_GAP: f32 = 6.0;
 /// The top bar and the bars' side padding (the title bar is SPACE_TITLE_BAR above).
 pub const SPACE_TOP_BAR: f32 = 32.0;
-pub const SPACE_BAR_PAD: f32 = 10.0;
+pub const SPACE_BAR_PAD: f32 = 12.0;
 /// The menu bar above the top bar (#147): its height, a title's side padding, a separator row's height in a menu,
 /// and the least gap between an entry's name and its hotkey.
-pub const SPACE_MENU_BAR: f32 = 24.0;
+pub const SPACE_MENU_BAR: f32 = 32.0;
 pub const SPACE_MENU_BAR_ITEM_PAD: f32 = 10.0;
 pub const SPACE_MENU_SEPARATOR: f32 = 9.0;
 pub const SPACE_MENU_HOTKEY_GAP: f32 = 28.0;
 /// The settings button on a title bar (square), and the gap between a name and its tags.
-pub const SPACE_SETTINGS_BUTTON: f32 = 20.0;
+pub const SPACE_SETTINGS_BUTTON: f32 = 28.0;
+pub const SPACE_SETTINGS_GAP: f32 = 8.0;
 pub const SPACE_TAG_GAP: f32 = 10.0;
+/// The least gap between the name and the chips (or the block) after it, and the room the name keeps at the least
+/// Panel width (about four characters and an ellipsis).
+pub const SPACE_NAME_GAP: f32 = 12.0;
+pub const SPACE_NAME_MIN: f32 = 44.0;
 /// The Page bar under the Colour Setup line (ADR 0041): its height. Its tabs, "+" and Add panel button are chips.
-pub const SPACE_PAGE_BAR: f32 = 28.0;
+pub const SPACE_PAGE_BAR: f32 = 36.0;
 /// A tab in a tab group's title bar (#211): side padding, least and greatest width, the gap between tabs, the
 /// active tab's underline, and the overflow chip's width when the tabs do not all fit.
 pub const SPACE_TAB_PAD: f32 = 8.0;
@@ -174,13 +212,21 @@ pub const SPACE_TAB_MIN_WIDTH: f32 = 34.0;
 pub const SPACE_TAB_MAX_WIDTH: f32 = 160.0;
 pub const SPACE_TAB_GAP: f32 = 2.0;
 pub const SPACE_TAB_UNDERLINE: f32 = 2.0;
+/// The accent's thin marks: the focus line along a title bar's top, the bar at a hovered menu row's left, the dashed
+/// dock outline's dash and gap, and the square that marks a chosen row.
+pub const SPACE_ACCENT_LINE: f32 = 2.0;
+pub const SPACE_DASH: f32 = 6.0;
+pub const SPACE_DASH_GAP: f32 = 4.0;
+/// Appearance: a swatch's side and the gap between swatches.
+pub const SPACE_SWATCH: f32 = 22.0;
+pub const SPACE_SWATCH_GAP: f32 = 8.0;
 pub const SPACE_TAB_OVERFLOW_WIDTH: f32 = 28.0;
 /// The empty page's Add panel button: width and height.
 pub const SPACE_ADD_BUTTON_WIDTH: f32 = 200.0;
 pub const SPACE_ADD_BUTTON_HEIGHT: f32 = 48.0;
 /// The edge + on a hovered Panel: its square, and how far it sits in from the Panel's edge (clear of the dividers'
 /// grab zone).
-pub const SPACE_EDGE_PLUS: f32 = 20.0;
+pub const SPACE_EDGE_PLUS: f32 = 24.0;
 pub const SPACE_EDGE_PLUS_INSET: f32 = 5.0;
 /// A legend strip: the colour bar's height and the whole strip's (bar, then labels beneath).
 pub const SPACE_LEGEND_BAR: f32 = 8.0;
@@ -191,8 +237,8 @@ pub const SPACE_SHOWCASE_LABEL: f32 = 140.0;
 pub const SPACE_SHOWCASE_COLUMN: f32 = 240.0;
 pub const SPACE_SHOWCASE_ROW: f32 = 36.0;
 pub const SPACE_SHOWCASE_SHEET_HEIGHT: f32 = 4000.0;
-pub const SPACE_SHOWCASE_PANEL_WIDE: f32 = 460.0;
-pub const SPACE_SHOWCASE_PANEL_NARROW: f32 = 250.0;
+pub const SPACE_SHOWCASE_PANEL_WIDE: f32 = 560.0;
+pub const SPACE_SHOWCASE_PANEL_NARROW: f32 = 340.0;
 pub const SPACE_SHOWCASE_PANEL_HEIGHT: f32 = 110.0;
 pub const SPACE_SHOWCASE_PANEL_STEP: f32 = 130.0;
 pub const SPACE_SHOWCASE_ANCHOR_OFFSET: f32 = 40.0;

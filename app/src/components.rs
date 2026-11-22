@@ -137,8 +137,54 @@ fn ink(state: State, on: bool) -> [u8; 3] {
         (State::Disabled, _) => style::TEXT_DISABLED,
         (_, true) => style::TEXT_ON_ACCENT,
         (State::Normal, false) => style::TEXT_SECONDARY,
+        (State::Hover, false) => style::TEXT_HIGH,
         (_, false) => style::TEXT_PRIMARY,
     }
+}
+
+/// A control that is on in the Hairline look (ADR 0044): a slightly lighter grey chip with the accent as its text and
+/// a thin line along its foot. Off, it is a plain grey control that lifts under the pointer (white text, never the
+/// accent, so hover never reads as on) and darkens under a press.
+fn accent_control(area: [f32; 4], label: &str, on: bool, state: State, scale: f32) -> Vec<Prim> {
+    let fill = match (state, on) {
+        (State::Disabled, true) => style::STATE_HOVER,
+        (State::Disabled, false) => style::SURFACE_CONTROL,
+        (State::Normal, true) => style::SURFACE_CONTROL_ON,
+        (State::Hover, true) => style::STATE_ON_HOVER,
+        (State::Pressed, _) => style::SURFACE_CONTROL_PRESSED,
+        (State::Normal, false) => style::SURFACE_CONTROL,
+        (State::Hover, false) => style::STATE_HOVER,
+    };
+    let ink = match (state, on) {
+        (State::Disabled, _) => style::TEXT_DISABLED,
+        (_, true) => style::accent_text(),
+        (State::Normal, false) => style::TEXT_SECONDARY,
+        (State::Hover, false) => style::TEXT_HIGH,
+        (State::Pressed, false) => style::TEXT_PRIMARY,
+    };
+    let mut prims = vec![rect(area, fill)];
+    if on && state != State::Disabled {
+        prims.push(underline(area, style::accent(), scale));
+    }
+    prims.push(text(label, area, Face::Label, ink, Align::Centre));
+    prims
+}
+
+/// A menu row under the pointer: a neutral lift and a thin accent bar at its left edge (ADR 0044).
+pub fn hovered_row(area: [f32; 4], lift: Rgb, scale: f32) -> [Prim; 2] {
+    [
+        rect(area, lift),
+        rect(
+            [area[0], area[1], style::SPACE_ACCENT_LINE * scale, area[3]],
+            style::accent(),
+        ),
+    ]
+}
+
+/// A thin line along the foot of `area`, in `colour`.
+pub fn underline(area: [f32; 4], colour: Rgb, scale: f32) -> Prim {
+    let line = style::SPACE_ACCENT_LINE * scale;
+    rect([area[0], area[1] + area[3] - line, area[2], line], colour)
 }
 
 // ---- Chips ----
@@ -244,11 +290,13 @@ impl Chip {
 
     pub fn draw(&self, at: [f32; 2], on: bool, state: State, scale: f32) -> Vec<Prim> {
         let area = self.rect(at, scale);
-        let colour = self.channel.map_or(style::ACCENT, Channel::colour);
-        vec![
-            rect(area, fill(state, on, colour)),
-            text(&self.text, area, Face::Label, ink(state, on), Align::Centre),
-        ]
+        match self.channel {
+            None => accent_control(area, &self.text, on, state, scale),
+            Some(channel) => vec![
+                rect(area, fill(state, on, channel.colour())),
+                text(&self.text, area, Face::Label, ink(state, on), Align::Centre),
+            ],
+        }
     }
 }
 
@@ -383,9 +431,7 @@ impl Segmented {
             } else {
                 State::Normal
             };
-            let on = i == selected;
-            prims.push(rect(*r, fill(own, on, style::ACCENT)));
-            prims.push(text(label, *r, Face::Label, ink(own, on), Align::Centre));
+            prims.extend(accent_control(*r, label, i == selected, own, scale));
         }
         prims
     }
@@ -469,9 +515,9 @@ impl Slider {
             filled: [track[0], track[1], x - track[0], thick],
             thumb: [
                 x - thumb / 2.0,
-                at[1] + (height - thumb) / 2.0,
+                at[1] + (height - style::SPACE_SLIDER_THUMB_HEIGHT * scale) / 2.0,
                 thumb,
-                thumb,
+                style::SPACE_SLIDER_THUMB_HEIGHT * scale,
             ],
             value_box,
             number,
@@ -516,10 +562,11 @@ impl Slider {
     ) -> Vec<Prim> {
         let l = self.layout(at, scale);
         let disabled = state == State::Disabled;
+        // A thin accent track and a grey thumb (ADR 0044).
         let thumb = match state {
-            State::Normal => style::ACCENT,
-            State::Hover => lift(style::ACCENT, style::STATE_ON_HOVER_LIFT),
-            State::Pressed => lift(style::ACCENT, -style::STATE_ON_HOVER_LIFT),
+            State::Normal => style::rgb(style::TEXT_PRIMARY),
+            State::Hover => style::rgb(style::TEXT_HIGH),
+            State::Pressed => style::rgb(style::TEXT_SECONDARY),
             State::Disabled => style::STATE_PRESSED,
         };
         let ink = if disabled {
@@ -530,13 +577,13 @@ impl Slider {
         let w = (style::LINE_WEIGHT * scale).max(1.0);
         let b = l.value_box;
         let mut prims = vec![
-            rect(l.track, style::SURFACE_CONTROL),
+            rect(l.track, style::STATE_PRESSED),
             rect(
                 l.filled,
                 if disabled {
                     style::STATE_PRESSED
                 } else {
-                    style::ACCENT
+                    style::accent()
                 },
             ),
             rect(l.thumb, thumb),
@@ -544,7 +591,7 @@ impl Slider {
             rect(
                 b,
                 if typing.is_some() {
-                    style::ACCENT
+                    style::accent()
                 } else {
                     style::LINE_BORDER
                 },
@@ -692,7 +739,7 @@ pub fn popover(menu: &Menu, area: [f32; 4], cursor: [f32; 2], scale: f32) -> Vec
             }
             MenuRow::Panel(action) => {
                 if contains(row_rect, cursor) {
-                    prims.push(rect(row_rect, style::STATE_HOVER));
+                    prims.extend(hovered_row(row_rect, style::STATE_HOVER, scale));
                 }
                 let left = area[0] + style::SPACE_MENU_TEXT_LEFT * scale;
                 prims.push(text(
@@ -705,7 +752,7 @@ pub fn popover(menu: &Menu, area: [f32; 4], cursor: [f32; 2], scale: f32) -> Vec
             }
             MenuRow::Close => {
                 if contains(row_rect, cursor) {
-                    prims.push(rect(row_rect, style::STATE_HOVER));
+                    prims.extend(hovered_row(row_rect, style::STATE_HOVER, scale));
                 }
                 let left = area[0] + style::SPACE_MENU_TEXT_LEFT * scale;
                 prims.push(text(
@@ -720,7 +767,7 @@ pub fn popover(menu: &Menu, area: [f32; 4], cursor: [f32; 2], scale: f32) -> Vec
                 text: label, on, ..
             } => {
                 if contains(row_rect, cursor) {
-                    prims.push(rect(row_rect, style::STATE_HOVER));
+                    prims.extend(hovered_row(row_rect, style::STATE_HOVER, scale));
                 }
                 if *on {
                     let side = style::SPACE_MENU_MARK * scale;
@@ -731,7 +778,7 @@ pub fn popover(menu: &Menu, area: [f32; 4], cursor: [f32; 2], scale: f32) -> Vec
                             side,
                             side,
                         ],
-                        style::STATE_ON,
+                        style::accent(),
                     ));
                 }
                 let left = area[0] + style::SPACE_MENU_TEXT_LEFT * scale;
@@ -796,19 +843,44 @@ pub fn popover_tooltip(
 
 // ---- Panel focus and the empty page (ADR 0038, #206) ----
 
-/// The quiet outline round the focused Panel: four thin edges just inside its `frame`.
-pub fn focus_outline(frame: [f32; 4], scale: f32) -> Vec<Prim> {
-    let weight = (style::LINE_WEIGHT * scale).max(1.0);
-    let [left, top, width, height] = frame;
-    [
-        [left, top, width, weight],
-        [left, top + height - weight, width, weight],
-        [left, top, weight, height],
-        [left + width - weight, top, weight, height],
-    ]
-    .into_iter()
-    .map(|edge| rect(edge, style::STATE_FOCUS))
-    .collect()
+/// The focused Panel's mark: a thin accent line along the top of its title bar and nothing round the picture
+/// (ADR 0044). `frame` is the Panel's frame.
+pub fn focus_line(frame: [f32; 4], scale: f32) -> Prim {
+    let line = style::SPACE_ACCENT_LINE * scale;
+    rect([frame[0], frame[1], frame[2], line], style::accent())
+}
+
+/// The dock target's outline: dashed in the accent over a faint grey wash (ADR 0044). `target` is the area a drop
+/// would take.
+pub fn dock_overlay(target: [f32; 4], scale: f32) -> Vec<Prim> {
+    let weight = (style::SPACE_ACCENT_LINE * scale).max(1.0);
+    let (dash, gap) = (style::SPACE_DASH * scale, style::SPACE_DASH_GAP * scale);
+    let [left, top, width, height] = target;
+    let wash = style::SURFACE_DOCK_WASH;
+    let mut prims = vec![Prim::Rect {
+        rect: target,
+        colour: [wash[0], wash[1], wash[2], style::DOCK_WASH_ALPHA],
+    }];
+    let mut along = |horizontal: bool, fixed: f32, start: f32, length: f32| {
+        let mut at = start;
+        while at < start + length {
+            let run = dash.min(start + length - at);
+            prims.push(rect(
+                if horizontal {
+                    [at, fixed, run, weight]
+                } else {
+                    [fixed, at, weight, run]
+                },
+                style::accent(),
+            ));
+            at += dash + gap;
+        }
+    };
+    along(true, top, left, width);
+    along(true, top + height - weight, left, width);
+    along(false, left, top, height);
+    along(false, left + width - weight, top, height);
+    prims
 }
 
 /// The empty page's one large button, in the middle of the Panel `area` (never larger than it).
@@ -827,7 +899,7 @@ pub fn add_panel_button_rect(area: [f32; 4], scale: f32) -> [f32; 4] {
 pub fn add_panel_button(area: [f32; 4], state: State, scale: f32) -> Vec<Prim> {
     let button = add_panel_button_rect(area, scale);
     vec![
-        rect(button, fill(state, false, style::ACCENT)),
+        rect(button, fill(state, false, style::STATE_ON)),
         text(
             "Add panel",
             button,
@@ -888,7 +960,7 @@ pub fn edge_plus_draw(frame: [f32; 4], lit: Option<Edge>, scale: f32) -> Vec<Pri
         } else {
             State::Normal
         };
-        prims.push(rect(r, fill(state, false, style::ACCENT)));
+        prims.push(rect(r, fill(state, false, style::STATE_ON)));
         prims.push(text("+", r, Face::Label, ink(state, false), Align::Centre));
     }
     prims
@@ -1028,10 +1100,40 @@ pub struct TitleLayout {
 
 impl TitleBar {
     /// What a title bar with a view block takes at its right end besides the chips and the settings button: the
-    /// block, and the divider with its gaps when there are chips (what [`crate::toolbar::Toolbar::fit_to`] reserves).
+    /// block, and the rule with its air on both sides when there are chips (what
+    /// [`crate::toolbar::Toolbar::fit_to_reserving`] reserves).
     pub fn view_reserve(scale: f32) -> f32 {
-        crate::view_block::ViewBlock::width(scale)
-            + (2.0 * style::SPACE_DIVIDER_GAP + style::LINE_WEIGHT) * scale
+        crate::view_block::ViewBlock::width(scale) + Self::rule_room(scale)
+    }
+
+    /// The rule between the Panel's own chips and the view block, with the air on each side of it.
+    pub fn rule_room(scale: f32) -> f32 {
+        (2.0 * style::SPACE_DIVIDER_GAP + style::SPACE_RULE_WIDTH) * scale
+    }
+
+    /// The settings button's width and the gap before it.
+    pub fn settings_room(scale: f32) -> f32 {
+        (style::SPACE_SETTINGS_BUTTON + style::SPACE_SETTINGS_GAP) * scale
+    }
+
+    /// The least width a Panel's title bar needs (ADR 0044): the bar's padding, the name cut to a few characters,
+    /// the view block (with the settings gap), and the settings button. The Panel's least width
+    /// ([`style::SPACE_MIN_PANEL_WIDTH`]) is this, rounded up. Chips and their "+N" need more than this: the "+N"
+    /// chip is shown where [`TitleBar::overflow_width`] fits beside the same parts.
+    pub fn least_width(scale: f32) -> f32 {
+        2.0 * style::SPACE_BAR_PAD * scale
+            + (style::SPACE_NAME_MIN + style::SPACE_NAME_GAP) * scale
+            + crate::view_block::ViewBlock::width(scale)
+            + Self::settings_room(scale)
+    }
+
+    /// The width of a title bar that shows the "+N" chip, the rule and the view block beside the least name: the
+    /// least a picture Panel that has chips must be for them to show as "+N".
+    pub fn overflow_width(scale: f32) -> f32 {
+        Self::least_width(scale)
+            + Self::rule_room(scale)
+            + Chip::new(crate::toolbar::OVERFLOW_WIDEST).size(scale)[0]
+            + style::SPACE_CHIP_GROUP_GAP * scale
     }
 
     /// The bar across the top of a Panel at `area`. The chips and the settings button stay at the right; the name
@@ -1040,47 +1142,40 @@ impl TitleBar {
         let bar = [area[0], area[1], area[2], style::SPACE_TITLE_BAR * scale];
         let pad = style::SPACE_BAR_PAD * scale;
         let gap = style::SPACE_TAG_GAP * scale;
+        let name_gap = style::SPACE_NAME_GAP * scale;
+        let mid = |height: f32| bar[1] + (bar[3] - height) / 2.0;
         let mut right = bar[0] + bar[2] - pad;
         let settings = self.settings_button.then(|| {
             let side = style::SPACE_SETTINGS_BUTTON * scale;
+            let height = style::SPACE_CHIP_HEIGHT * scale;
             right -= side;
-            [right, bar[1] + (bar[3] - side) / 2.0, side, side]
+            [right, mid(height), side, height]
         });
         let chips_width = chip_row_width_grouped(&self.chips, &self.groups, scale);
         let mut view = None;
         let mut divider = None;
+        if settings.is_some() {
+            right -= style::SPACE_SETTINGS_GAP * scale;
+        }
         if self.view {
-            if settings.is_some() {
-                right -= style::SPACE_CHIP_GAP * scale;
-            }
             view = Some(crate::view_block::ViewBlock::layout(right, bar, scale));
             right -= crate::view_block::ViewBlock::width(scale);
             if !self.chips.is_empty() {
-                let weight = style::LINE_WEIGHT * scale;
-                let dgap = style::SPACE_DIVIDER_GAP * scale;
+                let weight = style::SPACE_RULE_WIDTH * scale;
+                let air = style::SPACE_DIVIDER_GAP * scale;
                 let height = style::SPACE_CHIP_HEIGHT * scale;
-                divider = Some([
-                    right - dgap - weight,
-                    bar[1] + (bar[3] - height) / 2.0,
-                    weight,
-                    height,
-                ]);
-                right -= 2.0 * dgap + weight;
+                divider = Some([right - air - weight, mid(height), weight, height]);
+                right -= 2.0 * air + weight;
             }
-        } else if settings.is_some() && !self.chips.is_empty() {
-            right -= style::SPACE_CHIP_GAP * scale;
         }
         let chips_left = (right - chips_width).max(bar[0] + pad);
         let chips = chip_row_grouped(
             &self.chips,
             &self.groups,
-            [
-                chips_left,
-                bar[1] + (bar[3] - style::SPACE_CHIP_HEIGHT * scale) / 2.0,
-            ],
+            [chips_left, mid(style::SPACE_CHIP_HEIGHT * scale)],
             scale,
         );
-        let room = (chips_left - gap - (bar[0] + pad)).max(0.0);
+        let room = (chips_left - name_gap - (bar[0] + pad)).max(0.0);
         let name_width = text_width(&self.name, scale);
         let name_cut = name_width > room;
         let name = [bar[0] + pad, bar[1], name_width.min(room), bar[3]];
@@ -1108,6 +1203,19 @@ impl TitleBar {
         settings: State,
         scale: f32,
     ) -> Vec<Prim> {
+        self.draw_focused(area, chips, settings, false, scale)
+    }
+
+    /// [`TitleBar::draw`] for a Panel that holds the focus when `focused`: a thin accent line along the top of the
+    /// bar, and the name in the brightest text (ADR 0044).
+    pub fn draw_focused(
+        &self,
+        area: [f32; 4],
+        chips: &[(bool, State)],
+        settings: State,
+        focused: bool,
+        scale: f32,
+    ) -> Vec<Prim> {
         let l = self.layout(area, scale);
         let line = style::LINE_WEIGHT * scale;
         let mut prims = vec![
@@ -1121,9 +1229,16 @@ impl TitleBar {
             &self.name,
             l.name,
             Face::Label,
-            style::TEXT_PRIMARY,
+            if focused {
+                style::TEXT_HIGH
+            } else {
+                style::TEXT_PRIMARY
+            },
             Align::Left,
         ));
+        if focused {
+            prims.push(focus_line(l.bar, scale));
+        }
         if let Some(tags) = l.tags {
             prims.push(text(
                 &self.tags,
@@ -1137,7 +1252,7 @@ impl TitleBar {
             prims.extend(chip.draw([r[0], r[1]], *on, *state, scale));
         }
         if let Some(divider) = l.divider {
-            prims.push(rect(divider, style::LINE_BORDER));
+            prims.push(rect(divider, style::LINE_RULE));
         }
         if let Some(button) = l.settings {
             prims.extend(settings_button(button, settings, scale));
@@ -1146,17 +1261,17 @@ impl TitleBar {
     }
 }
 
-/// The settings button: three dots in a small square that lights under the pointer.
+/// The settings button: three dots in a small button that lights under the pointer (a neutral lift, white dots).
 pub fn settings_button(area: [f32; 4], state: State, scale: f32) -> Vec<Prim> {
     let mut prims = Vec::new();
     if matches!(state, State::Hover | State::Pressed) {
-        prims.push(rect(area, fill(state, false, style::ACCENT)));
+        prims.push(rect(area, fill(state, false, style::STATE_ON)));
     }
     let dot = 2.0 * style::LINE_WEIGHT * scale;
-    let colour = if state == State::Disabled {
-        style::TEXT_DISABLED
-    } else {
-        style::TEXT_PRIMARY
+    let colour = match state {
+        State::Disabled => style::TEXT_DISABLED,
+        State::Hover | State::Pressed => style::TEXT_HIGH,
+        State::Normal => style::TEXT_SECONDARY,
     };
     let step = 2.0 * dot;
     for i in 0..3 {
@@ -1295,7 +1410,9 @@ impl MenuBar {
             };
             match state {
                 State::Pressed => {
-                    prims.push(rect([r[0], r[1], r[2], r[3] - line], style::STATE_PRESSED))
+                    let open = [r[0], r[1], r[2], r[3] - line];
+                    prims.push(rect(open, style::SURFACE_MENU));
+                    prims.push(underline(open, style::accent(), scale));
                 }
                 State::Hover => {
                     prims.push(rect([r[0], r[1], r[2], r[3] - line], style::STATE_HOVER))
@@ -1314,6 +1431,28 @@ impl MenuBar {
     }
 }
 
+/// The width of a row of `n` swatches.
+fn swatch_row_width(n: usize, scale: f32) -> f32 {
+    n as f32 * style::SPACE_SWATCH * scale
+        + n.saturating_sub(1) as f32 * style::SPACE_SWATCH_GAP * scale
+}
+
+/// Where the `n` swatches of the menu row `row` are (also their hit areas), from the heading's left edge.
+pub fn swatch_rects(row: [f32; 4], n: usize, scale: f32) -> Vec<[f32; 4]> {
+    let side = style::SPACE_SWATCH * scale;
+    let left = row[0] + style::SPACE_MENU_HEADING_LEFT * scale + style::LINE_WEIGHT * scale;
+    (0..n)
+        .map(|i| {
+            [
+                left + i as f32 * (side + style::SPACE_SWATCH_GAP * scale),
+                row[1] + (row[3] - side) / 2.0,
+                side,
+                side,
+            ]
+        })
+        .collect()
+}
+
 /// One entry of a menu that drops from the menu bar.
 #[derive(Clone, Debug, PartialEq)]
 pub enum MenuEntry {
@@ -1322,6 +1461,9 @@ pub enum MenuEntry {
     Separator,
     /// A quiet line naming the group under it; not clickable.
     Heading(String),
+    /// A row of colour swatches (Settings > Appearance): each a colour sample (data, not style) and whether it is the
+    /// chosen one.
+    Swatches(Vec<(Rgb, bool)>),
 }
 
 /// A clickable entry: its name, its hotkey as the menu shows it (empty for none), whether it can be used now and
@@ -1376,6 +1518,10 @@ impl DropMenu {
                 MenuEntry::Heading(t) => {
                     style::SPACE_MENU_HEADING_LEFT * scale * 2.0 + text_width(t, scale)
                 }
+                MenuEntry::Swatches(colours) => {
+                    style::SPACE_MENU_HEADING_LEFT * scale * 2.0
+                        + swatch_row_width(colours.len(), scale)
+                }
                 MenuEntry::Separator => 0.0,
             })
             .fold(style::SPACE_MENU_WIDTH * scale, f32::max);
@@ -1428,6 +1574,21 @@ impl DropMenu {
             .collect()
     }
 
+    /// The swatch under `point`: its entry and its place in the row.
+    pub fn swatch_at(&self, area: [f32; 4], point: [f32; 2], scale: f32) -> Option<(usize, usize)> {
+        self.entry_rects(area, scale)
+            .iter()
+            .zip(&self.entries)
+            .enumerate()
+            .find_map(|(i, (r, e))| match e {
+                MenuEntry::Swatches(colours) => swatch_rects(*r, colours.len(), scale)
+                    .iter()
+                    .position(|s| contains(*s, point))
+                    .map(|n| (i, n)),
+                _ => None,
+            })
+    }
+
     /// The enabled item under `point`.
     pub fn hit(&self, area: [f32; 4], point: [f32; 2], scale: f32) -> Option<usize> {
         self.entry_rects(area, scale)
@@ -1474,6 +1635,18 @@ impl DropMenu {
                     style::TEXT_SECONDARY,
                     Align::Left,
                 )),
+                MenuEntry::Swatches(colours) => {
+                    for (s, (colour, chosen)) in swatch_rects(r, colours.len(), scale)
+                        .into_iter()
+                        .zip(colours)
+                    {
+                        if *chosen {
+                            prims.extend(framed(s, style::rgb(style::TEXT_HIGH), *colour, scale));
+                        } else {
+                            prims.push(rect(s, *colour));
+                        }
+                    }
+                }
                 MenuEntry::Item(item) => {
                     let state = if !item.enabled {
                         State::Disabled
@@ -1485,8 +1658,8 @@ impl DropMenu {
                         State::Normal
                     };
                     match state {
-                        State::Hover => prims.push(rect(r, style::STATE_HOVER)),
-                        State::Pressed => prims.push(rect(r, style::STATE_PRESSED)),
+                        State::Hover => prims.extend(hovered_row(r, style::STATE_HOVER, scale)),
+                        State::Pressed => prims.extend(hovered_row(r, style::STATE_PRESSED, scale)),
                         _ => {}
                     }
                     if item.on {
@@ -1498,7 +1671,7 @@ impl DropMenu {
                                 side,
                                 side,
                             ],
-                            style::STATE_ON,
+                            style::accent(),
                         ));
                     }
                     let (ink, quiet) = if item.enabled {

@@ -26,8 +26,8 @@ use scopecreep_feed::synthetic;
 
 const WIDTH: u32 = 1920;
 const HEIGHT: u32 = 1080;
-/// The waveform Panel's cell in logical pixels: about what it gets in the default 1280 × 760 Window.
-const CELL: [f32; 2] = [720.0, 420.0];
+/// The waveform Panel's cell in logical pixels: about what it gets in the default 1440 × 840 Window.
+const CELL: [f32; 2] = [720.0, 432.0];
 
 /// A piece of text as the Window sets it: words, left, top, width, face, colour, alignment, and the rectangle it
 /// is clipped to.

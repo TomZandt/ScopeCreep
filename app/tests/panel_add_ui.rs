@@ -31,23 +31,14 @@ fn texts(prims: &[Prim]) -> Vec<String> {
 }
 
 #[test]
-fn the_focused_panel_has_a_quiet_outline_just_inside_its_frame() {
+fn the_focused_panel_has_a_thin_accent_line_along_its_title_bar_and_nothing_round_the_picture() {
     for scale in SCALES {
-        let frame = [100.0, 50.0, 400.0, 300.0];
-        let prims = focus_outline(frame, scale);
-        let edges = rects(&prims);
-        assert_eq!(edges.len(), 4, "four thin edges");
-        let weight = (style::LINE_WEIGHT * scale).max(1.0);
-        for (rect, colour) in &edges {
-            assert_eq!(*colour, style::rgba(style::STATE_FOCUS));
-            assert!(rect[2] == weight || rect[3] == weight, "{rect:?} is thin");
-            // Inside the frame.
-            assert!(rect[0] >= frame[0] && rect[1] >= frame[1]);
-            assert!(rect[0] + rect[2] <= frame[0] + frame[2]);
-            assert!(rect[1] + rect[3] <= frame[1] + frame[3]);
-        }
-        // Quiet: a neutral grey, not the accent.
-        assert_ne!(style::STATE_FOCUS, style::ACCENT);
+        let title = [100.0, 50.0, 400.0, style::SPACE_TITLE_BAR * scale];
+        let Prim::Rect { rect, colour } = focus_line(title, scale) else {
+            panic!("a line is a rectangle");
+        };
+        assert_eq!(colour, style::rgba(style::accent()));
+        assert_eq!(rect, [title[0], title[1], title[2], 2.0 * scale]);
     }
 }
 

@@ -284,7 +284,7 @@ fn the_panel_fits_the_default_window_under_the_bar_at_1x_and_2x() {
     click(&mut panel, &mut hotkeys, "Go to page 1");
     panel.key(ctrl("2"), &mut hotkeys);
     for scale in [1.0, 2.0] {
-        let window = [1280.0 * scale, 760.0 * scale];
+        let window = [1440.0 * scale, 840.0 * scale];
         let title = menu_bar::bar().title_rects(0.0, 0.0, scale)[SETTINGS];
         let r = panel.menu(&hotkeys).drop.rect(title, window, scale);
         assert!(r[1] >= title[3] - 0.01, "under the bar");

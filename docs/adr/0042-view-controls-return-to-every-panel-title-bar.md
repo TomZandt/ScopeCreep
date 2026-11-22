@@ -24,3 +24,7 @@ The product owner tried the Window with the view strip (ADR 0040) at the right e
 - ADR 0040's view strip (and its menu bar row width, the "Mixed" readout, the read-only zoom tag) is superseded; its three-zone title bar and chip-order rules stand, now with the block as the middle zone.
 - ADR 0035's zoom model, Link rules and saved state are unchanged; its "zoom chip" and "Link chip" are the Fit and Link buttons of the block.
 - The Colour Setup line (ADR 0007's wording) is unchanged; only where it sits and how it is cut changed.
+
+## Update (ADR 0044, #226)
+
+The view block is on picture Panels only (not scopes); the divider is a 2 px full rule with 20 px of air, only where the Panel has chips; chips that give way become a "+N" chip; the Panel is at least 255 wide and the Window 1420 x 833. The "176" and "1015 x 645" above are superseded.

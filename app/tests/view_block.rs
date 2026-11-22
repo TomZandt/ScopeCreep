@@ -182,7 +182,7 @@ fn only_fit_and_link_are_hit_and_only_where_the_panel_zooms() {
 #[test]
 fn the_link_chip_is_lit_while_link_is_on_and_a_disabled_block_is_greyed_and_lights_nothing() {
     let view = bar(2, 600.0, 1.0).view.unwrap();
-    let lit = style::rgba(style::ACCENT);
+    let lit = style::rgba(style::accent());
     let on = fills(&block(true, "62 %", true).draw(&view, None, 1.0));
     let off = fills(&block(true, "62 %", false).draw(&view, None, 1.0));
     assert!(on.contains(&lit) && !off.contains(&lit));

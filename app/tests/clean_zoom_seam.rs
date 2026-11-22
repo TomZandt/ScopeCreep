@@ -228,7 +228,12 @@ fn the_view_block_stays_on_a_small_panel_and_only_the_chips_give_way() {
     let title = panel_title(NAME, &DisplayContext::default(), String::new());
     for scale in [1.0f32, 2.0] {
         let small = scopecreep::panel_grid::PanelLayout::new(
-            [0.0, 0.0, 190.0 * scale, 200.0 * scale],
+            [
+                0.0,
+                0.0,
+                scopecreep::style::SPACE_MIN_PANEL_WIDTH * scale,
+                200.0 * scale,
+            ],
             scale,
         )
         .title;

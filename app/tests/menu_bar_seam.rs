@@ -72,8 +72,8 @@ fn the_bar_is_thin_and_its_titles_are_hit_where_drawn() {
     for scale in SCALES {
         assert_eq!(MenuBar::height(scale), style::SPACE_MENU_BAR * scale);
         assert!(
-            MenuBar::height(scale) < BarKind::Top.height(scale),
-            "thinner than the top bar"
+            MenuBar::height(scale) <= BarKind::Top.height(scale),
+            "no taller than the top bar"
         );
         let rects = bar.title_rects(0.0, 0.0, scale);
         assert_eq!(rects.len(), bar.titles.len());
@@ -120,7 +120,9 @@ fn the_open_title_is_pressed_and_the_one_under_the_pointer_lit() {
         let hover = fills(&bar.draw(0.0, 0.0, 800.0, None, Some(0), scale));
         assert!(hover.contains(&style::rgba(style::STATE_HOVER)));
         let open = fills(&bar.draw(0.0, 0.0, 800.0, Some(0), Some(0), scale));
-        assert!(open.contains(&style::rgba(style::STATE_PRESSED)));
+        // The open title is a menu-coloured tab with the accent line at its foot (ADR 0044).
+        assert!(open.contains(&style::rgba(style::SURFACE_MENU)));
+        assert!(open.contains(&style::rgba(style::accent())));
         assert!(!open.contains(&style::rgba(style::STATE_HOVER)));
     }
 }
@@ -184,7 +186,7 @@ fn a_menu_drops_under_its_title_and_stays_in_the_window() {
         assert_eq!([r[0], r[1]], [title[0], title[3]]);
         assert_eq!([r[2], r[3]], menu.size(scale));
         assert!(r[2] >= style::SPACE_MENU_WIDTH * scale);
-        let small = [300.0 * scale, 160.0 * scale];
+        let small = [300.0 * scale, 320.0 * scale];
         let r = menu.rect(
             [180.0 * scale, 0.0, 60.0 * scale, 24.0 * scale],
             small,
@@ -261,7 +263,7 @@ fn an_item_lights_on_hover_darkens_on_press_and_a_disabled_one_is_grey_and_never
             "the hotkey beside its entry, quieter"
         );
         assert!(
-            quiet.contains(&style::rgba(style::STATE_ON)),
+            quiet.contains(&style::rgba(style::accent())),
             "the current entry is marked"
         );
     }

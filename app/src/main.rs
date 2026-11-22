@@ -20,6 +20,8 @@ use glyphon::{
     Attrs, Buffer, Cache, Color, ColorMode, Family, FontSystem, Metrics, Resolution, Shaping,
     SwashCache, TextArea, TextAtlas, TextBounds, TextRenderer, Viewport,
 };
+use scopecreep::accent::{self, Accent};
+use scopecreep::appearance_panel::AppearancePanel;
 use scopecreep::auto_resize;
 use scopecreep::commands::{Command, Hotkey, Hotkeys, Key};
 use scopecreep::components::{self, Align, MenuBar, Prim, State, Tooltip};
@@ -133,6 +135,11 @@ fn layouts_file() -> Option<PathBuf> {
 /// Where the hotkeys the user changed are remembered, next to the layouts (ADR 0036).
 fn hotkeys_file() -> Option<PathBuf> {
     grid_file().map(|p| p.with_file_name("hotkeys"))
+}
+
+/// Where the app accent colour is remembered, next to the hotkeys (ADR 0044): its own file.
+fn accent_file() -> Option<PathBuf> {
+    grid_file().map(|p| p.with_file_name("accent"))
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -290,6 +297,9 @@ struct AppWindow {
     layout_mode: LayoutMode,
     /// The Hotkeys panel, while it shows in place of the Settings menu (#148).
     hotkeys_panel: Option<HotkeysPanel>,
+    /// The Appearance panel, when open in place of the Settings menu, and the accent it edits.
+    appearance_panel: Option<AppearancePanel>,
+    accent: Accent,
     /// The Settings menu is asking whether to reset every Panel's settings (#228).
     confirm_reset: bool,
     /// The left button is down (a menu entry under it shows pressed).
@@ -580,6 +590,12 @@ impl AppWindow {
             bar_hover: None,
             layout_mode: LayoutMode::Show,
             hotkeys_panel: None,
+            appearance_panel: None,
+            accent: {
+                let accent = accent_file().map_or_else(Accent::default, |p| accent::load(&p));
+                accent::set_current(accent);
+                accent
+            },
             confirm_reset: false,
             left_down: false,
             full: None,
@@ -925,9 +941,10 @@ impl AppWindow {
                 self.displays.legends_on(&self.settings.lock().unwrap()),
             )),
             menu_bar::SETTINGS if self.confirm_reset => Some(menu_bar::reset_confirm_menu()),
-            menu_bar::SETTINGS => Some(match &self.hotkeys_panel {
-                Some(panel) => panel.menu(&self.hotkeys),
-                None => menu_bar::settings_menu(),
+            menu_bar::SETTINGS => Some(match (&self.hotkeys_panel, &self.appearance_panel) {
+                (Some(panel), _) => panel.menu(&self.hotkeys),
+                (None, Some(panel)) => panel.menu(self.accent),
+                (None, None) => menu_bar::settings_menu(),
             }),
             _ => None,
         }
@@ -966,6 +983,7 @@ impl AppWindow {
         self.finish_rename(true);
         self.layout_mode = LayoutMode::Show;
         self.hotkeys_panel = None;
+        self.appearance_panel = None;
         self.confirm_reset = false;
         self.window.request_redraw();
     }
@@ -977,6 +995,7 @@ impl AppWindow {
         self.hover = None;
         self.finish_rename(true);
         self.hotkeys_panel = None;
+        self.appearance_panel = None;
         self.bar_anchor = None;
         self.layout_mode = LayoutMode::Show;
         self.bar.open = Some(menu_bar::SETTINGS);
@@ -991,6 +1010,16 @@ impl AppWindow {
         self.save_settings();
         self.refresh_menu();
         self.window.request_redraw();
+    }
+
+    /// Remember the accent, and draw with it from now on.
+    fn save_accent(&self) {
+        accent::set_current(self.accent);
+        if let Some(path) = accent_file()
+            && let Err(e) = accent::save(&path, self.accent)
+        {
+            eprintln!("ScopeCreep: cannot remember the accent colour: {e}");
+        }
     }
 
     /// Remember the hotkeys.
@@ -1018,6 +1047,19 @@ impl AppWindow {
         };
         if !components::contains(rect, self.cursor) {
             return self.close_bar();
+        }
+        // A click on a swatch of the Appearance panel takes that accent.
+        if let Some(panel) = self.appearance_panel.as_mut()
+            && let Some((_, n)) = menu.drop.swatch_at(rect, self.cursor, self.scale)
+        {
+            if panel.click(
+                scopecreep::appearance_panel::AppearanceAction::Swatch(n),
+                &mut self.accent,
+            ) {
+                self.save_accent();
+            }
+            self.window.request_redraw();
+            return;
         }
         let action = menu
             .drop
@@ -1062,6 +1104,16 @@ impl AppWindow {
                 self.renaming = PageRename::start(&self.pages, self.pages.current());
             }
             Some(MenuAction::OpenHotkeys) => self.hotkeys_panel = Some(HotkeysPanel::default()),
+            Some(MenuAction::OpenAppearance) => {
+                self.appearance_panel = Some(AppearancePanel::default());
+            }
+            Some(MenuAction::Appearance(action)) => {
+                if let Some(panel) = self.appearance_panel.as_mut()
+                    && panel.click(action, &mut self.accent)
+                {
+                    self.save_accent();
+                }
+            }
             Some(MenuAction::Hotkeys(action)) => {
                 if let Some(panel) = self.hotkeys_panel.as_mut()
                     && panel.click(action, &mut self.hotkeys)
@@ -1274,6 +1326,31 @@ impl AppWindow {
                 }
                 self.window.request_redraw();
             }
+            return;
+        }
+        // The Appearance panel's hex box takes the keys while a hex is typed.
+        if self
+            .appearance_panel
+            .as_ref()
+            .is_some_and(AppearancePanel::takes_keys)
+        {
+            let mut changed = false;
+            if let Some(panel) = self.appearance_panel.as_mut() {
+                match &event.logical_key {
+                    LogicalKey::Named(NamedKey::Enter) => changed = panel.accept(&mut self.accent),
+                    LogicalKey::Named(NamedKey::Escape) => panel.cancel(),
+                    LogicalKey::Named(NamedKey::Backspace) => panel.backspace(),
+                    _ => {
+                        if let Some(text) = event.text.as_ref() {
+                            panel.type_text(text);
+                        }
+                    }
+                }
+            }
+            if changed {
+                self.save_accent();
+            }
+            self.window.request_redraw();
             return;
         }
         if self.renaming.is_some() {
@@ -1930,6 +2007,17 @@ impl AppWindow {
                         {
                             match action {
                                 ChipAction::Set(key, value) => self.choose(panel, key, &value),
+                                // "+N": the chips that gave way are in the Panel's settings.
+                                ChipAction::More => {
+                                    if let Some(r) = self
+                                        .title_layouts
+                                        .get(panel)
+                                        .and_then(|l| l.chips.get(chip))
+                                    {
+                                        self.open_popover(panel, [r[0], r[1] + r[3]]);
+                                        self.window.request_redraw();
+                                    }
+                                }
                             }
                         }
                         return;
@@ -2062,29 +2150,13 @@ impl AppWindow {
             }
             let panel = PanelLayout::new(*cell, scale);
             // Every Panel's title bar ends in the view block (Fit, zoom, Link), then the settings button (ADR 0042).
+            // Only a picture Panel's title bar has the view block (Fit, zoom, Link), then the settings button on
+            // every title bar (ADR 0044).
+            let has_view = self.displays.is_picture(i);
             let block = self.displays.view_block(i, panel.content, scale);
             let mut toolbar = self.displays.toolbar(i, &settings_now);
-            toolbar.fit_to_reserving(
-                panel.title[2],
-                true,
-                components::TitleBar::view_reserve(scale),
-                scale,
-            );
-            // Every Panel's popover holds Close, so every title bar has the settings button.
-            let has_popover = true;
-            let (l, tags, all_shown) = window_text::lay_out_view_title(
-                &title,
-                &toolbar.chips,
-                &toolbar.groups,
-                has_popover,
-                true,
-                panel.title,
-                scale,
-            );
-            toolbars.push(toolbar);
-            view_blocks.push(block);
             // A tab group of more than one Panel shows its tabs where the name would be.
-            let strip = self
+            let strip_labels: Option<(Vec<String>, usize)> = self
                 .pages
                 .tree()
                 .tab_group(i)
@@ -2095,14 +2167,57 @@ impl AppWindow {
                         .iter()
                         .map(|t| shown_names.get(*t).cloned().unwrap_or_default())
                         .collect();
-                    (
-                        tab_strip::TabStrip {
-                            labels,
-                            active: g.active,
-                        },
-                        tab_strip::room(&l, scale),
-                    )
+                    (labels, g.active)
                 });
+            // The chips give way first, then the tag, then the tabs fold, then the name is cut: so the chips fit
+            // only in what is left of the bar after the name (or tabs) and the tags at their full width.
+            let left_width = match &strip_labels {
+                Some((labels, active)) => tab_strip::TabStrip {
+                    labels: labels.clone(),
+                    active: *active,
+                }
+                .natural_width(scale),
+                None => {
+                    let tags = title.tags_text();
+                    components::text_width(&title.name, scale)
+                        + if tags.is_empty() {
+                            0.0
+                        } else {
+                            style::SPACE_TAG_GAP * scale + components::text_width(&tags, scale)
+                        }
+                }
+            };
+            let view_reserve = if has_view {
+                components::TitleBar::view_reserve(scale)
+            } else {
+                0.0
+            };
+            toolbar.fit_to_reserving_floor(
+                panel.title[2],
+                true,
+                view_reserve + left_width + style::SPACE_NAME_GAP * scale,
+                view_reserve + (style::SPACE_NAME_MIN + style::SPACE_NAME_GAP) * scale,
+                scale,
+            );
+            // Every Panel's popover holds Close, so every title bar has the settings button.
+            let has_popover = true;
+            let (l, tags, all_shown) = window_text::lay_out_view_title(
+                &title,
+                &toolbar.chips,
+                &toolbar.groups,
+                has_popover,
+                has_view,
+                panel.title,
+                scale,
+            );
+            toolbars.push(toolbar);
+            view_blocks.push(block);
+            let strip = strip_labels.map(|(labels, active)| {
+                (
+                    tab_strip::TabStrip { labels, active },
+                    tab_strip::room(&l, scale),
+                )
+            });
             tab_strips.push(strip);
             self.panel_texts[i].label.set(
                 &mut self.font_system,
@@ -2375,16 +2490,14 @@ impl AppWindow {
                 rects.push((edge, style::rgba(style::LINE_BORDER)));
             }
         }
-        // The focused Panel has a quiet outline.
+        // The focused Panel: a thin accent line along the top of its title bar, nothing round the picture.
         if !self.pages.tree().is_empty()
             && let Some(focused) = self.pages.tree().focused().filter(|f| *f < cells.len())
             && panel_grid::shown(cells[focused])
+            && let Prim::Rect { rect, colour } =
+                components::focus_line(panels[focused].title, scale)
         {
-            for prim in components::focus_outline(cells[focused], scale) {
-                if let Prim::Rect { rect, colour } = prim {
-                    rects.push((rect, [colour[0], colour[1], colour[2], 1.0]));
-                }
-            }
+            rects.push((rect, colour));
         }
         // A page with no Panel: one large Add panel button.
         self.add_button = self
@@ -2423,24 +2536,23 @@ impl AppWindow {
                     .tree()
                     .panel_at(area, margin, self.cursor)
                     .filter(|to| *to != from || tabs > 1)?;
+                let min = min_panel_size(scale);
+                let zone = dock::zone_at(cells[to], self.cursor);
                 if self.modifiers.shift_key() {
+                    drop_label = Some((zone.label(cells[to], margin, min, true), cells[to]));
                     return Some(cells[to]);
                 }
-                let zone = dock::zone_at(cells[to], self.cursor);
                 if zone == Zone::Middle && to == from {
                     return None;
                 }
-                drop_label = zone.label().map(|l| (l, cells[to]));
+                drop_label = Some((zone.label(cells[to], margin, min, false), cells[to]));
                 Some(dock::overlay(cells[to], zone, margin))
             })
         {
-            let weight = (style::LINE_WEIGHT * scale).max(1.0);
-            for edge in PanelLayout::new(outline, scale)
-                .lines(weight)
-                .iter()
-                .take(4)
-            {
-                rects.push((*edge, style::rgba(style::STATE_FOCUS)));
+            for prim in components::dock_overlay(outline, scale) {
+                if let Prim::Rect { rect, colour } = prim {
+                    rects.push((rect, colour));
+                }
             }
         }
         let mut menu_areas: Vec<(usize, f32, f32, [u8; 3])> = Vec::new();
@@ -2512,7 +2624,7 @@ impl AppWindow {
                 over.extend(chip.draw([r[0], r[1]], toolbar.on[c], state, scale));
             }
             if let Some(divider) = l.divider {
-                over.push(components::rect(divider, style::LINE_BORDER));
+                over.push(components::rect(divider, style::LINE_RULE));
             }
             if let (Some(view), Some(block)) = (&l.view, self.view_blocks.get(i)) {
                 let lit = match pointer_over {
@@ -2740,7 +2852,7 @@ impl ApplicationHandler<Wake> for App {
         }
         let attributes = Window::default_attributes()
             .with_title("ScopeCreep")
-            .with_inner_size(LogicalSize::new(1280.0, 760.0));
+            .with_inner_size(LogicalSize::new(1440.0, 840.0));
         #[cfg(target_os = "linux")]
         let attributes = {
             use winit::platform::wayland::WindowAttributesExtWayland;

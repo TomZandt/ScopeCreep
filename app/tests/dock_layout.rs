@@ -4,8 +4,8 @@
 use scopecreep::layout_tree::{Edge, LayoutTree, Placed};
 use scopecreep::panel_grid::{MIN_PANEL, min_panel_size};
 
-const AREA: [f32; 4] = [12.0, 12.0, 1256.0, 716.0];
-const GAP: f32 = 12.0;
+const AREA: [f32; 4] = [8.0, 8.0, 1424.0, 738.0];
+const GAP: f32 = 8.0;
 const EDGES: [Edge; 4] = [Edge::Left, Edge::Right, Edge::Top, Edge::Bottom];
 
 const NAMES: [&str; 7] = [

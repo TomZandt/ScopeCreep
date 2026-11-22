@@ -15,7 +15,7 @@ const NAMES: [&str; 7] = [
     "Skin Tone",
     "False Colour - Stops",
 ];
-const GAP: f32 = 12.0;
+const GAP: f32 = 8.0;
 
 fn shapes() -> Vec<Shape> {
     NAMES.iter().map(|n| auto_resize::shape_of(n)).collect()
@@ -99,7 +99,7 @@ fn a_picture_cell_gets_the_footage_aspect_leaving_room_for_the_title_bar_legend_
 
 #[test]
 fn only_ratios_change_places_and_nesting_stay() {
-    let area = [0.0, 0.0, 1256.0, 716.0];
+    let area = [0.0, 0.0, 1424.0, 738.0];
     let mut t = LayoutTree::default_for(&NAMES);
     let before = skeleton(&t);
     let cells_before = t.cells(area, GAP);
@@ -116,7 +116,7 @@ fn a_split_with_two_picture_children_or_none_is_left_alone() {
     ] {
         let mut t = tree(text);
         let before = t.to_text(&NAMES);
-        t.auto_resize(&shapes(), 1.0, [0.0, 0.0, 1256.0, 716.0], GAP, 1.0);
+        t.auto_resize(&shapes(), 1.0, [0.0, 0.0, 1424.0, 738.0], GAP, 1.0);
         assert_eq!(t.to_text(&NAMES), before);
     }
 }
@@ -135,7 +135,7 @@ fn the_vectorscope_is_not_picture_shaped_and_the_luma_waveform_is() {
 
 #[test]
 fn the_ratio_is_clamped_to_15_to_85_percent() {
-    let area = [0.0, 0.0, 1256.0, 716.0];
+    let area = [0.0, 0.0, 2400.0, 1400.0];
     let mut t = two("row", "Channel Viewer", "Vectorscope");
     t.auto_resize(&shapes(), 2.39, area, GAP, 1.0);
     let c = t.cells(area, GAP);
@@ -156,7 +156,7 @@ fn the_ratio_is_clamped_to_15_to_85_percent() {
 
 #[test]
 fn it_goes_top_down_so_a_nested_split_sees_its_parents_new_size() {
-    let area = [0.0, 0.0, 2000.0, 900.0];
+    let area = [0.0, 0.0, 2400.0, 1000.0];
     let mut t = tree(
         "layout 2\nsplit row 0.5\nleaf 0 Clean picture\nsplit col 0.5\nsplit row 0.5\nleaf 0 Skin tone\nleaf 0 Vectorscope\nleaf 0 Saturation heatmap\n",
     );
@@ -182,7 +182,7 @@ fn no_feed_means_16_to_9() {
 
 #[test]
 fn it_is_one_undo_step_and_a_press_that_changes_nothing_is_none() {
-    let area = [0.0, 0.0, 1256.0, 716.0];
+    let area = [0.0, 0.0, 1424.0, 738.0];
     let mut pages = Pages::new(two("row", "Channel Viewer", "Vectorscope"));
     let before = pages.tree().to_text(&NAMES);
     pages.change(|t| t.auto_resize(&shapes(), 2.39, area, GAP, 1.0));
