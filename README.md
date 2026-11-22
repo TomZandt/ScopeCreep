@@ -2,7 +2,7 @@
 
 Real-time, professional-grade video scopes for DaVinci Resolve, on their own screen.
 
-If it earns its place on your desk, you can [buy me a coffee](https://buymeacoffee.com/tomzandtvalentine).
+<a href="https://www.buymeacoffee.com/tomzandtvalentine"><img src="https://img.buymeacoffee.com/button-api/?text=Buy%20me%20a%20coffee&emoji=%E2%98%95&slug=tomzandtvalentine&button_colour=FFDD00&font_colour=000000&font_family=Cookie&outline_colour=000000&coffee_colour=ffffff" alt="Buy me a coffee" height="48"></a>
 
 scopecreep takes the picture Resolve is playing (the **Feed**) and shows it next to **Scopes** (luma waveform with Colorise, vectorscopes) and **Picture Views** (clean picture with channel chips and a Loupe, false colour, skin tone, saturation) in a separate app. The goals:
 
