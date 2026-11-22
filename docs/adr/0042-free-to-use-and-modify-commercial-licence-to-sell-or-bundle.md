@@ -24,5 +24,5 @@ ScopeCreep was "Proprietary. All rights reserved." with no terms for anyone else
 ## Consequences
 
 - A custom licence has not been tested in court; it should be reviewed by a solicitor before the first public release.
-- The official source needs public contact details for licence requests while the repository is private.
+- Licence requests come as messages through the Buy Me a Coffee page, the one public contact while the repository is private.
 - Third-party code keeps its own licence, so any shipped dependency needs its notices kept.

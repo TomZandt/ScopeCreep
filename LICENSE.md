@@ -40,7 +40,7 @@ You may not, for the Software or any Modified Version:
 
 ## 4. Commercial Licences, donations and payment
 
-To do anything section 3 rules out, ask the Licensor for a Commercial Licence, through the contact details at the Official Source. The Licensor may grant one on terms they choose, or decline.
+To do anything section 3 rules out, ask the Licensor for a Commercial Licence by sending a message through <https://www.buymeacoffee.com/tomzandtvalentine>. The Licensor may grant one on terms they choose, or decline.
 
 If you want to support ScopeCreep with a donation, or pay the Licensor, use <https://www.buymeacoffee.com/tomzandtvalentine>. A donation is a gift: it is welcome, never required, and does not by itself grant a Commercial Licence or any right beyond this licence.
 
