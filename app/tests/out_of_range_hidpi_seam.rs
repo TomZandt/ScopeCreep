@@ -10,8 +10,8 @@
 mod common;
 use common::{Rig, TARGET};
 use glyphon::{
-    Attrs, Buffer, Cache, Color, ColorMode, Family, FontSystem, Metrics, Resolution, Shaping,
-    SwashCache, TextArea, TextAtlas, TextBounds, TextRenderer, Viewport,
+    Attrs, Buffer, Cache, Color, ColorMode, Family, Metrics, Resolution, Shaping, SwashCache,
+    TextArea, TextAtlas, TextBounds, TextRenderer, Viewport,
 };
 use scopecreep::colour_setup::Levels;
 use scopecreep::components::{self, Align, Face, Prim, State};
@@ -192,7 +192,7 @@ impl Bench {
         layers: [&[Words]; 2],
     ) -> Vec<u8> {
         let (device, queue) = (&self.rig.device, &self.rig.queue);
-        let mut font_system = FontSystem::new();
+        let mut font_system = scopecreep::fonts::font_system();
         let cache = Cache::new(device);
         let mut viewport = Viewport::new(device, &cache);
         viewport.update(queue, Resolution { width, height });
@@ -216,7 +216,7 @@ impl Bench {
                     };
                     buffer.set_text(
                         text,
-                        &Attrs::new().family(Family::SansSerif),
+                        &Attrs::new().family(Family::Name(scopecreep::style::FONT_INTERFACE)),
                         Shaping::Advanced,
                         align,
                     );

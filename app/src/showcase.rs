@@ -416,6 +416,45 @@ pub fn showcase(scale: f32) -> Showcase {
     ));
     y += row;
 
+    // The fonts and the icon set (ADR 0045, 0046): DM Mono regular and emphasis, the wordmark, then every icon.
+    prims.push(caption("Fonts and icons", margin, y, label_w));
+    let font_cell = [margin + label_w, y, column * 1.5, row];
+    prims.push(text(
+        "DM Mono 0123456789 Regular",
+        font_cell,
+        Face::Label,
+        style::TEXT_PRIMARY,
+        Align::Left,
+    ));
+    prims.push(text(
+        "DM Mono 0123456789 Emphasis",
+        [font_cell[0] + font_cell[2], y, font_cell[2], row],
+        Face::Strong,
+        style::TEXT_PRIMARY,
+        Align::Left,
+    ));
+    y += row;
+    prims.push(text(
+        "SCOPECREEP",
+        [margin + label_w, y, column * 2.0, row],
+        Face::Wordmark,
+        style::accent_text(),
+        Align::Left,
+    ));
+    for (i, icon) in Icon::ALL.iter().enumerate() {
+        let side = style::SPACE_SETTINGS_BUTTON * scale;
+        prims.push(icon.draw(
+            [
+                margin + label_w + column * 2.0 + side * 1.25 * i as f32,
+                y + (row - side) / 2.0,
+                side,
+                side,
+            ],
+            style::TEXT_PRIMARY,
+        ));
+    }
+    y += row;
+
     // Trim the sheet's background to what is drawn.
     if let Some(Prim::Rect { rect, .. }) = prims.first_mut() {
         rect[3] = y;

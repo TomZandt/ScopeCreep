@@ -117,6 +117,18 @@ _Avoid_: header, toolbar
 The one colour in the Window's chrome (default #d2ff00, the user's choice in Settings > Appearance > App accent colour). It marks state only, as thin lines and text, small and away from the picture, and is never on measurement data. Hover is never the accent (ADR 0044).
 _Avoid_: Theme colour, highlight colour
 
+**Interface font**:
+DM Mono, bundled with the app: every piece of Window text (labels, values, menus, tags, tooltips, Panel names, chips) is set in it, Regular, with Medium for emphasis (the focused Panel's name, headings). Every digit is as wide as every letter. No system font is used for chrome text (ADR 0045).
+_Avoid_: Number font, system font, UI font
+
+**Wordmark font**:
+Anton, bundled with the app: used only for the wordmark and display headings (the About popover's title, the Stylesheet), never small chrome (ADR 0045).
+_Avoid_: Logo font, heading font
+
+**Icon font**:
+Lucide, bundled as a font subset to only the glyphs the Window draws (plus, chevrons, reset, ellipsis, close). Each icon is one `Icon` in the app, drawn as a text glyph tinted by the text colour (ADR 0046).
+_Avoid_: Icon set (for the font), glyph (for an icon)
+
 **Title bar**:
 The strip across the top of a Panel: its name (or its tabs) and tags, its own chips (a "+N" chip for those that gave way), a rule, the view block on a picture Panel, and the settings button, with an accent line along its top while the Panel has the focus. When narrow the chips give way first, then the tag, then extra tabs, then the name is cut.
 

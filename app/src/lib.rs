@@ -15,6 +15,7 @@ pub mod display;
 pub mod dock;
 pub mod feed_loop;
 pub mod flat_rects;
+pub mod fonts;
 pub mod gamut_warning;
 pub mod gpu_frame;
 pub mod gpu_memory;

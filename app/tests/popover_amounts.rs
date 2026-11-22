@@ -1,7 +1,7 @@
 //! The Panel settings popover's amounts (#225), on the pure seam: one row each (label, slider, value box with
 //! arrows, circular reset icon), a slider that follows the drag, typing into the value box, and the Panel reset.
 //! No GPU, no window.
-use scopecreep::components::{Prim, contains, popover, popover_tip};
+use scopecreep::components::{Face, Icon, Prim, contains, popover, popover_tip};
 use scopecreep::settings::{
     Amount, AmountHit, Choice, EditKey, Menu, MenuRow, PanelSettings, SettingDef,
 };
@@ -447,11 +447,12 @@ fn the_panel_reset_sits_in_the_panel_sections_corner_and_is_dim_when_all_is_defa
             popover(m, rect, [-1.0, -1.0], scale)
                 .into_iter()
                 .find_map(|p| match p {
-                    Prim::Rect { rect: r, colour }
-                        if contains(icon, [r[0], r[1]]) && r[3] <= 1.01 =>
-                    {
-                        Some(colour)
-                    }
+                    Prim::Text {
+                        text,
+                        colour,
+                        rect: r,
+                        ..
+                    } if text == "\u{E148}" && r == icon => Some(colour),
                     _ => None,
                 })
                 .expect("the Panel reset is drawn")
@@ -616,7 +617,7 @@ fn the_longest_value_and_label_never_touch_the_arrows_or_the_edges() {
 }
 
 #[test]
-fn the_arrows_and_the_reset_are_drawn_shapes_that_light_under_the_pointer() {
+fn the_arrows_and_the_reset_are_icons_that_light_under_the_pointer() {
     for scale in SCALES {
         let menu = wide_menu();
         let rect = menu.rect([50.0, 50.0], [1600.0, 1200.0], scale);
@@ -624,38 +625,41 @@ fn the_arrows_and_the_reset_are_drawn_shapes_that_light_under_the_pointer() {
         let l = menu.slider_layout(rect, row, scale);
         let away = [rect[0] + 1.0, rect[1] + 1.0];
         let rest = popover(&menu, rect, away, scale);
-        // No font glyph for an arrow or the reset: only labels are text.
-        for p in &rest {
-            if let Prim::Text { text, rect: r, .. } = p {
-                for button in [l.up, l.down, l.reset] {
-                    assert!(
-                        !contains(button, [r[0] + 1.0, r[1] + 1.0]),
-                        "glyph {text:?}"
-                    );
-                }
-            }
-        }
-        // A pixel-high run of rectangles inside a button is a drawn shape.
-        let shape_rows = |prims: &[Prim], button: [f32; 4]| -> Vec<[f32; 4]> {
-            rect_prims(prims)
-                .into_iter()
-                .filter(|r| contains(button, [r[0] + 0.1, r[1] + 0.1]) && r[3] <= 1.01)
-                .collect()
+        // The icon drawn in `button`: its glyph, face and colour.
+        let icon_in = |prims: &[Prim], button: [f32; 4]| -> (String, Face, [u8; 3]) {
+            prims
+                .iter()
+                .find_map(|p| match p {
+                    Prim::Text {
+                        text,
+                        rect: r,
+                        face: Face::Icon,
+                        colour,
+                        ..
+                    } if *r == button => Some((text.clone(), Face::Icon, *colour)),
+                    _ => None,
+                })
+                .expect("an icon is drawn in the button")
         };
-        for button in [l.up, l.down] {
-            let rows = shape_rows(&rest, button);
-            assert!(rows.len() >= 5 * scale as usize, "{} rows", rows.len());
-            let widest = rows.iter().map(|r| r[2]).fold(0.0, f32::max);
-            assert!(widest >= 8.0 * scale, "triangle {widest} wide");
-            // Lit under the pointer: a lighter ground behind it.
+        let (up, down, reset) = (
+            (l.up, Icon::ChevronUp),
+            (l.down, Icon::ChevronDown),
+            (l.reset, Icon::Reset),
+        );
+        for (button, icon) in [up, down, reset] {
+            // The icon (16 logical px) sits inside its button.
+            assert!(
+                style::TYPE_ICON * scale <= button[2] + 0.01
+                    && style::TYPE_ICON * scale <= button[3]
+            );
+            let (glyph, _, ink) = icon_in(&rest, button);
+            assert_eq!(glyph, icon.glyph().to_string());
+            // Lit under the pointer: white text.
             let lit = popover(&menu, rect, middle(button), scale);
-            assert!(rect_prims(&lit).len() > rect_prims(&rest).len());
+            let (_, _, lit_ink) = icon_in(&lit, button);
+            assert_ne!(ink, lit_ink);
+            assert_eq!(lit_ink, style::TEXT_HIGH);
         }
-        // The reset is a ring with an arrowhead, many pixels, not a hairline.
-        let ring: f32 = shape_rows(&rest, l.reset).iter().map(|r| r[2]).sum();
-        assert!(ring >= 30.0 * scale * scale, "{ring}");
-        let lit = popover(&menu, rect, middle(l.reset), scale);
-        assert!(rect_prims(&lit).len() > rect_prims(&rest).len());
     }
 }
 

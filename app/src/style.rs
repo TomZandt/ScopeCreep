@@ -49,6 +49,57 @@ pub const TYPE_LABEL_LINE: f32 = 1.4;
 /// Text is 13 with a floor of 12 (#226).
 pub const TYPE_SCALE: f32 = 12.0;
 pub const TYPE_SCALE_LINE: f32 = 1.3;
+/// An icon's glyph: 16 at rest (never smaller, so an arrow inside a 20 x 24 hit area reads), one line tall.
+pub const TYPE_ICON: f32 = 16.0;
+pub const TYPE_ICON_LINE: f32 = 1.0;
+/// The wordmark and display headings (Anton).
+pub const TYPE_WORDMARK: f32 = 18.0;
+pub const TYPE_WORDMARK_LINE: f32 = 1.2;
+/// The wordmark's tracking, as a share of its size (CSS letter-spacing, the trial's .06 em).
+pub const WORDMARK_TRACKING: f32 = 0.06;
+
+// Fonts (#238, ADR 0045). Everything is bundled: DM Mono is the interface font (all text, Regular, with Medium for
+// emphasis) and Anton is the wordmark and display headings only. They load from `app/assets/fonts/` (see
+// `fonts.rs`), so nothing depends on what the machine has installed.
+/// The family name of the interface font.
+pub const FONT_INTERFACE: &str = "DM Mono";
+/// The family name of the wordmark font (the About popover's title, the wordmark, the Stylesheet; never small chrome).
+pub const FONT_WORDMARK: &str = "Anton";
+/// The family name of the icon font: Lucide, subset to the glyphs the app draws (ADR 0046).
+pub const FONT_ICON: &str = "lucide";
+/// The weight of emphasis in the interface font (CSS numbering): the focused Panel name and headings.
+pub const FONT_EMPHASIS_WEIGHT: u16 = 500;
+
+/// Which font a piece of chrome text is set in.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
+pub enum FontRole {
+    /// DM Mono Regular: labels, values, menus, tags, tooltips, Panel names, chips.
+    #[default]
+    Interface,
+    /// DM Mono Medium: emphasis.
+    Emphasis,
+    /// Anton: the wordmark and display headings.
+    Wordmark,
+    /// Lucide: the icons, one glyph each (`components::Icon`).
+    Icon,
+}
+
+impl FontRole {
+    pub fn family(self) -> &'static str {
+        match self {
+            FontRole::Interface | FontRole::Emphasis => FONT_INTERFACE,
+            FontRole::Wordmark => FONT_WORDMARK,
+            FontRole::Icon => FONT_ICON,
+        }
+    }
+    /// The weight in CSS numbering.
+    pub fn weight(self) -> u16 {
+        match self {
+            FontRole::Emphasis => FONT_EMPHASIS_WEIGHT,
+            _ => 400,
+        }
+    }
+}
 
 // Spacing.
 /// Around the Window's edge and between the Panels.
@@ -178,14 +229,7 @@ pub const SPACE_VALUE_ARROWS: f32 = 22.0;
 /// The gap from a slider's track to its value box and from the box to its reset icon (#237).
 pub const SPACE_SLIDER_BOX_GAP: f32 = 10.0;
 pub const SPACE_RESET_GAP: f32 = 8.0;
-/// The drawn arrows and reset icon (#237): an arrow triangle's width and height, the reset ring's diameter and
-/// stroke, and its arrowhead's length and half-width. Drawn from rectangles, not font glyphs.
-pub const SPACE_ARROW_WIDTH: f32 = 10.0;
-pub const SPACE_ARROW_HEIGHT: f32 = 6.0;
-pub const SPACE_RESET_RING: f32 = 12.0;
-pub const SPACE_RESET_STROKE: f32 = 1.6;
-pub const SPACE_RESET_HEAD: f32 = 4.5;
-pub const SPACE_RESET_HEAD_HALF: f32 = 3.2;
+/// The reset icon's button (#237). The arrows and the reset are Lucide icons at `TYPE_ICON` (#238, ADR 0046).
 pub const SPACE_RESET_ICON: f32 = 24.0;
 /// The Panel settings popover (#225): its width, the height of a choice row, the extra room above a group's
 /// heading, the room round the popover, and the label column in front of a slider.

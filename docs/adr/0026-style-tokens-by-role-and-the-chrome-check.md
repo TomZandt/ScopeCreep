@@ -18,3 +18,5 @@ The Window's chrome (the menu, labels, scale numbers, status line, borders and g
 
 - New components (title bar, chips, slider, popover, tooltip; #115 onward) take their colours and sizes from `style.rs` and are added to the check's list.
 - Displays' own plot greys (grid, marks) are still local; moving the ones that are chrome rather than measurement is a follow-up.
+
+- **Fonts and icons (#238):** text is DM Mono and symbols are Lucide icons, bundled; the font families and icon size are tokens in `style.rs` (ADR 0045, ADR 0046).

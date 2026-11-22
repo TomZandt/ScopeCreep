@@ -23,3 +23,5 @@ Spec #113 needs one set of parts (chip, segmented control, slider, popover, tool
 ## Update (ADR 0044, #226)
 
 Chips that are on are accent text with a thin accent line on a lighter grey (not a filled accent), and hover is a neutral lift. The accent is the user's colour (default #d2ff00).
+
+- **Fonts and icons (#238):** the text in a prim is DM Mono (or Anton for the wordmark face) and an icon is a text prim in the icon face (`Icon::draw`), so the drawing stays rectangles and text. The layout estimate of ADR 0027 still holds: `app/tests/fonts_fit.rs` checks it against the real font (ADR 0045, ADR 0046).

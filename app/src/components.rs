@@ -34,6 +34,12 @@ pub enum Face {
     Notice,
     Label,
     Scale,
+    /// Label-sized emphasis: the focused Panel name, headings (DM Mono Medium, #238).
+    Strong,
+    /// The wordmark and display headings, in Anton (#238). Never small chrome.
+    Wordmark,
+    /// An icon glyph, in the icon font (#238, ADR 0046).
+    Icon,
 }
 
 impl Face {
@@ -43,7 +49,71 @@ impl Face {
             Face::Notice => (style::TYPE_NOTICE, style::TYPE_NOTICE_LINE),
             Face::Label => (style::TYPE_LABEL, style::TYPE_LABEL_LINE),
             Face::Scale => (style::TYPE_SCALE, style::TYPE_SCALE_LINE),
+            Face::Strong => (style::TYPE_LABEL, style::TYPE_LABEL_LINE),
+            Face::Wordmark => (style::TYPE_WORDMARK, style::TYPE_WORDMARK_LINE),
+            Face::Icon => (style::TYPE_ICON, style::TYPE_ICON_LINE),
         }
+    }
+
+    /// The font role of this face: every face is DM Mono (the interface font) except the wordmark's Anton (#238).
+    pub fn font(self) -> style::FontRole {
+        match self {
+            Face::Notice | Face::Label | Face::Scale => style::FontRole::Interface,
+            Face::Strong => style::FontRole::Emphasis,
+            Face::Wordmark => style::FontRole::Wordmark,
+            Face::Icon => style::FontRole::Icon,
+        }
+    }
+}
+
+/// The icons (ADR 0046): Lucide glyphs from the bundled, subset icon font. This is the one place that maps an icon to
+/// its codepoint; to add one, extend the subset and the table in `app/assets/fonts/README.md`, then add a variant.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Icon {
+    Plus,
+    ChevronUp,
+    ChevronDown,
+    ChevronRight,
+    /// Reset (Lucide's rotate-ccw).
+    Reset,
+    /// The settings button (Lucide's ellipsis).
+    Ellipsis,
+    Close,
+}
+
+impl Icon {
+    pub const ALL: [Icon; 7] = [
+        Icon::Plus,
+        Icon::ChevronUp,
+        Icon::ChevronDown,
+        Icon::ChevronRight,
+        Icon::Reset,
+        Icon::Ellipsis,
+        Icon::Close,
+    ];
+
+    /// The glyph's codepoint in the icon font (a private-use character).
+    pub fn glyph(self) -> char {
+        match self {
+            Icon::Plus => '\u{E13D}',
+            Icon::ChevronUp => '\u{E070}',
+            Icon::ChevronDown => '\u{E06D}',
+            Icon::ChevronRight => '\u{E06F}',
+            Icon::Reset => '\u{E148}',
+            Icon::Ellipsis => '\u{E0B6}',
+            Icon::Close => '\u{E1B2}',
+        }
+    }
+
+    /// The icon centred in `area`, tinted `colour`.
+    pub fn draw(self, area: [f32; 4], colour: [u8; 3]) -> Prim {
+        text(
+            &self.glyph().to_string(),
+            area,
+            Face::Icon,
+            colour,
+            Align::Centre,
+        )
     }
 }
 
@@ -648,12 +718,15 @@ impl Slider {
                     style::STATE_HOVER,
                 ));
             }
-            prims.extend(symbol(
-                if up { Symbol::Up } else { Symbol::Down },
+            prims.push(control_icon(
+                if up {
+                    Icon::ChevronUp
+                } else {
+                    Icon::ChevronDown
+                },
                 button,
                 !disabled,
                 lit,
-                scale,
             ));
         }
         prims.extend(reset_icon(
@@ -666,138 +739,29 @@ impl Slider {
     }
 }
 
-/// Filled shape `inside` (a test on device-pixel centres), within `bounds`, as one rectangle per run of pixels.
-fn shape(bounds: [f32; 4], colour: Rgb, inside: impl Fn(f32, f32) -> bool) -> Vec<Prim> {
-    let mut prims = Vec::new();
-    let (x0, y0) = (bounds[0].floor(), bounds[1].floor());
-    let (x1, y1) = (
-        (bounds[0] + bounds[2]).ceil(),
-        (bounds[1] + bounds[3]).ceil(),
-    );
-    let mut y = y0;
-    while y < y1 {
-        let mut run: Option<f32> = None;
-        let mut x = x0;
-        while x <= x1 {
-            let on = x < x1 && inside(x + 0.5, y + 0.5);
-            match (on, run) {
-                (true, None) => run = Some(x),
-                (false, Some(start)) => {
-                    prims.push(rect([start, y, x - start, 1.0], colour));
-                    run = None;
-                }
-                _ => {}
-            }
-            x += 1.0;
-        }
-        y += 1.0;
-    }
-    prims
+/// An icon centred in its button's `area`: bright at rest, white when `lit` (under the pointer), dim when not
+/// `enabled`. The value box's arrows and the reset use it (#238, ADR 0046).
+fn control_icon(icon: Icon, area: [f32; 4], enabled: bool, lit: bool) -> Prim {
+    icon.draw(
+        area,
+        if !enabled {
+            style::TEXT_DISABLED
+        } else if lit {
+            style::TEXT_HIGH
+        } else {
+            style::TEXT_PRIMARY
+        },
+    )
 }
 
-/// Whether `p` is inside the triangle `a`, `b`, `c`.
-fn in_triangle(p: [f32; 2], a: [f32; 2], b: [f32; 2], c: [f32; 2]) -> bool {
-    let side = |p: [f32; 2], q: [f32; 2], r: [f32; 2]| {
-        (p[0] - r[0]) * (q[1] - r[1]) - (q[0] - r[0]) * (p[1] - r[1])
-    };
-    let (d1, d2, d3) = (side(p, a, b), side(p, b, c), side(p, c, a));
-    let neg = d1 < 0.0 || d2 < 0.0 || d3 < 0.0;
-    let pos = d1 > 0.0 || d2 > 0.0 || d3 > 0.0;
-    !(neg && pos)
-}
-
-/// The small symbols of the controls (the value box's arrows and the reset). The one place they are drawn, so a
-/// font icon can replace the drawn shapes (#238) without touching layout, hit areas or tests.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum Symbol {
-    Up,
-    Down,
-    Reset,
-}
-
-/// `kind` drawn centred in `area` (its button), bright at rest, white when `lit`, dim when not `enabled`.
-pub fn symbol(kind: Symbol, area: [f32; 4], enabled: bool, lit: bool, scale: f32) -> Vec<Prim> {
-    match kind {
-        Symbol::Up => arrow(area, true, enabled, lit, scale),
-        Symbol::Down => arrow(area, false, enabled, lit, scale),
-        Symbol::Reset => ring(area, enabled, lit, scale),
-    }
-}
-
-/// An up or down arrow button's filled triangle, centred in `button`. Bright at rest, white when `lit`, dim when
-/// the button is not `enabled`.
-fn arrow(button: [f32; 4], up: bool, enabled: bool, lit: bool, scale: f32) -> Vec<Prim> {
-    let (w, h) = (
-        style::SPACE_ARROW_WIDTH * scale,
-        style::SPACE_ARROW_HEIGHT * scale,
-    );
-    let (cx, cy) = (button[0] + button[2] / 2.0, button[1] + button[3] / 2.0);
-    let (tip, base) = if up {
-        (cy - h / 2.0, cy + h / 2.0)
-    } else {
-        (cy + h / 2.0, cy - h / 2.0)
-    };
-    let (a, b, c) = ([cx, tip], [cx - w / 2.0, base], [cx + w / 2.0, base]);
-    let colour = if !enabled {
-        style::rgb(style::TEXT_DISABLED)
-    } else if lit {
-        style::rgb(style::TEXT_HIGH)
-    } else {
-        style::rgb(style::TEXT_PRIMARY)
-    };
-    shape([cx - w / 2.0, cy - h / 2.0, w, h], colour, |x, y| {
-        in_triangle([x, y], a, b, c)
-    })
-}
-
-/// The circular reset arrow, drawn from pixels (a ring open at the top with an arrowhead turning into the
-/// gap): dim when there is nothing to reset, bright at rest, white on a lighter ground under the pointer.
-pub fn reset_icon(area: [f32; 4], enabled: bool, hover: bool, scale: f32) -> Vec<Prim> {
+/// The reset arrow (Lucide's rotate-ccw): dim when there is nothing to reset, bright at rest, white on a lighter
+/// ground under the pointer.
+pub fn reset_icon(area: [f32; 4], enabled: bool, hover: bool, _scale: f32) -> Vec<Prim> {
     let mut prims = Vec::new();
     if enabled && hover {
         prims.push(rect(area, style::STATE_HOVER));
     }
-    prims.extend(symbol(Symbol::Reset, area, enabled, hover, scale));
-    prims
-}
-
-/// The reset ring and its arrowhead, from pixels.
-fn ring(area: [f32; 4], enabled: bool, hover: bool, scale: f32) -> Vec<Prim> {
-    let mut prims = Vec::new();
-    let colour = if !enabled {
-        style::rgb(style::TEXT_DISABLED)
-    } else if hover {
-        style::rgb(style::TEXT_HIGH)
-    } else {
-        style::rgb(style::TEXT_PRIMARY)
-    };
-    let (cx, cy) = (area[0] + area[2] / 2.0, area[1] + area[3] / 2.0);
-    let stroke = style::SPACE_RESET_STROKE * scale;
-    let radius = style::SPACE_RESET_RING * scale / 2.0 - stroke / 2.0;
-    // Angles run clockwise from east (y points down); the ring is open between -135 and -45 degrees, at the top.
-    let end = -45.0_f32.to_radians();
-    let dir = [end.sin(), -end.cos()];
-    let normal = [-dir[1], dir[0]];
-    let at = [cx + radius * end.cos(), cy + radius * end.sin()];
-    let (head, half) = (
-        style::SPACE_RESET_HEAD * scale,
-        style::SPACE_RESET_HEAD_HALF * scale,
-    );
-    let tip = [at[0] + dir[0] * head, at[1] + dir[1] * head];
-    let left = [at[0] + normal[0] * half, at[1] + normal[1] * half];
-    let right = [at[0] - normal[0] * half, at[1] - normal[1] * half];
-    let reach = radius + stroke;
-    prims.extend(shape(
-        [cx - reach, cy - reach, 2.0 * reach, 2.0 * reach],
-        colour,
-        |x, y| {
-            let (dx, dy) = (x - cx, y - cy);
-            let angle = dy.atan2(dx).to_degrees();
-            let on_ring = ((dx * dx + dy * dy).sqrt() - radius).abs() <= stroke / 2.0
-                && !(angle > -135.0 && angle < -45.0);
-            on_ring || in_triangle([x, y], tip, left, right)
-        },
-    ));
+    prims.push(control_icon(Icon::Reset, area, enabled, hover));
     prims
 }
 
@@ -1104,7 +1068,7 @@ pub fn edge_plus_draw(frame: [f32; 4], lit: Option<Edge>, scale: f32) -> Vec<Pri
             State::Normal
         };
         prims.push(rect(r, fill(state, false, style::STATE_ON)));
-        prims.push(text("+", r, Face::Label, ink(state, false), Align::Centre));
+        prims.push(Icon::Plus.draw(r, ink(state, false)));
     }
     prims
 }
@@ -1371,7 +1335,7 @@ impl TitleBar {
         prims.push(text(
             &self.name,
             l.name,
-            Face::Label,
+            if focused { Face::Strong } else { Face::Label },
             if focused {
                 style::TEXT_HIGH
             } else {
@@ -1405,25 +1369,17 @@ impl TitleBar {
 }
 
 /// The settings button: three dots in a small button that lights under the pointer (a neutral lift, white dots).
-pub fn settings_button(area: [f32; 4], state: State, scale: f32) -> Vec<Prim> {
+pub fn settings_button(area: [f32; 4], state: State, _scale: f32) -> Vec<Prim> {
     let mut prims = Vec::new();
     if matches!(state, State::Hover | State::Pressed) {
         prims.push(rect(area, fill(state, false, style::STATE_ON)));
     }
-    let dot = 2.0 * style::LINE_WEIGHT * scale;
     let colour = match state {
         State::Disabled => style::TEXT_DISABLED,
         State::Hover | State::Pressed => style::TEXT_HIGH,
         State::Normal => style::TEXT_SECONDARY,
     };
-    let step = 2.0 * dot;
-    for i in 0..3 {
-        let x = area[0] + area[2] / 2.0 + (i as f32 - 1.0) * step - dot / 2.0;
-        prims.push(rect(
-            [x, area[1] + (area[3] - dot) / 2.0, dot, dot],
-            style::rgb(colour),
-        ));
-    }
+    prims.push(Icon::Ellipsis.draw(area, colour));
     prims
 }
 
@@ -1774,7 +1730,7 @@ impl DropMenu {
                 MenuEntry::Heading(label) => prims.push(text(
                     label,
                     [r[0] + heading_left, r[1], r[2] - 2.0 * heading_left, r[3]],
-                    Face::Label,
+                    Face::Strong,
                     style::TEXT_SECONDARY,
                     Align::Left,
                 )),

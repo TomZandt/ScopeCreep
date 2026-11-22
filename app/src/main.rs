@@ -194,6 +194,8 @@ struct TextStyle {
     line: f32,
     align: Option<glyphon::cosmic_text::Align>,
     wrap: bool,
+    /// The font role (#238): the system sans, the number font or the wordmark font.
+    font: style::FontRole,
 }
 
 impl TextStyle {
@@ -203,6 +205,7 @@ impl TextStyle {
         line: style::TYPE_LABEL_LINE,
         align: None,
         wrap: true,
+        font: style::FontRole::Interface,
     };
     /// A notice on its own over the Panel.
     const NOTICE: TextStyle = TextStyle {
@@ -210,6 +213,7 @@ impl TextStyle {
         line: style::TYPE_NOTICE_LINE,
         align: Some(glyphon::cosmic_text::Align::Center),
         wrap: true,
+        font: style::FontRole::Interface,
     };
 }
 
@@ -248,7 +252,9 @@ impl Text {
         }) {
             return;
         }
-        let attrs = Attrs::new().family(Family::SansSerif);
+        let attrs = Attrs::new()
+            .family(Family::Name(style::FontRole::family(style.font)))
+            .weight(glyphon::Weight(style.font.weight()));
         self.buffer.set_metrics(Metrics::new(
             style.size * scale,
             style.size * scale * style.line,
@@ -490,7 +496,7 @@ impl AppWindow {
         pages.sweep(&displays, &mut settings.lock().unwrap());
         pages.show_on(&displays);
         write_pages(&pages, &displays.keys());
-        let mut font_system = FontSystem::new();
+        let mut font_system = scopecreep::fonts::font_system();
         let cache = Cache::new(&device);
         let viewport = Viewport::new(&device, &cache);
         let mut atlas = TextAtlas::with_color_mode(
@@ -2224,6 +2230,11 @@ impl AppWindow {
                 &title.name,
                 TextStyle {
                     wrap: false,
+                    font: if self.pages.tree().focused() == Some(i) {
+                        style::FontRole::Emphasis
+                    } else {
+                        style::FontRole::Interface
+                    },
                     ..TextStyle::LABEL
                 },
                 scale,
@@ -2234,6 +2245,7 @@ impl AppWindow {
                 line: style::TYPE_SCALE_LINE,
                 align: None,
                 wrap: false,
+                font: style::FontRole::Interface,
             };
             self.panel_texts[i].tags.set(
                 &mut self.font_system,
@@ -2370,6 +2382,7 @@ impl AppWindow {
                         .then_some(glyphon::cosmic_text::Align::Right)
                 },
                 wrap: false,
+                font: style::FontRole::Interface,
             };
             self.panel_texts[*i].scale[n].set(
                 &mut self.font_system,
@@ -2730,11 +2743,17 @@ impl AppWindow {
                     rect: at,
                     colour,
                     align,
-                    ..
+                    face,
                 } => {
                     if self.menu_texts.len() <= texts_used {
                         self.menu_texts.push(Text::new(&mut self.font_system));
                     }
+                    // An icon or the wordmark sets at its own size; the rest keeps the label's.
+                    let (own_size, own_line) = match face {
+                        components::Face::Icon | components::Face::Wordmark => face.metrics(),
+                        _ => (style::TYPE_LABEL, style::TYPE_LABEL_LINE),
+                    };
+                    let line = own_size * scale * own_line;
                     let align = match align {
                         Align::Left => None,
                         Align::Centre => Some(glyphon::cosmic_text::Align::Center),
@@ -2746,7 +2765,9 @@ impl AppWindow {
                         TextStyle {
                             wrap: false,
                             align,
-                            ..TextStyle::LABEL
+                            font: face.font(),
+                            size: own_size,
+                            line: own_line,
                         },
                         scale,
                         at[2],

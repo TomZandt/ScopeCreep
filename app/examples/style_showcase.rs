@@ -38,7 +38,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         label: Some("style showcase"),
         ..Default::default()
     }))?;
-    let mut font_system = FontSystem::new();
+    let mut font_system = scopecreep::fonts::font_system();
     for scale in [1.0f32, 2.0] {
         let sheet = scopecreep::showcase::showcase(scale);
         let (width, height) = (sheet.size[0].ceil() as u32, sheet.size[1].ceil() as u32);
@@ -170,7 +170,9 @@ fn render(
         };
         buffer.set_text(
             text,
-            &Attrs::new().family(Family::SansSerif),
+            &Attrs::new()
+                .family(Family::Name(face.font().family()))
+                .weight(glyphon::Weight(face.font().weight())),
             Shaping::Advanced,
             align,
         );

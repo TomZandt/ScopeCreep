@@ -24,3 +24,7 @@ ScopeCreep is a professional colour grading tool: the chrome around the picture 
 
 - Checks for a person (queue #219): the lime against the false colour legends (Stops +½ to +1 stop, Arri's green band) at the app, and the look at UHD.
 - The Window's least size and the Panel's least width are quoted in the changelog and the README; tests derive them from the tokens.
+
+## Note (#238)
+
+The tabular numbers this ADR could not give the text renderer are now there: the interface font is DM Mono, whose digits are all one width (ADR 0045). The text sizes and the least sizes above are unchanged.

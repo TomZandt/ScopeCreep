@@ -344,8 +344,11 @@ fn a_slider_states_differ_and_a_disabled_one_is_dimmed() {
             assert_ne!(a, b);
         }
     }
-    // Only the number is text: the arrows and the reset icon are drawn shapes, not font glyphs (#237).
-    assert_eq!(texts(&slider.draw([0.0; 2], State::Normal, 1.0)), ["50"]);
+    // The number, then the two arrows and the reset icon, which are Lucide icons (#238).
+    assert_eq!(
+        texts(&slider.draw([0.0; 2], State::Normal, 1.0)),
+        ["50", "\u{E06D}", "\u{E070}", "\u{E148}"]
+    );
 }
 
 const DEFS: [SettingDef; 2] = [
@@ -528,7 +531,10 @@ fn the_title_bar_draws_its_name_tags_and_one_chip_each_in_its_state() {
         State::Normal,
         1.0,
     );
-    assert_eq!(texts(&prims), ["Waveform", "Rec.709 weights", "Y", "R"]);
+    assert_eq!(
+        texts(&prims),
+        ["Waveform", "Rec.709 weights", "Y", "R", "\u{E0B6}"]
+    );
     let lit = fills(&prims);
     assert!(
         lit.contains(&style::rgba(style::CHANNEL_Y)),
