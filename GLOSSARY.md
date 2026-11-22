@@ -229,12 +229,20 @@ _Avoid_: Shortcut, keybinding, accelerator
 Since spec #196 (ADR 0041) Ctrl+1 to 9 go to pages 1 to 9 and Ctrl+Shift+1 to 9 (save into a slot) are removed; Ctrl+Z (Undo layout change) is added.
 
 **Menu bar**:
-The thin bar across the very top of the Window, with the Colour Setup line at its right end, drawn by the app in the style system's quiet chrome. It holds the app's own Commands in menus (Layout, View, Settings), each entry with its Hotkey beside it. A menu opens on a click on its title and closes on a second click, a click elsewhere or Escape. Panel settings stay in each Panel's popover.
+The thin bar across the very top of the Window, with the Colour Setup line at its right end, drawn by the app in the style system's quiet chrome. It holds the app's own Commands in menus (Layout, View, Settings, Help), each entry with its Hotkey beside it. A menu opens on a click on its title and closes on a second click, a click elsewhere or Escape. Panel settings stay in each Panel's popover.
 _Avoid_: Toolbar (that is a Panel's title bar chips), main menu
 
 **View menu**:
 The menu on the Menu bar between Layout and Settings for display choices that cover the whole Window. Its first entry, "Show legends", shows or hides the legend strip of every Panel that has one, by setting each Panel's own Legend setting (so a Panel can still differ afterwards); it is marked while every legend is on. It runs a Command with no default Hotkey.
 _Avoid_: Display menu, Window menu
+
+**Help menu**:
+The last menu on the Menu bar, after Settings, and the only place in the everyday chrome where ScopeCreep speaks about itself: About ScopeCreep…, Licence…, Website, Report a problem…, Check for updates and Buy Me a Coffee…. Every entry but About opens a page in the browser; the app never goes online itself and never asks for a donation unprompted.
+_Avoid_: About menu, ScopeCreep menu
+
+**About popover**:
+The small popover Help, then About ScopeCreep… opens: the logo, the name, the version and Feed protocol, who made it, the one-line licence summary, and links to the website, the licence and Buy Me a Coffee.
+_Avoid_: About window, splash screen
 
 **Filling the Window**:
 Ctrl+F (a Hotkey) makes the Panel under the pointer take the whole Panel area, with the menu bar, Colour Setup line and status line still there; Ctrl+F again or Escape brings the Panel grid back, and so does showing a Layout. Display state, never saved; while a Panel fills the Window, borders and title bars can't be dragged.
