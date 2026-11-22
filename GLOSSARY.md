@@ -187,6 +187,14 @@ _Avoid_: Pane, stack, container
 A Panel is one instance of a display with a stable id, so a display can be on the Window more than once. The first instance keeps the display's name as its settings key; further ones are "Name 2", "Name 3", numbered when created and never by position (ADR 0039). **Duplicate right** and **Duplicate below** (the Panel section of a popover) make a new instance that takes half of the Panel's cell and starts with a copy of its settings and remembered state; **Replace with** keeps a Panel's place and size and gives it another display on that display's defaults (a display's closed first instance comes back, else a further instance is made). Closing a Panel forgets its settings, and a closed further instance is removed so its number is free again. Zoom and Link reach every picture instance (built in #208).
 _Avoid_: Copy (for the id), clone
 
+**Panel reset**:
+The reset icon at the corner of a Panel popover's Panel section: puts every setting of that one Panel instance back to its display's defaults (#225). What the display remembers for itself (a zoom) and where the Panel sits stay.
+_Avoid_: Clear settings
+
+**Reset all Panels**:
+A Command (id `panels-reset-all`, Settings menu, reassignable in the Hotkeys panel, no default hotkey) that does the Panel reset for every Panel instance on every page. Undo never touches display settings (ADR 0041), so it asks first, in a confirm row in the Settings menu's place (Cancel, which Enter takes, and Reset). The arrangement, zoom, Link, tabs, pages and the accent and app preferences are not touched (#228).
+_Avoid_: Factory reset
+
 **Add panel**:
 A Command (Layout menu, reassignable in the Hotkeys panel, no default hotkey) that opens the list of displays; picking one splits the focused tab group along its longer side (wider than tall: the new Panel on the right; otherwise below) at 50/50 and focuses it. The focused Panel is the one last clicked or added, and has a quiet outline. A page with no Panels shows one large Add panel button. Built in #206: an add with no room is refused with a notice that names the minimum Panel size, and a display already on the page is greyed until Panels can be copied (#208). The **edge +** (built in #209): a **+** on each edge of a Panel, shown only while the pointer is over it, lists the same displays and puts the one picked on that side at 50/50 (the same operation as Add panel with a chosen side, with the same no-room notice, one undo step). Built in #211: a new Panel that has no room (Add panel, edge add or side dock) joins the focused (or target) tab group as a tab instead, with a notice that says so and names the minimum, as one undo step; only Duplicate still refuses.
 _Avoid_: Insert, new window
