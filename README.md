@@ -119,6 +119,7 @@ DaVinci Resolve                                 scopecreep app (Rust + wgpu)
   - [0040](docs/adr/0040-view-controls-live-in-a-view-strip.md): View controls live in a view strip on the menu bar, and title bars are three fixed zones (the strip superseded by 0042)
   - [0041](docs/adr/0041-pages-are-the-layouts-and-auto-layout-is-a-button.md): Pages are the layouts, and Auto layout and Auto resize are one-shot buttons per page
   - [0042](docs/adr/0042-free-to-use-and-modify-commercial-licence-to-sell-or-bundle.md): ScopeCreep is free to use and modify; selling, sharing or bundling needs a commercial licence
+  - [0044](docs/adr/0044-the-brand-accent-and-the-hairline-look.md): The brand accent is lime (a user option in Settings > Appearance) and the chrome is Hairline: grey, the accent only as thin lines and text; the view block is on picture Panels only, chips overflow as "+N", a Panel is at least 255 wide and the Window at least 1420 × 833
   - [0042](docs/adr/0042-view-controls-return-to-every-panel-title-bar.md): View controls return to every Panel's title bar as a block, the Colour Setup line sits in the menu bar row, and a page tab has a right-click menu
   - [0043](docs/adr/0043-the-feed-keeps-its-bytes-and-takes-each-platforms-shared-memory-name.md): The Feed keeps its bytes and takes each platform's shared-memory name (Linux /dev/shm, macOS shm_open, Windows named mapping)
 - [docs/findings/](docs/findings/): what testing showed, one file per ticket.
