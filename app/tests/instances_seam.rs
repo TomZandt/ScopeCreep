@@ -432,16 +432,17 @@ fn a_picture_zoom_and_link_reach_every_picture_instance() {
     let copy = b.duplicate(CLEAN, Dir::Row);
     b.settle();
     let first = b.index(CLEAN);
-    let contents = vec![AREA; b.set.len()];
-    b.set.set_link_from_strip(true, &contents, 1.0);
+    b.set.set_link(true, first);
     b.set.set_zoom(first, AREA, 1.0, 700.0);
     for panel in [first, copy] {
         let r = b.set.zoom(panel, AREA, 1.0).unwrap();
         assert!((r.percent - 700.0).abs() < 1.0, "Panel {panel}: {r:?}");
     }
-    // The strip reads the shared zoom, and Fit brings both back.
-    assert_eq!(b.set.view_strip(&contents, 1.0).readout, "700 %");
-    b.set.fit_all(&contents, 1.0);
+    // Both blocks read the shared zoom, and Fit on one brings both back.
+    for panel in [first, copy] {
+        assert_eq!(b.set.view_block(panel, AREA, 1.0).readout, "700 %");
+    }
+    b.set.fit_panel(copy, AREA, 1.0);
     for panel in [first, copy] {
         let r = b.set.zoom(panel, AREA, 1.0).unwrap();
         assert!(r.percent <= r.fit + 0.01, "Fit: {r:?}");

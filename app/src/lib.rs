@@ -52,7 +52,7 @@ pub mod style;
 pub mod tab_strip;
 pub mod toolbar;
 pub mod vectorscope;
-pub mod view_strip;
+pub mod view_block;
 pub mod viewer_gate;
 pub mod waveform;
 pub mod waveform_scale;

@@ -249,6 +249,18 @@ impl Toolbar {
     /// by the toolbar's own order, into [`Toolbar::collapsed`] for the popover to offer. Once any has left the
     /// settings button is counted, as the popover now holds them.
     pub fn fit_to(&mut self, bar_width: f32, settings_button: bool, scale: f32) {
+        self.fit_to_reserving(bar_width, settings_button, 0.0, scale);
+    }
+
+    /// [`Toolbar::fit_to`] on a title bar that also holds the view block (ADR 0042): `reserve` device pixels at its
+    /// right end ([`crate::components::TitleBar::view_reserve`]) are not the chips'.
+    pub fn fit_to_reserving(
+        &mut self,
+        bar_width: f32,
+        settings_button: bool,
+        reserve: f32,
+        scale: f32,
+    ) {
         let needed = |chips: &[Chip], groups: &[usize], button: bool| {
             let button = if button {
                 (crate::style::SPACE_SETTINGS_BUTTON + crate::style::SPACE_CHIP_GAP) * scale
@@ -257,6 +269,7 @@ impl Toolbar {
             };
             crate::components::chip_row_width_grouped(chips, groups, scale)
                 + button
+                + reserve
                 + 2.0 * crate::style::SPACE_BAR_PAD * scale
         };
         if needed(&self.chips, &self.groups, settings_button) <= bar_width {

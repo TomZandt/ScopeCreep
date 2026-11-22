@@ -436,6 +436,7 @@ fn title(chips: usize) -> TitleBar {
         chips: all[..chips].to_vec(),
         groups: vec![],
         settings_button: true,
+        view: false,
     }
 }
 
@@ -491,6 +492,7 @@ fn a_title_bar_without_tags_or_chips_has_nothing_to_move() {
         chips: vec![],
         groups: vec![],
         settings_button: false,
+        view: false,
     };
     let l = bare.layout([0.0, 0.0, 300.0, 100.0], 1.0);
     assert!(l.tags.is_none() && !l.tags_in_tooltip && l.settings.is_none() && l.chips.is_empty());

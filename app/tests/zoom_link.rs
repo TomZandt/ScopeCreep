@@ -7,8 +7,10 @@ const BIG: [f32; 4] = [0.0, 0.0, 800.0, 450.0];
 const SMALL: [f32; 4] = [0.0, 0.0, 320.0, 180.0];
 const FRAME: [u32; 2] = [1600, 900];
 
+/// Two Panels on a Link that is switched off (a new Link opens on, ADR 0035).
 fn pair() -> (PanelZoom, PanelZoom, Link) {
     let (a, b, link) = (PanelZoom::default(), PanelZoom::default(), Link::default());
+    link.set(false, None);
     a.link_to(&link);
     b.link_to(&link);
     (a, b, link)
@@ -54,7 +56,8 @@ fn near(a: [f32; 2], b: [f32; 2]) -> bool {
 }
 
 #[test]
-fn link_is_off_until_turned_on_and_panels_zoom_alone() {
+fn a_new_link_opens_on_and_with_it_off_panels_zoom_alone() {
+    assert!(Link::default().on(), "Link opens on");
     let (a, b, link) = pair();
     assert!(!link.on());
     wheel(&a, BIG, [400.0, 225.0], 2.0);

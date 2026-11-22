@@ -9,17 +9,16 @@ use crate::components::{DropMenu, MenuBar};
 use crate::layout_tree::LayoutTree;
 use crate::panel_grid::min_panel_size;
 use crate::style;
-use crate::view_strip::ViewStrip;
 
 /// The smallest the Window can be made (#172), in logical pixels: the default layout of `grid` with every Panel at
-/// least its minimum size, under the menu bar, the Colour Setup line and a margin and over a two-line status row
-/// (a notice can take the second); room for the menu bar row's titles and the view strip (ADR 0040); and room under the menu bar for the largest of `menus`, so no menu is cut off.
+/// least its minimum size, under the menu bar row (which also holds the Colour Setup line, ADR 0042) and the Page
+/// bar and a margin and over a two-line status row (a notice can take the second); room for the menu bar row's
+/// titles; and room under the menu bar for the largest of `menus`, so no menu is cut off.
 /// A layout the user dragged is not part of it: making the Window smaller than that layout was arranged at shrinks
 /// its Panels with it.
 pub fn min_window(grid: &LayoutTree, menus: &[DropMenu]) -> [f32; 2] {
     let area = grid.min_area(MARGIN, min_panel_size(1.0));
     let chrome = MenuBar::height(1.0)
-        + crate::components::BarKind::Top.height(1.0)
         + crate::page_bar::PageBar::height(1.0)
         + MARGIN
         + 2.0 * style::SPACE_STATUS_ROW;
@@ -29,12 +28,13 @@ pub fn min_window(grid: &LayoutTree, menus: &[DropMenu]) -> [f32; 2] {
         .fold((0.0, 0.0), |(w, h), [mw, mh]| {
             (f32::max(w, mw), f32::max(h, mh))
         });
-    // The menu bar row holds the menu titles and, at its right end, the view strip (ADR 0040).
+    // The menu bar row holds the menu titles and, at its right end, the Colour Setup line, which is cut with an
+    // ellipsis to the room left, so only the titles count.
     let titles_right = crate::menu_bar::bar()
         .title_rects(0.0, 0.0, 1.0)
         .last()
         .map_or(0.0, |r| r[0] + r[2]);
-    let bar_width = titles_right + ViewStrip::width(1.0) + style::SPACE_BAR_PAD;
+    let bar_width = titles_right + style::SPACE_BAR_PAD;
     [
         (area[0] + 2.0 * MARGIN)
             .max(menu_width)

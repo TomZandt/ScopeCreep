@@ -94,7 +94,7 @@ Everything the Window draws that is not a measurement: the menu, labels, scale n
 _Avoid_: UI, theme
 
 **Top bar**:
-The one line across the top of the Window that says the Colour Setup: Timeline → Output, Levels, where it came from, and whether Output Conversion is exact or approximated. The Panels do not repeat it.
+The one line at the right end of the menu bar row that says the Colour Setup (it is cut with an ellipsis to the room beside the menus, and its full text is the hover): Timeline → Output, Levels, where it came from, and whether Output Conversion is exact or approximated. The Panels do not repeat it.
 _Avoid_: header, toolbar
 
 **Title bar tag**:
@@ -143,7 +143,7 @@ The one part of the code every Picture View draws through. It places the frame i
 _Avoid_: Renderer, canvas
 
 **Zoom**:
-How much of a picture Panel's frame is shown, in percent of source pixels: 100 % is one picture pixel to one device pixel. It runs from Fit to 800 %, free below 100 % and in whole steps (200, 300 ... 800 %) above, so every picture pixel is an exact square. The scroll wheel zooms toward the pointer; a read-only zoom tag on the title bar says it, and Fit in the view strip takes every picture Panel back to Fit. It is not a setting: it is not saved and every session starts at Fit (ADR 0035). On every picture Panel in the Window, each on its own, or all together while Link is on.
+How much of a picture Panel's frame is shown, in percent of source pixels: 100 % is one picture pixel to one device pixel. It runs from Fit to 800 %, free below 100 % and in whole steps (200, 300 ... 800 %) above, so every picture pixel is an exact square. The scroll wheel zooms toward the pointer; the Panel's view block says it, and Fit there takes the Panel (every picture Panel while Link is on) back to Fit. It is not a setting: it is not saved and every session starts at Fit (ADR 0035). On every picture Panel in the Window, each on its own, or all together while Link is on.
 _Avoid_: Magnify (that is the Loupe), scale
 
 **Pan**:
@@ -153,7 +153,7 @@ Moving a zoomed picture inside its Panel by dragging with the middle mouse butto
 The zoom that shows the whole frame in the Panel, as a picture Panel always did. The zoom tag says how much that scales the frame: "Fit 23 %". A frame already larger than 100 % at Fit (a small frame in a big Panel) starts at Fit and zooms on in whole steps. Z (a Hotkey) toggles the picture Panel under the pointer between Fit and the zoom and spot it last left, like Resolve's Shift+Z.
 
 **Link**:
-One Window-wide switch, in the view strip (lit while on). It is on in a first session; a saved choice wins. With Link on, every picture Panel shares one zoom and one centre point in picture coordinates, so Panels of different sizes look at the same pixels and each fits its own Panel at Fit; scroll, middle-drag and the view strip's Fit on any of them move all of them. Turning it on brings every Panel to the zoom and spot of the first Panel zoomed in (else the first picture Panel); turning it off leaves each where it is. Link is remembered between sessions; zoom and pan are not (ADR 0035, 0015).
+One Window-wide switch, in every Panel's view block (lit while on). It is on in a first session; a saved choice wins. With Link on, every picture Panel shares one zoom and one centre point in picture coordinates, so Panels of different sizes look at the same pixels and each fits its own Panel at Fit; scroll, middle-drag and Fit on any of them move all of them. Turning it on brings every Panel to the zoom and spot of the Panel whose Link was clicked; turning it off leaves each where it is. Link is remembered between sessions; zoom and pan are not (ADR 0035, 0015).
 
 **Matte**:
 A black bar around the picture: whole rows at the top and bottom, or whole columns at the sides, in which every pixel is exactly black. The Picture stage finds them once per frame and draws them black on every Picture View. A black pixel inside the picture is not a matte.
@@ -192,7 +192,7 @@ Dragging a Panel's title or tab onto another tab group: the outer quarter neares
 _Avoid_: Snap, drop zone (for the overlay)
 
 **Page**:
-A saved layout shown as a tab in the Page bar under the Colour Setup line: its own Layout tree, focused tab group and undo. The pages and the current page are remembered; only the current page's Panels measure and draw. New pages come from Empty page, Default layout (the 7 Panels), a copy of the current one (each Panel's settings copied) or a template, arranged once with Auto layout for the Feed's aspect (16:9 with no Feed) and named after it: All 7 Panels, Picture views (Channel Viewer, False Colour - Arri, False Colour - Stops, Saturation, Skin Tone), Scopes (Channel Viewer, Waveform, Vectorscope) and Picture only (the Channel Viewer); there are at most 12; Ctrl+1 to 9 go to pages 1 to 9, and the first nine tabs show their number, "[1] Colour" (ADR 0041).
+A saved layout shown as a tab in the Page bar under the menu bar row (right-click a tab for the Layout menu's entries): its own Layout tree, focused tab group and undo. The pages and the current page are remembered; only the current page's Panels measure and draw. New pages come from Empty page, Default layout (the 7 Panels), a copy of the current one (each Panel's settings copied) or a template, arranged once with Auto layout for the Feed's aspect (16:9 with no Feed) and named after it: All 7 Panels, Picture views (Channel Viewer, False Colour - Arri, False Colour - Stops, Saturation, Skin Tone), Scopes (Channel Viewer, Waveform, Vectorscope) and Picture only (the Channel Viewer); there are at most 12; Ctrl+1 to 9 go to pages 1 to 9, and the first nine tabs show their number, "[1] Colour" (ADR 0041).
 _Avoid_: Workspace (Resolve's word for its page arrangement), slot, preset
 
 **Auto layout**:
@@ -207,9 +207,12 @@ _Avoid_: Fit layout, auto fit
 Ctrl+Z (a Command, also in the Layout menu, greyed when there is nothing to undo): steps back through the last 20 changes to the layout, one change at a time (a divider drag is one change). It holds the arrangement only, so it never touches a Panel's settings or state, and it is session only. Each layout tree keeps its own history, so each Page has its own (ADR 0041).
 _Avoid_: Revert, history (for the control)
 
-**View strip**:
-Fit, the zoom readout and Link, at the right end of the menu bar row: the Window-wide view controls, always in the same place. The readout is always a percentage ("62 %"), or "Mixed" when Link is off and picture Panels differ; "Fit" is only the button. A picture Panel keeps a read-only zoom tag (ADR 0040).
+**View block**:
+Fit, the Panel's zoom readout and Link, at the top right of every Panel's title bar (scopes too, greyed where nothing zooms), after a divider from the Panel's own chips and before the settings button, so it is always in the same place. The readout is a percentage ("62 %"); "Fit" is only the button; Link is the one Window-wide switch (ADR 0042).
 _Avoid_: View toolbar, zoom bar
+
+**View strip** (former term):
+The row of Fit, a shared zoom readout and Link at the right end of the menu bar that ADR 0040 introduced in spec #196 (#205). Replaced by the view block on every Panel's title bar (#224, ADR 0042); it appears only in older changelog lines and ADR 0040.
 
 **Command**:
 Something the app does that a menu entry offers and a Hotkey can trigger, such as showing a layout or saving one into a slot. Every command is one entry in one table, with a label and a default Hotkey, and works from its menu with no Hotkey (ADR 0036).
@@ -222,7 +225,7 @@ _Avoid_: Shortcut, keybinding, accelerator
 Since spec #196 (ADR 0041) Ctrl+1 to 9 go to pages 1 to 9 and Ctrl+Shift+1 to 9 (save into a slot) are removed; Ctrl+Z (Undo layout change) is added.
 
 **Menu bar**:
-The thin bar across the very top of the Window, above the Colour Setup line, drawn by the app in the style system's quiet chrome. It holds the app's own Commands in menus (Layout, View, Settings), each entry with its Hotkey beside it. A menu opens on a click on its title and closes on a second click, a click elsewhere or Escape. Panel settings stay in each Panel's popover.
+The thin bar across the very top of the Window, with the Colour Setup line at its right end, drawn by the app in the style system's quiet chrome. It holds the app's own Commands in menus (Layout, View, Settings), each entry with its Hotkey beside it. A menu opens on a click on its title and closes on a second click, a click elsewhere or Escape. Panel settings stay in each Panel's popover.
 _Avoid_: Toolbar (that is a Panel's title bar chips), main menu
 
 **View menu**:

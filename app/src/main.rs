@@ -22,7 +22,7 @@ use glyphon::{
 };
 use scopecreep::auto_resize;
 use scopecreep::commands::{Command, Hotkey, Hotkeys, Key};
-use scopecreep::components::{self, Align, BarKind, MenuBar, Prim, State, Tooltip};
+use scopecreep::components::{self, Align, MenuBar, Prim, State, Tooltip};
 use scopecreep::display::{DisplaySet, Pointer};
 use scopecreep::dock::{self, Zone};
 use scopecreep::feed_loop::{FeedLoop, Texts};
@@ -44,7 +44,7 @@ use scopecreep::settings::{Amount, EditKey, Menu, PanelAction, PanelSettings};
 use scopecreep::style;
 use scopecreep::tab_strip;
 use scopecreep::toolbar::{ChipAction, Toolbar};
-use scopecreep::view_strip::{self, StripPart, ViewStrip};
+use scopecreep::view_block::{self, BlockPart, ViewBlock};
 use scopecreep::window_text;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -73,8 +73,10 @@ enum Hover {
     Chip(usize, usize),
     /// Panel `.0`'s settings button.
     SettingsButton(usize),
-    /// Fit or Link in the view strip.
-    Strip(StripPart),
+    /// Fit or Link in Panel `.0`'s view block.
+    View(usize, BlockPart),
+    /// The Colour Setup line in the menu bar row (its full text is the hover).
+    ColourSetup,
     Status,
 }
 
@@ -83,6 +85,8 @@ enum Hover {
 enum ToolbarHit {
     Chip(usize, usize),
     Settings(usize),
+    /// Fit or Link in Panel `.0`'s view block.
+    View(usize, BlockPart),
 }
 
 /// Where the border positions are remembered: `$XDG_CONFIG_HOME/scopecreep/panel-grid`, else
@@ -349,8 +353,11 @@ struct AppWindow {
     /// Each Panel's toolbar and where its chips and settings button were last drawn (device pixels).
     toolbars: Vec<Toolbar>,
     title_layouts: Vec<components::TitleLayout>,
-    /// The view strip as last drawn (ADR 0040): what its buttons hit.
-    view_strip: ViewStrip,
+    /// Each Panel's view block as last drawn (ADR 0042): what its buttons hit.
+    view_blocks: Vec<ViewBlock>,
+    /// The Colour Setup line in the menu bar row as last drawn, and its full text for the hover.
+    colour_setup: window_text::ColourSetupLine,
+    colour_setup_full: String,
     status_bar: [f32; 4],
     status_hover: String,
     stop: Arc<AtomicBool>,
@@ -613,11 +620,9 @@ impl AppWindow {
             title_hovers: Vec::new(),
             toolbars: Vec::new(),
             title_layouts: Vec::new(),
-            view_strip: ViewStrip {
-                enabled: false,
-                readout: String::new(),
-                link: true,
-            },
+            view_blocks: Vec::new(),
+            colour_setup: window_text::colour_setup_line("", 0.0, 1.0),
+            colour_setup_full: String::new(),
             status_bar: [0.0; 4],
             status_hover: String::new(),
             stop,
@@ -680,10 +685,13 @@ impl AppWindow {
             None
         } else if components::contains(self.status_bar, self.cursor) {
             Some(Hover::Status)
-        } else if let Some(part) = self.strip_hit() {
-            Some(Hover::Strip(part))
+        } else if components::contains(self.colour_setup.rect, self.cursor)
+            && !self.colour_setup_full.is_empty()
+        {
+            Some(Hover::ColourSetup)
         } else {
             match self.toolbar_hit() {
+                Some(ToolbarHit::View(panel, part)) => Some(Hover::View(panel, part)),
                 Some(ToolbarHit::Chip(panel, chip)) => Some(Hover::Chip(panel, chip)),
                 Some(ToolbarHit::Settings(panel)) => Some(Hover::SettingsButton(panel)),
                 None => self
@@ -699,18 +707,17 @@ impl AppWindow {
         }
     }
 
-    /// The view strip's button under the pointer (none while no picture Panel is shown).
-    fn strip_hit(&self) -> Option<StripPart> {
-        self.view_strip
-            .hit(self.config.width as f32, self.cursor, self.scale)
-    }
-
     /// The chip or settings button of a title bar under the pointer.
     fn toolbar_hit(&self) -> Option<ToolbarHit> {
         self.title_layouts
             .iter()
             .enumerate()
             .find_map(|(panel, l)| {
+                if let (Some(view), Some(block)) = (&l.view, self.view_blocks.get(panel))
+                    && let Some(part) = block.hit(view, self.cursor)
+                {
+                    return Some(ToolbarHit::View(panel, part));
+                }
                 if let Some(chip) = l
                     .chips
                     .iter()
@@ -736,18 +743,19 @@ impl AppWindow {
         self.menu = Some((Menu::for_panel(panel, &defs, &current), at));
     }
 
-    /// The strip's Fit: every picture Panel back to Fit. Zoom is display state: it is never put in the settings or
-    /// saved.
-    fn fit_all(&mut self) {
-        self.displays.fit_all(&self.contents, self.scale);
+    /// Panel `panel`'s Fit button: that Panel back to Fit, and every picture Panel with it while Link is on. Zoom
+    /// is display state: it is never put in the settings or saved.
+    fn fit_panel(&mut self, panel: usize) {
+        if let Some(area) = self.contents.get(panel) {
+            self.displays.fit_panel(panel, *area, self.scale);
+        }
         self.window.request_redraw();
     }
 
-    /// Switch the Window's Link from the strip (turning it on takes the view of the first picture Panel) and
-    /// remember it; zoom and pan are not remembered.
-    fn set_link(&mut self, on: bool) {
-        self.displays
-            .set_link_from_strip(on, &self.contents, self.scale);
+    /// Switch the Window's Link from Panel `panel`'s block (turning it on takes that Panel's view) and remember
+    /// it; zoom and pan are not remembered.
+    fn set_link(&mut self, on: bool, panel: usize) {
+        self.displays.set_link(on, panel);
         let changed = scopecreep::zoom::remember_link(&mut self.settings.lock().unwrap(), on);
         if changed {
             self.save_settings();
@@ -859,9 +867,26 @@ impl AppWindow {
         }
     }
 
-    /// Right button: open the menu of the Panel under the pointer (none for a Panel without settings, or off a
+    /// Right button: on a page's tab, the Layout menu's entries; else open the menu of the Panel under the pointer (none for a Panel without settings, or off a
     /// Panel), or close the one that is open. A menu of the menu bar just closes.
     fn right_click(&mut self) {
+        // A page's tab: the Layout menu's entries for that page, dropping from the tab (#224, ADR 0042).
+        if let Some((page, anchor)) = self.page_bar().right_click(
+            page_bar::top(self.scale),
+            self.config.width as f32,
+            self.cursor,
+            self.scale,
+        ) {
+            self.menu = None;
+            self.hover = None;
+            self.finish_rename(true);
+            self.go_to_page(page);
+            self.bar.open = Some(menu_bar::LAYOUT);
+            self.reset_bar_menus();
+            self.bar_anchor = Some(anchor);
+            self.window.request_redraw();
+            return;
+        }
         if self.bar.open.is_some() {
             self.close_bar();
             return;
@@ -1799,15 +1824,6 @@ impl AppWindow {
             self.page_bar_click(part);
             return;
         }
-        if let Some(part) = self.strip_hit() {
-            self.menu = None;
-            self.hover = None;
-            match part {
-                StripPart::Fit => self.fit_all(),
-                StripPart::Link => self.set_link(!self.displays.link_on()),
-            }
-            return;
-        }
         if self.menu.is_some() {
             self.menu_click();
             return;
@@ -1853,6 +1869,15 @@ impl AppWindow {
                 }
                 // A chip or the settings button on a title bar takes the press before the bar can be dragged.
                 match self.toolbar_hit() {
+                    Some(ToolbarHit::View(panel, part)) => {
+                        self.menu = None;
+                        self.hover = None;
+                        match part {
+                            BlockPart::Fit => self.fit_panel(panel),
+                            BlockPart::Link => self.set_link(!self.displays.link_on(), panel),
+                        }
+                        return;
+                    }
                     Some(ToolbarHit::Chip(panel, chip)) => {
                         if let Some(action) = self
                             .toolbars
@@ -1951,9 +1976,8 @@ impl AppWindow {
         // The Colour Setup is said once, in the bar across the top.
         // Over it all, the thin menu bar (#147).
         let bar_height = MenuBar::height(scale);
-        let top_height = BarKind::Top.height(scale);
         let page_bar_height = PageBar::height(scale);
-        let area_top = bar_height + top_height + page_bar_height + margin;
+        let area_top = bar_height + page_bar_height + margin;
         let area = [
             margin,
             area_top,
@@ -1980,6 +2004,7 @@ impl AppWindow {
         self.title_hovers.clear();
         let settings_now = self.settings.lock().unwrap().clone();
         let mut toolbars: Vec<Toolbar> = Vec::new();
+        let mut view_blocks: Vec<ViewBlock> = Vec::new();
         let mut layouts: Vec<components::TitleLayout> = Vec::new();
         let mut tab_strips: Vec<Option<(tab_strip::TabStrip, [f32; 4])>> = Vec::new();
         // Only the shown Panel of each tab group measures and draws (ADR 0038).
@@ -1993,23 +2018,28 @@ impl AppWindow {
                 title.name.clone_from(shown);
             }
             let panel = PanelLayout::new(*cell, scale);
-            // A picture Panel keeps its zoom as a read-only tag with its other tags (ADR 0040).
-            if let Some(zoom) = self.displays.zoom_tag(i, panel.content, scale) {
-                title.tags.push(zoom);
-            }
+            // Every Panel's title bar ends in the view block (Fit, zoom, Link), then the settings button (ADR 0042).
+            let block = self.displays.view_block(i, panel.content, scale);
             let mut toolbar = self.displays.toolbar(i, &settings_now);
-            toolbar.fit_to(panel.title[2], true, scale);
+            toolbar.fit_to_reserving(
+                panel.title[2],
+                true,
+                components::TitleBar::view_reserve(scale),
+                scale,
+            );
             // Every Panel's popover holds Close, so every title bar has the settings button.
             let has_popover = true;
-            let (l, tags, all_shown) = window_text::lay_out_toolbar_title(
+            let (l, tags, all_shown) = window_text::lay_out_view_title(
                 &title,
                 &toolbar.chips,
                 &toolbar.groups,
                 has_popover,
+                true,
                 panel.title,
                 scale,
             );
             toolbars.push(toolbar);
+            view_blocks.push(block);
             // A tab group of more than one Panel shows its tabs where the name would be.
             let strip = self
                 .pages
@@ -2068,8 +2098,7 @@ impl AppWindow {
         self.title_layouts = layouts;
         self.tab_strips = tab_strips;
         self.contents = panels.iter().map(|p| p.content).collect();
-        // Hidden cells have no content, so no zoom to read.
-        self.view_strip = self.displays.view_strip(&self.contents, scale);
+        self.view_blocks = view_blocks;
         let status_width = width - 2.0 * margin;
         // Playback and performance only: the longest choice that fits, whole parts only (never cut mid-word).
         let status_line = window_text::fit_status(&texts.status, status_width, scale);
@@ -2085,20 +2114,24 @@ impl AppWindow {
         );
         self.status_bar = [0.0, height - row, width, row];
         self.status_hover = texts.status_hover.clone();
-        let top_line = window_text::fit_parts(
-            &texts.top_bar,
-            width - 2.0 * style::SPACE_BAR_PAD * scale,
-            scale,
-        );
-        // The Colour Setup bar is drawn with the overlay (its text above its fill, #217).
-        // Overlay text draws over every fill, so while a menu is open over the bar the line is left out.
+        // The Colour Setup line at the right end of the menu bar row, cut with an ellipsis where it would meet the
+        // menus; its full text is the hover. Overlay text draws over every fill, so while a menu is open over the
+        // bar the line is left out.
+        let colour_setup = window_text::colour_setup_line(&texts.top_bar, width, scale);
+        self.colour_setup_full.clone_from(&texts.top_bar);
         let bar_covered = self.bar.open.is_some() || self.menu.is_some();
-        let top_bar_prims = window_text::top_bar_prims(
-            if bar_covered { "" } else { &top_line },
-            bar_height,
-            width,
-            scale,
-        );
+        let colour_setup_prims = if bar_covered || colour_setup.text.is_empty() {
+            Vec::new()
+        } else {
+            vec![components::text(
+                &colour_setup.text,
+                colour_setup.rect,
+                components::Face::Label,
+                style::TEXT_PRIMARY,
+                Align::Right,
+            )]
+        };
+        self.colour_setup = colour_setup;
         let (notice_style, notice_width) = if notice_in_status {
             (TextStyle::LABEL, status_width)
         } else {
@@ -2370,7 +2403,6 @@ impl AppWindow {
         let mut menu_areas: Vec<(usize, f32, f32, [u8; 3])> = Vec::new();
         // The menu over the Panels, or else the hover of what the pointer rests on, over everything.
         let mut over: Vec<Prim> = over_empty;
-        over.extend(top_bar_prims);
         if let Some((label, cell)) = drop_label {
             over.push(components::text(
                 label,
@@ -2436,6 +2468,16 @@ impl AppWindow {
                 };
                 over.extend(chip.draw([r[0], r[1]], toolbar.on[c], state, scale));
             }
+            if let Some(divider) = l.divider {
+                over.push(components::rect(divider, style::LINE_BORDER));
+            }
+            if let (Some(view), Some(block)) = (&l.view, self.view_blocks.get(i)) {
+                let lit = match pointer_over {
+                    Some(ToolbarHit::View(p, part)) if p == i => Some(part),
+                    _ => None,
+                };
+                over.extend(block.draw(view, lit, scale));
+            }
             if let Some(button) = l.settings {
                 let open = self.menu.as_ref().is_some_and(|(m, _)| m.panel == i);
                 let state = if open {
@@ -2449,6 +2491,7 @@ impl AppWindow {
             }
         }
         over.extend(menu_bar::bar().draw(0.0, 0.0, width, self.bar.open, self.bar_hover, scale));
+        over.extend(colour_setup_prims);
         // The Page bar between the Colour Setup line and the Panels (ADR 0041).
         let page_bar = self.page_bar();
         let page_top = page_bar::top(scale);
@@ -2458,12 +2501,6 @@ impl AppWindow {
             page_bar.hit(page_top, width, self.cursor, scale)
         };
         over.extend(page_bar.draw(page_top, width, page_hover, scale));
-        let strip_hover = if self.menu.is_some() || self.bar.open.is_some() {
-            None
-        } else {
-            self.strip_hit()
-        };
-        over.extend(self.view_strip.draw(width, strip_hover, scale));
         let bar_menu = self
             .bar_menu()
             .and_then(|m| self.bar_menu_rect(&m).map(|r| (m, r)));
@@ -2499,15 +2536,29 @@ impl AppWindow {
                     self.title_bars.get(i).copied(),
                     self.title_hovers.get(i).cloned(),
                 ),
-                Hover::Strip(part) => {
-                    let l = view_strip::ViewStrip::layout(width, scale);
-                    match part {
-                        StripPart::Fit => (Some(l.fit), Some(view_strip::FIT_TOOLTIP.to_string())),
-                        StripPart::Link => {
-                            (Some(l.link), Some(view_strip::LINK_TOOLTIP.to_string()))
+                Hover::View(p, part) => {
+                    let view = self.title_layouts.get(p).and_then(|l| l.view);
+                    match (view, part) {
+                        (Some(v), BlockPart::Fit) => {
+                            (Some(v.fit), Some(view_block::FIT_TOOLTIP.to_string()))
                         }
+                        (Some(v), BlockPart::Link) => {
+                            (Some(v.link), Some(view_block::LINK_TOOLTIP.to_string()))
+                        }
+                        (None, _) => (None, None),
                     }
                 }
+                Hover::ColourSetup => (
+                    Some(self.colour_setup.rect),
+                    Some(window_text::hover_text(
+                        &window_text::PanelTitle {
+                            full: self.colour_setup_full.clone(),
+                            ..Default::default()
+                        },
+                        false,
+                        max_chars,
+                    )),
+                ),
                 Hover::Status => (Some(self.status_bar), Some(self.status_hover.clone())),
             };
             if let (Some(anchor), Some(text)) = (anchor, text.filter(|t| !t.is_empty())) {

@@ -43,6 +43,7 @@ pub fn room(title: &crate::components::TitleLayout, scale: f32) -> [f32; 4] {
         .chips
         .first()
         .map(|c| c[0])
+        .or(title.view.map(|v| v.fit[0]))
         .or(title.settings.map(|s| s[0]))
         .map_or(title.bar[0] + title.bar[2], |x| {
             x - style::SPACE_TAG_GAP * scale

@@ -65,7 +65,7 @@ pub const SPACE_DOCK_EDGE: f32 = 0.25;
 /// The least height a display keeps under the title bar, the least width of a Panel, and the least height of a
 /// Panel (the display, the title bar and the border's three lines).
 pub const SPACE_MIN_DISPLAY: f32 = 80.0;
-pub const SPACE_MIN_PANEL_WIDTH: f32 = 120.0;
+pub const SPACE_MIN_PANEL_WIDTH: f32 = 176.0;
 pub const SPACE_MIN_PANEL_HEIGHT: f32 = 105.0;
 /// The window the saved border positions are checked against: the default window's Panel area and gap.
 pub const SPACE_REFERENCE_AREA: [f32; 2] = [1256.0, 716.0];
@@ -127,8 +127,8 @@ pub const SPACE_CHIP_PAD: f32 = 8.0;
 pub const SPACE_CHIP_GAP: f32 = 4.0;
 /// The gap between two groups of chips on a title bar: at least twice the gap within a group (ADR 0040).
 pub const SPACE_CHIP_GROUP_GAP: f32 = 12.0;
-/// The gap between the parts of the view strip on the menu bar row (ADR 0040).
-pub const SPACE_STRIP_GAP: f32 = 8.0;
+/// The gap on each side of the divider between a title bar's own chips and the view block (ADR 0042).
+pub const SPACE_DIVIDER_GAP: f32 = 8.0;
 pub const SPACE_CHAR_WIDTH: f32 = 7.6;
 /// A segmented control: height and side padding of a segment.
 pub const SPACE_SEGMENT_HEIGHT: f32 = 22.0;

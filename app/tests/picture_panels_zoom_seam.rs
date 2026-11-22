@@ -125,8 +125,9 @@ impl Bench {
 
     fn chip(&self, index: usize) -> String {
         self.set
-            .zoom_tag(index, AREA, 1.0)
-            .expect("a picture Panel has a zoom tag")
+            .zoom(index, AREA, 1.0)
+            .expect("a picture Panel has a zoom")
+            .text
     }
 
     fn wheel_to(&self, index: usize, text: &str) {
@@ -219,6 +220,7 @@ fn every_picture_panel_zooms_in_exact_squares_with_the_wheel() {
 #[test]
 fn zooming_one_panel_leaves_the_others_at_their_own_zoom() {
     let b = Bench::new("panels-zoom-own", "off");
+    b.set.set_link(false, 0);
     b.wheel_to(0, "200 %");
     b.wheel_to(3, "300 %");
     assert_eq!(b.chip(0), "200 %");
@@ -339,7 +341,7 @@ fn zoomed_the_legend_strip_is_unchanged() {
 // ---- the toolbar seam
 
 #[test]
-fn every_picture_panel_has_a_read_only_zoom_tag_and_no_zoom_or_link_chip() {
+fn every_picture_panel_reads_its_zoom_in_its_block_and_has_no_zoom_or_link_chip() {
     let b = Bench::new("panels-zoom-chips", "off");
     for (i, name) in NAMES.iter().enumerate() {
         assert_eq!(b.chip(i), "Fit 50 %", "{name}");
@@ -349,7 +351,7 @@ fn every_picture_panel_has_a_read_only_zoom_tag_and_no_zoom_or_link_chip() {
                 .chips
                 .iter()
                 .all(|c| !c.text.contains('%') && c.text != "Link"),
-            "{name}: zoom and Link are in the view strip"
+            "{name}: zoom and Link are in the view block"
         );
         assert!(
             toolbar.chips.iter().enumerate().all(|(c, _)| toolbar
@@ -408,14 +410,14 @@ fn at_the_minimum_panel_width_every_picture_panel_keeps_its_chips_inside_and_the
 }
 
 #[test]
-fn fit_in_the_view_strip_takes_each_picture_panel_back_to_fit_and_a_scope_has_no_zoom() {
+fn fit_in_the_view_block_takes_each_picture_panel_back_to_fit_and_a_scope_has_no_zoom() {
     let b = Bench::new("panels-zoom-slider", "off");
     let areas = [AREA; NAMES.len()];
     for (i, name) in NAMES.iter().enumerate() {
         b.wheel_to(i, "200 %");
         assert_eq!(b.chip(i), "200 %", "{name}");
     }
-    b.set.fit_all(&areas, 1.0);
+    b.set.fit_panel(0, areas[0], 1.0);
     for (i, name) in NAMES.iter().enumerate() {
         assert_eq!(b.chip(i), "Fit 50 %", "{name}");
     }

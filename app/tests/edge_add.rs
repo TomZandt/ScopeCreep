@@ -79,7 +79,10 @@ fn a_side_that_would_break_a_minimum_leaves_the_tree_alone_and_names_it() {
         assert_eq!(tree.focused(), Some(1));
         let _ = focus;
         let notice = placed.notice().unwrap();
-        assert!(notice.contains("120") && notice.contains("105"), "{notice}");
+        assert!(
+            notice.contains(&MIN_PANEL[0].to_string()) && notice.contains("105"),
+            "{notice}"
+        );
     }
     for edge in [Edge::Top, Edge::Bottom] {
         let mut tree = LayoutTree::automatic(1);

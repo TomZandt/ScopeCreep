@@ -638,8 +638,8 @@ fn a_saved_split_that_leaves_a_panel_under_its_minimum_is_moved_off_it() {
     let good = default_tree().to_text(&NAMES);
     let first_split = good.lines().nth(1).unwrap().to_string();
     for text in [
-        good.replacen(&first_split, "split row 0.002", 1),
-        good.replacen(&first_split, "split row 0.998", 1),
+        good.replacen(&first_split, "split col 0.02", 1),
+        good.replacen(&first_split, "split col 0.98", 1),
     ] {
         let tree = LayoutTree::from_text(&NAMES, &text);
         assert_ne!(

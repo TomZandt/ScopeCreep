@@ -66,7 +66,7 @@ fn a_tab_dragged_out_docks_elsewhere_and_the_others_stay() {
     t.join_tab(5, 0);
     t.join_tab(2, 0);
     assert_eq!(t.tab_group(0).unwrap().tabs, vec![0, 5, 2]);
-    let target = 3;
+    let target = 1;
     let placed = t.dock(5, target, Edge::Left, AREA, GAP, min_panel_size(1.0));
     assert_eq!(placed, Placed::Split);
     assert_eq!(t.tab_group(0).unwrap().tabs, vec![0, 2]);
@@ -175,7 +175,7 @@ fn a_no_room_add_edge_add_and_dock_are_one_undo_step_and_never_lose_the_panel() 
     let placed = h.change(&mut t, |t| t.dock(1, 0, Edge::Right, narrow, GAP, min));
     assert_eq!(placed, Placed::Tabbed);
     assert_eq!(t.len(), 2);
-    assert!(placed.dock_notice().unwrap().contains("120"));
+    assert!(placed.dock_notice().unwrap().contains(&min[0].to_string()));
     h.undo(&mut t);
     assert_eq!(t, start);
 }

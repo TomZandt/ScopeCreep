@@ -1,4 +1,4 @@
-//! The Page bar (#212, spec #196, ADR 0041): between the Colour Setup line and the Panels, a tab for each page, a **+**
+//! The Page bar (#212, spec #196, ADR 0041): between the menu bar row and the Panels, a tab for each page, a **+**
 //! after the last one and the Auto layout, Auto resize and Add panel buttons at its right end. The first nine tabs read "[1] Colour": the number is
 //! the tab's position, so the Ctrl+number that goes to it shows, and a tenth page onward has none. Pure: no GPU, no
 //! window. Tabs, "+" and Add panel are chips, so they draw through the style tokens.
@@ -149,13 +149,30 @@ impl PageBar {
         }
     }
 
-    /// Where a bar menu drops from when `part` opened it: the button's own rectangle (the **+** or Add panel), worked out
+    /// Where a bar menu drops from when `part` opened it: the button's own rectangle (the **+**, Add panel or a tab), worked out
     /// from the bar as it is now, never from where it was last drawn. `None` for a part that opens no menu.
     pub fn anchor(&self, part: BarPart, top: f32, width: f32, scale: f32) -> Option<[f32; 4]> {
         let l = self.layout(top, width, scale);
         match part {
             BarPart::Plus => Some(l.plus),
             BarPart::AddPanel => Some(l.add_panel),
+            BarPart::Tab(page) => l.tabs.iter().find(|(i, _)| *i == page).map(|(_, r)| *r),
+            _ => None,
+        }
+    }
+
+    /// A right-click at `point` (#224, ADR 0042): on a page's tab it opens the Layout menu's entries for that page,
+    /// which the click makes the current one (Duplicate, Rename and Delete act on the current page). Returns the
+    /// page and the tab's rectangle for the menu to drop from; none off a tab.
+    pub fn right_click(
+        &self,
+        top: f32,
+        width: f32,
+        point: [f32; 2],
+        scale: f32,
+    ) -> Option<(usize, [f32; 4])> {
+        match self.hit(top, width, point, scale)? {
+            BarPart::Tab(page) => Some((page, self.anchor(BarPart::Tab(page), top, width, scale)?)),
             _ => None,
         }
     }
@@ -231,7 +248,8 @@ impl PageBar {
     }
 }
 
-/// The menu bar's row and the Colour Setup line above the Page bar, at `scale`: where the Page bar's top is.
+/// The menu bar's row (the Colour Setup line is at its right end, ADR 0042) above the Page bar, at `scale`: where
+/// the Page bar's top is.
 pub fn top(scale: f32) -> f32 {
-    MenuBar::height(scale) + crate::components::BarKind::Top.height(scale)
+    MenuBar::height(scale)
 }

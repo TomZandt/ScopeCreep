@@ -150,19 +150,25 @@ impl Bench {
     /// What Panel `index` reads as its zoom tag.
     fn text(&self, index: usize) -> String {
         self.set
-            .zoom_tag(index, AREAS[index], 1.0)
-            .expect("a picture Panel has a zoom tag")
+            .zoom(index, AREAS[index], 1.0)
+            .expect("a picture Panel has a zoom")
+            .text
     }
 
-    /// The view strip as the window reads it.
-    fn strip(&self) -> scopecreep::view_strip::ViewStrip {
-        self.set.view_strip(&AREAS, 1.0)
+    /// Panel `index`'s view block as the window reads it.
+    fn block(&self, index: usize) -> scopecreep::view_block::ViewBlock {
+        self.set.view_block(index, AREAS[index], 1.0)
     }
 
-    /// Click Link in the view strip, as the window does.
-    fn click_link(&self) {
+    /// Click Link in Panel `index`'s view block, as the window does.
+    fn click_link(&self, index: usize) {
         let on = self.set.link_on();
-        self.set.set_link_from_strip(!on, &AREAS, 1.0);
+        self.set.set_link(!on, index);
+    }
+
+    /// Click Fit in Panel `index`'s view block, as the window does.
+    fn click_fit(&self, index: usize) {
+        self.set.fit_panel(index, AREAS[index], 1.0);
     }
 }
 
@@ -238,7 +244,7 @@ fn with_link_on_zooming_or_panning_one_panel_draws_the_same_pixels_in_every_pane
 #[test]
 fn turning_link_on_takes_the_zoomed_panels_view_and_off_keeps_every_view() {
     let b = Bench::new("link-feed-onoff");
-    b.click_link();
+    b.click_link(0);
     assert!(!b.set.link_on());
     b.wheel_to(2, "200 %");
     assert_eq!(
@@ -246,7 +252,7 @@ fn turning_link_on_takes_the_zoomed_panels_view_and_off_keeps_every_view() {
         ("Fit 50 %", "200 %")
     );
     b.drag(2, 20.0);
-    b.click_link();
+    b.click_link(2);
     for i in 0..4 {
         assert_eq!(b.text(i), "200 %");
         let a = AREAS[i];
@@ -256,7 +262,7 @@ fn turning_link_on_takes_the_zoomed_panels_view_and_off_keeps_every_view() {
             "Panel {i}: on the clicked Panel's spot ({offset})"
         );
     }
-    b.click_link();
+    b.click_link(0);
     assert!(!b.set.link_on());
     let before: Vec<_> = (0..4).map(|i| b.render(i)).collect();
     assert_eq!(b.text(1), "200 %", "off leaves each Panel where it is");
@@ -270,21 +276,31 @@ fn turning_link_on_takes_the_zoomed_panels_view_and_off_keeps_every_view() {
 }
 
 #[test]
-fn with_link_on_fit_in_the_strip_takes_every_panel_back_to_fit() {
+fn with_link_on_fit_on_any_panels_block_takes_every_panel_back_to_fit() {
     let b = Bench::new("link-fit-click");
     b.wheel_to(3, "200 %");
     assert!((0..4).all(|i| b.text(i) == "200 %"));
-    b.set.fit_all(&AREAS, 1.0);
+    b.click_fit(1);
     for i in 0..4 {
         assert!(b.text(i).starts_with("Fit"), "Panel {i}: {}", b.text(i));
     }
 }
 
-// ---- the view strip (#205, ADR 0040)
+// ---- the view block on every Panel (#224, ADR 0042)
 
 #[test]
-fn the_picture_panels_have_no_link_chip_and_the_strip_shows_link_lit_by_default() {
-    let b = Bench::new("link-strip-default");
+fn link_is_on_in_a_fresh_profile_and_every_picture_panel_has_a_lit_block_and_no_link_chip() {
+    // A Window that was never told otherwise: no saved state, no set_link call.
+    assert!(
+        DisplaySet::default().link_on(),
+        "a fresh display set is linked"
+    );
+    assert!(
+        link_remembered(&PanelSettings::default()),
+        "nothing saved: on"
+    );
+    let b = Bench::new("link-block-default");
+    assert!(b.set.link_on());
     for (i, name) in NAMES.iter().enumerate() {
         let t = b.set.toolbar(i, &b.settings);
         assert!(t.chips.iter().all(|c| c.text != "Link"), "{name}");
@@ -292,48 +308,60 @@ fn the_picture_panels_have_no_link_chip_and_the_strip_shows_link_lit_by_default(
             (0..t.chips.len()).all(|c| t.click(c).is_none_or(|(k, _)| k != LINK_KEY)),
             "{name}"
         );
+        let block = b.block(i);
+        assert!(block.enabled && block.link, "{name}: lit by default");
+        assert!(
+            block.readout.ends_with(" %") && block.readout != "Fit",
+            "{name}: the actual zoom as a percentage, not the word Fit: {}",
+            block.readout
+        );
     }
-    let strip = b.strip();
-    assert!(strip.enabled && strip.link, "lit by default");
-    assert!(
-        strip.readout.ends_with(" %") && strip.readout != "Fit",
-        "the actual zoom as a percentage, not the word Fit: {}",
-        strip.readout
-    );
 }
 
 #[test]
-fn the_readout_says_the_shared_zoom_while_link_is_on_and_mixed_when_it_is_off_and_panels_differ() {
-    let b = Bench::new("link-strip-readout");
+fn zoom_on_one_picture_panel_reaches_every_picture_panel_in_a_fresh_profile() {
+    let b = Bench::new("link-block-reach");
     b.wheel_to(0, "200 %");
-    assert_eq!(b.strip().readout, "200 %", "the shared zoom");
-    b.click_link();
-    assert!(!b.strip().link);
-    assert_eq!(
-        b.strip().readout,
-        "200 %",
+    for (i, name) in NAMES.iter().enumerate() {
+        assert_eq!(b.text(i), "200 %", "{name}");
+        assert_eq!(b.block(i).readout, "200 %", "{name}: its block says so");
+    }
+}
+
+#[test]
+fn each_panels_readout_is_its_own_zoom_once_link_is_off_and_fit_is_that_panels_own() {
+    let b = Bench::new("link-block-readout");
+    b.wheel_to(0, "200 %");
+    b.click_link(0);
+    assert!(
+        (0..4).all(|i| !b.block(i).link),
+        "Link is one switch: off everywhere"
+    );
+    assert!(
+        (0..4).all(|i| b.block(i).readout == "200 %"),
         "off leaves every Panel at 200 %"
     );
     b.wheel(1, -30.0);
-    assert_eq!(b.strip().readout, "Mixed", "Link off and the Panels differ");
-    b.set.fit_all(&AREAS, 1.0);
-    let said = b.strip().readout;
+    assert_ne!(b.block(1).readout, b.block(0).readout, "the Panels differ");
+    assert_eq!(b.block(0).readout, "200 %");
+    // Fit on one Panel's block takes only that Panel to Fit.
+    b.click_fit(0);
+    assert!(b.text(0).starts_with("Fit"));
+    assert_eq!(b.block(2).readout, "200 %", "the others stay");
+    b.click_link(2);
     assert!(
-        said == "Mixed" || said.ends_with(" %"),
-        "Fit takes every Panel to its Fit zoom, said as a percentage (Mixed when their Fit differs): {said}"
+        b.set.link_on() && (0..4).all(|i| b.block(i).link),
+        "Link switches back on"
     );
-    assert!((0..4).all(|i| b.text(i).starts_with("Fit")));
-    b.click_link();
-    assert!(b.strip().link && b.set.link_on(), "Link switches back on");
 }
 
 #[test]
-fn turning_link_on_from_the_strip_brings_every_panel_to_the_zoomed_panels_view() {
-    let b = Bench::new("link-strip-on");
-    b.click_link();
+fn turning_link_on_from_a_panels_block_brings_every_panel_to_that_panels_view() {
+    let b = Bench::new("link-block-on");
+    b.click_link(0);
     b.wheel_to(0, "200 %");
     assert!(b.text(1).starts_with("Fit"), "off: the others stay");
-    b.click_link();
+    b.click_link(0);
     for i in 0..4 {
         assert_eq!(b.text(i), "200 %", "Panel {i}");
     }

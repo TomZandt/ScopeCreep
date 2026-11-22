@@ -408,10 +408,20 @@ impl ZoomModel {
 /// The Window's one Link (#168): whether picture Panels zoom together, and the one view they share while it is on
 /// (a zoom and a centre point in picture coordinates, so Panels of different sizes look at the same pixels and each
 /// fits its own Panel at Fit). Cheap to clone (shared state).
-#[derive(Clone, Default)]
+#[derive(Clone)]
 pub struct Link(Arc<Mutex<LinkState>>);
 
-#[derive(Default)]
+/// Link opens on (ADR 0035, #176, #224): a Window that was never told otherwise is linked.
+impl Default for Link {
+    fn default() -> Link {
+        Link(Arc::new(Mutex::new(LinkState {
+            on: true,
+            model: ZoomModel::default(),
+            generation: 0,
+        })))
+    }
+}
+
 struct LinkState {
     on: bool,
     /// The shared view while on; the view every Panel keeps when it goes off.

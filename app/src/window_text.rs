@@ -1,6 +1,6 @@
 //! What the Window's text says (spec #94, ticket #99): a colourist reads only what changes how they act.
 //!
-//! - The top bar says the Colour Setup once ([`top_bar`]).
+//! - The menu bar row says the Colour Setup once, at its right end ([`top_bar`], [`colour_setup_line`]).
 //! - Each Panel's title bar says its name and short tags, only for state that changes how to read it
 //!   ([`panel_title`]); hovering it shows the full label as the display gives it.
 //! - The status line says playback and performance only ([`fit_status`] picks what fits the width); everything
@@ -70,33 +70,46 @@ pub fn top_bar(known: Option<&KnownColourSetup>, unknown: &str) -> String {
     .join(SEP)
 }
 
-/// The Colour Setup bar across the Window at `top`, `width` wide: its fill, the line under it and the text `line`
-/// (already fitted to the width, see [`fit_parts`]), in that order. The text is part of the same list as the fill and
-/// comes after it, so it is drawn over the fill: the Window draws a list's rectangles first and its text over them.
-/// Drawn as the base text layer instead, the fill covered it and the bar was empty (#217).
-pub fn top_bar_prims(line: &str, top: f32, width: f32, scale: f32) -> Vec<crate::components::Prim> {
-    use crate::components::{Align, BarKind, Face, rect, text};
-    let height = BarKind::Top.height(scale);
-    let weight = (crate::style::LINE_WEIGHT * scale).max(1.0);
-    let pad = crate::style::SPACE_BAR_PAD * scale;
-    let mut prims = vec![
-        rect([0.0, top, width, height], crate::style::SURFACE_PANEL),
-        rect(
-            [0.0, top + height - weight, width, weight],
-            crate::style::LINE_BORDER,
-        ),
-    ];
-    // An empty line (a menu is open over the bar: overlay text would show through it) draws no text.
-    if !line.is_empty() {
-        prims.push(text(
-            line,
-            [pad, top, (width - 2.0 * pad).max(1.0), height],
-            Face::Label,
-            crate::style::TEXT_PRIMARY,
-            Align::Left,
-        ));
+/// The Colour Setup line in the menu bar row (#224, ADR 0042): where it goes, what of it shows and whether it was cut.
+#[derive(Clone, Debug, PartialEq)]
+pub struct ColourSetupLine {
+    /// Where the text is drawn (device pixels, the menu bar row's height): right-aligned to the row's right end, and
+    /// also the hover's anchor.
+    pub rect: [f32; 4],
+    /// What shows: the whole line when it fits beside the menu titles, else its start and an ellipsis.
+    pub text: String,
+    /// The line did not fit and is cut: its full text is the hover.
+    pub cut: bool,
+}
+
+/// The `line` laid out in the menu bar row of a Window `window_width` wide at `scale`: at the row's right end, in
+/// the room right of the menu titles, so it never overlaps them. When it does not fit it is cut and ends in an
+/// ellipsis (the hover has all of it).
+pub fn colour_setup_line(line: &str, window_width: f32, scale: f32) -> ColourSetupLine {
+    let row = crate::components::MenuBar::height(scale);
+    let titles_right = crate::menu_bar::bar()
+        .title_rects(0.0, 0.0, scale)
+        .last()
+        .map_or(0.0, |r| r[0] + r[2]);
+    let left = titles_right + crate::style::SPACE_TAG_GAP * scale;
+    let right = window_width - crate::style::SPACE_BAR_PAD * scale;
+    let room = (right - left).max(0.0);
+    let width = text_width(line, scale);
+    if width <= room {
+        return ColourSetupLine {
+            rect: [right - width, 0.0, width, row],
+            text: line.to_string(),
+            cut: false,
+        };
     }
-    prims
+    let char_width = crate::style::SPACE_CHAR_WIDTH * scale;
+    let keep = ((room / char_width).floor() as usize).saturating_sub(1);
+    let text: String = line.chars().take(keep).chain(['…']).collect();
+    ColourSetupLine {
+        rect: [left, 0.0, room, row],
+        text: if keep == 0 { String::new() } else { text },
+        cut: true,
+    }
 }
 
 /// The tags a picture's conversion needs on a Panel: "approximated" when Output Conversion is, "unconverted" when
@@ -362,6 +375,20 @@ pub fn lay_out_toolbar_title(
     bar: [f32; 4],
     scale: f32,
 ) -> (crate::components::TitleLayout, String, bool) {
+    lay_out_view_title(title, chips, groups, settings_button, false, bar, scale)
+}
+
+/// [`lay_out_toolbar_title`] with the view block (Fit, zoom, Link, ADR 0042) at the right end when `view`: what every
+/// Panel's title bar in the Window is.
+pub fn lay_out_view_title(
+    title: &PanelTitle,
+    chips: &[crate::components::Chip],
+    groups: &[usize],
+    settings_button: bool,
+    view: bool,
+    bar: [f32; 4],
+    scale: f32,
+) -> (crate::components::TitleLayout, String, bool) {
     use crate::components::TitleBar;
     for n in (0..=title.tags.len()).rev() {
         let tags = title.tags[..n].join(", ");
@@ -371,6 +398,7 @@ pub fn lay_out_toolbar_title(
             chips: chips.to_vec(),
             groups: groups.to_vec(),
             settings_button,
+            view,
         }
         .layout(bar, scale);
         if layout.name_cut {

@@ -201,6 +201,7 @@ pub fn showcase(scale: f32) -> Showcase {
         chips: bar_chips,
         groups: Vec::new(),
         settings_button: true,
+        view: false,
     };
     let states = [
         (true, State::Normal),

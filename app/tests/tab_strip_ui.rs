@@ -38,6 +38,7 @@ fn bar_room(width: f32, scale: f32) -> [f32; 4] {
         chips: vec![scopecreep::components::Chip::new("Y")],
         groups: Vec::new(),
         settings_button: true,
+        view: false,
     }
     .layout(title, scale);
     room(&layout, scale)

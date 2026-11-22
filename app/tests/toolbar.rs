@@ -346,14 +346,21 @@ fn fit_inside(
     scale: f32,
     what: &str,
 ) -> (components::TitleLayout, Vec<&'static str>) {
-    toolbar.fit_to(bar[2], !popover_defs(defs, toolbar_defs).is_empty(), scale);
+    // Every Panel's title bar ends in the view block (ADR 0042), so its room is not the chips'.
+    toolbar.fit_to_reserving(
+        bar[2],
+        !popover_defs(defs, toolbar_defs).is_empty(),
+        components::TitleBar::view_reserve(scale),
+        scale,
+    );
     let popover = scopecreep::toolbar::popover_with(defs, toolbar_defs, &toolbar.collapsed);
     let title = panel_title(what, &DisplayContext::default(), String::new());
-    let (l, _, _) = window_text::lay_out_toolbar_title(
+    let (l, _, _) = window_text::lay_out_view_title(
         &title,
         &toolbar.chips,
         &toolbar.groups,
         !popover.is_empty(),
+        true,
         bar,
         scale,
     );
@@ -446,7 +453,7 @@ fn chips_leave_a_setting_at_a_time_so_a_lit_channel_is_never_hidden_beside_its_n
             &mut toolbar,
             &picture_view::SETTINGS,
             &picture_view::TOOLBAR,
-            bar(170.0, scale),
+            bar(170.0 + components::TitleBar::view_reserve(1.0), scale),
             scale,
             "Channel Viewer",
         );
@@ -483,8 +490,9 @@ fn with_room_the_clean_picture_shows_every_chip_as_before() {
             &mut toolbar,
             &picture_view::SETTINGS,
             &picture_view::TOOLBAR,
-            // Five chips in two groups, the settings button and the pads take 198 px; the Panel's border takes 2 more.
-            bar(200.0, scale),
+            // Five chips in two groups, the settings button and the pads take 198 px, and the view block and its
+            // divider the rest; the Panel's border takes 2 more.
+            bar(200.0 + components::TitleBar::view_reserve(1.0), scale),
             scale,
             "Channel Viewer",
         );

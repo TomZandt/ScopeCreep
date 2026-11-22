@@ -741,7 +741,7 @@ impl DisplaySet {
     }
 
     /// The chips on the title bar of the display in Panel `index`, given everyone's choices. Zoom and Link are not
-    /// chips: they are in the view strip ([`DisplaySet::view_strip`], ADR 0040).
+    /// chips: they are the view block ([`DisplaySet::view_block`], ADR 0042).
     pub fn toolbar(&self, index: usize, settings: &PanelSettings) -> Toolbar {
         let own = self.settings_of(index, settings);
         Toolbar::new(self.read().displays[index].toolbar_defs_for(&own), &own)
@@ -752,59 +752,30 @@ impl DisplaySet {
         self.read().displays[index].zoom(area, scale)
     }
 
-    /// The read-only zoom tag a picture Panel shows with its other tags ("Fit 17 %"); `None` for a Scope.
-    pub fn zoom_tag(&self, index: usize, area: [f32; 4], scale: f32) -> Option<String> {
-        self.zoom(index, area, scale).map(|r| r.text)
-    }
-
-    /// The picture Panel Link takes the view of when the strip turns it on (there is no clicked Panel any more):
-    /// the first one zoomed in, else the first one shown (`contents` is each Panel's content area, in Panel order).
-    pub fn first_picture_panel(&self, contents: &[[f32; 4]], scale: f32) -> Option<usize> {
-        let readouts: Vec<_> = contents
-            .iter()
-            .zip(&self.read().displays)
-            .map(|(area, d)| d.zoom(*area, scale))
-            .collect();
-        readouts
-            .iter()
-            .position(|r| r.as_ref().is_some_and(|r| r.percent > r.fit + 0.01))
-            .or_else(|| readouts.iter().position(Option::is_some))
-    }
-
-    /// The view strip as it reads now (ADR 0040): enabled while a picture Panel is shown; the readout is the shared
-    /// zoom while Link is on (a percentage, "62 %", the first picture Panel's), and while it is off the one zoom every picture Panel has, or
-    /// "Mixed" when they differ.
-    pub fn view_strip(&self, contents: &[[f32; 4]], scale: f32) -> crate::view_strip::ViewStrip {
-        // The zoom each picture Panel has, rounded to a percent: what the readout can say about one Panel.
-        let says: Vec<String> = contents
-            .iter()
-            .zip(&self.read().displays)
-            .filter_map(|(area, d)| d.zoom(*area, scale))
-            .map(|r| format!("{} %", r.percent.round()))
-            .collect();
+    /// The view block of Panel `index` with its content in `area` (ADR 0042): every Panel has one. It is enabled,
+    /// with the Panel's own zoom as a percentage ("62 %"), where the display zooms (a picture with a frame); a
+    /// Scope's, or a picture's before its first frame, is disabled. Link is the Window's one switch.
+    pub fn view_block(
+        &self,
+        index: usize,
+        area: [f32; 4],
+        scale: f32,
+    ) -> crate::view_block::ViewBlock {
         let link = self.link.on();
-        let readout = match says.first() {
-            None => String::new(),
-            Some(first) if link || says.iter().all(|s| s == first) => first.clone(),
-            Some(_) => "Mixed".to_string(),
-        };
-        crate::view_strip::ViewStrip {
-            enabled: !says.is_empty(),
-            readout,
-            link,
+        match self.zoom(index, area, scale) {
+            Some(r) => crate::view_block::ViewBlock {
+                enabled: true,
+                readout: format!("{} %", r.percent.round()),
+                link,
+            },
+            None => crate::view_block::ViewBlock::disabled(link),
         }
     }
 
-    /// The strip's Link: switch the Window's Link; turning it on takes the view of [`DisplaySet::first_picture_panel`].
-    pub fn set_link_from_strip(&self, on: bool, contents: &[[f32; 4]], scale: f32) {
-        self.set_link(on, self.first_picture_panel(contents, scale).unwrap_or(0));
-    }
-
-    /// The strip's Fit: every picture Panel back to Fit (`contents` is each Panel's content area, in Panel order).
-    pub fn fit_all(&self, contents: &[[f32; 4]], scale: f32) {
-        for (area, d) in contents.iter().zip(&self.read().displays) {
-            d.set_zoom(*area, scale, 0.0);
-        }
+    /// The Fit button of Panel `index`'s block: this Panel back to Fit, and every picture Panel with it while Link
+    /// is on (they share one view).
+    pub fn fit_panel(&self, index: usize, area: [f32; 4], scale: f32) {
+        self.read().displays[index].set_zoom(area, scale, 0.0);
     }
 
     /// The Fit toggle (Z, #169) on the display in Panel `index`: Fit and back to the last zoom and spot; every

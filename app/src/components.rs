@@ -1003,6 +1003,8 @@ pub struct TitleBar {
     /// The group of each chip (empty: one group); groups are set apart by a wider gap.
     pub groups: Vec<usize>,
     pub settings_button: bool,
+    /// The view block (Fit, zoom readout, Link, ADR 0042) sits between the chips and the settings button.
+    pub view: bool,
 }
 
 /// Where the parts of a title bar are.
@@ -1014,6 +1016,10 @@ pub struct TitleLayout {
     pub tags: Option<[f32; 4]>,
     pub chips: Vec<[f32; 4]>,
     pub settings: Option<[f32; 4]>,
+    /// The view block's parts, when the Panel has one.
+    pub view: Option<crate::view_block::BlockLayout>,
+    /// The divider between the Panel's own chips and the view block: only where both are present.
+    pub divider: Option<[f32; 4]>,
     /// The tags did not fit and show in the hover instead.
     pub tags_in_tooltip: bool,
     /// The name is cut short to make room.
@@ -1021,6 +1027,13 @@ pub struct TitleLayout {
 }
 
 impl TitleBar {
+    /// What a title bar with a view block takes at its right end besides the chips and the settings button: the
+    /// block, and the divider with its gaps when there are chips (what [`crate::toolbar::Toolbar::fit_to`] reserves).
+    pub fn view_reserve(scale: f32) -> f32 {
+        crate::view_block::ViewBlock::width(scale)
+            + (2.0 * style::SPACE_DIVIDER_GAP + style::LINE_WEIGHT) * scale
+    }
+
     /// The bar across the top of a Panel at `area`. The chips and the settings button stay at the right; the name
     /// truncates before they move; the tags go to the hover when they do not fit beside the name.
     pub fn layout(&self, area: [f32; 4], scale: f32) -> TitleLayout {
@@ -1034,7 +1047,27 @@ impl TitleBar {
             [right, bar[1] + (bar[3] - side) / 2.0, side, side]
         });
         let chips_width = chip_row_width_grouped(&self.chips, &self.groups, scale);
-        if settings.is_some() && !self.chips.is_empty() {
+        let mut view = None;
+        let mut divider = None;
+        if self.view {
+            if settings.is_some() {
+                right -= style::SPACE_CHIP_GAP * scale;
+            }
+            view = Some(crate::view_block::ViewBlock::layout(right, bar, scale));
+            right -= crate::view_block::ViewBlock::width(scale);
+            if !self.chips.is_empty() {
+                let weight = style::LINE_WEIGHT * scale;
+                let dgap = style::SPACE_DIVIDER_GAP * scale;
+                let height = style::SPACE_CHIP_HEIGHT * scale;
+                divider = Some([
+                    right - dgap - weight,
+                    bar[1] + (bar[3] - height) / 2.0,
+                    weight,
+                    height,
+                ]);
+                right -= 2.0 * dgap + weight;
+            }
+        } else if settings.is_some() && !self.chips.is_empty() {
             right -= style::SPACE_CHIP_GAP * scale;
         }
         let chips_left = (right - chips_width).max(bar[0] + pad);
@@ -1060,6 +1093,8 @@ impl TitleBar {
             tags,
             chips,
             settings,
+            view,
+            divider,
             tags_in_tooltip: !self.tags.is_empty() && !fits,
             name_cut,
         }
@@ -1100,6 +1135,9 @@ impl TitleBar {
         }
         for ((chip, r), (on, state)) in self.chips.iter().zip(&l.chips).zip(chips) {
             prims.extend(chip.draw([r[0], r[1]], *on, *state, scale));
+        }
+        if let Some(divider) = l.divider {
+            prims.push(rect(divider, style::LINE_BORDER));
         }
         if let Some(button) = l.settings {
             prims.extend(settings_button(button, settings, scale));

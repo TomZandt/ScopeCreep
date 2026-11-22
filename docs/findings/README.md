@@ -115,6 +115,7 @@ What we learned by testing, kept in the repo so it isn't lost when an issue thre
 | [209](209-edge-add.md) | Does an edge add put the new Panel on the chosen side at 50/50 and focus it, is a side with no room refused with the notice, and are the four + hit areas inside the Panel and clear of the title bar, shown only on hover, at 1x and 2x (headless)? |
 | [208](208-panel-copies.md) | Do two instances of a display keep separate settings and draw different pictures, is a duplicate a copy, are the numbers stable, does Close forget settings, does Replace keep place and size, and do zoom and Link reach every picture instance (Feed seam, headless)? |
 | [211](211-tab-groups.md) | Does a drop in the middle make a tab, can a tab be dragged out with the others staying, does a Panel in a hidden tab get no frames, does no room join a tab group with a notice as one undo step, and does the tab strip fit and overflow at the minimum Panel width at 1x and 2x (headless)? |
+| [224](224-view-block.md) | Is Link on in a fresh profile, does the view block sit in the same place on every Panel at 1x and 2x, does the Colour Setup line cut before it meets the menus, and what does the block cost in Panel and Window size (headless)? |
 
 ## Adding findings
 

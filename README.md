@@ -116,8 +116,9 @@ DaVinci Resolve                                 scopecreep app (Rust + wgpu)
   - [0037](docs/adr/0037-aces-conversion-pays-gpu-time-for-exactness.md): The ACES 2.0 conversion pays about 1.4 ms of GPU time to stay inside the exact tolerance
   - [0038](docs/adr/0038-the-window-is-a-tree-of-tab-groups.md): The Window is a tree of tab groups: Panels can be added, moved, tabbed and closed
   - [0039](docs/adr/0039-a-panel-is-an-instance-of-a-display.md): A Panel is an instance of a display, so a display can be on the Window more than once
-  - [0040](docs/adr/0040-view-controls-live-in-a-view-strip.md): View controls live in a view strip on the menu bar, and title bars are three fixed zones
+  - [0040](docs/adr/0040-view-controls-live-in-a-view-strip.md): View controls live in a view strip on the menu bar, and title bars are three fixed zones (the strip superseded by 0042)
   - [0041](docs/adr/0041-pages-are-the-layouts-and-auto-layout-is-a-button.md): Pages are the layouts, and Auto layout and Auto resize are one-shot buttons per page
+  - [0042](docs/adr/0042-view-controls-return-to-every-panel-title-bar.md): View controls return to every Panel's title bar as a block, the Colour Setup line sits in the menu bar row, and a page tab has a right-click menu
 - [docs/findings/](docs/findings/): what testing showed, one file per ticket.
 - [docs/research/](docs/research/): what public sources say, with dates and links.
 

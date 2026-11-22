@@ -2,14 +2,14 @@
 //! menu drops from the button that opened it, which Panels a page owns after a migration, what titles and the Add
 //! list say, a clean profile's one page, the Colour Setup bar's text above its fill (#217) and the default layout.
 //! No GPU, no window.
-use scopecreep::components::{Prim, contains};
+use scopecreep::components::contains;
 use scopecreep::layout::min_window;
 use scopecreep::layout_tree::{LayoutTree, default_names};
 use scopecreep::layouts::Layouts;
 use scopecreep::menu_bar::{AddEntry, LayoutMode, add_menu, largest_menus, layout_menu};
 use scopecreep::page_bar::{BarPart, PageBar};
 use scopecreep::pages::{self, Pages};
-use scopecreep::window_text::top_bar_prims;
+use scopecreep::window_text::colour_setup_line;
 
 const SCALES: [f32; 3] = [1.0, 1.5, 2.0];
 
@@ -105,11 +105,15 @@ fn a_menu_that_does_not_fit_below_its_button_opens_above_it() {
 }
 
 #[test]
-fn only_the_plus_and_add_panel_have_an_anchor() {
+fn only_the_plus_add_panel_and_the_tabs_have_an_anchor() {
     let b = bar();
-    for part in [BarPart::Tab(0), BarPart::AutoResize, BarPart::AutoLayout] {
+    for part in [BarPart::AutoResize, BarPart::AutoLayout] {
         assert_eq!(b.anchor(part, 56.0, 1280.0, 1.0), None);
     }
+    assert!(
+        b.anchor(BarPart::Tab(0), 56.0, 1280.0, 1.0).is_some(),
+        "a tab's right-click menu drops from it"
+    );
 }
 
 #[test]
@@ -231,29 +235,12 @@ fn a_clean_profile_has_exactly_one_page_and_only_saved_layouts_become_pages() {
 }
 
 #[test]
-fn the_colour_setup_bars_text_is_in_the_same_list_after_its_fill() {
+fn the_colour_setup_line_says_something_inside_the_menu_bar_row() {
     for scale in SCALES {
-        let prims = top_bar_prims(
-            "Timeline → Output  ·  Video levels",
-            20.0 * scale,
-            1280.0 * scale,
-            scale,
-        );
-        let first_text = prims.iter().position(|p| matches!(p, Prim::Text { .. }));
-        let last_rect = prims.iter().rposition(|p| matches!(p, Prim::Rect { .. }));
-        assert!(first_text.is_some(), "the bar says something");
-        assert!(
-            first_text > last_rect,
-            "text after the fill, so it is drawn over it"
-        );
-        // Inside the bar.
-        if let Some(Prim::Text { rect, .. }) = prims.get(first_text.unwrap()) {
-            assert_eq!(rect[1], 20.0 * scale);
-            assert!(rect[0] > 0.0 && rect[0] + rect[2] <= 1280.0 * scale);
-        }
-        // With a menu over it the bar keeps its fill and says nothing.
-        let covered = top_bar_prims("", 20.0 * scale, 1280.0 * scale, scale);
-        assert!(covered.iter().all(|p| matches!(p, Prim::Rect { .. })));
+        let line = colour_setup_line("Timeline → Output  ·  Video levels", 1280.0 * scale, scale);
+        assert!(!line.text.is_empty(), "the row says something");
+        assert_eq!(line.rect[1], 0.0, "in the menu bar row");
+        assert!(line.rect[0] > 0.0 && line.rect[0] + line.rect[2] <= 1280.0 * scale);
     }
 }
 
@@ -315,5 +302,5 @@ fn the_displays_to_choose_from_are_listed_a_to_z_whatever_the_panel_order() {
 #[test]
 fn the_windows_least_size_follows_the_default_layout() {
     let tree = LayoutTree::default_for(&default_names());
-    assert_eq!(min_window(&tree, &largest_menus()), [713.0, 645.0]);
+    assert_eq!(min_window(&tree, &largest_menus()), [1015.0, 645.0]);
 }

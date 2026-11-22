@@ -1,5 +1,7 @@
 # View controls live in a view strip on the menu bar, and title bars are three fixed zones
 
+> **Superseded in part by [ADR 0042](0042-view-controls-return-to-every-panel-title-bar.md) (#224):** the view strip is gone; Fit, the zoom readout and Link are a block on every Panel's title bar. The three zones and the chip-order rule below stand.
+
 Date: 2026-11-20 (spec #196). See ADR 0013, ADR 0035.
 
 The zoom chip and the Link chip share a right-anchored row with each Panel's own chips, so Link sits at a different x on every Panel, is missing on the scopes, and is the first chip a narrow Panel pushes into its popover (#171). Link is one Window-wide switch drawn on every picture Panel. The product owner asked for the view controls to be separate from the Panel's controls and always in the same place.

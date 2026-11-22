@@ -86,13 +86,13 @@ fn a_square_cell_counts_as_wide() {
 #[test]
 fn an_add_splits_the_focused_cell_only() {
     let mut tree = default_tree();
-    let (skin, vectorscope) = (index("Skin Tone"), index("Vectorscope"));
+    let (skin, focused) = (index("Skin Tone"), index("Channel Viewer"));
     tree.close(skin);
     let before = tree.cells(AREA, GAP);
-    tree.set_focus(vectorscope);
+    tree.set_focus(focused);
     tree.add(skin, AREA, GAP, min_panel_size(1.0));
     let after = tree.cells(AREA, GAP);
-    let old = before[vectorscope];
+    let old = before[focused];
     let (first, second) = if old[2] >= old[3] {
         let half = (old[2] - GAP) / 2.0;
         (
@@ -107,13 +107,13 @@ fn an_add_splits_the_focused_cell_only() {
         )
     };
     assert!(
-        near(after[vectorscope], first),
+        near(after[focused], first),
         "{:?} vs {first:?}",
-        after[vectorscope]
+        after[focused]
     );
     assert!(near(after[skin], second), "{:?} vs {second:?}", after[skin]);
     for (i, cell) in before.iter().enumerate() {
-        if i != vectorscope && i != skin {
+        if i != focused && i != skin {
             assert!(near(after[i], *cell), "Panel {i} did not move");
         }
     }
