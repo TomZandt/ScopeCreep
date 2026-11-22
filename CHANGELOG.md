@@ -7,6 +7,7 @@ The format follows [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/
 ## [Unreleased]
 
 ### Added
+- The glossary calls the page that shows every UI component in every state the Stylesheet (it was the style showcase).
 - Fit, the zoom readout and Link are back on every Panel's title bar as one block at the top right, after a divider from the Panel's own chips and before the settings button; the view strip in the menu bar row is gone. The scopes have the block too, greyed where nothing zooms, so it is always in the same place. Fit takes that Panel (and every picture Panel while Link is on) to Fit; Link stays one Window-wide switch, on in a first session. A Panel's least width is now 176 (was 120) so the block fits, which makes the Window's least size 1015 × 645 (#224, ADR 0042).
 - The Colour Setup line is now at the right end of the menu bar row, so the full-width row under the menu bar is gone and the Panels have its height back. It is cut with an ellipsis before it can meet the menus, and hovering it shows the whole line (#224, ADR 0042).
 - Right-click on a page tab opens the Layout menu's entries (go to the page, New page from, Duplicate, Rename, Delete, Add panel, Auto layout, Auto resize, Undo, Default layout) from the tab, after making that page the current one. The Layout menu in the menu bar stays (#224, ADR 0042).

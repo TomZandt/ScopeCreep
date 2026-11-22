@@ -109,6 +109,10 @@ _Avoid_: footer
 A named colour or size by role (`TEXT_SECONDARY`, `SPACE_MARGIN`), kept in one module; chrome never uses a raw value.
 _Avoid_: Theme colour, constant
 
+**Stylesheet**:
+The one page that shows every component of the UI (chips, segmented controls, sliders with a value box, the settings button, the popover and tooltip, title bars, the menu bar, the top and status bars, the legend strip) in every state, at 1x and 2x: how every element looks and feels, and the reference a UI change is checked against. `cargo run -p scopecreep --example style_showcase` draws it to PNG images; the style tokens it draws from are the stylesheet's values. Earlier records call it the style showcase (#115).
+_Avoid_: Style showcase, theme page
+
 **Measurement colour**:
 A colour that is data, not style: a false colour band, the heatmap palette, a skin tint, a trace colour. It lives with its display and is exempt from the style check.
 _Avoid_: Theme colour
