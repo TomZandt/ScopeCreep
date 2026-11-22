@@ -1,0 +1,321 @@
+<!doctype html>
+<!--
+  PROTOTYPE, THROWAWAY (never merged to main; lives on branch prototype/stylesheet-accent).
+  Question: how should ScopeCreep's brand accent (#d2ff00, user-settable in Settings) be used across the whole
+  stylesheet (every component in every state, plus the title bar with the owner's option A divider and no view
+  block on scopes)?
+  Three structurally different answers, switch with the bar at the bottom or the arrow keys (?variant=A|B|C):
+    A  Signal    on-states are FILLED with the accent; hover is an accent outline.
+    B  Hairline  chrome stays grey; the accent is only lines and text (underlines, edge bars, text colour).
+    C  Tinted    the greys pick up a trace of the accent hue; on-states filled; focus is a full frame; washes on hover.
+  Static HTML, no build, no persistence. Colours are the app's current style tokens (app/src/style.rs).
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>ScopeCreep stylesheet, accent prototype</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+:root{
+  --accent:#d2ff00; --accent-on:#111; --accent-hover:#e0ff4d; --accent-press:#a8cc00;
+  --bg:#121212; --panel:#171717; --menu:#1c1c1c; --control:#262626; --control-hi:#333; --line:#2e2e2e;
+  --text:#b0b0b0; --text2:#8a8a8a; --muted:#707070; --disabled:#4e4e4e;
+  --r:#d9534f; --g:#4cae4c; --b:#5b7fe8; --y:#c7c7c7;
+  --font: "Noto Sans","DejaVu Sans",system-ui,sans-serif;
+  --tint: transparent;   /* variant C mixes this into the greys */
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:13px/1.35 var(--font);padding:24px 24px 90px}
+h1{font-size:15px;margin:0 0 4px;color:#ddd}
+.note{color:var(--muted);margin:0 0 18px;max-width:900px}
+.wrap{display:grid;grid-template-columns:minmax(560px,1fr) minmax(520px,1fr);gap:28px;align-items:start}
+@media(max-width:1250px){.wrap{grid-template-columns:1fr}}
+h2{font-size:12px;font-weight:600;color:var(--text2);margin:22px 0 8px;letter-spacing:.04em;text-transform:uppercase}
+h2:first-child{margin-top:0}
+
+/* ---------------- variant skins: each sets how states look ---------------- */
+.vC{ --tint:color-mix(in srgb,var(--accent) 7%,transparent) }
+.vC{ --bg:color-mix(in srgb,#121212 93%,var(--accent) 7%); --panel:color-mix(in srgb,#171717 92%,var(--accent) 8%);
+     --menu:color-mix(in srgb,#1c1c1c 92%,var(--accent) 8%); --control:color-mix(in srgb,#262626 90%,var(--accent) 10%);
+     --control-hi:color-mix(in srgb,#333 86%,var(--accent) 14%); --line:color-mix(in srgb,#2e2e2e 82%,var(--accent) 18%) }
+body.vC{background:var(--bg)}
+
+/* ---------------- components ---------------- */
+.chip{display:inline-flex;align-items:center;justify-content:center;min-width:26px;height:20px;padding:0 8px;
+  background:var(--control);color:var(--text);font-size:12px;border:1px solid transparent;position:relative;user-select:none;cursor:default}
+.chip.dis,.dis{color:var(--disabled)!important;pointer-events:none}
+.chip.dis{background:#1e1e1e!important;color:var(--disabled)!important;outline:none!important;box-shadow:none!important}
+.chip.hover{background:var(--control-hi)}
+.chip.press{background:#383838}
+.chip.on{color:var(--accent-on);background:var(--y)}
+.chip.on.R{background:var(--r)} .chip.on.G{background:var(--g);color:#0b1d0b} .chip.on.B{background:var(--b)} .chip.on.Yc{background:var(--y)}
+.chip.on.R,.chip.on.B{color:#fff0f0}
+/* A: accent fills, outline hover */
+.vA .chip.on:not(.R):not(.G):not(.B):not(.Yc){background:var(--accent);color:var(--accent-on)}
+.vA .chip.hover{outline:1px solid var(--accent);outline-offset:-1px;background:var(--control-hi)}
+.vA .chip.on.hover:not(.R):not(.G):not(.B){background:var(--accent-hover);outline:none}
+.vA .chip.press{background:#444;outline:1px solid var(--accent-press);outline-offset:-1px}
+.vA .chip.on.press:not(.R):not(.G):not(.B){background:var(--accent-press)}
+/* B: grey stays grey; accent is text and a 2px underline */
+.vB .chip.on:not(.R):not(.G):not(.B):not(.Yc){background:var(--control);color:var(--accent);box-shadow:inset 0 -2px 0 var(--accent)}
+.vB .chip.hover{color:var(--accent)}
+.vB .chip.press{background:#303030;color:var(--accent-press)}
+.vB .chip.on.hover:not(.R):not(.G):not(.B){background:var(--control-hi)}
+/* C: tinted greys, accent fills, wash on hover */
+.vC .chip.on:not(.R):not(.G):not(.B):not(.Yc){background:var(--accent);color:var(--accent-on)}
+.vC .chip.hover{background:color-mix(in srgb,var(--control) 82%,var(--accent) 18%);color:#e6e6e6}
+.vC .chip.on.hover:not(.R):not(.G):not(.B){background:var(--accent-hover)}
+.vC .chip.press{background:color-mix(in srgb,var(--control) 70%,var(--accent) 30%)}
+
+.seg{display:inline-flex;border:1px solid var(--line)}
+.seg .chip{border-right:1px solid var(--line);height:22px;min-width:56px}
+.seg .chip:last-child{border-right:0}
+.vA .seg .chip.sel{background:var(--accent);color:var(--accent-on)}
+.vB .seg .chip.sel{background:var(--control);color:var(--accent);box-shadow:inset 0 -2px 0 var(--accent)}
+.vC .seg .chip.sel{background:var(--accent);color:var(--accent-on)}
+.seg .chip.sel.hover{filter:brightness(1.1)}
+
+.sliderrow{display:flex;align-items:center;gap:8px;font-size:12px}
+.sliderrow label{width:92px;color:var(--text2)}
+.range{-webkit-appearance:none;appearance:none;width:150px;height:18px;background:transparent;margin:0}
+.range::-webkit-slider-runnable-track{height:4px;background:#333}
+.range::-webkit-slider-thumb{-webkit-appearance:none;width:10px;height:16px;margin-top:-6px;background:#c7c7c7}
+.vA .range::-webkit-slider-runnable-track{background:linear-gradient(90deg,var(--accent) var(--p,50%),#333 var(--p,50%))}
+.vA .range::-webkit-slider-thumb{background:var(--accent)}
+.vB .range::-webkit-slider-runnable-track{height:2px;background:linear-gradient(90deg,var(--accent) var(--p,50%),#3a3a3a var(--p,50%))}
+.vB .range::-webkit-slider-thumb{background:#d0d0d0;width:8px;border-radius:0;box-shadow:0 2px 0 var(--accent)}
+.vC .range::-webkit-slider-runnable-track{background:linear-gradient(90deg,var(--accent) var(--p,50%),var(--control-hi) var(--p,50%))}
+.vC .range::-webkit-slider-thumb{background:#fff}
+.vbox{display:inline-flex;border:1px solid var(--line);height:22px;background:var(--bg)}
+.vbox input{width:58px;background:transparent;border:0;color:var(--text);text-align:right;font:12px var(--font);padding:0 6px;outline:0}
+.vbox:focus-within{border-color:var(--accent)}
+.vC .vbox:focus-within,.vA .vbox:focus-within{box-shadow:0 0 0 1px var(--accent)}
+.vbox .ar{display:flex;flex-direction:column;border-left:1px solid var(--line);font-size:7px;line-height:10px;width:16px;text-align:center;color:var(--text2)}
+.vbox .ar span:hover{color:var(--accent)}
+.rst{width:20px;height:20px;display:inline-flex;align-items:center;justify-content:center;color:var(--text2);font-size:14px}
+.rst:hover{color:var(--accent)}
+.rst.dim{color:var(--disabled)}
+.gear{display:inline-flex;width:22px;height:20px;align-items:center;justify-content:center;color:var(--text2);font-size:13px;letter-spacing:1px}
+.gear.hover{background:var(--control-hi);color:#ddd}
+.vA .gear.hover{outline:1px solid var(--accent);outline-offset:-1px}
+.vB .gear.hover{color:var(--accent)}
+.vC .gear.hover{background:color-mix(in srgb,var(--control) 80%,var(--accent) 20%)}
+
+.matrix{display:grid;grid-template-columns:110px repeat(4,1fr);gap:8px 6px;align-items:center}
+.matrix .h{color:var(--muted);font-size:11px}
+.matrix .l{color:var(--text2);font-size:12px}
+
+/* popover + tooltip */
+.pop{width:330px;background:var(--menu);border:1px solid #3a3a3a;padding:6px 0;font-size:12px;position:relative}
+.pop .hd{padding:6px 12px;color:var(--text2);font-size:11px;letter-spacing:.03em}
+.pop .row{padding:5px 12px 5px 28px;position:relative;color:var(--text)}
+.pop .row.sel:before{content:"";position:absolute;left:12px;top:10px;width:7px;height:7px;background:#ccc}
+.vA .pop .row.sel:before{background:var(--accent)} .vB .pop .row.sel:before{background:var(--accent)} .vC .pop .row.sel:before{background:var(--accent)}
+.pop .row.hov{background:#333}
+.vA .pop .row.hov{background:#333;color:#fff;box-shadow:inset 3px 0 0 var(--accent)}
+.vB .pop .row.hov{color:var(--accent);box-shadow:inset 2px 0 0 var(--accent);background:transparent}
+.vC .pop .row.hov{background:color-mix(in srgb,#333 70%,var(--accent) 30%);color:#fff}
+.pop .sep{height:1px;background:var(--line);margin:6px 12px}
+.pop .amt{padding:6px 12px;display:grid;grid-template-columns:100px 1fr auto auto;gap:6px;align-items:center}
+.pop .amt .range{width:100%}
+.tip{display:inline-block;border:1px solid #444;background:#1c1c1c;padding:4px 8px;font-size:12px;color:#ccc}
+
+/* panel + title bar (option A divider: strong rule, 28px each side) */
+.panel{background:var(--panel);border:1px solid var(--line);margin-bottom:10px;position:relative}
+.tb{height:26px;display:flex;align-items:center;border-bottom:1px solid var(--line);padding-left:8px;gap:8px;position:relative}
+.tb .name{color:var(--text);font-size:12.5px;white-space:nowrap}
+.tb .tag{color:var(--muted);font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+.tb .sp{flex:1}
+.tb .chips{display:flex;gap:2px}
+.tb .rule{align-self:stretch;width:2px;background:#5a5a5a;margin:0 28px}
+.vA .tb .rule{background:var(--accent);opacity:.9}
+.vB .tb .rule{background:#6a6a6a}
+.vC .tb .rule{background:color-mix(in srgb,var(--accent) 55%,#444)}
+.tb .blk{display:flex;gap:4px;align-items:center}
+.tb .blk .zoom{color:var(--muted);font-size:12px;min-width:40px;text-align:center}
+.panel .body{height:96px;background:linear-gradient(135deg,#1a1a1a,#101010);display:flex;align-items:center;justify-content:center;color:#444;font-size:11px}
+.panel.focus{border-color:#555}
+.vA .panel.focus{box-shadow:0 0 0 1px var(--accent)}
+.vA .panel.focus .tb .name{color:#fff}
+.vB .panel.focus .tb{box-shadow:inset 0 2px 0 var(--accent)}
+.vC .panel.focus{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent)}
+.vC .panel.focus .tb .name{color:var(--accent)}
+.tabs{display:flex;align-items:flex-end;height:22px;border-bottom:1px solid var(--line);padding-left:8px;gap:2px}
+.tabs .t{padding:3px 10px;color:var(--text2);font-size:12px;border:1px solid transparent;border-bottom:0;margin-bottom:-1px}
+.tabs .t.on{background:var(--panel);color:#ddd;border-color:var(--line)}
+.vA .tabs .t.on{color:var(--accent-on);background:var(--accent);border-color:var(--accent)}
+.vB .tabs .t.on{color:var(--accent);box-shadow:inset 0 -2px 0 var(--accent);background:transparent;border-color:transparent}
+.vC .tabs .t.on{color:var(--accent);background:var(--panel);border-color:var(--accent);border-bottom-color:var(--panel)}
+.edgeplus{position:absolute;width:20px;height:20px;background:var(--control);color:var(--text);display:flex;align-items:center;justify-content:center;opacity:.95}
+.vA .edgeplus{background:var(--accent);color:var(--accent-on)}
+.vB .edgeplus{border:1px solid var(--accent);color:var(--accent);background:transparent}
+.vC .edgeplus{background:var(--accent);color:var(--accent-on)}
+.dock{position:absolute;left:8px;top:34px;bottom:8px;width:48%;display:flex;align-items:center;justify-content:center;font-size:12px;color:#fff}
+.vA .dock{background:color-mix(in srgb,var(--accent) 22%,transparent);border:2px solid var(--accent)}
+.vB .dock{background:transparent;border:2px dashed var(--accent);color:var(--accent)}
+.vC .dock{background:color-mix(in srgb,var(--accent) 30%,transparent);border:1px solid var(--accent)}
+
+/* bars */
+.menubar{display:flex;align-items:center;height:26px;background:var(--bg);border-bottom:1px solid var(--line);font-size:12.5px;padding-left:4px}
+.menubar .m{padding:4px 11px;color:var(--text)}
+.menubar .m.open{background:var(--control-hi);color:#fff}
+.vA .menubar .m.open{background:var(--accent);color:var(--accent-on)}
+.vB .menubar .m.open{color:var(--accent);box-shadow:inset 0 -2px 0 var(--accent);background:transparent}
+.vC .menubar .m.open{background:color-mix(in srgb,var(--control-hi) 60%,var(--accent) 40%);color:#fff}
+.menubar .cs{margin-left:auto;margin-right:8px;color:var(--text2);font-size:11.5px;max-width:520px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pagebar{display:flex;align-items:center;height:26px;background:var(--bg);padding:0 8px;gap:4px;border-bottom:1px solid var(--line)}
+.pagebar .pt{height:20px;padding:0 10px;display:inline-flex;align-items:center;background:var(--control);color:var(--text2);font-size:12px}
+.pagebar .pt.on{color:#e6e6e6;background:var(--control-hi)}
+.vA .pagebar .pt.on{background:var(--accent);color:var(--accent-on)}
+.vB .pagebar .pt.on{background:var(--control);color:var(--accent);box-shadow:inset 0 -2px 0 var(--accent)}
+.vC .pagebar .pt.on{background:var(--accent);color:var(--accent-on)}
+.pagebar .sp{flex:1}
+.statusbar{height:20px;display:flex;align-items:center;padding:0 8px;font-size:11px;color:var(--text2);border-top:1px solid var(--line);background:var(--bg)}
+.statusbar .sp{flex:1}
+.legend{height:6px;background:linear-gradient(90deg,#0000ff,#3a1fcc 20%,#6a2f9a 40%,#9a4a6a 55%,#d06a30 75%,#ff8000);margin-top:4px}
+.legendlbl{display:flex;justify-content:space-between;font-size:10.5px;color:var(--muted)}
+.win{border:1px solid #333;background:var(--bg)}
+.winbody{padding:8px;display:grid;grid-template-columns:1fr;gap:8px}
+.winbody .panel{margin:0}
+
+/* accent setting */
+.setting{background:var(--menu);border:1px solid #3a3a3a;padding:12px 14px;width:100%}
+.setting h3{margin:0 0 8px;font-size:12px;font-weight:600;color:#ccc}
+.sw{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.swatch{width:26px;height:26px;border:2px solid transparent;cursor:pointer;outline:1px solid #444}
+.swatch.sel{border-color:#fff}
+.hex{display:inline-flex;align-items:center;gap:6px}
+.hex input{width:84px;background:var(--bg);border:1px solid var(--line);color:var(--text);padding:3px 6px;font:12px var(--font)}
+.contrast{margin-top:8px;font-size:11.5px;color:var(--text2)}
+.ok{color:#9be37a}.bad{color:#ff7a7a}
+.txtaccent{color:var(--accent)}
+
+/* prototype switcher (not part of the design) */
+#sw{position:fixed;left:50%;bottom:16px;transform:translateX(-50%);background:#fff;color:#111;border-radius:999px;
+  box-shadow:0 6px 24px rgba(0,0,0,.55);display:flex;align-items:center;gap:6px;padding:6px 8px;font:600 13px var(--font);z-index:99}
+#sw button{border:0;background:#eee;border-radius:999px;width:30px;height:30px;font-size:16px;cursor:pointer}
+#sw span{min-width:260px;text-align:center}
+</style>
+</head>
+<body>
+<h1>ScopeCreep stylesheet, accent colour prototype <span style="color:var(--muted);font-weight:400">(throwaway)</span></h1>
+<p class="note">One question: how should the brand accent be used across every component? Three structurally different answers, switch with the bar below or the &larr; &rarr; keys. Change the accent in the Settings box (bottom right of the page): everything follows it, as the real option would. Channel chips R G B Y keep their own colours. The title bar uses your option A: a strong full-height rule with 28 px each side, and no view controls on scopes.</p>
+
+<div class="wrap">
+<div>
+  <h2>Chips and controls, every state</h2>
+  <div class="matrix" id="matrix"></div>
+  <h2>Segmented, slider with a value box, reset, settings button</h2>
+  <div style="display:flex;flex-direction:column;gap:10px" id="controls"></div>
+  <h2>Popover and tooltip</h2>
+  <div style="display:flex;gap:14px;align-items:flex-start" id="popwrap"></div>
+  <h2>Legend strip</h2>
+  <div style="max-width:560px"><div class="legend"></div><div class="legendlbl"><span>0</span><span>20</span><span>40</span><span>60</span><span>80</span><span>100</span></div></div>
+</div>
+<div>
+  <h2>In the Window</h2>
+  <div class="win" id="win"></div>
+  <h2>Panel title bars (picture Panel with the view block, scope without)</h2>
+  <div id="titlebars"></div>
+  <h2>Tab group, edge +, dock overlay</h2>
+  <div class="win" style="padding:8px"><div class="panel" style="height:150px;margin:0" id="dockdemo"></div></div>
+  <h2>Settings, app accent colour</h2>
+  <div class="setting" id="setting"></div>
+</div>
+</div>
+
+<div id="sw"><button id="prev" aria-label="previous">&larr;</button><span id="lbl"></span><button id="next" aria-label="next">&rarr;</button></div>
+
+<script>
+const VARIANTS=[
+ ['A','Signal: accent fills on-states, outline on hover'],
+ ['B','Hairline: grey chrome, accent as lines and text'],
+ ['C','Tinted: greys pick up the hue, fills and washes']];
+const q=new URLSearchParams(location.search);
+let cur=Math.max(0,VARIANTS.findIndex(v=>v[0]===q.get('variant')));
+function setVariant(i){cur=(i+VARIANTS.length)%VARIANTS.length;
+  document.body.className='v'+VARIANTS[cur][0];
+  document.documentElement.className='v'+VARIANTS[cur][0];
+  document.getElementById('lbl').textContent=VARIANTS[cur][0]+' ('+VARIANTS[cur][1]+')';
+  const u=new URL(location);u.searchParams.set('variant',VARIANTS[cur][0]);history.replaceState(null,'',u);}
+document.getElementById('prev').onclick=()=>setVariant(cur-1);
+document.getElementById('next').onclick=()=>setVariant(cur+1);
+addEventListener('keydown',e=>{if(/INPUT|TEXTAREA/.test(document.activeElement.tagName))return;
+  if(e.key==='ArrowLeft')setVariant(cur-1);if(e.key==='ArrowRight')setVariant(cur+1);});
+
+const $=(s)=>document.querySelector(s);
+const chip=(t,cls='')=>`<span class="chip ${cls}">${t}</span>`;
+// matrix
+const states=['','hover','press','dis'];
+const rows=[['Chip off','',''],['Chip on','on',''],['Y on','on Yc',''],['R on','on R',''],['G on','on G',''],['B on','on B','']];
+let m='<div></div>'+['Normal','Hover','Pressed','Disabled'].map(s=>`<div class="h">${s}</div>`).join('');
+for(const [label,base] of rows){m+=`<div class="l">${label}</div>`+states.map(s=>`<div>${chip(base.includes('Yc')?'Y':base.includes('R')?'R':base.includes('G')?'G':base.includes('B')?'B':'Y',base+' '+(s==='dis'?'dis':s))}</div>`).join('');}
+m+=`<div class="l">Settings button</div>`+states.map(s=>`<div><span class="gear ${s==='dis'?'dis':s}">···</span></div>`).join('');
+$('#matrix').innerHTML=m;
+
+// controls
+function range(id,val){return `<input class="range" id="${id}" type="range" min="0" max="100" value="${val}" style="--p:${val}%">`}
+function amount(label,id,val,unit){return `<div class="sliderrow"><label>${label}</label>${range(id,val)}
+ <span class="vbox"><input id="${id}v" value="${val}"><span class="ar"><span>▲</span><span>▼</span></span></span><span class="txt" style="color:var(--text2);width:24px">${unit}</span>
+ <span class="rst ${val===100?'dim':''}" title="Reset to 100 %">↺</span></div>`}
+$('#controls').innerHTML=
+ `<div class="seg">${chip('Luma','sel')}${chip('Chroma','')}${chip('Both','hover')}</div>`+
+ amount('Trace brightness','a',75,'%')+amount('Soft spread','b',40,'px')+amount('Graticule','c',100,'%')+
+ `<div class="sliderrow"><label>Panel</label>${chip('Reset this Panel','')}</div>`;
+document.addEventListener('input',e=>{const t=e.target;if(t.classList&&t.classList.contains('range')){t.style.setProperty('--p',t.value+'%');const v=document.getElementById(t.id+'v');if(v)v.value=t.value;}});
+
+// popover
+$('#popwrap').innerHTML=`<div class="pop">
+ <div class="hd">Luma weights</div><div class="row sel">From the Measured Space's primaries</div><div class="row hov">Match Resolve's waveform</div>
+ <div class="sep"></div><div class="hd">Scale units</div><div class="row sel">10-bit codes</div><div class="row">Percent</div>
+ <div class="sep"></div>
+ <div class="amt"><span style="color:var(--text2)">Low level</span>${range('p1',0)}<span class="vbox"><input value="0"><span class="ar"><span>▲</span><span>▼</span></span></span><span class="rst dim">↺</span></div>
+ <div class="sep"></div><div class="hd" style="display:flex;justify-content:space-between">Panel <span class="rst" title="Reset this Panel's settings">↺</span></div>
+ <div class="row">Replace with…</div><div class="row">Duplicate right</div><div class="row">Close</div></div>
+ <div><span class="tip">Red channel</span><div style="height:10px"></div><span class="tip">Reset to 100 %</span></div>`;
+
+// window
+const pic=(name,zoom,focus)=>`<div class="panel ${focus?'focus':''}"><div class="tb"><span class="name">${name}</span><span class="tag">Fit ${zoom} %</span><span class="sp"></span>
+ <span class="chips">${chip('Y','on Yc')}${chip('R','')}${chip('G','')}${chip('B','')}</span><span class="rule"></span>
+ <span class="blk">${chip('Fit','')}<span class="zoom">${zoom} %</span>${chip('Link','on')}</span><span class="gear">···</span></div><div class="body">picture</div></div>`;
+const scope=(name,tag)=>`<div class="panel"><div class="tb"><span class="name">${name}</span><span class="tag">${tag}</span><span class="sp"></span>
+ <span class="chips">${chip('Y','on Yc')}${chip('R','')}${chip('G','')}${chip('B','')}${chip('Col','')}</span><span class="gear">···</span></div><div class="body">scope</div></div>`;
+$('#win').innerHTML=`<div class="menubar"><span class="m open">Layout</span><span class="m">View</span><span class="m">Settings</span>
+ <span class="cs">ACEScct → Rec.709 BT.1886 · Video levels · from project, assumes ACES 2.0 · Output Conversion exact for ACES 2.0</span></div>
+ <div class="pagebar"><span class="pt on">[1] Main</span><span class="pt">[2] Pictures</span><span class="pt">+</span><span class="sp"></span>
+  <span class="pt">Auto layout</span><span class="pt">Auto resize</span><span class="pt">Add panel</span></div>
+ <div class="winbody"><div>${pic('Channel Viewer',62,true)}${pic('False Colour - Stops',27,false)}</div><div>${scope('Waveform','Rec.709 weights')}${scope('Vectorscope','100 % plot only')}</div></div>
+ <div class="statusbar">paused · 0 dropped · Timeline 1<span class="sp"></span>Sender A</div>`;
+$('#titlebars').innerHTML=pic('Channel Viewer',62,true)+scope('Waveform','Rec.709 weights, 100 %')+
+ `<div class="panel"><div class="tb"><span class="name">Vectorscope</span><span class="tag">100 % plot only</span><span class="sp"></span><span class="chips">${chip('100 %','')}${chip('200 %','')}${chip('Both','on')}${chip('Mono','')}</span><span class="rule"></span><span class="chips">${chip('All','on')}${chip('Shadows','')}${chip('Mids','')}</span><span class="gear">···</span></div></div>`;
+
+// dock demo
+$('#dockdemo').innerHTML=`<div class="tabs"><span class="t on">Channel Viewer</span><span class="t">Waveform</span><span class="t">+2</span></div>
+ <div style="height:110px;display:flex;align-items:center;justify-content:center;color:#444">tab group</div>
+ <span class="edgeplus" style="right:6px;top:64px">+</span><span class="edgeplus" style="left:50%;bottom:6px">+</span>
+ <div class="dock">Tab here</div>`;
+
+// accent setting
+const SW=['#d2ff00','#ffffff','#38d6ff','#ff9a1f','#ff4fa3','#7cffb2'];
+function lum(h){const c=[1,3,5].map(i=>parseInt(h.slice(i,i+2),16)/255).map(v=>v<=.03928?v/12.92:Math.pow((v+.055)/1.055,2.4));return .2126*c[0]+.7152*c[1]+.0722*c[2]}
+function cr(a,b){const x=lum(a),y=lum(b);return (Math.max(x,y)+.05)/(Math.min(x,y)+.05)}
+function mix(h,t,p){const c=[1,3,5].map(i=>parseInt(h.slice(i,i+2),16));const d=[1,3,5].map((_,i)=>Math.round(c[i]+(t-c[i])*p));return '#'+d.map(v=>v.toString(16).padStart(2,'0')).join('')}
+function setAccent(h){h=h.toLowerCase();if(!/^#[0-9a-f]{6}$/.test(h))return;
+  const on=lum(h)>.35?'#111111':'#ffffff';const r=document.documentElement.style;
+  r.setProperty('--accent',h);r.setProperty('--accent-on',on);r.setProperty('--accent-hover',mix(h,255,.3));r.setProperty('--accent-press',mix(h,0,.25));
+  document.querySelectorAll('.swatch').forEach(s=>s.classList.toggle('sel',s.dataset.c===h));
+  $('#hexin').value=h;
+  const a=cr(h,'#121212'),b=cr(on,h);
+  $('#contrast').innerHTML=`Accent on the window grey: <b class="${a>=4.5?'ok':'bad'}">${a.toFixed(1)}:1</b> · text on an accent fill: <b class="${b>=4.5?'ok':'bad'}">${b.toFixed(1)}:1</b> (4.5:1 is the aim)`;}
+$('#setting').innerHTML=`<h3>Settings › Appearance › App accent colour</h3>
+ <div class="sw">${SW.map(c=>`<span class="swatch" data-c="${c}" style="background:${c}"></span>`).join('')}
+ <span class="hex">#<input id="hexin" value="#d2ff00" maxlength="7"></span>${chip('Reset to #d2ff00','')}</div>
+ <div class="contrast" id="contrast"></div>
+ <div class="contrast">Default is the brand colour. Used for: on-state chips, Link, hover, focus, the active page, sliders, selected rows. Never for measurements or the R G B Y channel chips.</div>`;
+document.querySelectorAll('.swatch').forEach(s=>s.onclick=()=>setAccent(s.dataset.c));
+$('#hexin').addEventListener('input',e=>{let v=e.target.value.trim();if(v[0]!=='#')v='#'+v;setAccent(v)});
+$('#setting').querySelector('.chip').onclick=()=>setAccent('#d2ff00');
+setAccent('#d2ff00');setVariant(cur);
+</script>
+</body>
+</html>
