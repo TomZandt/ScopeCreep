@@ -105,7 +105,7 @@ fn dragging_a_slider_moves_the_readout_and_the_panels_setting_on_every_move() {
         let rect = menu.rect([100.0, 100.0], [1600.0, 1200.0], scale);
         let row = row_of(&menu, "brightness");
         let track = menu.slider_layout(rect, row, scale).track;
-        let y = menu.row_rect(rect, row, scale)[1] + 4.0 * scale;
+        let y = menu.own_rect(rect, row, scale)[1] + 4.0 * scale;
         let press = menu.press(rect, [track[0] + track[2] * 0.25, y], scale, false);
         assert!(press.consumed && menu.dragging());
         for c in &press.changes {
@@ -158,7 +158,9 @@ fn an_amount_is_one_row_of_label_slider_value_box_and_reset_inside_the_popover()
                 assert!(part[1] >= r[1] && part[1] + part[3] <= r[1] + r[3] + 0.01);
             }
             // Hit targets: the box, each arrow and the reset icon are readable sizes.
-            assert!(l.up[3] >= 12.0 * scale && l.down[3] >= 12.0 * scale);
+            for button in [l.up, l.down, l.reset] {
+                assert!(button[2] >= 20.0 * scale && button[3] >= 20.0 * scale);
+            }
             assert!(l.reset[2] >= 20.0 * scale && l.value_box[3] >= 24.0 * scale);
             assert!(r[3] >= style::SPACE_SLIDER_HEIGHT * scale - 0.01);
         }
@@ -173,15 +175,15 @@ fn an_amount_is_one_row_of_label_slider_value_box_and_reset_inside_the_popover()
             .iter()
             .position(|r| matches!(r, MenuRow::Heading(t) if t == "Panel"))
             .unwrap();
-        let first = menu.heading_rect(rect, 0, scale);
+        let first = menu.own_rect(rect, 0, scale);
         let first_full = menu.row_rect(rect, 0, scale);
         assert_eq!(first, first_full, "the first heading has no room above it");
         let (u, u_full) = (
-            menu.heading_rect(rect, units, scale),
+            menu.own_rect(rect, units, scale),
             menu.row_rect(rect, units, scale),
         );
         let (p, p_full) = (
-            menu.heading_rect(rect, section, scale),
+            menu.own_rect(rect, section, scale),
             menu.row_rect(rect, section, scale),
         );
         assert!(u[1] - u_full[1] >= style::SPACE_POPOVER_GROUP_GAP * scale - 0.01);
@@ -217,9 +219,10 @@ fn the_parts_of_an_amount_row_are_told_apart_by_where_a_press_lands() {
         assert_eq!(hit(l.reset), Some(("brightness", AmountHit::Reset)));
         let label = menu.label_rect(rect, row, scale);
         assert_eq!(hit(label), None, "the label is not a control");
-        // The arrows' halves meet at the box's middle and neither reaches the other.
+        // The arrows sit side by side at the box's right, each as tall as the box, and neither reaches the other.
         assert!(contains(l.up, [l.up[0] + 1.0, l.up[1] + l.up[3] - 1.0]));
-        assert!(!contains(l.up, [l.up[0] + 1.0, l.down[1] + 1.0]));
+        assert!(!contains(l.up, [l.down[0] + 1.0, l.down[1] + 1.0]));
+        assert!(!contains(l.down, [l.up[0] + 1.0, l.up[1] + 1.0]));
         // Not a hit above the first amount row or on a choice row.
         assert_eq!(
             menu.amount_hit(rect, [l.number[0], rect[1] + 1.0], scale),
@@ -417,7 +420,7 @@ fn the_panel_reset_sits_in_the_panel_sections_corner_and_is_dim_when_all_is_defa
             .iter()
             .position(|r| matches!(r, MenuRow::Heading(t) if t == "Panel"))
             .unwrap();
-        let heading = menu.heading_rect(rect, section, scale);
+        let heading = menu.own_rect(rect, section, scale);
         assert!(icon[1] >= heading[1] && icon[1] + icon[3] <= heading[1] + heading[3] + 0.01);
         assert!(
             icon[0] + icon[2] <= rect[0] + rect[2],
@@ -444,12 +447,11 @@ fn the_panel_reset_sits_in_the_panel_sections_corner_and_is_dim_when_all_is_defa
             popover(m, rect, [-1.0, -1.0], scale)
                 .into_iter()
                 .find_map(|p| match p {
-                    Prim::Text {
-                        text,
-                        colour,
-                        rect: r,
-                        ..
-                    } if text == "\u{21BA}" && r == icon => Some(colour),
+                    Prim::Rect { rect: r, colour }
+                        if contains(icon, [r[0], r[1]]) && r[3] <= 1.01 =>
+                    {
+                        Some(colour)
+                    }
                     _ => None,
                 })
                 .expect("the Panel reset is drawn")
@@ -544,4 +546,139 @@ fn resetting_all_panels_puts_every_instance_back_and_keeps_state_and_link() {
     let version = settings.version();
     settings.reset_all_settings();
     assert_eq!(settings.version(), version);
+}
+
+// ---- The popover reads like the demo (#237) ----
+
+/// The widest amount row the popovers have: a long label and "1023 codes".
+const HIGH_REFERENCE: Amount = Amount {
+    min: 0.0,
+    max: 1023.0,
+    step: 1.0,
+    default: 940.0,
+    unit: " codes",
+    decimals: 0,
+    legacy: &[],
+};
+
+fn wide_menu() -> Menu {
+    let defs = [
+        SettingDef {
+            key: "units",
+            label: "Scale units",
+            amount: None,
+            choices: &[Choice {
+                value: "codes",
+                text: "10-bit codes",
+            }],
+        },
+        SettingDef {
+            key: "high",
+            label: "High reference level",
+            amount: Some(HIGH_REFERENCE),
+            choices: &[],
+        },
+    ];
+    let mut current = PanelSettings::default().resolve("P", &defs);
+    current.insert("high".to_string(), Amount::store(1023.0));
+    Menu::for_panel(0, &defs, &current)
+}
+
+fn rect_prims(prims: &[Prim]) -> Vec<[f32; 4]> {
+    prims
+        .iter()
+        .filter_map(|p| match p {
+            Prim::Rect { rect, .. } => Some(*rect),
+            _ => None,
+        })
+        .collect()
+}
+
+#[test]
+fn the_longest_value_and_label_never_touch_the_arrows_or_the_edges() {
+    for scale in SCALES {
+        let menu = wide_menu();
+        let rect = menu.rect([50.0, 50.0], [1600.0, 1200.0], scale);
+        let row = row_of(&menu, "high");
+        let l = menu.slider_layout(rect, row, scale);
+        // Ten characters at the widest a digit or letter runs (0.6 of the 13 px type).
+        let wanted = 10.0 * 0.6 * style::TYPE_LABEL * scale;
+        assert!(
+            wanted + 4.0 * scale <= l.number[2],
+            "{wanted} in {} at {scale}",
+            l.number[2]
+        );
+        // The number's part, then the two arrows, one after the other inside the box.
+        assert!(l.number[0] + l.number[2] <= l.down[0] + 0.01);
+        assert!(l.down[0] + l.down[2] <= l.up[0] + 0.01);
+        assert!(l.up[0] + l.up[2] <= l.value_box[0] + l.value_box[2] + 0.01);
+    }
+}
+
+#[test]
+fn the_arrows_and_the_reset_are_drawn_shapes_that_light_under_the_pointer() {
+    for scale in SCALES {
+        let menu = wide_menu();
+        let rect = menu.rect([50.0, 50.0], [1600.0, 1200.0], scale);
+        let row = row_of(&menu, "high");
+        let l = menu.slider_layout(rect, row, scale);
+        let away = [rect[0] + 1.0, rect[1] + 1.0];
+        let rest = popover(&menu, rect, away, scale);
+        // No font glyph for an arrow or the reset: only labels are text.
+        for p in &rest {
+            if let Prim::Text { text, rect: r, .. } = p {
+                for button in [l.up, l.down, l.reset] {
+                    assert!(
+                        !contains(button, [r[0] + 1.0, r[1] + 1.0]),
+                        "glyph {text:?}"
+                    );
+                }
+            }
+        }
+        // A pixel-high run of rectangles inside a button is a drawn shape.
+        let shape_rows = |prims: &[Prim], button: [f32; 4]| -> Vec<[f32; 4]> {
+            rect_prims(prims)
+                .into_iter()
+                .filter(|r| contains(button, [r[0] + 0.1, r[1] + 0.1]) && r[3] <= 1.01)
+                .collect()
+        };
+        for button in [l.up, l.down] {
+            let rows = shape_rows(&rest, button);
+            assert!(rows.len() >= 5 * scale as usize, "{} rows", rows.len());
+            let widest = rows.iter().map(|r| r[2]).fold(0.0, f32::max);
+            assert!(widest >= 8.0 * scale, "triangle {widest} wide");
+            // Lit under the pointer: a lighter ground behind it.
+            let lit = popover(&menu, rect, middle(button), scale);
+            assert!(rect_prims(&lit).len() > rect_prims(&rest).len());
+        }
+        // The reset is a ring with an arrowhead, many pixels, not a hairline.
+        let ring: f32 = shape_rows(&rest, l.reset).iter().map(|r| r[2]).sum();
+        assert!(ring >= 30.0 * scale * scale, "{ring}");
+        let lit = popover(&menu, rect, middle(l.reset), scale);
+        assert!(rect_prims(&lit).len() > rect_prims(&rest).len());
+    }
+}
+
+#[test]
+fn groups_are_apart_with_a_quiet_line_before_the_amounts_and_before_the_panel_section() {
+    for scale in SCALES {
+        let menu = wide_menu();
+        let rect = menu.rect([50.0, 50.0], [1600.0, 1200.0], scale);
+        let (high, section) = (row_of(&menu, "high"), menu.rows.len() - 5);
+        let choice = menu.row_rect(rect, high - 1, scale);
+        let amount = menu.own_rect(rect, high, scale);
+        let gap = |below: [f32; 4], above: [f32; 4]| below[1] - (above[1] + above[3]);
+        assert!(gap(amount, choice) >= style::SPACE_POPOVER_GROUP_GAP * scale - 0.01);
+        let heading = menu.own_rect(rect, section, scale);
+        assert!(gap(heading, amount) >= style::SPACE_POPOVER_GROUP_GAP * scale - 0.01);
+        // The amount row keeps its 34 px.
+        assert!((amount[3] - style::SPACE_POPOVER_ROW * scale).abs() < 0.01);
+        // A thin line, most of the popover wide, sits in each gap.
+        let prims = popover(&menu, rect, [0.0, 0.0], scale);
+        let lines = rect_prims(&prims)
+            .into_iter()
+            .filter(|r| r[3] <= scale.max(1.0) + 0.01 && r[2] > rect[2] / 2.0)
+            .count();
+        assert!(lines >= 2, "{lines} group lines");
+    }
 }

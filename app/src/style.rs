@@ -166,7 +166,7 @@ pub const SPACE_SEGMENT_HEIGHT: f32 = 22.0;
 pub const SPACE_SEGMENT_PAD: f32 = 12.0;
 /// A slider: its row, the track's length and thickness, the thumb, and the room for its number.
 pub const SPACE_SLIDER_HEIGHT: f32 = 34.0;
-pub const SPACE_SLIDER_TRACK: f32 = 84.0;
+pub const SPACE_SLIDER_TRACK: f32 = 72.0;
 pub const SPACE_SLIDER_TRACK_THICKNESS: f32 = 2.0;
 pub const SPACE_SLIDER_THUMB: f32 = 8.0;
 /// The thumb's height (a grey bar across the 2 px track).
@@ -174,7 +174,18 @@ pub const SPACE_SLIDER_THUMB_HEIGHT: f32 = 16.0;
 /// The value box beside a slider (#225): the box's whole width, the arrows' column at its right, and the circular
 /// reset icon after it.
 pub const SPACE_VALUE_BOX: f32 = 84.0;
-pub const SPACE_VALUE_ARROWS: f32 = 18.0;
+pub const SPACE_VALUE_ARROWS: f32 = 22.0;
+/// The gap from a slider's track to its value box and from the box to its reset icon (#237).
+pub const SPACE_SLIDER_BOX_GAP: f32 = 10.0;
+pub const SPACE_RESET_GAP: f32 = 8.0;
+/// The drawn arrows and reset icon (#237): an arrow triangle's width and height, the reset ring's diameter and
+/// stroke, and its arrowhead's length and half-width. Drawn from rectangles, not font glyphs.
+pub const SPACE_ARROW_WIDTH: f32 = 10.0;
+pub const SPACE_ARROW_HEIGHT: f32 = 6.0;
+pub const SPACE_RESET_RING: f32 = 12.0;
+pub const SPACE_RESET_STROKE: f32 = 1.6;
+pub const SPACE_RESET_HEAD: f32 = 4.5;
+pub const SPACE_RESET_HEAD_HALF: f32 = 3.2;
 pub const SPACE_RESET_ICON: f32 = 24.0;
 /// The Panel settings popover (#225): its width, the height of a choice row, the extra room above a group's
 /// heading, the room round the popover, and the label column in front of a slider.
@@ -182,7 +193,7 @@ pub const SPACE_POPOVER_WIDTH: f32 = 400.0;
 pub const SPACE_POPOVER_ROW: f32 = 34.0;
 pub const SPACE_POPOVER_GROUP_GAP: f32 = 10.0;
 pub const SPACE_POPOVER_PAD: f32 = 8.0;
-pub const SPACE_POPOVER_LABEL: f32 = 134.0;
+pub const SPACE_POPOVER_LABEL: f32 = 128.0;
 /// A tooltip's padding and its gap from what it names.
 pub const SPACE_TOOLTIP_PAD: f32 = 6.0;
 pub const SPACE_TOOLTIP_GAP: f32 = 6.0;
@@ -234,7 +245,7 @@ pub const SPACE_LEGEND_HEIGHT: f32 = 26.0;
 /// The development showcase sheet (logical pixels): the row-label column, a state column, a row, the sheet's
 /// height, the wide and narrow sample Panels and their height and row step, and the tooltip anchor's offset.
 pub const SPACE_SHOWCASE_LABEL: f32 = 140.0;
-pub const SPACE_SHOWCASE_COLUMN: f32 = 240.0;
+pub const SPACE_SHOWCASE_COLUMN: f32 = 264.0;
 pub const SPACE_SHOWCASE_ROW: f32 = 36.0;
 pub const SPACE_SHOWCASE_SHEET_HEIGHT: f32 = 4000.0;
 pub const SPACE_SHOWCASE_PANEL_WIDE: f32 = 560.0;

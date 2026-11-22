@@ -138,23 +138,42 @@ pub fn showcase(scale: f32) -> Showcase {
             ],
         },
         crate::settings::SettingDef {
-            key: "spread",
-            label: "Soft spread",
-            amount: None,
-            choices: &[
-                crate::settings::Choice {
-                    value: "on",
-                    text: "On",
-                },
-                crate::settings::Choice {
-                    value: "off",
-                    text: "Off",
-                },
-            ],
+            key: "brightness",
+            label: "Trace brightness",
+            amount: Some(crate::settings::Amount {
+                min: 0.0,
+                max: 200.0,
+                step: 5.0,
+                default: 100.0,
+                unit: " %",
+                decimals: 0,
+                legacy: &[],
+            }),
+            choices: &[],
+        },
+        crate::settings::SettingDef {
+            key: "high",
+            label: "High reference level",
+            amount: Some(crate::settings::Amount {
+                min: 0.0,
+                max: 1023.0,
+                step: 1.0,
+                default: 940.0,
+                unit: " codes",
+                decimals: 0,
+                legacy: &[],
+            }),
+            choices: &[],
         },
     ];
-    let current = crate::settings::PanelSettings::default().resolve("sample", &defs);
-    let menu = Menu::new(0, &defs, &current).expect("the sample has settings");
+    let mut current = crate::settings::PanelSettings::default().resolve("sample", &defs);
+    // Two amounts off their defaults (a lit reset icon), the longest value box text ("1023 codes").
+    current.insert(
+        "brightness".to_string(),
+        crate::settings::Amount::store(150.0),
+    );
+    current.insert("high".to_string(), crate::settings::Amount::store(1023.0));
+    let menu = Menu::for_panel(0, &defs, &current);
     let area = [margin + label_w, y, 0.0, 0.0];
     let popover_rect = menu.rect(
         [area[0], area[1]],

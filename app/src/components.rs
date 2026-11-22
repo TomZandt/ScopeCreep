@@ -487,24 +487,21 @@ impl Slider {
         let x = track[0] + value * track_w;
         let gap = style::SPACE_CHIP_GAP * scale;
         let box_h = height - gap;
+        let arrows = style::SPACE_VALUE_ARROWS * scale;
+        let number_w = style::SPACE_VALUE_BOX * scale;
         let value_box = [
-            track[0] + track_w + thumb / 2.0 + 2.0 * gap,
+            track[0] + track_w + thumb / 2.0 + style::SPACE_SLIDER_BOX_GAP * scale,
             at[1] + (height - box_h) / 2.0,
-            style::SPACE_VALUE_BOX * scale,
+            number_w + 2.0 * arrows,
             box_h,
         ];
-        let arrows = style::SPACE_VALUE_ARROWS * scale;
-        let number = [value_box[0], value_box[1], value_box[2] - arrows, box_h];
-        let up = [
-            value_box[0] + value_box[2] - arrows,
-            value_box[1],
-            arrows,
-            box_h / 2.0,
-        ];
-        let down = [up[0], value_box[1] + box_h / 2.0, arrows, box_h / 2.0];
+        let number = [value_box[0], value_box[1], number_w, box_h];
+        // Two buttons side by side at the box's right, each as tall as the box: a hit target of at least 20 x 20.
+        let down = [value_box[0] + number_w, value_box[1], arrows, box_h];
+        let up = [down[0] + arrows, value_box[1], arrows, box_h];
         let side = style::SPACE_RESET_ICON * scale;
         let reset = [
-            value_box[0] + value_box[2] + gap,
+            value_box[0] + value_box[2] + style::SPACE_RESET_GAP * scale,
             at[1] + (height - side) / 2.0,
             side,
             side,
@@ -560,6 +557,26 @@ impl Slider {
         typing: Option<&str>,
         reset_enabled: bool,
     ) -> Vec<Prim> {
+        self.draw_under(
+            at,
+            state,
+            scale,
+            typing,
+            reset_enabled,
+            [f32::NEG_INFINITY; 2],
+        )
+    }
+
+    /// As [`Slider::draw_with`], with the arrow or reset icon under `cursor` lit (a lighter ground, white glyph).
+    pub fn draw_under(
+        &self,
+        at: [f32; 2],
+        state: State,
+        scale: f32,
+        typing: Option<&str>,
+        reset_enabled: bool,
+        cursor: [f32; 2],
+    ) -> Vec<Prim> {
         let l = self.layout(at, scale);
         let disabled = state == State::Disabled;
         // A thin accent track and a grey thumb (ADR 0044).
@@ -605,7 +622,7 @@ impl Slider {
             Some(t) => format!("{t}|"),
             None => self.number.clone(),
         };
-        let pad = style::SPACE_CHIP_GAP * scale;
+        let pad = style::SPACE_CHIP_GAP * 2.0 * scale;
         prims.push(text(
             &shown,
             [
@@ -618,45 +635,168 @@ impl Slider {
             ink,
             Align::Right,
         ));
-        // The arrows: a divider, and a small triangle in each half.
-        prims.push(rect(
-            [l.up[0], b[1] + w, w, b[3] - 2.0 * w],
-            style::LINE_BORDER,
-        ));
-        for (arrow, glyph) in [(l.up, "\u{25B2}"), (l.down, "\u{25BC}")] {
-            prims.push(text(
-                glyph,
-                arrow,
-                Face::Scale,
-                if disabled {
-                    style::TEXT_DISABLED
-                } else {
-                    style::TEXT_SECONDARY
-                },
-                Align::Centre,
+        // The arrows: two buttons with a divider before each, a filled triangle in each.
+        for (button, up) in [(l.down, false), (l.up, true)] {
+            prims.push(rect(
+                [button[0], b[1] + w, w, b[3] - 2.0 * w],
+                style::LINE_BORDER,
+            ));
+            let lit = !disabled && contains(button, cursor);
+            if lit {
+                prims.push(rect(
+                    [button[0] + w, b[1] + w, button[2] - 2.0 * w, b[3] - 2.0 * w],
+                    style::STATE_HOVER,
+                ));
+            }
+            prims.extend(symbol(
+                if up { Symbol::Up } else { Symbol::Down },
+                button,
+                !disabled,
+                lit,
+                scale,
             ));
         }
-        prims.extend(reset_icon(l.reset, reset_enabled && !disabled, false));
+        prims.extend(reset_icon(
+            l.reset,
+            reset_enabled && !disabled,
+            contains(l.reset, cursor),
+            scale,
+        ));
         prims
     }
 }
 
-/// The circular reset arrow: dim when there is nothing to reset, lit under the pointer when there is.
-pub fn reset_icon(area: [f32; 4], enabled: bool, hover: bool) -> Vec<Prim> {
+/// Filled shape `inside` (a test on device-pixel centres), within `bounds`, as one rectangle per run of pixels.
+fn shape(bounds: [f32; 4], colour: Rgb, inside: impl Fn(f32, f32) -> bool) -> Vec<Prim> {
+    let mut prims = Vec::new();
+    let (x0, y0) = (bounds[0].floor(), bounds[1].floor());
+    let (x1, y1) = (
+        (bounds[0] + bounds[2]).ceil(),
+        (bounds[1] + bounds[3]).ceil(),
+    );
+    let mut y = y0;
+    while y < y1 {
+        let mut run: Option<f32> = None;
+        let mut x = x0;
+        while x <= x1 {
+            let on = x < x1 && inside(x + 0.5, y + 0.5);
+            match (on, run) {
+                (true, None) => run = Some(x),
+                (false, Some(start)) => {
+                    prims.push(rect([start, y, x - start, 1.0], colour));
+                    run = None;
+                }
+                _ => {}
+            }
+            x += 1.0;
+        }
+        y += 1.0;
+    }
+    prims
+}
+
+/// Whether `p` is inside the triangle `a`, `b`, `c`.
+fn in_triangle(p: [f32; 2], a: [f32; 2], b: [f32; 2], c: [f32; 2]) -> bool {
+    let side = |p: [f32; 2], q: [f32; 2], r: [f32; 2]| {
+        (p[0] - r[0]) * (q[1] - r[1]) - (q[0] - r[0]) * (p[1] - r[1])
+    };
+    let (d1, d2, d3) = (side(p, a, b), side(p, b, c), side(p, c, a));
+    let neg = d1 < 0.0 || d2 < 0.0 || d3 < 0.0;
+    let pos = d1 > 0.0 || d2 > 0.0 || d3 > 0.0;
+    !(neg && pos)
+}
+
+/// The small symbols of the controls (the value box's arrows and the reset). The one place they are drawn, so a
+/// font icon can replace the drawn shapes (#238) without touching layout, hit areas or tests.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Symbol {
+    Up,
+    Down,
+    Reset,
+}
+
+/// `kind` drawn centred in `area` (its button), bright at rest, white when `lit`, dim when not `enabled`.
+pub fn symbol(kind: Symbol, area: [f32; 4], enabled: bool, lit: bool, scale: f32) -> Vec<Prim> {
+    match kind {
+        Symbol::Up => arrow(area, true, enabled, lit, scale),
+        Symbol::Down => arrow(area, false, enabled, lit, scale),
+        Symbol::Reset => ring(area, enabled, lit, scale),
+    }
+}
+
+/// An up or down arrow button's filled triangle, centred in `button`. Bright at rest, white when `lit`, dim when
+/// the button is not `enabled`.
+fn arrow(button: [f32; 4], up: bool, enabled: bool, lit: bool, scale: f32) -> Vec<Prim> {
+    let (w, h) = (
+        style::SPACE_ARROW_WIDTH * scale,
+        style::SPACE_ARROW_HEIGHT * scale,
+    );
+    let (cx, cy) = (button[0] + button[2] / 2.0, button[1] + button[3] / 2.0);
+    let (tip, base) = if up {
+        (cy - h / 2.0, cy + h / 2.0)
+    } else {
+        (cy + h / 2.0, cy - h / 2.0)
+    };
+    let (a, b, c) = ([cx, tip], [cx - w / 2.0, base], [cx + w / 2.0, base]);
+    let colour = if !enabled {
+        style::rgb(style::TEXT_DISABLED)
+    } else if lit {
+        style::rgb(style::TEXT_HIGH)
+    } else {
+        style::rgb(style::TEXT_PRIMARY)
+    };
+    shape([cx - w / 2.0, cy - h / 2.0, w, h], colour, |x, y| {
+        in_triangle([x, y], a, b, c)
+    })
+}
+
+/// The circular reset arrow, drawn from pixels (a ring open at the top with an arrowhead turning into the
+/// gap): dim when there is nothing to reset, bright at rest, white on a lighter ground under the pointer.
+pub fn reset_icon(area: [f32; 4], enabled: bool, hover: bool, scale: f32) -> Vec<Prim> {
     let mut prims = Vec::new();
     if enabled && hover {
         prims.push(rect(area, style::STATE_HOVER));
     }
-    prims.push(text(
-        "\u{21BA}",
-        area,
-        Face::Notice,
-        if enabled {
-            style::TEXT_PRIMARY
-        } else {
-            style::TEXT_DISABLED
+    prims.extend(symbol(Symbol::Reset, area, enabled, hover, scale));
+    prims
+}
+
+/// The reset ring and its arrowhead, from pixels.
+fn ring(area: [f32; 4], enabled: bool, hover: bool, scale: f32) -> Vec<Prim> {
+    let mut prims = Vec::new();
+    let colour = if !enabled {
+        style::rgb(style::TEXT_DISABLED)
+    } else if hover {
+        style::rgb(style::TEXT_HIGH)
+    } else {
+        style::rgb(style::TEXT_PRIMARY)
+    };
+    let (cx, cy) = (area[0] + area[2] / 2.0, area[1] + area[3] / 2.0);
+    let stroke = style::SPACE_RESET_STROKE * scale;
+    let radius = style::SPACE_RESET_RING * scale / 2.0 - stroke / 2.0;
+    // Angles run clockwise from east (y points down); the ring is open between -135 and -45 degrees, at the top.
+    let end = -45.0_f32.to_radians();
+    let dir = [end.sin(), -end.cos()];
+    let normal = [-dir[1], dir[0]];
+    let at = [cx + radius * end.cos(), cy + radius * end.sin()];
+    let (head, half) = (
+        style::SPACE_RESET_HEAD * scale,
+        style::SPACE_RESET_HEAD_HALF * scale,
+    );
+    let tip = [at[0] + dir[0] * head, at[1] + dir[1] * head];
+    let left = [at[0] + normal[0] * half, at[1] + normal[1] * half];
+    let right = [at[0] - normal[0] * half, at[1] - normal[1] * half];
+    let reach = radius + stroke;
+    prims.extend(shape(
+        [cx - reach, cy - reach, 2.0 * reach, 2.0 * reach],
+        colour,
+        |x, y| {
+            let (dx, dy) = (x - cx, y - cy);
+            let angle = dy.atan2(dx).to_degrees();
+            let on_ring = ((dx * dx + dy * dy).sqrt() - radius).abs() <= stroke / 2.0
+                && !(angle > -135.0 && angle < -45.0);
+            on_ring || in_triangle([x, y], tip, left, right)
         },
-        Align::Centre,
     ));
     prims
 }
@@ -672,22 +812,22 @@ pub fn popover(menu: &Menu, area: [f32; 4], cursor: [f32; 2], scale: f32) -> Vec
     for (i, row) in menu.rows.iter().enumerate() {
         let row_rect = menu.row_rect(area, i, scale);
         let top = row_rect[1];
+        let own = menu.own_rect(area, i, scale);
+        // A group starts after a quiet line in the room above its heading (or its first amount).
+        if menu.gap_before(i) > 0.0 {
+            let inset = style::SPACE_MENU_HEADING_LEFT * scale;
+            prims.push(rect(
+                [
+                    area[0] + inset,
+                    own[1] - (menu.gap_before(i) * scale + weight) / 2.0,
+                    area[2] - 2.0 * inset,
+                    weight,
+                ],
+                style::LINE_BORDER,
+            ));
+        }
         match row {
             MenuRow::Heading(label) => {
-                let own = menu.heading_rect(area, i, scale);
-                // A heading after the first starts a group: a quiet line in the room above it.
-                if i > 0 {
-                    let inset = style::SPACE_MENU_HEADING_LEFT * scale;
-                    prims.push(rect(
-                        [
-                            area[0] + inset,
-                            own[1] - (style::SPACE_POPOVER_GROUP_GAP * scale + weight) / 2.0,
-                            area[2] - 2.0 * inset,
-                            weight,
-                        ],
-                        style::LINE_BORDER,
-                    ));
-                }
                 let left = area[0] + style::SPACE_MENU_HEADING_LEFT * scale;
                 prims.push(text(
                     label,
@@ -703,6 +843,7 @@ pub fn popover(menu: &Menu, area: [f32; 4], cursor: [f32; 2], scale: f32) -> Vec
                         reset,
                         !menu.panel_at_default,
                         contains(reset, cursor),
+                        scale,
                     ));
                 }
             }
@@ -712,7 +853,7 @@ pub fn popover(menu: &Menu, area: [f32; 4], cursor: [f32; 2], scale: f32) -> Vec
                 amount,
                 value,
             } => {
-                let state = if contains(row_rect, cursor) {
+                let state = if contains(own, cursor) {
                     State::Hover
                 } else {
                     State::Normal
@@ -730,12 +871,14 @@ pub fn popover(menu: &Menu, area: [f32; 4], cursor: [f32; 2], scale: f32) -> Vec
                     number: amount.text(*value),
                 };
                 let at = menu.slider_origin(area, i, scale);
-                prims.extend(slider.draw_with(at, state, scale, typing, *value != amount.default));
-                let reset = slider.layout(at, scale).reset;
-                if *value != amount.default && contains(reset, cursor) {
-                    prims.push(rect(reset, style::STATE_HOVER));
-                    prims.extend(reset_icon(reset, true, false));
-                }
+                prims.extend(slider.draw_under(
+                    at,
+                    state,
+                    scale,
+                    typing,
+                    *value != amount.default,
+                    cursor,
+                ));
             }
             MenuRow::Panel(action) => {
                 if contains(row_rect, cursor) {

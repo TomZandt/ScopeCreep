@@ -344,11 +344,8 @@ fn a_slider_states_differ_and_a_disabled_one_is_dimmed() {
             assert_ne!(a, b);
         }
     }
-    // The number, the two arrows and the reset icon.
-    assert_eq!(
-        texts(&slider.draw([0.0; 2], State::Normal, 1.0)),
-        ["50", "\u{25B2}", "\u{25BC}", "\u{21BA}"]
-    );
+    // Only the number is text: the arrows and the reset icon are drawn shapes, not font glyphs (#237).
+    assert_eq!(texts(&slider.draw([0.0; 2], State::Normal, 1.0)), ["50"]);
 }
 
 const DEFS: [SettingDef; 2] = [

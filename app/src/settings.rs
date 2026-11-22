@@ -588,18 +588,18 @@ impl Menu {
 
     // ---- Geometry ----
 
-    /// A row's height in logical pixels, a group heading's room above it included.
+    /// A row's height in logical pixels, a group's gap above it included.
     fn row_height(&self, row: usize) -> f32 {
         match &self.rows[row] {
-            MenuRow::Slider { .. } => crate::style::SPACE_SLIDER_HEIGHT,
-            MenuRow::Heading(_) => MENU_ROW + self.heading_gap(row),
+            MenuRow::Slider { .. } => crate::style::SPACE_SLIDER_HEIGHT + self.gap_before(row),
+            MenuRow::Heading(_) => MENU_ROW + self.gap_before(row),
             _ => MENU_ROW,
         }
     }
 
-    /// The room above a heading that separates its group from the one before: none for the first row, more
-    /// before the Panel section.
-    fn heading_gap(&self, row: usize) -> f32 {
+    /// The room above a row that starts a group (with a quiet line in it): a heading after the first row (more
+    /// before the Panel section) and the first amount after a run of choices. None for any other row.
+    pub fn gap_before(&self, row: usize) -> f32 {
         match &self.rows[row] {
             MenuRow::Heading(text) if row > 0 => {
                 if text == PANEL_SECTION {
@@ -607,6 +607,11 @@ impl Menu {
                 } else {
                     crate::style::SPACE_POPOVER_GROUP_GAP
                 }
+            }
+            MenuRow::Slider { .. }
+                if row > 0 && matches!(self.rows[row - 1], MenuRow::Choice { .. }) =>
+            {
+                crate::style::SPACE_POPOVER_GROUP_GAP
             }
             _ => 0.0,
         }
@@ -649,9 +654,9 @@ impl Menu {
         ]
     }
 
-    /// A heading's own row, below the room its group's gap takes.
-    pub fn heading_rect(&self, rect: [f32; 4], row: usize, scale: f32) -> [f32; 4] {
-        let gap = self.heading_gap(row) * scale;
+    /// A row's own part, below the room its group's gap takes.
+    pub fn own_rect(&self, rect: [f32; 4], row: usize, scale: f32) -> [f32; 4] {
+        let gap = self.gap_before(row) * scale;
         let full = self.row_rect(rect, row, scale);
         [full[0], full[1] + gap, full[2], full[3] - gap]
     }
@@ -712,13 +717,13 @@ impl Menu {
             rect[0]
                 + (crate::style::SPACE_MENU_HEADING_LEFT + crate::style::SPACE_POPOVER_LABEL)
                     * scale,
-            self.row_top(rect, row, scale),
+            self.own_rect(rect, row, scale)[1],
         ]
     }
 
     /// The label's box in an amount row.
     pub fn label_rect(&self, rect: [f32; 4], row: usize, scale: f32) -> [f32; 4] {
-        let r = self.row_rect(rect, row, scale);
+        let r = self.own_rect(rect, row, scale);
         [
             rect[0] + crate::style::SPACE_MENU_HEADING_LEFT * scale,
             r[1],
@@ -748,7 +753,7 @@ impl Menu {
             .rows
             .iter()
             .position(|r| matches!(r, MenuRow::Heading(t) if t == PANEL_SECTION))?;
-        let h = self.heading_rect(rect, row, scale);
+        let h = self.own_rect(rect, row, scale);
         let side = crate::style::SPACE_RESET_ICON * scale;
         Some([
             rect[0] + rect[2] - crate::style::SPACE_MENU_HEADING_LEFT * scale - side,
