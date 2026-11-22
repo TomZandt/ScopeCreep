@@ -134,11 +134,22 @@ pub const SPACE_CHAR_WIDTH: f32 = 7.6;
 pub const SPACE_SEGMENT_HEIGHT: f32 = 22.0;
 pub const SPACE_SEGMENT_PAD: f32 = 12.0;
 /// A slider: its row, the track's length and thickness, the thumb, and the room for its number.
-pub const SPACE_SLIDER_HEIGHT: f32 = 24.0;
-pub const SPACE_SLIDER_TRACK: f32 = 120.0;
+pub const SPACE_SLIDER_HEIGHT: f32 = 32.0;
+pub const SPACE_SLIDER_TRACK: f32 = 84.0;
 pub const SPACE_SLIDER_TRACK_THICKNESS: f32 = 4.0;
 pub const SPACE_SLIDER_THUMB: f32 = 12.0;
-pub const SPACE_SLIDER_NUMBER: f32 = 44.0;
+/// The value box beside a slider (#225): the box's whole width, the arrows' column at its right, and the circular
+/// reset icon after it.
+pub const SPACE_VALUE_BOX: f32 = 84.0;
+pub const SPACE_VALUE_ARROWS: f32 = 18.0;
+pub const SPACE_RESET_ICON: f32 = 24.0;
+/// The Panel settings popover (#225): its width, the height of a choice row, the extra room above a group's
+/// heading, the room round the popover, and the label column in front of a slider.
+pub const SPACE_POPOVER_WIDTH: f32 = 392.0;
+pub const SPACE_POPOVER_ROW: f32 = 28.0;
+pub const SPACE_POPOVER_GROUP_GAP: f32 = 10.0;
+pub const SPACE_POPOVER_PAD: f32 = 8.0;
+pub const SPACE_POPOVER_LABEL: f32 = 134.0;
 /// A tooltip's padding and its gap from what it names.
 pub const SPACE_TOOLTIP_PAD: f32 = 6.0;
 pub const SPACE_TOOLTIP_GAP: f32 = 6.0;

@@ -104,7 +104,7 @@ fn a_panels_popover_ends_with_a_close_entry_even_with_no_settings() {
         for scale in SCALES {
             let rect = menu.rect([40.0, 40.0], [1000.0, 800.0], scale);
             let row = menu.rows.len() - 1;
-            let top = Menu::row_top(rect, row, scale);
+            let top = menu.row_top(rect, row, scale);
             let on_close = [rect[0] + 20.0 * scale, top + 4.0 * scale];
             assert!(menu.close_at(rect, on_close, scale));
             assert!(!menu.close_at(rect, [rect[0] - 2.0, top + 4.0 * scale], scale));
@@ -119,7 +119,7 @@ fn a_panels_popover_ends_with_a_close_entry_even_with_no_settings() {
 fn close_is_not_a_setting_choice() {
     let menu = menu_of(false);
     let rect = menu.rect([0.0, 0.0], [1000.0, 800.0], 1.0);
-    let top = Menu::row_top(rect, menu.rows.len() - 1, 1.0);
+    let top = menu.row_top(rect, menu.rows.len() - 1, 1.0);
     assert_eq!(menu.choice_at(rect, [rect[0] + 20.0, top + 4.0], 1.0), None);
 }
 
@@ -289,13 +289,13 @@ fn the_panel_section_lists_replace_with_duplicate_right_duplicate_below_then_clo
                 (n - 3, PanelAction::DuplicateRight),
                 (n - 2, PanelAction::DuplicateBelow),
             ] {
-                let top = Menu::row_top(rect, row, scale);
+                let top = menu.row_top(rect, row, scale);
                 let on = [rect[0] + 20.0 * scale, top + 4.0 * scale];
                 assert_eq!(menu.panel_action_at(rect, on, scale), Some(action));
                 assert!(!menu.close_at(rect, on, scale));
                 assert_eq!(menu.choice_at(rect, on, scale), None);
             }
-            let heading = Menu::row_top(rect, n - 5, scale) + 4.0 * scale;
+            let heading = menu.row_top(rect, n - 5, scale) + 4.0 * scale;
             assert_eq!(
                 menu.panel_action_at(rect, [rect[0] + 20.0 * scale, heading], scale),
                 None
@@ -330,7 +330,7 @@ fn the_replace_list_names_each_display_then_goes_back() {
     );
     for scale in SCALES {
         let rect = menu.rect([40.0, 40.0], [1000.0, 800.0], scale);
-        let top = Menu::row_top(rect, 2, scale);
+        let top = menu.row_top(rect, 2, scale);
         assert_eq!(
             menu.panel_action_at(rect, [rect[0] + 20.0 * scale, top + 4.0 * scale], scale),
             Some(PanelAction::ReplaceBy("Skin Tone".to_string()))

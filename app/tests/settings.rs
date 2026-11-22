@@ -112,7 +112,7 @@ fn a_click_lands_on_the_choice_under_it_and_never_on_a_heading() {
         let row_middle = |row: usize| {
             [
                 rect[0] + rect[2] / 2.0,
-                Menu::row_top(rect, row, scale) + MENU_ROW * scale / 2.0,
+                menu.row_top(rect, row, scale) + MENU_ROW * scale / 2.0,
             ]
         };
         assert_eq!(
@@ -264,17 +264,17 @@ fn an_amount_round_trips_through_the_saved_text() {
 }
 
 #[test]
-fn a_menu_for_an_amount_has_a_heading_a_slider_and_a_reset_row() {
+fn a_menu_for_an_amount_is_one_slider_row_with_its_label() {
     let mut all = PanelSettings::default();
     all.set("P", "brightness", "150");
     let menu = Menu::new(0, &AMOUNT_DEFS, &all.resolve("P", &AMOUNT_DEFS)).unwrap();
-    assert_eq!(menu.rows.len(), 3);
-    assert_eq!(menu.rows[0], MenuRow::Heading("Trace brightness".into()));
-    assert!(
-        matches!(&menu.rows[1], MenuRow::Slider { key: "brightness", value, .. } if *value == 150.0)
+    assert_eq!(
+        menu.rows.len(),
+        1,
+        "label, slider, value box and reset in one row"
     );
     assert!(
-        matches!(&menu.rows[2], MenuRow::Reset { value, text, .. } if *value == 100.0 && text == "Reset to default (100 %)")
+        matches!(&menu.rows[0], MenuRow::Slider { key: "brightness", label: "Trace brightness", value, .. } if *value == 150.0)
     );
 }
 
@@ -288,7 +288,7 @@ fn pressing_on_the_track_gives_a_value_in_steps_and_dragging_past_the_ends_gives
     .unwrap();
     for scale in [1.0_f32, 2.0] {
         let rect = menu.rect([100.0, 100.0], [1280.0, 760.0], scale);
-        let at = Menu::slider_origin(rect, 1, scale);
+        let at = menu.slider_origin(rect, 0, scale);
         let slider = scopecreep::components::Slider {
             value: 0.0,
             number: String::new(),
@@ -323,36 +323,11 @@ fn pressing_on_the_track_gives_a_value_in_steps_and_dragging_past_the_ends_gives
             Some(max)
         );
         assert_eq!(menu.slider_value(rect, "nothing", track[0], scale), None);
-        // A press on the heading is not a slider press, and neither is one in the slider row's left padding.
-        assert_eq!(
-            menu.slider_at(rect, [track[0], Menu::row_top(rect, 0, scale) + 2.0], scale),
-            None
-        );
+        // A press on the row's label is not a slider press.
         assert_eq!(menu.slider_at(rect, [rect[0] + 1.0, y], scale), None);
-        // Neither the slider row nor the reset row is a choice.
+        // The slider row is not a choice.
         assert_eq!(menu.choice_at(rect, [track[0], y], scale), None);
     }
-}
-
-#[test]
-fn the_reset_row_gives_the_default_and_is_not_a_slider() {
-    let menu = Menu::new(
-        0,
-        &AMOUNT_DEFS,
-        &PanelSettings::default().resolve("P", &AMOUNT_DEFS),
-    )
-    .unwrap();
-    let rect = menu.rect([100.0, 100.0], [1280.0, 760.0], 1.0);
-    let on_reset = [rect[0] + 40.0, Menu::row_top(rect, 2, 1.0) + MENU_ROW / 2.0];
-    assert_eq!(
-        menu.reset_at(rect, on_reset, 1.0),
-        Some(("brightness", 100.0))
-    );
-    assert_eq!(menu.slider_at(rect, on_reset, 1.0), None);
-    assert_eq!(
-        menu.reset_at(rect, [on_reset[0], Menu::row_top(rect, 1, 1.0) + 5.0], 1.0),
-        None
-    );
 }
 
 #[test]

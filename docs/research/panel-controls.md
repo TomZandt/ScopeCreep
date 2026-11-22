@@ -186,3 +186,11 @@ What real scopes offer:
     - a 75 % + 100 % "both" targets option;
     - the hue-vectors graticule;
     - whether to retire the Black and white Panel.
+
+## Amounts in the popover: one row, a value box, a reset (#225)
+
+Resolve's own Pitch and Yaw rows are the model (owner screenshot, 2026-11-20): label, slider, value box, then a small circular reset arrow, one row each. Resolve also puts one reset icon in a section's corner that resets the whole section. scopecreep follows that, minus the keyframe diamond (it has no keyframes):
+
+- **An amount is one row:** label, slider, a value box you can type into (with increase and decrease arrows; Up and Down, Shift for ten steps, Enter accepts, Escape cancels; clamped to the slider's range, in the slider's unit), and a circular reset icon that goes back to the default. The icon's tooltip names the default ("Reset to 100 %") and it is dim when the amount is already there. The old "Reset to default (100 %)" text line under each slider is gone.
+- **A Panel reset** sits in the corner of the popover's Panel section ("Reset this Panel's settings"): every setting of that Panel instance goes back to its defaults, as one action; its position, size, zoom and tab are not settings and stay. It is dim when everything is already at default.
+- **Groups are apart:** a choice setting keeps its heading; each group after the first has room above its heading and a quiet line, and the Panel section has more room than the rest.

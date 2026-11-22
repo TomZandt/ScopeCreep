@@ -40,7 +40,7 @@ use scopecreep::page_edit::{self, Room};
 use scopecreep::pages::{self, PageRename, Pages};
 use scopecreep::panel_grid::{self, PanelLayout, min_panel_size};
 use scopecreep::resolve_helper::ScriptHelper;
-use scopecreep::settings::{Amount, Menu, PanelAction, PanelSettings};
+use scopecreep::settings::{Amount, EditKey, Menu, PanelAction, PanelSettings};
 use scopecreep::style;
 use scopecreep::tab_strip;
 use scopecreep::toolbar::{ChipAction, Toolbar};
@@ -279,8 +279,6 @@ struct AppWindow {
     settings: Arc<Mutex<PanelSettings>>,
     /// The right-click menu, while open, with where it opened.
     menu: Option<(Menu, [f32; 2])>,
-    /// The key of the slider being dragged in the menu, while the button is down.
-    slider_drag: Option<&'static str>,
     /// The menu bar (#147): which of its menus is open, the title under the pointer, and what the Layout menu
     /// shows. A bar menu and a Panel's popover are never open together.
     bar: BarState,
@@ -569,7 +567,6 @@ impl AppWindow {
             bar_anchor: None,
             settings,
             menu: None,
-            slider_drag: None,
             bar: BarState::default(),
             bar_hover: None,
             layout_mode: LayoutMode::Show,
@@ -774,14 +771,43 @@ impl AppWindow {
         self.window.request_redraw();
     }
 
+    /// An amount the popover changed: remember it as the Panel's setting and show the settings again.
+    fn apply_change(&mut self, panel: usize, change: scopecreep::settings::Change) {
+        self.choose(panel, change.key, &Amount::store(change.value));
+        self.refresh_menu();
+    }
+
+    /// The open popover reads the Panel's settings again (a value changed, or the Panel was reset).
+    fn refresh_menu(&mut self) {
+        let Some((menu, _)) = self.menu.as_ref() else {
+            return;
+        };
+        let panel = menu.panel;
+        let (current, at_default) = {
+            let settings = self.settings.lock().unwrap();
+            (
+                self.displays.popover_settings(panel, &settings),
+                self.displays.at_default(panel, &settings),
+            )
+        };
+        if let Some((menu, _)) = self.menu.as_mut() {
+            menu.sync(&current);
+            menu.panel_at_default = at_default;
+        }
+        self.window.request_redraw();
+    }
+
     fn pointer_moved(&mut self, x: f32, y: f32) {
         self.cursor = [x, y];
-        if let (Some(key), Some((menu, _)), Some(rect)) =
-            (self.slider_drag, self.menu.as_ref(), self.menu_rect())
-        {
-            if let Some(value) = menu.slider_value(rect, key, x, self.scale) {
+        if self.menu.as_ref().is_some_and(|(m, _)| m.dragging()) {
+            // A slider being dragged follows the pointer on every move: its value, the popover's readout and
+            // the Panel's setting.
+            let (rect, scale) = (self.menu_rect(), self.scale);
+            if let (Some(rect), Some((menu, _))) = (rect, self.menu.as_mut()) {
                 let panel = menu.panel;
-                self.choose(panel, key, &Amount::store(value));
+                if let Some(change) = menu.drag_to(rect, x, scale) {
+                    self.apply_change(panel, change);
+                }
             }
             return;
         }
@@ -1209,6 +1235,39 @@ impl AppWindow {
             self.window.request_redraw();
             return;
         }
+        // A value box being typed into takes the keys (Escape cancels it, it does not close the popover).
+        if self
+            .menu
+            .as_ref()
+            .is_some_and(|(m, _)| m.editing().is_some())
+        {
+            let big = self.modifiers.shift_key();
+            let key = match &event.logical_key {
+                LogicalKey::Named(NamedKey::Enter) => Some(EditKey::Enter),
+                LogicalKey::Named(NamedKey::Escape) => Some(EditKey::Escape),
+                LogicalKey::Named(NamedKey::Backspace) => Some(EditKey::Backspace),
+                LogicalKey::Named(NamedKey::ArrowUp) => Some(EditKey::Up(big)),
+                LogicalKey::Named(NamedKey::ArrowDown) => Some(EditKey::Down(big)),
+                _ => None,
+            };
+            let typed: Vec<EditKey> = match key {
+                Some(k) => vec![k],
+                None => event
+                    .text
+                    .as_ref()
+                    .map(|t| t.chars().map(EditKey::Char).collect())
+                    .unwrap_or_default(),
+            };
+            for k in typed {
+                let change = self.menu.as_mut().and_then(|(m, _)| m.key(k));
+                if let Some(change) = change {
+                    let panel = self.menu.as_ref().map_or(0, |(m, _)| m.panel);
+                    self.apply_change(panel, change);
+                }
+            }
+            self.window.request_redraw();
+            return;
+        }
         if event.logical_key == LogicalKey::Named(NamedKey::Escape) {
             if self.panel_drag.take().is_some() {
                 // Escape cancels a drag: the layout is as it was.
@@ -1497,16 +1556,29 @@ impl AppWindow {
             return;
         };
         let (panel, cursor, scale) = (menu.panel, self.cursor, self.scale);
-        // A press on a slider takes it (the menu stays open while it is dragged); on a reset row, sets the default.
-        if let Some((key, value)) = menu.slider_at(rect, cursor, scale) {
-            self.slider_drag = Some(key);
-            self.choose(panel, key, &Amount::store(value));
+        // A press on a slider takes it (the menu stays open while it is dragged), on an arrow steps, on the number
+        // types, on a reset icon goes back to the default; the Panel reset puts every setting back.
+        let big = self.modifiers.shift_key();
+        let pressed = match self.menu.as_mut() {
+            Some((menu, _)) => menu.press(rect, cursor, scale, big),
+            None => return,
+        };
+        for change in &pressed.changes {
+            self.apply_change(panel, *change);
+        }
+        if pressed.reset_panel {
+            let name = self.displays.key(panel);
+            self.settings.lock().unwrap().reset_settings(&name);
+            self.save_settings();
+            self.refresh_menu();
+        }
+        if pressed.consumed {
+            self.window.request_redraw();
             return;
         }
-        if let Some((key, value)) = menu.reset_at(rect, cursor, scale) {
-            self.choose(panel, key, &Amount::store(value));
+        let Some((menu, _)) = self.menu.as_ref() else {
             return;
-        }
+        };
         if menu.close_at(rect, cursor, scale) {
             self.menu = None;
             self.close_panel(panel);
@@ -1635,7 +1707,9 @@ impl AppWindow {
         self.left_down = state == ElementState::Pressed;
         // Letting go always ends a drag, even with a menu open over it (a right click can open one meanwhile).
         if state == ElementState::Released {
-            self.slider_drag = None;
+            if let Some((menu, _)) = self.menu.as_mut() {
+                menu.release();
+            }
             if let Some(panel) = self.pointer_panel.take() {
                 self.display_pointer(panel, Pointer::Up);
             }
@@ -2398,6 +2472,13 @@ impl AppWindow {
             over.extend(menu.drop.draw(rect, hover, self.left_down, scale));
         } else if let (Some((menu, _)), Some(rect)) = (self.menu.as_ref(), self.menu_rect()) {
             over.extend(components::popover(menu, rect, self.cursor, scale));
+            over.extend(components::popover_tooltip(
+                menu,
+                rect,
+                self.cursor,
+                [width, height],
+                scale,
+            ));
         } else if let Some(hover) = self.hover {
             let (anchor, text) = match hover {
                 Hover::Chip(p, c) => (

@@ -135,6 +135,14 @@ impl PanelSettings {
         }
     }
 
+    /// Put every setting of Panel `panel` back to its default (the Panel reset, #225). What the display remembers
+    /// for itself (a Loupe's zoom and position) and where the Panel sits are not settings and stay.
+    pub fn reset_settings(&mut self, panel: &str) {
+        if self.panels.remove(panel).is_some() {
+            self.version += 1;
+        }
+    }
+
     /// Forget everything kept for Panel `panel` (it was closed, or replaced, ADR 0039): it starts from the defaults
     /// if it is ever made again.
     pub fn forget_panel(&mut self, panel: &str) {
@@ -333,15 +341,18 @@ impl PanelSettings {
     }
 }
 
-/// Logical pixels: the menu's size.
-pub const MENU_WIDTH: f32 = crate::style::SPACE_MENU_WIDTH;
-pub const MENU_ROW: f32 = crate::style::SPACE_MENU_ROW;
-pub const MENU_PAD: f32 = crate::style::SPACE_MENU_PAD;
+/// Logical pixels: the popover's size (#225).
+pub const MENU_WIDTH: f32 = crate::style::SPACE_POPOVER_WIDTH;
+pub const MENU_ROW: f32 = crate::style::SPACE_POPOVER_ROW;
+pub const MENU_PAD: f32 = crate::style::SPACE_POPOVER_PAD;
+
+/// The heading of the Panel section that ends every popover (ADR 0039); it carries the Panel-wide reset.
+pub const PANEL_SECTION: &str = "Panel";
 
 /// What one row of the menu says.
 #[derive(Clone, Debug, PartialEq)]
 pub enum MenuRow {
-    /// A setting's name; not clickable.
+    /// A setting's name; not clickable. A group starts with one.
     Heading(String),
     /// A choice; `on` when it is the setting's current value.
     Choice {
@@ -350,9 +361,10 @@ pub enum MenuRow {
         text: String,
         on: bool,
     },
-    /// An amount: a slider with its number.
+    /// An amount, all in one row (#225): its label, a slider, a value box with arrows and a reset icon.
     Slider {
         key: &'static str,
+        label: &'static str,
         amount: Amount,
         value: f32,
     },
@@ -360,12 +372,6 @@ pub enum MenuRow {
     Close,
     /// One of the Panel section's other entries (ADR 0039, #208).
     Panel(PanelAction),
-    /// The way back to an amount's default, under its slider.
-    Reset {
-        key: &'static str,
-        value: f32,
-        text: String,
-    },
 }
 
 /// What the Panel section of a popover does besides Close (ADR 0039, #208).
@@ -396,15 +402,89 @@ impl PanelAction {
     }
 }
 
+/// An amount that changed: the setting and its new value (already clamped to the slider's range).
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Change {
+    pub key: &'static str,
+    pub value: f32,
+}
+
+/// The parts of an amount row a pointer can be on.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum AmountHit {
+    /// The slider's track or thumb.
+    Track,
+    /// The value box's increase arrow.
+    Up,
+    /// The value box's decrease arrow.
+    Down,
+    /// The value box's number: a press types into it.
+    Field,
+    /// The circular reset icon.
+    Reset,
+}
+
+/// A key the value box takes while it is being typed into (#225).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum EditKey {
+    /// A typed character (only digits, a decimal point and a minus sign are kept).
+    Char(char),
+    Backspace,
+    /// One step up; `true` with Shift is ten steps.
+    Up(bool),
+    Down(bool),
+    /// Accept the typed number.
+    Enter,
+    /// Cancel: the value goes back to what it was when typing began.
+    Escape,
+}
+
+/// What a press in the popover did to the amounts.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct Pressed {
+    /// The press was on one of the amount controls or the Panel reset (so nothing else is to be done with it).
+    pub consumed: bool,
+    /// The amounts that changed, in order, each to be remembered as a setting.
+    pub changes: Vec<Change>,
+    /// The Panel-wide reset was pressed while it was enabled.
+    pub reset_panel: bool,
+}
+
+/// The value box being typed into.
+#[derive(Clone, Debug, PartialEq)]
+struct Edit {
+    key: &'static str,
+    text: String,
+    original: f32,
+    /// Nothing typed yet: the first character replaces the whole number.
+    fresh: bool,
+}
+
 /// The right-click menu of one Panel.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Menu {
     /// The Panel (its index in the grid) the menu belongs to.
     pub panel: usize,
     pub rows: Vec<MenuRow>,
+    /// Whether every one of the Panel's settings is at its default: the Panel reset is dim when so. The caller
+    /// sets it (a Panel's chips are settings the popover does not list).
+    pub panel_at_default: bool,
+    /// The amount whose slider is being dragged.
+    drag: Option<&'static str>,
+    edit: Option<Edit>,
 }
 
 impl Menu {
+    fn with_rows(panel: usize, rows: Vec<MenuRow>) -> Menu {
+        Menu {
+            panel,
+            rows,
+            panel_at_default: true,
+            drag: None,
+            edit: None,
+        }
+    }
+
     /// The menu for a display with `defs`, showing `current`. `None` when it has no settings: such a Panel shows
     /// no menu.
     pub fn new(panel: usize, defs: &[SettingDef], current: &Settings) -> Option<Menu> {
@@ -413,21 +493,17 @@ impl Menu {
         }
         let mut rows = Vec::new();
         for def in defs {
-            rows.push(MenuRow::Heading(def.label.to_string()));
             if let Some(amount) = def.amount {
                 let value = amount.read(current.get(def.key).map(String::as_str));
                 rows.push(MenuRow::Slider {
                     key: def.key,
+                    label: def.label,
                     amount,
                     value,
                 });
-                rows.push(MenuRow::Reset {
-                    key: def.key,
-                    value: amount.default,
-                    text: format!("Reset to default ({})", amount.text(amount.default)),
-                });
                 continue;
             }
+            rows.push(MenuRow::Heading(def.label.to_string()));
             for choice in def.choices {
                 rows.push(MenuRow::Choice {
                     key: def.key,
@@ -437,17 +513,28 @@ impl Menu {
                 });
             }
         }
-        Some(Menu { panel, rows })
+        let mut menu = Menu::with_rows(panel, rows);
+        menu.panel_at_default = Menu::at_default(defs, current);
+        Some(menu)
+    }
+
+    /// Whether every setting in `defs` reads its default in `current`.
+    pub fn at_default(defs: &[SettingDef], current: &Settings) -> bool {
+        defs.iter().all(|def| match def.amount {
+            Some(amount) => amount.read(current.get(def.key).map(String::as_str)) == amount.default,
+            None => def
+                .choices
+                .first()
+                .is_none_or(|first| current.get(def.key).is_none_or(|v| v == first.value)),
+        })
     }
 
     /// A Panel's popover: its settings (when it has any) and, last, the Panel section with Close (#206). A Panel
     /// with no settings still has a popover, so it can be closed.
     pub fn for_panel(panel: usize, defs: &[SettingDef], current: &Settings) -> Menu {
-        let mut menu = Menu::new(panel, defs, current).unwrap_or(Menu {
-            panel,
-            rows: Vec::new(),
-        });
-        menu.rows.push(MenuRow::Heading("Panel".to_string()));
+        let mut menu =
+            Menu::new(panel, defs, current).unwrap_or_else(|| Menu::with_rows(panel, Vec::new()));
+        menu.rows.push(MenuRow::Heading(PANEL_SECTION.to_string()));
         menu.rows.push(MenuRow::Panel(PanelAction::ReplaceWith));
         menu.rows.push(MenuRow::Panel(PanelAction::DuplicateRight));
         menu.rows.push(MenuRow::Panel(PanelAction::DuplicateBelow));
@@ -465,7 +552,111 @@ impl Menu {
                 .map(|n| MenuRow::Panel(PanelAction::ReplaceBy(n.clone()))),
         );
         rows.push(MenuRow::Panel(PanelAction::Back));
-        Menu { panel, rows }
+        Menu::with_rows(panel, rows)
+    }
+
+    /// Show `current` again: every slider and choice reads the settings, so a value that changed (a drag, a
+    /// typed number, a reset) is what the popover shows.
+    pub fn sync(&mut self, current: &Settings) {
+        for row in &mut self.rows {
+            match row {
+                MenuRow::Slider {
+                    key, amount, value, ..
+                } => *value = amount.read(current.get(*key).map(String::as_str)),
+                MenuRow::Choice { key, value, on, .. } => {
+                    *on = current.get(*key).map(String::as_str) == Some(*value)
+                }
+                _ => {}
+            }
+        }
+    }
+
+    // ---- Geometry ----
+
+    /// A row's height in logical pixels, a group heading's room above it included.
+    fn row_height(&self, row: usize) -> f32 {
+        match &self.rows[row] {
+            MenuRow::Slider { .. } => crate::style::SPACE_SLIDER_HEIGHT,
+            MenuRow::Heading(_) => MENU_ROW + self.heading_gap(row),
+            _ => MENU_ROW,
+        }
+    }
+
+    /// The room above a heading that separates its group from the one before: none for the first row, more
+    /// before the Panel section.
+    fn heading_gap(&self, row: usize) -> f32 {
+        match &self.rows[row] {
+            MenuRow::Heading(text) if row > 0 => {
+                if text == PANEL_SECTION {
+                    2.0 * crate::style::SPACE_POPOVER_GROUP_GAP
+                } else {
+                    crate::style::SPACE_POPOVER_GROUP_GAP
+                }
+            }
+            _ => 0.0,
+        }
+    }
+
+    fn content_height(&self) -> f32 {
+        (0..self.rows.len()).map(|r| self.row_height(r)).sum()
+    }
+
+    /// Where the menu sits when opened at `at` in a window of `window` device pixels at `scale`: the whole menu
+    /// stays inside the window. Left, top, width, height.
+    pub fn rect(&self, at: [f32; 2], window: [f32; 2], scale: f32) -> [f32; 4] {
+        let (w, h) = (
+            MENU_WIDTH * scale,
+            (self.content_height() + 2.0 * MENU_PAD) * scale,
+        );
+        [
+            at[0].min(window[0] - w).max(0.0),
+            at[1].min(window[1] - h).max(0.0),
+            w,
+            h,
+        ]
+    }
+
+    /// The top of row `row` inside `rect`.
+    pub fn row_top(&self, rect: [f32; 4], row: usize, scale: f32) -> f32 {
+        let above: f32 = (0..row.min(self.rows.len()))
+            .map(|r| self.row_height(r))
+            .sum();
+        rect[1] + (MENU_PAD + above) * scale
+    }
+
+    /// Row `row`'s rectangle inside `rect`: the whole width.
+    pub fn row_rect(&self, rect: [f32; 4], row: usize, scale: f32) -> [f32; 4] {
+        [
+            rect[0],
+            self.row_top(rect, row, scale),
+            rect[2],
+            self.row_height(row) * scale,
+        ]
+    }
+
+    /// A heading's own row, below the room its group's gap takes.
+    pub fn heading_rect(&self, rect: [f32; 4], row: usize, scale: f32) -> [f32; 4] {
+        let gap = self.heading_gap(row) * scale;
+        let full = self.row_rect(rect, row, scale);
+        [full[0], full[1] + gap, full[2], full[3] - gap]
+    }
+
+    /// The row under `point`'s y, when `point` is inside the menu's width.
+    pub fn row_at(&self, rect: [f32; 4], point: [f32; 2], scale: f32) -> Option<usize> {
+        if point[0] < rect[0] || point[0] >= rect[0] + rect[2] || point[1] < rect[1] {
+            return None;
+        }
+        let mut top = rect[1] + MENU_PAD * scale;
+        if point[1] < top {
+            return None;
+        }
+        for row in 0..self.rows.len() {
+            top += self.row_height(row) * scale;
+            if point[1] < top {
+                return Some(row);
+            }
+        }
+        None
     }
 
     /// The Panel section's entry under `point`, if it is on one.
@@ -487,26 +678,6 @@ impl Menu {
             .is_some_and(|row| self.rows.get(row) == Some(&MenuRow::Close))
     }
 
-    /// Where the menu sits when opened at `at` in a window of `window` device pixels at `scale`: the whole menu
-    /// stays inside the window. Left, top, width, height.
-    pub fn rect(&self, at: [f32; 2], window: [f32; 2], scale: f32) -> [f32; 4] {
-        let (w, h) = (
-            MENU_WIDTH * scale,
-            (self.rows.len() as f32 * MENU_ROW + 2.0 * MENU_PAD) * scale,
-        );
-        [
-            at[0].min(window[0] - w).max(0.0),
-            at[1].min(window[1] - h).max(0.0),
-            w,
-            h,
-        ]
-    }
-
-    /// The top of row `row` inside `rect`.
-    pub fn row_top(rect: [f32; 4], row: usize, scale: f32) -> f32 {
-        rect[1] + (MENU_PAD + row as f32 * MENU_ROW) * scale
-    }
-
     /// The choice (setting key and value) under `point`, if the point is on a choice row.
     pub fn choice_at(
         &self,
@@ -514,69 +685,124 @@ impl Menu {
         point: [f32; 2],
         scale: f32,
     ) -> Option<(&'static str, &'static str)> {
-        if point[0] < rect[0] || point[0] >= rect[0] + rect[2] {
-            return None;
-        }
-        let offset = point[1] - rect[1] - MENU_PAD * scale;
-        if offset < 0.0 {
-            return None;
-        }
-        match self.rows.get((offset / (MENU_ROW * scale)) as usize)? {
+        match self.rows.get(self.row_at(rect, point, scale)?)? {
             MenuRow::Choice { key, value, .. } => Some((key, value)),
             _ => None,
         }
     }
 
-    /// The row under `point`'s y, when `point` is inside the menu's width.
-    fn row_at(&self, rect: [f32; 4], point: [f32; 2], scale: f32) -> Option<usize> {
-        let offset = point[1] - rect[1] - MENU_PAD * scale;
-        (offset >= 0.0 && point[0] >= rect[0] && point[0] < rect[0] + rect[2])
-            .then(|| (offset / (MENU_ROW * scale)) as usize)
-    }
-
-    /// Where a slider's row begins, for [`crate::components::Slider`] to place its parts.
-    pub fn slider_origin(rect: [f32; 4], row: usize, scale: f32) -> [f32; 2] {
+    /// Where an amount row's slider begins (after its label), for [`crate::components::Slider`] to place its parts.
+    pub fn slider_origin(&self, rect: [f32; 4], row: usize, scale: f32) -> [f32; 2] {
         [
-            rect[0] + crate::style::SPACE_MENU_HEADING_LEFT * scale,
-            Menu::row_top(rect, row, scale),
+            rect[0]
+                + (crate::style::SPACE_MENU_HEADING_LEFT + crate::style::SPACE_POPOVER_LABEL)
+                    * scale,
+            self.row_top(rect, row, scale),
         ]
     }
 
-    /// The setting and value a press at `point` means when it is on a slider's track, handle or number.
+    /// The label's box in an amount row.
+    pub fn label_rect(&self, rect: [f32; 4], row: usize, scale: f32) -> [f32; 4] {
+        let r = self.row_rect(rect, row, scale);
+        [
+            rect[0] + crate::style::SPACE_MENU_HEADING_LEFT * scale,
+            r[1],
+            crate::style::SPACE_POPOVER_LABEL * scale,
+            r[3],
+        ]
+    }
+
+    /// The parts of amount row `row`.
+    pub fn slider_layout(
+        &self,
+        rect: [f32; 4],
+        row: usize,
+        scale: f32,
+    ) -> crate::components::SliderLayout {
+        crate::components::Slider {
+            value: 0.0,
+            number: String::new(),
+        }
+        .layout(self.slider_origin(rect, row, scale), scale)
+    }
+
+    /// Where the Panel-wide reset icon is: the corner of the Panel section's heading. `None` when the menu has no
+    /// Panel section.
+    pub fn panel_reset_rect(&self, rect: [f32; 4], scale: f32) -> Option<[f32; 4]> {
+        let row = self
+            .rows
+            .iter()
+            .position(|r| matches!(r, MenuRow::Heading(t) if t == PANEL_SECTION))?;
+        let h = self.heading_rect(rect, row, scale);
+        let side = crate::style::SPACE_RESET_ICON * scale;
+        Some([
+            rect[0] + rect[2] - crate::style::SPACE_MENU_HEADING_LEFT * scale - side,
+            h[1] + (h[3] - side) / 2.0,
+            side,
+            side,
+        ])
+    }
+
+    /// Whether `point` is on the Panel reset icon.
+    pub fn panel_reset_at(&self, rect: [f32; 4], point: [f32; 2], scale: f32) -> bool {
+        self.panel_reset_rect(rect, scale)
+            .is_some_and(|r| crate::components::contains(r, point))
+    }
+
+    /// The part of an amount row under `point`, with its setting.
+    pub fn amount_hit(
+        &self,
+        rect: [f32; 4],
+        point: [f32; 2],
+        scale: f32,
+    ) -> Option<(&'static str, AmountHit)> {
+        let row = self.row_at(rect, point, scale)?;
+        let MenuRow::Slider { key, .. } = self.rows.get(row)? else {
+            return None;
+        };
+        let at = self.slider_origin(rect, row, scale);
+        let slider = crate::components::Slider {
+            value: 0.0,
+            number: String::new(),
+        };
+        let (l, grab) = (slider.layout(at, scale), slider.grab(at, scale));
+        let on = |r: [f32; 4]| crate::components::contains(r, point);
+        let part = if on(l.reset) {
+            AmountHit::Reset
+        } else if on(l.up) {
+            AmountHit::Up
+        } else if on(l.down) {
+            AmountHit::Down
+        } else if on(l.number) {
+            AmountHit::Field
+        } else if on(grab) {
+            AmountHit::Track
+        } else {
+            return None;
+        };
+        Some((key, part))
+    }
+
+    /// The setting and value a press at `point` means when it is on a slider's track or thumb.
     pub fn slider_at(
         &self,
         rect: [f32; 4],
         point: [f32; 2],
         scale: f32,
     ) -> Option<(&'static str, f32)> {
-        let row = self.row_at(rect, point, scale)?;
-        let MenuRow::Slider { key, .. } = self.rows.get(row)? else {
-            return None;
-        };
-        let at = Menu::slider_origin(rect, row, scale);
-        let slider = crate::components::Slider {
-            value: 0.0,
-            number: String::new(),
-        };
-        let (grab, layout) = (slider.grab(at, scale), slider.layout(at, scale));
-        let in_row = point[0] >= grab[0] && point[0] < layout.row[0] + layout.row[2];
-        in_row
-            .then(|| self.slider_value(rect, key, point[0], scale))
-            .flatten()
-            .map(|v| (*key, v))
+        match self.amount_hit(rect, point, scale)? {
+            (key, AmountHit::Track) => self
+                .slider_value(rect, key, point[0], scale)
+                .map(|v| (key, v)),
+            _ => None,
+        }
     }
 
     /// The value of slider `key` with the pointer at `x`, wherever it is: a drag goes on past the ends of the
     /// track and out of the menu.
     pub fn slider_value(&self, rect: [f32; 4], key: &str, x: f32, scale: f32) -> Option<f32> {
-        let row = self
-            .rows
-            .iter()
-            .position(|r| matches!(r, MenuRow::Slider { key: k, .. } if *k == key))?;
-        let MenuRow::Slider { amount, .. } = &self.rows[row] else {
-            return None;
-        };
-        let at = Menu::slider_origin(rect, row, scale);
+        let (row, amount, _) = self.amount_row(key)?;
+        let at = self.slider_origin(rect, row, scale);
         Some(
             amount.at_fraction(
                 crate::components::Slider {
@@ -588,17 +814,18 @@ impl Menu {
         )
     }
 
-    /// The setting and default value when `point` is on an amount's reset row.
+    /// The setting and default value when `point` is on an amount's reset icon and it is not at its default.
     pub fn reset_at(
         &self,
         rect: [f32; 4],
         point: [f32; 2],
         scale: f32,
     ) -> Option<(&'static str, f32)> {
-        match self.rows.get(self.row_at(rect, point, scale)?)? {
-            MenuRow::Reset { key, value, .. } => Some((key, *value)),
-            _ => None,
-        }
+        let (key, AmountHit::Reset) = self.amount_hit(rect, point, scale)? else {
+            return None;
+        };
+        let (_, amount, value) = self.amount_row(key)?;
+        (value != amount.default).then_some((key, amount.default))
     }
 
     /// Whether `point` is inside the menu.
@@ -607,6 +834,183 @@ impl Menu {
             && point[0] < rect[0] + rect[2]
             && point[1] >= rect[1]
             && point[1] < rect[1] + rect[3]
+    }
+
+    // ---- Amounts: dragging, the value box, the reset icon ----
+
+    fn amount_row(&self, key: &str) -> Option<(usize, Amount, f32)> {
+        self.rows.iter().enumerate().find_map(|(i, r)| match r {
+            MenuRow::Slider {
+                key: k,
+                amount,
+                value,
+                ..
+            } if *k == key => Some((i, *amount, *value)),
+            _ => None,
+        })
+    }
+
+    /// The value the popover shows for amount `key`.
+    pub fn value_of(&self, key: &str) -> Option<f32> {
+        self.amount_row(key).map(|(_, _, v)| v)
+    }
+
+    /// Show `value` (clamped to the range) for amount `key` and say what changed. Nothing is said when it is
+    /// what the row already shows.
+    fn set_row(&mut self, key: &'static str, value: f32) -> Option<Change> {
+        let (row, amount, old) = self.amount_row(key)?;
+        let value = ((value.clamp(amount.min, amount.max) * 1e4).round() / 1e4)
+            .clamp(amount.min, amount.max);
+        if value == old {
+            return None;
+        }
+        if let MenuRow::Slider { value: v, .. } = &mut self.rows[row] {
+            *v = value;
+        }
+        Some(Change { key, value })
+    }
+
+    /// A press at `point` (`big`: Shift held). On the track it grabs the slider and moves the value to the
+    /// pointer; on an arrow it steps (Shift: ten steps); on the number it starts typing; on a reset icon it goes
+    /// back to the default. A press anywhere else while typing accepts the typed number.
+    pub fn press(&mut self, rect: [f32; 4], point: [f32; 2], scale: f32, big: bool) -> Pressed {
+        let mut out = Pressed::default();
+        let hit = self.amount_hit(rect, point, scale);
+        if let Some(edit) = &self.edit
+            && !matches!(hit, Some((k, AmountHit::Field)) if k == edit.key)
+        {
+            out.changes.extend(self.finish_edit(true));
+        }
+        match hit {
+            Some((key, AmountHit::Track)) => {
+                self.drag = Some(key);
+                if let Some(v) = self.slider_value(rect, key, point[0], scale) {
+                    out.changes.extend(self.set_row(key, v));
+                }
+                out.consumed = true;
+            }
+            Some((key, AmountHit::Up)) => {
+                out.changes.extend(self.step(key, 1.0, big));
+                out.consumed = true;
+            }
+            Some((key, AmountHit::Down)) => {
+                out.changes.extend(self.step(key, -1.0, big));
+                out.consumed = true;
+            }
+            Some((key, AmountHit::Field)) => {
+                if self.edit.is_none()
+                    && let Some((_, amount, value)) = self.amount_row(key)
+                {
+                    self.edit = Some(Edit {
+                        key,
+                        text: format!("{value:.*}", amount.decimals),
+                        original: value,
+                        fresh: true,
+                    });
+                }
+                out.consumed = true;
+            }
+            Some((key, AmountHit::Reset)) => {
+                if let Some((_, amount, _)) = self.amount_row(key) {
+                    out.changes.extend(self.set_row(key, amount.default));
+                }
+                out.consumed = true;
+            }
+            None => {
+                if self.panel_reset_at(rect, point, scale) {
+                    out.reset_panel = !self.panel_at_default;
+                    out.consumed = true;
+                }
+            }
+        }
+        out
+    }
+
+    /// One step of `key` up (`direction` 1) or down; `big` is ten steps.
+    fn step(&mut self, key: &'static str, direction: f32, big: bool) -> Option<Change> {
+        let (_, amount, value) = self.amount_row(key)?;
+        // While typing, the step goes from the number typed.
+        let base = match &self.edit {
+            Some(e) if e.key == key => e.text.parse::<f32>().unwrap_or(value),
+            _ => value,
+        };
+        let change = self.set_row(
+            key,
+            base + direction * amount.step * if big { 10.0 } else { 1.0 },
+        );
+        let shown = self.value_of(key).unwrap_or(value);
+        if let Some(e) = self.edit.as_mut().filter(|e| e.key == key) {
+            e.text = format!("{shown:.*}", amount.decimals);
+            e.fresh = true;
+        }
+        change
+    }
+
+    /// The drag in progress with the pointer at `x`: the amount's new value, if it moved.
+    pub fn drag_to(&mut self, rect: [f32; 4], x: f32, scale: f32) -> Option<Change> {
+        let key = self.drag?;
+        let v = self.slider_value(rect, key, x, scale)?;
+        self.set_row(key, v)
+    }
+
+    /// Whether a slider is being dragged.
+    pub fn dragging(&self) -> bool {
+        self.drag.is_some()
+    }
+
+    /// The pointer was let go.
+    pub fn release(&mut self) {
+        self.drag = None;
+    }
+
+    /// The setting and text of the value box being typed into.
+    pub fn editing(&self) -> Option<(&'static str, &str)> {
+        self.edit.as_ref().map(|e| (e.key, e.text.as_str()))
+    }
+
+    /// A key for the value box being typed into (nothing happens when none is).
+    pub fn key(&mut self, key: EditKey) -> Option<Change> {
+        let target = self.edit.as_ref()?.key;
+        match key {
+            EditKey::Char(c) => {
+                let edit = self.edit.as_mut()?;
+                let c = if c == ',' { '.' } else { c };
+                if c.is_ascii_digit() || c == '.' || c == '-' {
+                    if edit.fresh {
+                        edit.text.clear();
+                        edit.fresh = false;
+                    }
+                    if edit.text.len() < 12 {
+                        edit.text.push(c);
+                    }
+                }
+                None
+            }
+            EditKey::Backspace => {
+                let edit = self.edit.as_mut()?;
+                if edit.fresh {
+                    edit.text.clear();
+                    edit.fresh = false;
+                } else {
+                    edit.text.pop();
+                }
+                None
+            }
+            EditKey::Up(big) => self.step(target, 1.0, big),
+            EditKey::Down(big) => self.step(target, -1.0, big),
+            EditKey::Enter => self.finish_edit(true),
+            EditKey::Escape => self.finish_edit(false),
+        }
+    }
+
+    /// End typing: accepting sets the typed number (clamped; unreadable text keeps what was there), cancelling
+    /// puts back the number from before typing began.
+    fn finish_edit(&mut self, accept: bool) -> Option<Change> {
+        let edit = self.edit.take()?;
+        let typed = accept
+            .then(|| edit.text.parse::<f32>().ok().filter(|v| v.is_finite()))
+            .flatten();
+        self.set_row(edit.key, typed.unwrap_or(edit.original))
     }
 }
 

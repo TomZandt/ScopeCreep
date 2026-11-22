@@ -322,7 +322,11 @@ fn a_slider_states_differ_and_a_disabled_one_is_dimmed() {
             assert_ne!(a, b);
         }
     }
-    assert_eq!(texts(&slider.draw([0.0; 2], State::Normal, 1.0)), ["50"]);
+    // The number, the two arrows and the reset icon.
+    assert_eq!(
+        texts(&slider.draw([0.0; 2], State::Normal, 1.0)),
+        ["50", "\u{25B2}", "\u{25BC}", "\u{21BA}"]
+    );
 }
 
 const DEFS: [SettingDef; 2] = [
@@ -369,23 +373,23 @@ fn the_popover_draws_the_menu_with_its_frame_its_ticks_and_the_row_under_the_poi
             ["Weights", "Alpha", "Beta", "Spread", "On", "Off"],
             "every row, in order"
         );
-        // Border, fill, and one tick per setting.
-        assert_eq!(fills(&away).len(), 4);
+        // Border, fill, one tick per setting and the line above the second group.
+        assert_eq!(fills(&away).len(), 5);
         assert_eq!(fills(&away)[1], style::rgba(style::SURFACE_MENU));
         // The pointer over "Beta" (row 2) lights that row.
         let over = [
             area[0] + 5.0 * scale,
-            Menu::row_top(area, 2, scale) + 2.0 * scale,
+            menu.row_top(area, 2, scale) + 2.0 * scale,
         ];
         let lit = popover(&menu, area, over, scale);
-        assert_eq!(fills(&lit).len(), 5);
+        assert_eq!(fills(&lit).len(), 6);
         assert!(fills(&lit).contains(&style::rgba(style::STATE_HOVER)));
         // A heading never lights.
         let heading = [
             area[0] + 5.0 * scale,
-            Menu::row_top(area, 0, scale) + 2.0 * scale,
+            menu.row_top(area, 0, scale) + 2.0 * scale,
         ];
-        assert_eq!(fills(&popover(&menu, area, heading, scale)).len(), 4);
+        assert_eq!(fills(&popover(&menu, area, heading, scale)).len(), 5);
     }
 }
 

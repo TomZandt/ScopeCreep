@@ -160,7 +160,7 @@ pub fn showcase(scale: f32) -> Showcase {
     // The second choice of the first setting is under the pointer.
     let hover = [
         popover_rect[0] + popover_rect[2] / 2.0,
-        Menu::row_top(popover_rect, 2, scale) + row / 4.0,
+        menu.row_top(popover_rect, 2, scale) + row / 4.0,
     ];
     prims.extend(popover(&menu, popover_rect, hover, scale));
     let tip = Tooltip::new("Red channel");

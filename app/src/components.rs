@@ -9,7 +9,7 @@
 //! an image.
 use crate::layout_tree::Edge;
 use crate::panel_grid::PanelLayout;
-use crate::settings::{MENU_ROW, Menu, MenuRow};
+use crate::settings::{Menu, MenuRow};
 use crate::style::{self, Rgb};
 
 /// A piece of the drawing.
@@ -391,21 +391,29 @@ impl Segmented {
     }
 }
 
-// ---- Slider with a number ----
+// ---- Slider with a value box ----
 
 /// Where the parts of a slider are.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct SliderLayout {
-    /// The whole row, track and number: left, top, width, height.
+    /// The whole row, track to reset icon: left, top, width, height.
     pub row: [f32; 4],
     pub track: [f32; 4],
     /// The part of the track up to the thumb.
     pub filled: [f32; 4],
     pub thumb: [f32; 4],
+    /// The value box, arrows included.
+    pub value_box: [f32; 4],
+    /// The number's part of the box (a press types into it).
     pub number: [f32; 4],
+    /// The increase and decrease arrows, one above the other at the box's right.
+    pub up: [f32; 4],
+    pub down: [f32; 4],
+    /// The circular reset icon after the box.
+    pub reset: [f32; 4],
 }
 
-/// A slider with its number beside it.
+/// A slider with its value box and reset icon beside it (#225).
 #[derive(Clone, Debug, PartialEq)]
 pub struct Slider {
     /// 0 to 1 along the track.
@@ -431,14 +439,32 @@ impl Slider {
         ];
         let value = self.value.clamp(0.0, 1.0);
         let x = track[0] + value * track_w;
-        let number = [
-            track[0] + track_w + thumb / 2.0 + style::SPACE_CHIP_GAP * scale,
-            at[1],
-            style::SPACE_SLIDER_NUMBER * scale,
-            height,
+        let gap = style::SPACE_CHIP_GAP * scale;
+        let box_h = height - gap;
+        let value_box = [
+            track[0] + track_w + thumb / 2.0 + 2.0 * gap,
+            at[1] + (height - box_h) / 2.0,
+            style::SPACE_VALUE_BOX * scale,
+            box_h,
+        ];
+        let arrows = style::SPACE_VALUE_ARROWS * scale;
+        let number = [value_box[0], value_box[1], value_box[2] - arrows, box_h];
+        let up = [
+            value_box[0] + value_box[2] - arrows,
+            value_box[1],
+            arrows,
+            box_h / 2.0,
+        ];
+        let down = [up[0], value_box[1] + box_h / 2.0, arrows, box_h / 2.0];
+        let side = style::SPACE_RESET_ICON * scale;
+        let reset = [
+            value_box[0] + value_box[2] + gap,
+            at[1] + (height - side) / 2.0,
+            side,
+            side,
         ];
         SliderLayout {
-            row: [at[0], at[1], number[0] + number[2] - at[0], height],
+            row: [at[0], at[1], reset[0] + reset[2] - at[0], height],
             track,
             filled: [track[0], track[1], x - track[0], thick],
             thumb: [
@@ -447,7 +473,11 @@ impl Slider {
                 thumb,
                 thumb,
             ],
+            value_box,
             number,
+            up,
+            down,
+            reset,
         }
     }
 
@@ -469,7 +499,21 @@ impl Slider {
         ((x - l.track[0]) / l.track[2]).clamp(0.0, 1.0)
     }
 
+    /// Drawn with the reset icon enabled and nothing being typed.
     pub fn draw(&self, at: [f32; 2], state: State, scale: f32) -> Vec<Prim> {
+        self.draw_with(at, state, scale, None, true)
+    }
+
+    /// Drawn with `typing` in the value box when it is being typed into, and the reset icon dim when
+    /// `reset_enabled` is false (the value is already the default).
+    pub fn draw_with(
+        &self,
+        at: [f32; 2],
+        state: State,
+        scale: f32,
+        typing: Option<&str>,
+        reset_enabled: bool,
+    ) -> Vec<Prim> {
         let l = self.layout(at, scale);
         let disabled = state == State::Disabled;
         let thumb = match state {
@@ -478,7 +522,14 @@ impl Slider {
             State::Pressed => lift(style::ACCENT, -style::STATE_ON_HOVER_LIFT),
             State::Disabled => style::STATE_PRESSED,
         };
-        vec![
+        let ink = if disabled {
+            style::TEXT_DISABLED
+        } else {
+            style::TEXT_PRIMARY
+        };
+        let w = (style::LINE_WEIGHT * scale).max(1.0);
+        let b = l.value_box;
+        let mut prims = vec![
             rect(l.track, style::SURFACE_CONTROL),
             rect(
                 l.filled,
@@ -489,19 +540,78 @@ impl Slider {
                 },
             ),
             rect(l.thumb, thumb),
-            text(
-                &self.number,
-                l.number,
-                Face::Label,
+            // The value box: a frame (the accent while typing) round a dark field.
+            rect(
+                b,
+                if typing.is_some() {
+                    style::ACCENT
+                } else {
+                    style::LINE_BORDER
+                },
+            ),
+            rect(
+                [b[0] + w, b[1] + w, b[2] - 2.0 * w, b[3] - 2.0 * w],
+                style::SURFACE_PANEL,
+            ),
+        ];
+        let shown = match typing {
+            Some(t) => format!("{t}|"),
+            None => self.number.clone(),
+        };
+        let pad = style::SPACE_CHIP_GAP * scale;
+        prims.push(text(
+            &shown,
+            [
+                l.number[0] + pad,
+                l.number[1],
+                l.number[2] - 2.0 * pad,
+                l.number[3],
+            ],
+            Face::Label,
+            ink,
+            Align::Right,
+        ));
+        // The arrows: a divider, and a small triangle in each half.
+        prims.push(rect(
+            [l.up[0], b[1] + w, w, b[3] - 2.0 * w],
+            style::LINE_BORDER,
+        ));
+        for (arrow, glyph) in [(l.up, "\u{25B2}"), (l.down, "\u{25BC}")] {
+            prims.push(text(
+                glyph,
+                arrow,
+                Face::Scale,
                 if disabled {
                     style::TEXT_DISABLED
                 } else {
-                    style::TEXT_PRIMARY
+                    style::TEXT_SECONDARY
                 },
-                Align::Right,
-            ),
-        ]
+                Align::Centre,
+            ));
+        }
+        prims.extend(reset_icon(l.reset, reset_enabled && !disabled, false));
+        prims
     }
+}
+
+/// The circular reset arrow: dim when there is nothing to reset, lit under the pointer when there is.
+pub fn reset_icon(area: [f32; 4], enabled: bool, hover: bool) -> Vec<Prim> {
+    let mut prims = Vec::new();
+    if enabled && hover {
+        prims.push(rect(area, style::STATE_HOVER));
+    }
+    prims.push(text(
+        "\u{21BA}",
+        area,
+        Face::Notice,
+        if enabled {
+            style::TEXT_PRIMARY
+        } else {
+            style::TEXT_DISABLED
+        },
+        Align::Centre,
+    ));
+    prims
 }
 
 // ---- Popover ----
@@ -511,46 +621,74 @@ impl Slider {
 pub fn popover(menu: &Menu, area: [f32; 4], cursor: [f32; 2], scale: f32) -> Vec<Prim> {
     let mut prims: Vec<Prim> = framed(area, style::LINE_BORDER, style::SURFACE_MENU, scale).into();
     let text_width = area[2] - style::SPACE_MENU_TEXT_RIGHT * scale;
+    let weight = (style::LINE_WEIGHT * scale).max(1.0);
     for (i, row) in menu.rows.iter().enumerate() {
-        let top = Menu::row_top(area, i, scale);
-        let row_rect = [area[0], top, area[2], MENU_ROW * scale];
+        let row_rect = menu.row_rect(area, i, scale);
+        let top = row_rect[1];
         match row {
             MenuRow::Heading(label) => {
+                let own = menu.heading_rect(area, i, scale);
+                // A heading after the first starts a group: a quiet line in the room above it.
+                if i > 0 {
+                    let inset = style::SPACE_MENU_HEADING_LEFT * scale;
+                    prims.push(rect(
+                        [
+                            area[0] + inset,
+                            own[1] - (style::SPACE_POPOVER_GROUP_GAP * scale + weight) / 2.0,
+                            area[2] - 2.0 * inset,
+                            weight,
+                        ],
+                        style::LINE_BORDER,
+                    ));
+                }
                 let left = area[0] + style::SPACE_MENU_HEADING_LEFT * scale;
                 prims.push(text(
                     label,
-                    [left, top, text_width, row_rect[3]],
+                    [left, own[1], text_width, own[3]],
                     Face::Label,
-                    style::TEXT_SECONDARY,
+                    style::TEXT_PRIMARY,
                     Align::Left,
                 ));
+                if label == crate::settings::PANEL_SECTION
+                    && let Some(reset) = menu.panel_reset_rect(area, scale)
+                {
+                    prims.extend(reset_icon(
+                        reset,
+                        !menu.panel_at_default,
+                        contains(reset, cursor),
+                    ));
+                }
             }
-            MenuRow::Slider { amount, value, .. } => {
+            MenuRow::Slider {
+                key,
+                label,
+                amount,
+                value,
+            } => {
                 let state = if contains(row_rect, cursor) {
                     State::Hover
                 } else {
                     State::Normal
                 };
-                prims.extend(
-                    Slider {
-                        value: amount.fraction(*value),
-                        number: amount.text(*value),
-                    }
-                    .draw(Menu::slider_origin(area, i, scale), state, scale),
-                );
-            }
-            MenuRow::Reset { text: label, .. } => {
-                if contains(row_rect, cursor) {
-                    prims.push(rect(row_rect, style::STATE_HOVER));
-                }
-                let left = area[0] + style::SPACE_MENU_TEXT_LEFT * scale;
                 prims.push(text(
                     label,
-                    [left, top, text_width, row_rect[3]],
+                    menu.label_rect(area, i, scale),
                     Face::Label,
                     style::TEXT_SECONDARY,
                     Align::Left,
                 ));
+                let typing = menu.editing().filter(|(k, _)| k == key).map(|(_, t)| t);
+                let slider = Slider {
+                    value: amount.fraction(*value),
+                    number: amount.text(*value),
+                };
+                let at = menu.slider_origin(area, i, scale);
+                prims.extend(slider.draw_with(at, state, scale, typing, *value != amount.default));
+                let reset = slider.layout(at, scale).reset;
+                if *value != amount.default && contains(reset, cursor) {
+                    prims.push(rect(reset, style::STATE_HOVER));
+                    prims.extend(reset_icon(reset, true, false));
+                }
             }
             MenuRow::Panel(action) => {
                 if contains(row_rect, cursor) {
@@ -608,6 +746,52 @@ pub fn popover(menu: &Menu, area: [f32; 4], cursor: [f32; 2], scale: f32) -> Vec
         }
     }
     prims
+}
+
+/// The Panel reset's tooltip.
+pub const PANEL_RESET_TIP: &str = "Reset this Panel's settings";
+
+/// What a reset icon under `cursor` is called: an amount's ("Reset to 100 %") or the Panel's, with the icon's
+/// rectangle to hang the tooltip on. `None` when the cursor is on neither.
+pub fn popover_tip(
+    menu: &Menu,
+    area: [f32; 4],
+    cursor: [f32; 2],
+    scale: f32,
+) -> Option<([f32; 4], String)> {
+    if let Some(reset) = menu.panel_reset_rect(area, scale)
+        && contains(reset, cursor)
+    {
+        return Some((reset, PANEL_RESET_TIP.to_string()));
+    }
+    let (_, crate::settings::AmountHit::Reset) = menu.amount_hit(area, cursor, scale)? else {
+        return None;
+    };
+    let row = menu.row_at(area, cursor, scale)?;
+    let MenuRow::Slider { amount, .. } = menu.rows.get(row)? else {
+        return None;
+    };
+    Some((
+        menu.slider_layout(area, row, scale).reset,
+        format!("Reset to {}", amount.text(amount.default)),
+    ))
+}
+
+/// The tooltip of a reset icon under the pointer, drawn inside a window of `window` device pixels.
+pub fn popover_tooltip(
+    menu: &Menu,
+    area: [f32; 4],
+    cursor: [f32; 2],
+    window: [f32; 2],
+    scale: f32,
+) -> Vec<Prim> {
+    match popover_tip(menu, area, cursor, scale) {
+        Some((anchor, words)) => {
+            let tip = Tooltip::new(&words);
+            tip.draw(tip.rect(anchor, window, scale), scale)
+        }
+        None => Vec::new(),
+    }
 }
 
 // ---- Panel focus and the empty page (ADR 0038, #206) ----
@@ -1134,7 +1318,7 @@ impl DropMenu {
         scale
             * match entry {
                 MenuEntry::Separator => style::SPACE_MENU_SEPARATOR,
-                _ => MENU_ROW,
+                _ => style::SPACE_MENU_ROW,
             }
     }
 

@@ -824,6 +824,15 @@ impl DisplaySet {
         self.read().displays[index].popover_settings(&own)
     }
 
+    /// Whether every setting of the display in Panel `index` (chips included) is at its default, so the Panel
+    /// reset has nothing to do (#225).
+    pub fn at_default(&self, index: usize, settings: &PanelSettings) -> bool {
+        let shared = self.read();
+        let defs = shared.displays[index].setting_defs();
+        let key = &shared.instances[index].key;
+        settings.resolve(key, defs) == PanelSettings::default().resolve(key, defs)
+    }
+
     /// What to keep for Panel `index`'s `key` set to `value` from the popover or a chip.
     pub fn stored_value(
         &self,

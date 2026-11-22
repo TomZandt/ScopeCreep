@@ -7,6 +7,7 @@ The format follows [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/
 ## [Unreleased]
 
 ### Added
+- A Panel's settings popover is easier to use (#225). Every amount is one row like Resolve's own: label, slider, a **value box** you can type into (with up and down arrows; Up and Down keys, Shift for ten steps, Enter accepts, Escape cancels; clamped to the slider's range, in its unit), and a small circular **reset** arrow that goes back to the default (its tooltip names it, "Reset to 100 %", and it is dim at the default). The "Reset to default" text line is gone. The popover's Panel section has a **reset this Panel's settings** icon in its corner that puts every setting of that Panel back to default in one step (its position, size, zoom and tab stay); it is dim when all is at default. The popover is wider and roomier: groups are apart, with a heading and a line each, taller rows and bigger hit targets, and the Panel section set well apart at the bottom.
 - A Sponsor button on the GitHub repository and a line in the README that link to buymeacoffee.com/tomzandtvalentine.
 - Gamut Warning, Neutrals and Chromaticity are back in the Window (the former gamut/legal warning, Highlight Neutrals and CIE plot, renamed). Add panel, a Panel's edge **+** and Replace with list them A to Z with the other seven; they are not in the default layout or the page templates, so a page gets one by adding it. Each can be duplicated and closed like any Panel, keeps its own settings, and costs nothing while it is not on the page you are on. Pages and settings saved under the old names still load (#222).
 - A **Displays** table in the glossary: the seven displays in the Window with their kind, purpose and former name, and the six kept out of the Window.
@@ -41,6 +42,7 @@ The format follows [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/
 - The Window can't be made smaller than 713 × 645 (logical pixels): the size at which every Panel of the default layout keeps its minimum size and every menu, including the Hotkeys panel, fits under the menu bar. A layout you dragged can still shrink its Panels below their minimum in a Window smaller than the one it was arranged in (#172).
 
 ### Fixed
+- Dragging a slider in a Panel's popover now moves the slider and its number as you drag. The Panel's setting was already changing on each move, but the popover kept drawing the value it was opened with, so the thumb and the readout stood still (the thumb only caught up after the popover was opened again) (#225).
 - The Colour Setup line under the menu bar was an empty bar: its text was drawn below its own background. It now shows the Timeline, Output, Levels and where it came from (#217).
 - The Page bar's **+** and Add panel menus, an edge **+** and the empty page's Add panel button now open their list under the button that was clicked, or above it when there is no room below, not at the top left of the Window.
 - Main and every other page now start on Panels of their own, Main on the first instances, so Main's saved settings apply to it and no page shows "Clean picture 2" for a single Panel; instances no page holds are removed at start-up.
