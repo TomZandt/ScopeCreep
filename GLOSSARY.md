@@ -60,6 +60,22 @@ _Avoid_: Range, data range, legal/full (on its own)
 The short list of exact fixes that appears only while something ScopeCreep needs is missing, and disappears once everything works.
 _Avoid_: Onboarding, wizard, warnings panel, status page
 
+**Installer**:
+The one download per platform that puts the app in place and the Sender in Resolve's OFX plugins folder: a `.pkg` on macOS (Apple Silicon), a setup `.exe` on Windows, and a `.tar.gz` with an install script on Linux.
+_Avoid_: Package, bundle (the Sender's own folder is the OFX bundle), build
+
+**Release**:
+A numbered version (vX.Y.Z) published for download, carrying an Installer for each platform whose UHD 50 performance check has passed on that build. While the version is 0.y.z every Release is a pre-release.
+_Avoid_: Drop, ship, publish (as a noun)
+
+**Test build**:
+Installers built on request from any commit, downloadable for a short time to try a change before it becomes a Release. Never published and never numbered as a version.
+_Avoid_: Nightly, beta, preview, snapshot
+
+**Update check**:
+The app's one look, at start-up, for a newer Release that has an Installer for its platform. It can be turned off, and it says nothing when offline. When it finds one, a dialog offers Update, Skip this version or Later. Update installs that Installer where the app can, and otherwise opens the Release's page.
+_Avoid_: Auto-update (nothing installs without the user), phone home
+
 ## Displays
 
 The displays, by their name now. Each Panel is one of these (a page can hold the same display more than once: its Panel title then adds the instance number, "Waveform 2", only when the page holds two or more of it). Choosing lists (Add panel, a Panel's edge **+**, Replace with…) list them A to Z. Former names are still read from every saved file (settings, layouts, pages, copies like "Clean picture 2"), and new names are written from the next save on (the rename of the displays, #196).
