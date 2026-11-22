@@ -1,0 +1,374 @@
+<!doctype html>
+<!--
+  PROTOTYPE, THROWAWAY (branch prototype/stylesheet-accent, never merged to main).
+  An INTERACTIVE demo of the ScopeCreep Window with the brand accent (#d2ff00), variant A by default
+  (?variant=A|B|C). Real hovers and presses, chips that toggle, wheel zoom with Link, Fit, popovers with value boxes,
+  menus, page tabs (right-click for the layout menu, double-click to rename), Add panel and edge +, dock by dragging a
+  title (edges split, middle tabs, Shift swaps, Esc cancels), draggable dividers, Close, Duplicate, Replace, Ctrl+Z,
+  an accent picker, and sliders for the spacing tokens so the spacing can be tuned live and copied out.
+  No persistence. Colours and sizes are the app's style tokens (app/src/style.rs) plus the owner's accent.
+-->
+<html lang="en"><head><meta charset="utf-8"><title>ScopeCreep interactive demo</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+:root{
+  --accent:#d2ff00;--accent-on:#111;--accent-hover:#e0ff4d;--accent-press:#a8cc00;
+  --bg:#121212;--panel:#171717;--menu:#1c1c1c;--control:#262626;--control-hi:#333;--line:#2e2e2e;
+  --text:#b0b0b0;--text2:#8a8a8a;--muted:#707070;--disabled:#4e4e4e;--r:#d9534f;--g:#4cae4c;--b:#5b7fe8;--y:#c7c7c7;
+  --font:"Noto Sans","DejaVu Sans",system-ui,sans-serif;
+  /* tunable spacing tokens (logical px) */
+  --tb-h:26px;--chip-h:20px;--chip-gap:2px;--group-air:28px;--blk-gap:4px;--pad:8px;--row-h:26px;--pop-w:340px;--gap:6px;--fs:12.5px;
+}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%}
+body{background:var(--bg);color:var(--text);font:var(--fs)/1.3 var(--font);overflow:hidden;user-select:none}
+.vC{--bg:color-mix(in srgb,#121212 93%,var(--accent) 7%);--panel:color-mix(in srgb,#171717 92%,var(--accent) 8%);--menu:color-mix(in srgb,#1c1c1c 92%,var(--accent) 8%);--control:color-mix(in srgb,#262626 90%,var(--accent) 10%);--control-hi:color-mix(in srgb,#333 86%,var(--accent) 14%);--line:color-mix(in srgb,#2e2e2e 82%,var(--accent) 18%)}
+#app{display:grid;grid-template-rows:26px 28px 1fr 20px;height:100vh;padding-right:0}
+/* ---- bars ---- */
+.menubar{display:flex;align-items:center;background:var(--bg);border-bottom:1px solid var(--line);padding-left:4px;position:relative}
+.menubar .m{padding:4px 11px;color:var(--text);cursor:default}
+.menubar .m:hover{background:var(--control-hi);color:#fff}
+.vA .menubar .m:hover,.vA .menubar .m.open{background:var(--accent);color:var(--accent-on)}
+.vB .menubar .m:hover,.vB .menubar .m.open{color:var(--accent);box-shadow:inset 0 -2px 0 var(--accent);background:transparent}
+.vC .menubar .m:hover,.vC .menubar .m.open{background:color-mix(in srgb,var(--control-hi) 60%,var(--accent) 40%);color:#fff}
+.menubar .cs{margin-left:auto;margin-right:10px;color:var(--text2);font-size:11.5px;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:0 1 560px}
+.pagebar{display:flex;align-items:center;background:var(--bg);padding:0 var(--pad);gap:4px;border-bottom:1px solid var(--line)}
+.btn{height:var(--chip-h);padding:0 10px;display:inline-flex;align-items:center;background:var(--control);color:var(--text2);cursor:default;white-space:nowrap}
+.btn:hover{background:var(--control-hi);color:#eee}
+.vA .btn:hover{outline:1px solid var(--accent);outline-offset:-1px}
+.vB .btn:hover{color:var(--accent)}
+.vC .btn:hover{background:color-mix(in srgb,var(--control) 80%,var(--accent) 20%)}
+.btn:active{background:#3c3c3c}
+.pt.on{color:#e6e6e6;background:var(--control-hi)}
+.vA .pt.on{background:var(--accent);color:var(--accent-on)}
+.vB .pt.on{background:var(--control);color:var(--accent);box-shadow:inset 0 -2px 0 var(--accent)}
+.vC .pt.on{background:var(--accent);color:var(--accent-on)}
+.pt input{background:var(--bg);border:1px solid var(--accent);color:#fff;font:inherit;width:90px;padding:0 4px;height:18px;outline:0}
+.sp{flex:1}
+.statusbar{display:flex;align-items:center;padding:0 var(--pad);font-size:11px;color:var(--text2);border-top:1px solid var(--line);background:var(--bg)}
+.statusbar .notice{color:var(--accent);margin-left:14px}
+/* ---- chips ---- */
+.chip{display:inline-flex;align-items:center;justify-content:center;min-width:26px;height:var(--chip-h);padding:0 8px;background:var(--control);color:var(--text);font-size:12px;position:relative;cursor:default}
+.chip:hover{background:var(--control-hi)}
+.chip:active{background:#3c3c3c}
+.chip.dis{background:#1e1e1e!important;color:var(--disabled)!important;pointer-events:none;outline:none!important;box-shadow:none!important}
+.chip.on{background:var(--y);color:var(--accent-on)}
+.chip.on.R{background:var(--r);color:#fff0f0}.chip.on.G{background:var(--g);color:#0b1d0b}.chip.on.B{background:var(--b);color:#fff0f0}
+.vA .chip:hover{outline:1px solid var(--accent);outline-offset:-1px}
+.vA .chip.on:not(.R):not(.G):not(.B):not(.Yc){background:var(--accent);color:var(--accent-on)}
+.vA .chip.on:not(.R):not(.G):not(.B):not(.Yc):hover{background:var(--accent-hover);outline:none}
+.vA .chip.on:not(.R):not(.G):not(.B):not(.Yc):active{background:var(--accent-press)}
+.vB .chip:hover{color:var(--accent)}
+.vB .chip.on:not(.R):not(.G):not(.B):not(.Yc){background:var(--control);color:var(--accent);box-shadow:inset 0 -2px 0 var(--accent)}
+.vC .chip:hover{background:color-mix(in srgb,var(--control) 82%,var(--accent) 18%);color:#fff}
+.vC .chip.on:not(.R):not(.G):not(.B):not(.Yc){background:var(--accent);color:var(--accent-on)}
+.vC .chip.on:not(.R):not(.G):not(.B):not(.Yc):hover{background:var(--accent-hover)}
+.gear{display:inline-flex;width:24px;height:var(--chip-h);align-items:center;justify-content:center;color:var(--text2);letter-spacing:1px;cursor:default}
+.gear:hover{background:var(--control-hi);color:#eee}
+.vA .gear:hover{outline:1px solid var(--accent);outline-offset:-1px}
+.vB .gear:hover{color:var(--accent)}
+/* ---- layout tree ---- */
+#area{position:relative;padding:var(--gap);min-height:0;overflow:hidden}
+#tree{position:relative;width:100%;height:100%}
+.sn{display:flex;width:100%;height:100%}
+.sn.row{flex-direction:row}.sn.col{flex-direction:column}
+.sn>.ch{min-width:0;min-height:0;position:relative}
+.div{flex:0 0 var(--gap);position:relative;z-index:3}
+.row>.div{cursor:col-resize}.col>.div{cursor:row-resize}
+.div:hover:after,.div.drag:after{content:"";position:absolute;background:var(--accent);opacity:.8}
+.row>.div:after{left:2px;right:2px;top:0;bottom:0}.col>.div:after{top:2px;bottom:2px;left:0;right:0}
+.panel{position:absolute;inset:0;background:var(--panel);border:1px solid var(--line);display:flex;flex-direction:column;min-width:0}
+.panel.focus{border-color:#555}
+.vA .panel.focus{box-shadow:0 0 0 1px var(--accent);border-color:var(--accent)}
+.vB .panel.focus .tb{box-shadow:inset 0 2px 0 var(--accent)}
+.vC .panel.focus{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent)}
+.vC .panel.focus .nm{color:var(--accent)}
+.tb{height:var(--tb-h);flex:0 0 var(--tb-h);display:flex;align-items:center;border-bottom:1px solid var(--line);padding-left:var(--pad);gap:var(--pad);position:relative;min-width:0;cursor:default}
+.tb .nm{color:var(--text);white-space:nowrap;flex:0 0 auto}
+.panel.focus .nm{color:#fff}
+.tb .tag{color:var(--muted);font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+.tb .chips{display:flex;gap:var(--chip-gap);margin-left:auto;flex:0 0 auto}
+.tb .rule{align-self:stretch;width:2px;background:#5a5a5a;margin:0 var(--group-air);flex:0 0 2px}
+.vA .tb .rule{background:var(--accent);opacity:.9}.vC .tb .rule{background:color-mix(in srgb,var(--accent) 55%,#444)}
+.tb .blk{display:flex;gap:var(--blk-gap);align-items:center}
+.tb .zoom{color:var(--muted);min-width:44px;text-align:center}
+.tb.narrow .tag{display:none}.tb.tight .chips,.tb.tight .rule{display:none}
+.tabs{display:flex;align-items:center;gap:2px;min-width:0;overflow:hidden}
+.tabs .t{padding:2px 9px;color:var(--text2);cursor:default;white-space:nowrap;height:var(--chip-h);display:flex;align-items:center}
+.tabs .t:hover{color:#eee}
+.tabs .t.on{background:var(--control-hi);color:#eee}
+.vA .tabs .t.on{background:var(--accent);color:var(--accent-on)}.vB .tabs .t.on{color:var(--accent);box-shadow:inset 0 -2px 0 var(--accent);background:transparent}.vC .tabs .t.on{background:var(--accent);color:var(--accent-on)}
+.body{flex:1;position:relative;overflow:hidden;background:#101010}
+.pic{position:absolute;inset:0;background:radial-gradient(circle at 60% 55%,#c9a77a,#6b4a3a 40%,#26343a 75%,#101a1e);transform-origin:50% 50%;transition:transform .08s}
+.pic.false{background:linear-gradient(120deg,#4fc1f5,#16a34a 35%,#fde68a 60%,#f97316)}
+.pic.sat{background:radial-gradient(circle at 50% 50%,#16a34a,#38bdf8 45%,#0f3d5c)}
+.pic.skin{background:radial-gradient(circle at 55% 50%,#22d83a,#caa 50%,#876)}
+.pic.arri{background:linear-gradient(110deg,#444,#aaa 40%,#ff66b3 60%,#2eb82e)}
+canvas.sc{position:absolute;inset:0;width:100%;height:100%}
+.edge{position:absolute;width:20px;height:20px;display:none;align-items:center;justify-content:center;z-index:6;cursor:default;background:var(--control);color:var(--text)}
+.panel:hover .edge{display:flex}
+.vA .edge{background:var(--accent);color:var(--accent-on)}.vB .edge{border:1px solid var(--accent);color:var(--accent);background:var(--panel)}.vC .edge{background:var(--accent);color:var(--accent-on)}
+.edge.l{left:5px;top:50%;margin-top:-10px}.edge.r{right:5px;top:50%;margin-top:-10px}.edge.t{top:calc(var(--tb-h) + 5px);left:50%;margin-left:-10px}.edge.b{bottom:5px;left:50%;margin-left:-10px}
+.dockov{position:fixed;z-index:50;pointer-events:none;display:flex;align-items:center;justify-content:center;color:#fff;font-size:12px}
+.vA .dockov{background:color-mix(in srgb,var(--accent) 22%,transparent);border:2px solid var(--accent)}
+.vB .dockov{border:2px dashed var(--accent);color:var(--accent)}.vC .dockov{background:color-mix(in srgb,var(--accent) 30%,transparent);border:1px solid var(--accent)}
+.empty{position:absolute;inset:0;display:flex;align-items:center;justify-content:center}
+.empty .btn{height:40px;padding:0 22px;font-size:14px}
+/* ---- popovers and menus ---- */
+.pop{position:fixed;z-index:60;background:var(--menu);border:1px solid #3a3a3a;padding:6px 0;min-width:200px;box-shadow:0 8px 24px rgba(0,0,0,.5);max-height:90vh;overflow:auto}
+.pop.wide{width:var(--pop-w)}
+.pop .hd{padding:6px 12px;color:var(--text2);font-size:11px;letter-spacing:.03em;display:flex;justify-content:space-between;align-items:center}
+.pop .row{height:var(--row-h);display:flex;align-items:center;padding:0 12px 0 28px;color:var(--text);position:relative;cursor:default;gap:16px}
+.pop .row .k{margin-left:auto;color:var(--muted);font-size:11px}
+.pop .row.sel:before{content:"";position:absolute;left:12px;top:50%;margin-top:-3px;width:7px;height:7px;background:var(--accent)}
+.pop .row.d{color:var(--disabled);pointer-events:none}
+.pop .row:hover{background:#333;color:#fff}
+.vA .pop .row:hover{box-shadow:inset 3px 0 0 var(--accent)}
+.vB .pop .row:hover{color:var(--accent);box-shadow:inset 2px 0 0 var(--accent);background:transparent}
+.vC .pop .row:hover{background:color-mix(in srgb,#333 70%,var(--accent) 30%)}
+.pop .sep{height:1px;background:var(--line);margin:6px 12px}
+.amt{display:grid;grid-template-columns:96px 1fr auto 22px;gap:8px;align-items:center;padding:4px 12px;min-height:var(--row-h)}
+.range{-webkit-appearance:none;appearance:none;width:100%;height:18px;background:transparent;margin:0;cursor:default}
+.range::-webkit-slider-runnable-track{height:4px;background:linear-gradient(90deg,var(--accent) var(--p,50%),#333 var(--p,50%))}
+.range::-webkit-slider-thumb{-webkit-appearance:none;width:10px;height:16px;margin-top:-6px;background:var(--accent)}
+.vB .range::-webkit-slider-runnable-track{height:2px;background:linear-gradient(90deg,var(--accent) var(--p,50%),#3a3a3a var(--p,50%))}
+.vB .range::-webkit-slider-thumb{background:#d0d0d0;width:8px;box-shadow:0 2px 0 var(--accent)}
+.vC .range::-webkit-slider-runnable-track{background:linear-gradient(90deg,var(--accent) var(--p,50%),var(--control-hi) var(--p,50%))}
+.vC .range::-webkit-slider-thumb{background:#fff}
+.vbox{display:inline-flex;border:1px solid var(--line);height:22px;background:var(--bg)}
+.vbox input{width:54px;background:transparent;border:0;color:var(--text);text-align:right;font:12px var(--font);padding:0 6px;outline:0;user-select:text}
+.vbox:focus-within{border-color:var(--accent)}.vbox:focus-within{box-shadow:0 0 0 1px var(--accent)}
+.vbox .ar{display:flex;flex-direction:column;border-left:1px solid var(--line);font-size:7px;line-height:10px;width:16px;text-align:center;color:var(--text2)}
+.vbox .ar span{cursor:default}.vbox .ar span:hover{color:var(--accent);background:var(--control-hi)}
+.rst{width:22px;height:22px;display:inline-flex;align-items:center;justify-content:center;color:var(--text2);font-size:14px;cursor:default}
+.rst:hover{color:var(--accent);background:var(--control-hi)}.rst.dim{color:var(--disabled);pointer-events:none}
+.tip{position:fixed;z-index:80;pointer-events:none;border:1px solid #444;background:#1c1c1c;padding:4px 8px;font-size:12px;color:#ccc}
+.confirm{padding:8px 12px;max-width:300px;color:var(--text)}.confirm .rowb{display:flex;gap:6px;margin-top:8px}
+/* ---- tweaks drawer + stylesheet below ---- */
+#drawer{position:fixed;right:0;top:0;bottom:0;width:300px;background:#1a1a1a;border-left:1px solid #333;z-index:70;transform:translateX(100%);transition:transform .15s;padding:14px;overflow:auto;user-select:text}
+#drawer.open{transform:none}
+#drawer h3{margin:14px 0 6px;font-size:11px;letter-spacing:.05em;text-transform:uppercase;color:var(--text2);font-weight:600}
+#drawer h3:first-child{margin-top:0}
+.tw{display:grid;grid-template-columns:110px 1fr 36px;gap:6px;align-items:center;margin:4px 0;font-size:12px}
+.tw output{text-align:right;color:var(--text)}
+.sw{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.swatch{width:24px;height:24px;border:2px solid transparent;outline:1px solid #444;cursor:pointer}.swatch.sel{border-color:#fff}
+.hexin{width:84px;background:var(--bg);border:1px solid var(--line);color:var(--text);padding:3px 6px;font:12px var(--font)}
+.ok{color:#9be37a}.bad{color:#ff7a7a}
+pre#tokens{background:#111;border:1px solid #333;padding:8px;font-size:11px;white-space:pre-wrap;margin:6px 0}
+#tw-open{position:fixed;right:10px;bottom:56px;z-index:71;background:var(--control);color:#ddd;padding:6px 12px;cursor:default;border:1px solid #444}
+#tw-open:hover{border-color:var(--accent);color:var(--accent)}
+#sw{position:fixed;left:50%;bottom:14px;transform:translateX(-50%);background:#fff;color:#111;border-radius:999px;box-shadow:0 6px 24px rgba(0,0,0,.55);display:flex;align-items:center;gap:6px;padding:5px 8px;font:600 13px var(--font);z-index:90}
+#sw button{border:0;background:#eee;border-radius:999px;width:28px;height:28px;font-size:15px;cursor:pointer}#sw span{min-width:250px;text-align:center}
+</style></head>
+<body>
+<div id="app">
+  <div class="menubar" id="menubar"><span class="m" data-m="layout">Layout</span><span class="m" data-m="view">View</span><span class="m" data-m="settings">Settings</span>
+    <span class="cs" title="ACEScct → Rec.709 BT.1886 · Video levels · from project, assumes ACES 2.0 · Output Conversion exact for ACES 2.0">ACEScct → Rec.709 BT.1886 · Video levels · from project, assumes ACES 2.0 · Output Conversion exact for ACES 2.0</span></div>
+  <div class="pagebar" id="pagebar"></div>
+  <div id="area"><div id="tree"></div></div>
+  <div class="statusbar"><span>paused · 0 dropped · Timeline 1</span><span class="notice" id="notice"></span><span class="sp"></span><span>Sender A</span></div>
+</div>
+<div id="tw-open">Tweak spacing and accent</div>
+<div id="drawer">
+  <h3>App accent colour</h3>
+  <div class="sw" id="sws"></div>
+  <div style="margin-top:8px">#<input class="hexin" id="hexin" value="#d2ff00" maxlength="7"> <span class="btn" id="hexreset">Reset</span></div>
+  <div class="ctr" id="ctr" style="margin-top:6px;font-size:11.5px;color:var(--text2)"></div>
+  <h3>Spacing tokens (logical px)</h3><div id="tweaks"></div>
+  <h3>Copy out</h3><pre id="tokens"></pre><span class="btn" id="copytok">Copy tokens</span>
+  <h3>Try</h3>
+  <div style="font-size:12px;line-height:1.5;color:var(--text2)">Hover and press anything. Click a Panel to focus it. Wheel over a picture to zoom (Link on: all pictures follow). Click ⋯ for the Panel menu. Hover a Panel edge for the +. Drag a title onto an edge (Shift swaps, Esc cancels). Drag a divider. Right-click a page tab. Double-click a tab to rename. Ctrl+Z undoes layout changes.</div>
+</div>
+<div id="sw"><button id="prev">&larr;</button><span id="lbl"></span><button id="next">&rarr;</button></div>
+
+<script>
+/* ============ variant switcher ============ */
+const VARS=[['A','Signal: accent fills on-states'],['B','Hairline: grey chrome, accent as lines'],['C','Tinted: hue in the greys, fills and washes']];
+const qp=new URLSearchParams(location.search);let vi=Math.max(0,VARS.findIndex(v=>v[0]===qp.get('variant')));
+function setV(i){vi=(i+3)%3;document.documentElement.className=document.body.className='v'+VARS[vi][0];$('#lbl').textContent=VARS[vi][0]+' ('+VARS[vi][1]+')';const u=new URL(location);u.searchParams.set('variant',VARS[vi][0]);history.replaceState(null,'',u)}
+const $=s=>document.querySelector(s),$$=s=>[...document.querySelectorAll(s)];
+$('#prev').onclick=()=>setV(vi-1);$('#next').onclick=()=>setV(vi+1);
+addEventListener('keydown',e=>{if(/INPUT/.test(document.activeElement.tagName))return;
+  if(e.key==='ArrowLeft')setV(vi-1);if(e.key==='ArrowRight')setV(vi+1);
+  if(e.key==='Escape'){if(drag)cancelDrag();else closePop()}
+  if((e.ctrlKey||e.metaKey)&&e.key==='z'){e.preventDefault();undo()}
+  if(e.ctrlKey&&/^[1-9]$/.test(e.key)){e.preventDefault();goPage(+e.key-1)}});
+
+/* ============ model ============ */
+const DISPLAYS={ // key: [kind, tag, class]
+ 'Channel Viewer':['pic','','pic'],'Waveform':['scope','Rec.709 weights, 100 %','wave'],'Vectorscope':['scope','100 % plot only','vec'],
+ 'False Colour - Arri':['pic','','pic arri'],'False Colour - Stops':['pic','','pic false'],'Skin Tone':['pic','','pic skin'],'Saturation':['pic','','pic sat'],
+ 'Gamut Warning':['pic','','pic'],'Neutrals':['pic','','pic'],'Chromaticity':['scope','CIE 1931','vec']};
+const ORDER=Object.keys(DISPLAYS).sort((a,b)=>a.localeCompare(b,'en',{sensitivity:'base'}));
+let uid=1;const P={}; // panel id -> {id,disp,chips,settings,fit}
+function mkPanel(disp,copyOf){const id=uid++;P[id]={id,disp,chips:copyOf?{...P[copyOf].chips}:{Y:1,'Both':1,'Zones':1},set:copyOf?{...P[copyOf].set}:defaults(disp),mode:0};return id}
+function defaults(d){return {a:100,b:100,c:0}}
+const leaf=(...tabs)=>({t:'l',tabs,active:0}),split=(dir,ratio,a,b)=>({t:'s',dir,ratio,a,b});
+function defaultTree(){const m=n=>leaf(mkPanel(n));
+ return split('col',.6427851,split('row',.57572013,m('Channel Viewer'),split('col',.37797147,split('row',.56338125,m('Vectorscope'),m('Saturation')),m('Waveform'))),
+  split('row',.30952382,m('False Colour - Stops'),split('row',.5,m('False Colour - Arri'),m('Skin Tone'))))}
+let pages=[{name:'Main',tree:defaultTree(),focus:null,hist:[]}],cur=0,linkOn=true,zoom=null; // zoom null = Fit
+const pg=()=>pages[cur];
+const clone=o=>JSON.parse(JSON.stringify(o));
+function snap(){const p=pg();p.hist.push(clone({tree:p.tree,focus:p.focus}));if(p.hist.length>20)p.hist.shift()}
+function undo(){const p=pg(),h=p.hist.pop();if(!h){note('Nothing to undo');return}p.tree=h.tree;p.focus=h.focus;render();note('Undid a layout change')}
+function leaves(n,o=[]){if(n.t==='l')o.push(n);else{leaves(n.a,o);leaves(n.b,o)}return o}
+function findLeaf(id,n=pg().tree){return leaves(n).find(l=>l.tabs.includes(id))}
+function parentOf(t,n=pg().tree,par=null){if(n===t)return par;if(n.t==='s')return parentOf(t,n.a,n)||parentOf(t,n.b,n);return null}
+function replaceNode(old,nw){const p=pg();const par=parentOf(old);if(!par)p.tree=nw;else if(par.a===old)par.a=nw;else par.b=nw}
+function removeFrom(l,id){l.tabs=l.tabs.filter(t=>t!==id);if(l.active>=l.tabs.length)l.active=Math.max(0,l.tabs.length-1);
+  if(!l.tabs.length){const par=parentOf(l);if(!par){pg().tree=null}else{replaceNode(par,par.a===l?par.b:par.a)}}}
+function instNo(id){const d=P[id].disp;const same=leaves(pg().tree).flatMap(l=>l.tabs).filter(x=>P[x].disp===d);return same.length>1?' '+(same.indexOf(id)+1):''}
+function shownName(id){return P[id].disp+instNo(id)}
+let rects=new Map();
+const MINW=176,MINH=105;
+function addPanel(disp,targetLeaf,edge,copyOf){snap();const id=mkPanel(disp,copyOf);const p=pg();
+  if(!p.tree){p.tree=leaf(id);p.focus=id;render();return}
+  const t=targetLeaf||findLeaf(p.focus)||leaves(p.tree)[0];const r=rects.get(t)||{w:1000,h:600};
+  let dir=edge?(edge==='l'||edge==='r'?'row':'col'):(r.w>=r.h?'row':'col'),first=edge==='l'||edge==='t';
+  const sizeOk=dir==='row'?(r.w-6)/2>=MINW:(r.h-6)/2>=MINH;
+  if(!sizeOk){t.tabs.push(id);t.active=t.tabs.length-1;note('No room to split: joined as a tab (a Panel needs at least '+MINW+' × '+MINH+')')}
+  else{const nl=leaf(id);replaceNode(t,first?split(dir,.5,nl,t):split(dir,.5,t,nl))}
+  p.focus=id;render()}
+function closePanel(id){snap();const l=findLeaf(id);removeFrom(l,id);const p=pg();if(p.focus===id)p.focus=p.tree?leaves(p.tree)[0].tabs[leaves(p.tree)[0].active]:null;delete P[id];render()}
+/* ============ rendering ============ */
+function chipEl(id,k){const on=P[id].chips[k];return `<span class="chip ${on?'on':''} ${k==='R'||k==='G'||k==='B'?k:(k==='Y'?'Yc':'')}" data-p="${id}" data-chip="${k}">${k}</span>`}
+function render(){closePop();const t=pg().tree,root=$('#tree');rects=new Map();
+  if(!t){root.innerHTML='<div class="empty"><span class="btn" id="addfirst">+ Add panel</span></div>';$('#addfirst').onclick=e=>openAdd(e.currentTarget,null,null);renderBar();return}
+  root.innerHTML='';root.appendChild(node(t));layoutDone();renderBar()}
+function node(n){
+  if(n.t==='l'){const wrap=document.createElement('div');wrap.className='ch';wrap.style.cssText='flex:1 1 0;position:relative';wrap.__leaf=n;wrap.appendChild(panelEl(n));return wrap}
+  const el=document.createElement('div');el.className='sn '+n.dir;const a=node(n.a),b=node(n.b),d=document.createElement('div');d.className='div';
+  a.style.flex=`0 0 calc(${n.ratio*100}% - ${n.ratio*6}px)`;b.style.flex='1 1 0';
+  d.onmousedown=e=>dragDiv(e,n,el,d);el.append(a,d,b);return el}
+function panelEl(l){const id=l.tabs[l.active],pn=P[id],kind=DISPLAYS[pn.disp][0],multi=l.tabs.length>1;
+  const el=document.createElement('div');el.className='panel'+(pg().focus===id?' focus':'');el.dataset.p=id;
+  const tag=kind==='pic'?`Fit ${zoom==null?'62':zoom} %`:DISPLAYS[pn.disp][1];
+  const CH={'Channel Viewer':['Y','R','G','B','L'],'Waveform':['Y','R','G','B','Col'],'Vectorscope':['100 %','200 %','Both','Mono'],'False Colour - Arri':['B/W'],'Skin Tone':['B/W'],'False Colour - Stops':['Zones','Grey +1']};const chips=CH[pn.disp]||[];
+  const left=multi?`<span class="tabs">${l.tabs.map((x,i)=>`<span class="t ${i===l.active?'on':''}" data-tab="${i}" data-p="${x}">${shownName(x)}</span>`).join('')}</span>`:`<span class="nm" data-title="${id}">${shownName(id)}</span><span class="tag">${tag}</span>`;
+  const block=kind==='pic'?`${chips.length?'<span class="rule"></span>':''}<span class="blk"><span class="chip" data-fit="${id}">Fit</span><span class="zoom">${zoom==null?'62':zoom} %</span><span class="chip ${linkOn?'on':''}" data-link>Link</span></span>`:'';
+  const cs=chips.length?`<span class="chips">${chips.map(c=>chipEl(id,c)).join('')}</span>`:'<span style="flex:1"></span>';
+  const body=kind==='pic'?`<div class="${DISPLAYS[pn.disp][2]}" style="${zoom?`transform:scale(${zoom/62})`:''}"></div>`:`<canvas class="sc" data-sc="${pn.disp}"></canvas>`;
+  el.innerHTML=`<div class="tb" data-tb="${id}">${left}${cs}${block}<span class="gear" data-gear="${id}">···</span></div><div class="body" data-wheel="${kind==='pic'?1:0}">${body}</div>
+   <span class="edge l" data-edge="l">+</span><span class="edge r" data-edge="r">+</span><span class="edge t" data-edge="t">+</span><span class="edge b" data-edge="b">+</span>`;
+  el.__leaf=l;return el}
+function layoutDone(){$$('.ch').forEach(c=>{if(c.__leaf)rects.set(c.__leaf,{w:c.clientWidth,h:c.clientHeight})});
+  $$('.tb').forEach(tb=>{const w=tb.clientWidth;tb.classList.toggle('narrow',w<470);tb.classList.toggle('tight',w<340)});
+  $$('canvas.sc').forEach(drawScope)}
+function drawScope(c){const r=c.getBoundingClientRect(),dp=devicePixelRatio||1;c.width=r.width*dp;c.height=r.height*dp;const g=c.getContext('2d');g.scale(dp,dp);const w=r.width,h=r.height;
+  g.fillStyle='#0d0d0d';g.fillRect(0,0,w,h);g.strokeStyle='#2a2a2a';g.lineWidth=1;
+  if(c.dataset.sc==='Waveform'){for(let i=0;i<=4;i++){const y=h*i/4;g.beginPath();g.moveTo(40,y);g.lineTo(w,y);g.stroke()}g.fillStyle='#707070';g.font='10px sans-serif';['1023','940','512','64','0'].forEach((t,i)=>g.fillText(t,4,Math.min(h-3,i*h/4+10)));
+    g.fillStyle='rgba(235,235,235,.35)';for(let x=40;x<w;x+=1){const t=(x-40)/(w-40),y=h*(.82-.5*t*t-.1*Math.sin(t*18)*Math.sin(t*3));for(let k=0;k<5;k++)g.fillRect(x,y+(Math.sin(x*12.9+k)*8),1,1.2)}}
+  else{const cx=w/2,cy=h/2,R=Math.min(w,h)/2-10;g.strokeStyle='#3a3a3a';g.beginPath();g.arc(cx,cy,R,0,7);g.stroke();g.beginPath();g.arc(cx,cy,R*.5,0,7);g.stroke();g.beginPath();g.moveTo(cx-R,cy);g.lineTo(cx+R,cy);g.moveTo(cx,cy-R);g.lineTo(cx,cy+R);g.stroke();
+    g.fillStyle='rgba(255,200,120,.5)';for(let i=0;i<400;i++){const a=-1+Math.random()*.6,r=Math.random()*R*.45;g.fillRect(cx+Math.cos(a)*r,cy+Math.sin(a)*r,1.5,1.5)}}}
+function renderBar(){const pb=$('#pagebar');
+  pb.innerHTML=pages.map((p,i)=>`<span class="btn pt ${i===cur?'on':''}" data-pg="${i}">${i<9?`[${i+1}] `:''}${p.name}</span>`).join('')+
+   `<span class="btn" id="newpg" title="New page from…">+</span><span class="sp"></span><span class="btn" id="al">Auto layout</span><span class="btn" id="ar">Auto resize</span><span class="btn" id="ap">Add panel</span>`;
+  $('#newpg').onclick=e=>menuAt('newpage',e.currentTarget);$('#ap').onclick=e=>openAdd(e.currentTarget,null,null);
+  $('#al').onclick=()=>note('Auto layout: the app re-arranges the page here (best of the ranked arrangements; press again for the next)');
+  $('#ar').onclick=()=>note('Auto resize: the app fits split sizes to the footage here');
+  $$('.pt').forEach(b=>{b.onclick=()=>goPage(+b.dataset.pg);b.ondblclick=()=>renamePage(+b.dataset.pg,b);b.oncontextmenu=e=>{e.preventDefault();goPage(+b.dataset.pg);menuAt('layout',b,e)}})}
+function goPage(i){if(i<pages.length){cur=i;render()}}
+function renamePage(i,b){b.innerHTML=`<input value="${pages[i].name}">`;const inp=b.querySelector('input');inp.focus();inp.select();
+  inp.onkeydown=e=>{e.stopPropagation();if(e.key==='Enter'){pages[i].name=inp.value||pages[i].name;renderBar()}if(e.key==='Escape')renderBar()};inp.onblur=()=>{pages[i].name=inp.value||pages[i].name;renderBar()};b.ondblclick=null}
+let nt;function note(t){const n=$('#notice');n.textContent=t;clearTimeout(nt);nt=setTimeout(()=>n.textContent='',4500)}
+/* ============ popovers and menus ============ */
+let pop=null;function closePop(){if(pop){pop.remove();pop=null}$$('.menubar .m').forEach(m=>m.classList.remove('open'))}
+function place(el,x,y){document.body.appendChild(el);const r=el.getBoundingClientRect();el.style.left=Math.max(4,Math.min(x,innerWidth-r.width-4))+'px';el.style.top=Math.max(4,Math.min(y,innerHeight-r.height-4))+'px'}
+function mkPop(cls=''){closePop();pop=document.createElement('div');pop.className='pop '+cls;pop.onmousedown=e=>e.stopPropagation();return pop}
+const rowH=(t,cls='',k='',act)=>{const r=document.createElement('div');r.className='row '+cls;r.innerHTML=`${t}${k?`<span class="k">${k}</span>`:''}`;if(act)r.onclick=()=>{closePop();act()};return r}
+const hd=(t)=>{const h=document.createElement('div');h.className='hd';h.textContent=t;return h}
+const sep=()=>{const s=document.createElement('div');s.className='sep';return s}
+function menuAt(kind,anchor,ev){const p=mkPop();const r=anchor.getBoundingClientRect();
+  if(kind==='layout'){[...pages.map((pgx,i)=>[`${i+1}  ${pgx.name}`,i===cur?'sel':'',i<9?'Ctrl+'+(i+1):'',()=>goPage(i)]),'-',
+     ['New page from…','','',()=>menuAt('newpage',anchor)],['Duplicate page','','',()=>{pages.push({name:pg().name+' copy',tree:clone(pg().tree),focus:null,hist:[]});cur=pages.length-1;render()}],
+     ['Rename page','','',()=>renamePage(cur,$$('.pt')[cur])],['Delete page',pages.length<2?'d':'','',()=>{pages.splice(cur,1);cur=Math.max(0,cur-1);render()}],'-',
+     ['Add panel…','','',()=>openAdd(anchor,null,null)],['Close panel','','',()=>{const f=pg().focus;if(f)closePanel(f)}],['Auto layout','','',()=>note('Auto layout (the app does this)')],['Auto resize','','',()=>note('Auto resize (the app does this)')],
+     ['Undo layout change','','Ctrl+Z',undo],['Default layout','','',()=>{snap();pg().tree=defaultTree();render()}]].forEach(it=>p.appendChild(it==='-'?sep():rowH(it[0],it[1],it[2],it[3])));}
+  if(kind==='newpage'){[['Empty page',()=>{pages.push({name:'Empty page',tree:null,focus:null,hist:[]});cur=pages.length-1;render()}],
+     ['Default layout (7 Panels)',()=>{pages.push({name:'Default',tree:defaultTree(),focus:null,hist:[]});cur=pages.length-1;render()}],
+     ['Copy of this page',()=>{pages.push({name:pg().name+' copy',tree:clone(pg().tree),focus:null,hist:[]});cur=pages.length-1;render()}]].forEach(it=>p.appendChild(rowH(it[0],'','',it[1])))}
+  if(kind==='view'){p.appendChild(rowH('Legends','sel'));p.appendChild(rowH('Graticule','sel'));p.appendChild(rowH('Fit all pictures','','Z',()=>{zoom=null;render()}))}
+  if(kind==='settings'){p.appendChild(rowH('Hotkeys…'));p.appendChild(rowH('Appearance: accent colour…','','',()=>$('#drawer').classList.add('open')));p.appendChild(sep());
+     p.appendChild(rowH('Reset all Panels to defaults…','','',()=>{const q=mkPop();q.innerHTML=`<div class="confirm">Reset all Panels to defaults? Settings of every Panel on every page go back to default.<div class="rowb"><span class="btn" id="yes">Reset</span><span class="btn" id="no">Cancel</span></div></div>`;place(q,r.left,r.bottom);q.querySelector('#yes').onclick=()=>{Object.values(P).forEach(x=>{x.set=defaults(x.disp);x.chips={Y:1,'Both':1,'Zones':1}});closePop();render();note('Every Panel is back to its defaults')};q.querySelector('#no').onclick=closePop}))}
+  if(ev)place(p,ev.clientX,ev.clientY);else place(p,r.left,r.bottom)}
+$$('.menubar .m').forEach(m=>m.onclick=e=>{e.stopPropagation();const open=m.classList.contains('open');closePop();if(open)return;m.classList.add('open');menuAt(m.dataset.m,m)});
+function openAdd(anchor,target,edge,ev){const p=mkPop();p.appendChild(hd('Add panel'));ORDER.forEach(n=>p.appendChild(rowH(n,'','',()=>addPanel(n,target,edge))));
+  const r=anchor.getBoundingClientRect();place(p,ev?ev.clientX:r.left,ev?ev.clientY:r.bottom)}
+function amountRow(id,key,label,unit,min,max,def){const pn=P[id];const v=pn.set[key];const row=document.createElement('div');row.className='amt';
+  row.innerHTML=`<span style="color:var(--text2)">${label}</span><input class="range" type="range" min="${min}" max="${max}" value="${v}" style="--p:${(v-min)/(max-min)*100}%"><span class="vbox"><input value="${v}"><span class="ar"><span class="u">▲</span><span class="d">▼</span></span></span><span class="rst ${v===def?'dim':''}" title="Reset to ${def} ${unit}">↺</span>`;
+  const rg=row.querySelector('.range'),bx=row.querySelector('.vbox input'),rs=row.querySelector('.rst');
+  const set=(x,commit)=>{x=Math.max(min,Math.min(max,Math.round(x)));pn.set[key]=x;rg.value=x;rg.style.setProperty('--p',(x-min)/(max-min)*100+'%');if(commit||document.activeElement!==bx)bx.value=x;rs.classList.toggle('dim',x===def)};
+  rg.oninput=()=>set(+rg.value);bx.onkeydown=e=>{e.stopPropagation();const st=e.shiftKey?10:1;if(e.key==='ArrowUp'){e.preventDefault();set(+bx.value+st,1)}if(e.key==='ArrowDown'){e.preventDefault();set(+bx.value-st,1)}if(e.key==='Enter'){set(+bx.value||def,1);bx.blur()}if(e.key==='Escape'){bx.value=pn.set[key];bx.blur()}};
+  bx.onchange=()=>set(+bx.value||def,1);row.querySelector('.u').onclick=()=>set(pn.set[key]+1,1);row.querySelector('.d').onclick=()=>set(pn.set[key]-1,1);rs.onclick=()=>set(def,1);return row}
+function openGear(id,anchor){const p=mkPop('wide'),pn=P[id];
+  if(pn.disp==='Waveform'){p.appendChild(hd('Luma weights'));[0,1].forEach(i=>{const r=rowH(['From the Measured Space\'s primaries','Match Resolve\'s waveform'][i],pn.mode===i?'sel':'');r.onclick=()=>{pn.mode=i;openGear(id,anchor)};p.appendChild(r)});p.appendChild(sep());
+    p.appendChild(amountRow(id,'a','Trace brightness','%',0,200,100));p.appendChild(amountRow(id,'b','Soft spread','px',0,400,100));p.appendChild(amountRow(id,'c','Low reference','codes',0,1023,0))}
+  else{p.appendChild(hd('Settings'));p.appendChild(amountRow(id,'a','Intensity','%',0,200,100));p.appendChild(amountRow(id,'b','Tolerance','%',0,200,100))}
+  p.appendChild(sep());const h=hd('Panel');const rr=document.createElement('span');rr.className='rst';rr.textContent='↺';rr.title="Reset this Panel's settings";rr.onclick=()=>{pn.set=defaults(pn.disp);openGear(id,anchor)};h.appendChild(rr);p.appendChild(h);
+  p.appendChild(rowH('Replace with…','','',()=>{const q=mkPop();q.appendChild(hd('Replace with'));ORDER.filter(n=>n!==pn.disp).forEach(n=>q.appendChild(rowH(n,'','',()=>{snap();pn.disp=n;pn.set=defaults(n);render()})));const r=anchor.getBoundingClientRect();place(q,r.left-150,r.bottom)}));
+  ['Duplicate right','Duplicate below'].forEach((t,i)=>p.appendChild(rowH(t,'','',()=>addPanel(pn.disp,findLeaf(id),i?'b':'r',id))));p.appendChild(rowH('Close','','',()=>closePanel(id)));
+  const r=anchor.getBoundingClientRect();place(p,r.right-parseInt(getComputedStyle(document.documentElement).getPropertyValue('--pop-w')),r.bottom+2)}
+/* ============ interaction ============ */
+addEventListener('mousedown',e=>{if(!e.target.closest('.pop')&&!e.target.closest('.menubar .m'))closePop();
+  const pan=e.target.closest('.panel');if(pan&&!drag){pg().focus=+pan.dataset.p;$$('.panel').forEach(x=>x.classList.toggle('focus',x===pan))}});
+document.addEventListener('click',e=>{const t=e.target;
+  if(t.dataset.chip){const pn=P[t.dataset.p];pn.chips[t.dataset.chip]^=1;t.classList.toggle('on');return}
+  if(t.dataset.link!==undefined){linkOn=!linkOn;$$('[data-link]').forEach(x=>x.classList.toggle('on',linkOn));return}
+  if(t.dataset.fit){zoom=null;render();return}
+  if(t.dataset.gear){e.stopPropagation();openGear(+t.dataset.gear,t);return}
+  if(t.dataset.edge){const pan=t.closest('.panel');openAdd(t,pan.__leaf,t.dataset.edge,e);return}
+  if(t.dataset.tab!==undefined){const l=t.closest('.panel').__leaf;l.active=+t.dataset.tab;render()}});
+addEventListener('wheel',e=>{const b=e.target.closest('[data-wheel="1"]');if(!b)return;e.preventDefault();
+  const z=(zoom==null?62:zoom)*(e.deltaY<0?1.15:1/1.15);zoom=Math.max(25,Math.min(800,Math.round(z)));if(zoom===62)zoom=null;
+  if(linkOn)render();else{ // unlinked: only this Panel zooms (demo: readout follows the last one)
+    const pan=e.target.closest('.panel');pan.querySelector('.pic').style.transform=`scale(${(zoom||62)/62})`;pan.querySelector('.zoom').textContent=(zoom||62)+' %'}},{passive:false});
+addEventListener('mouseover',e=>{const t=e.target.closest('[data-link],[data-fit],[data-gear],.rst,.edge');if(!t||t._tip)return;
+  const txt=t.dataset.link!==undefined?(linkOn?'Link: all pictures zoom together':'Link off: each picture zooms alone'):t.dataset.fit?'Fit every picture':t.dataset.gear?'Panel settings and menu':t.classList.contains('edge')?'Add a Panel on this side':t.title||null;if(!txt)return;
+  const tip=document.createElement('div');tip.className='tip';tip.textContent=txt;const r=t.getBoundingClientRect();document.body.appendChild(tip);tip.style.left=Math.min(innerWidth-tip.offsetWidth-6,r.left)+'px';tip.style.top=(r.bottom+6)+'px';
+  t.addEventListener('mouseleave',()=>tip.remove(),{once:true})});
+/* divider drag */
+function dragDiv(e,n,el,d){e.preventDefault();snap();d.classList.add('drag');const vert=n.dir==='row';
+  const mv=ev=>{const r=el.getBoundingClientRect();const tot=(vert?r.width:r.height)-6;const pos=(vert?ev.clientX-r.left:ev.clientY-r.top)-3;const min=(vert?MINW:MINH)/tot;n.ratio=Math.max(min,Math.min(1-min,pos/tot));el.children[0].style.flex=`0 0 calc(${n.ratio*100}% - ${n.ratio*6}px)`;layoutDone()};
+  const up=()=>{removeEventListener('mousemove',mv);removeEventListener('mouseup',up);d.classList.remove('drag')};addEventListener('mousemove',mv);addEventListener('mouseup',up)}
+/* dock by dragging a title */
+let drag=null,ov=null;
+document.addEventListener('mousedown',e=>{const nm=e.target.closest('[data-title],.tabs .t');if(!nm||e.button)return;const id=+(nm.dataset.title||nm.dataset.p);drag={id,x:e.clientX,y:e.clientY,live:false}});
+addEventListener('mousemove',e=>{if(!drag)return;if(!drag.live){if(Math.hypot(e.clientX-drag.x,e.clientY-drag.y)<4)return;drag.live=true;ov=document.createElement('div');ov.className='dockov';document.body.appendChild(ov)}
+  const el=document.elementFromPoint(e.clientX,e.clientY),pan=el&&el.closest('.panel');drag.target=null;ov.style.display='none';if(!pan)return;
+  const l=pan.__leaf;if(l.tabs.length===1&&l.tabs[0]===drag.id){return}
+  const r=pan.getBoundingClientRect(),fx=(e.clientX-r.left)/r.width,fy=(e.clientY-r.top)/r.height;
+  const d=[[fx,'l'],[1-fx,'r'],[fy,'t'],[1-fy,'b']].sort((a,b)=>a[0]-b[0])[0];let zone=d[0]<.25?d[1]:'m';
+  if(e.shiftKey){zone='swap'}
+  drag.target={l,zone};ov.style.display='flex';let x=r.left,y=r.top,w=r.width,h=r.height,txt='';
+  if(zone==='l')w/=2;if(zone==='r'){x+=w/2;w/=2}if(zone==='t')h/=2;if(zone==='b'){y+=h/2;h/=2}
+  if(zone==='m'){txt='Tab here'}if(zone==='swap')txt='Swap places';Object.assign(ov.style,{left:x+'px',top:y+'px',width:w+'px',height:h+'px'});ov.textContent=txt});
+addEventListener('mouseup',e=>{if(!drag)return;const d=drag;drag=null;if(ov){ov.remove();ov=null}if(!d.live||!d.target)return;
+  const {l,zone}=d.target;const from=findLeaf(d.id);snap();
+  if(zone==='swap'){const a=from.tabs.indexOf(d.id);const b=l.tabs[l.active];const bi=l.tabs.indexOf(b);from.tabs[a]=b;l.tabs[bi]=d.id}
+  else if(zone==='m'){removeFrom(from,d.id);l.tabs.push(d.id);l.active=l.tabs.length-1}
+  else{const r=rects.get(l)||{w:1000,h:600};const ok=(zone==='l'||zone==='r')?(r.w-6)/2>=MINW:(r.h-6)/2>=MINH;
+    if(!ok){removeFrom(from,d.id);l.tabs.push(d.id);l.active=l.tabs.length-1;note('No room to dock there: joined as a tab (a Panel needs at least '+MINW+' × '+MINH+')')}
+    else{removeFrom(from,d.id);const nl=leaf(d.id),dir=(zone==='l'||zone==='r')?'row':'col';replaceNode(l,(zone==='l'||zone==='t')?split(dir,.5,nl,l):split(dir,.5,l,nl))}}
+  pg().focus=d.id;render()});
+function cancelDrag(){drag=null;if(ov){ov.remove();ov=null}}
+addEventListener('resize',layoutDone);
+/* ============ accent + spacing tweaks ============ */
+const SW=['#d2ff00','#ffffff','#38d6ff','#ff9a1f','#ff4fa3','#7cffb2'];
+function lum(h){const c=[1,3,5].map(i=>parseInt(h.slice(i,i+2),16)/255).map(v=>v<=.03928?v/12.92:Math.pow((v+.055)/1.055,2.4));return .2126*c[0]+.7152*c[1]+.0722*c[2]}
+const cr=(a,b)=>{const x=lum(a),y=lum(b);return(Math.max(x,y)+.05)/(Math.min(x,y)+.05)};
+function mixc(h,t,p){const c=[1,3,5].map(i=>parseInt(h.slice(i,i+2),16));return '#'+c.map(v=>Math.round(v+(t-v)*p).toString(16).padStart(2,'0')).join('')}
+function setAccent(h){h=h.toLowerCase();if(!/^#[0-9a-f]{6}$/.test(h))return;const on=lum(h)>.35?'#111111':'#ffffff',s=document.documentElement.style;
+  s.setProperty('--accent',h);s.setProperty('--accent-on',on);s.setProperty('--accent-hover',mixc(h,255,.3));s.setProperty('--accent-press',mixc(h,0,.25));
+  $$('.swatch').forEach(x=>x.classList.toggle('sel',x.dataset.c===h));$('#hexin').value=h;const a=cr(h,'#121212'),b=cr(on,h);
+  $('#ctr').innerHTML=`Accent on the window grey <b class="${a>=4.5?'ok':'bad'}">${a.toFixed(1)}:1</b> · text on an accent fill <b class="${b>=4.5?'ok':'bad'}">${b.toFixed(1)}:1</b> (aim 4.5:1)`}
+$('#sws').innerHTML=SW.map(c=>`<span class="swatch" data-c="${c}" style="background:${c}"></span>`).join('');
+$$('.swatch').forEach(s=>s.onclick=()=>setAccent(s.dataset.c));$('#hexin').oninput=e=>{let v=e.target.value.trim();if(v[0]!=='#')v='#'+v;setAccent(v)};$('#hexreset').onclick=()=>setAccent('#d2ff00');
+const TW=[['--tb-h','Title bar height',22,40],['--chip-h','Chip height',16,28],['--chip-gap','Gap between chips',0,10],['--group-air','Air round the rule',8,48],['--blk-gap','Gap inside view block',0,12],['--pad','Panel padding',4,16],['--row-h','Menu row height',20,40],['--pop-w','Popover width',260,460],['--gap','Gap between Panels',2,12],['--fs','Font size',11,16]];
+$('#tweaks').innerHTML=TW.map(([k,l,a,b])=>`<div class="tw"><span>${l}</span><input class="range" type="range" min="${a}" max="${b}" step="${k==='--fs'?.5:1}" value="${parseFloat(getComputedStyle(document.documentElement).getPropertyValue(k))}" data-k="${k}" style="--p:50%"><output></output></div>`).join('');
+function showTok(){const o=TW.map(([k])=>k+': '+getComputedStyle(document.documentElement).getPropertyValue(k).trim());$('#tokens').textContent=':root{\n  --accent: '+getComputedStyle(document.documentElement).getPropertyValue('--accent').trim()+';\n  '+o.join(';\n  ')+';\n}'}
+$$('#tweaks input').forEach(i=>{const out=i.parentNode.querySelector('output');const upd=()=>{document.documentElement.style.setProperty(i.dataset.k,i.value+(i.dataset.k==='--fs'||true?'px':''));out.textContent=i.value;const p=(i.value-i.min)/(i.max-i.min)*100;i.style.setProperty('--p',p+'%');layoutDone();showTok()};i.oninput=upd;out.textContent=i.value});
+$('#tw-open').onclick=()=>$('#drawer').classList.toggle('open');$('#copytok').onclick=()=>{navigator.clipboard&&navigator.clipboard.writeText($('#tokens').textContent);note('Tokens copied')};
+setAccent('#d2ff00');setV(vi);render();showTok();
+</script></body></html>
