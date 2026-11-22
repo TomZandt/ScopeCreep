@@ -7,6 +7,7 @@ default-members = ["feed", "app"]
 version = "0.3.1"
 edition = "2024"
 publish = false
+license-file = "LICENSE.md"
 
 # Clippy's style lints below fight deliberate choices: index loops over fixed
 # grids, NaN-aware negated comparisons, constant checks in token tests.

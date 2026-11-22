@@ -1,5 +1,7 @@
 # Contributing
 
+Contributions are welcome. Sending one (a pull request, patch or design) means you agree to section 5 of the [ScopeCreep Licence](LICENSE.md): you have the right to send it, and it may be built into ScopeCreep and licensed with it, including under commercial licences. [LICENSING.md](LICENSING.md) explains the licence in plain English.
+
 ## Commits: Conventional Commits
 
 Every commit message follows [Conventional Commits 1.0.0](https://www.conventionalcommits.org/en/v1.0.0/):

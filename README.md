@@ -118,10 +118,11 @@ DaVinci Resolve                                 scopecreep app (Rust + wgpu)
   - [0039](docs/adr/0039-a-panel-is-an-instance-of-a-display.md): A Panel is an instance of a display, so a display can be on the Window more than once
   - [0040](docs/adr/0040-view-controls-live-in-a-view-strip.md): View controls live in a view strip on the menu bar, and title bars are three fixed zones (the strip superseded by 0042)
   - [0041](docs/adr/0041-pages-are-the-layouts-and-auto-layout-is-a-button.md): Pages are the layouts, and Auto layout and Auto resize are one-shot buttons per page
+  - [0042](docs/adr/0042-free-to-use-and-modify-commercial-licence-to-sell-or-bundle.md): ScopeCreep is free to use and modify; selling, sharing or bundling needs a commercial licence
   - [0042](docs/adr/0042-view-controls-return-to-every-panel-title-bar.md): View controls return to every Panel's title bar as a block, the Colour Setup line sits in the menu bar row, and a page tab has a right-click menu
 - [docs/findings/](docs/findings/): what testing showed, one file per ticket.
 - [docs/research/](docs/research/): what public sources say, with dates and links.
 
 ## Licence
 
-Proprietary. All rights reserved.
+Free to use, including for paid work, under the [ScopeCreep Licence](LICENSE.md): use it on client work, install it across your company and change it for your own use. Selling it, sharing copies outside your company or bundling it with something else needs a commercial licence. [LICENSING.md](LICENSING.md) explains it with examples. To donate or pay, use [Buy Me a Coffee](https://www.buymeacoffee.com/tomzandtvalentine).
