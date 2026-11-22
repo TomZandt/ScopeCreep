@@ -22,7 +22,8 @@ Pre-alpha. Nothing to install yet.
 | 2 | Every display in its own Panel: 14 Panels (waveforms, vectorscope, CIE plot, false colour, skin tone and more) | Released in v0.2.0 |
 | 3 | A colourist's Window: the picture as the hero, arranged and saved layouts, title bars and one Colour Setup line, a style system with Panel toolbars and sliders, stronger Skin Tone and heatmap, following the scrub | Partly released in v0.3.1 (menu bar, user-assignable hotkeys, Z for Fit, Ctrl+F to fill the Window, on top of v0.3.0's Panel toolbars and chips, sliders for every amount setting, horizontal legends, waveform Scale units, Vectorscope Tonal range, zoom, pan and Link); in progress. Specs [#94](https://github.com/TomZandt/ScopeCreep/issues/94), [#113](https://github.com/TomZandt/ScopeCreep/issues/113), [#83](https://github.com/TomZandt/ScopeCreep/issues/83), [#106](https://github.com/TomZandt/ScopeCreep/issues/106); backlog [#119](https://github.com/TomZandt/ScopeCreep/issues/119); checks at Resolve [#120](https://github.com/TomZandt/ScopeCreep/issues/120) |
 | 4 | A tiling Window: pages, Panels placed where you want them (add, dock, tabs, copies of a display), Auto layout and Auto resize, popover amounts with value boxes, Gamut Warning, Neutrals and Chromaticity back | On `main`, not yet released (spec #196) |
-| Later | Parade, histogram, HDR, Setup Checklist, Capture, Windows/macOS, installers, licensing | Decided, parked |
+| Downloads | Releases built by CI with an Installer per platform, an Update check at start-up, Windows (NVIDIA) and macOS (Apple Silicon) | Specs [#233](https://github.com/TomZandt/ScopeCreep/issues/233), [#234](https://github.com/TomZandt/ScopeCreep/issues/234), [#235](https://github.com/TomZandt/ScopeCreep/issues/235), [#236](https://github.com/TomZandt/ScopeCreep/issues/236), in that order |
+| Later | Parade, histogram, HDR, Setup Checklist, Capture, code signing | Decided, parked |
 
 ## Development (Linux, NVIDIA)
 
