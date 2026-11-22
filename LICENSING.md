@@ -44,7 +44,7 @@ Your company means the one legal entity you work for. A sister company in the sa
 
 ### Ask first
 
-If what you want to do is on the "not allowed" list, or you aren't sure, send a message through [Buy Me a Coffee](https://www.buymeacoffee.com/tomzandtvalentine). Commercial licences for reselling, bundling, pre-installing and group-wide use are available on request.
+If what you want to do is on the "not allowed" list, or you aren't sure, get in touch through [tomzandtvalentine.co.uk](https://www.tomzandtvalentine.co.uk/). Commercial licences for reselling, bundling, pre-installing and group-wide use are available on request.
 
 ## Supporting ScopeCreep
 
