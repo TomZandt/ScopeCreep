@@ -1,0 +1,3 @@
+# Platforms whose Installer is built by CI and goes into a Release, one per line (spec #233).
+# Add a platform here only once its UHD 50 check has passed on that build (GLOSSARY, Release).
+linux

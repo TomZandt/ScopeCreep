@@ -96,6 +96,10 @@ Finish every item, unprompted. Work is not done while any item is open.
 4. **Merged and closed:** squash-merged with one Conventional Commit, pushed, the issue closed with a comment pointing at the commit and findings.
 5. **Clean:** the ticket's branches (local and on GitHub) and worktrees deleted; Resolve left on the project that was open, with no scratch projects.
 
+### A Test build
+
+Actions, "release", "Run workflow" on any branch builds the Installer for every platform in `packaging/platforms.txt` and keeps it as a workflow artifact for 30 days (`.tar.gz` and `SHA256SUMS`). It never publishes. The Sender builds without Resolve or a GPU: CUDA runtime from apt, the official OpenFX headers at the tag pinned in `.github/workflows/release.yml`, and `sender/ci/ofxImageEffectExt.h` standing in for Resolve's extension header. To bump OpenFX, change `OFX_REF` and check the Sender still builds.
+
 ### A release
 
 1. **Performance check passes:** `harness/experiments/uhd50_bench` (ADR 0003) on the build being released.

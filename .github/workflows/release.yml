@@ -1,0 +1,91 @@
+name: release
+
+# A Test build (spec #233, ticket #242): "Run workflow" on any branch builds the Installer for every
+# platform in packaging/platforms.txt and keeps it as a workflow artifact for 30 days. It never publishes.
+# The `v*` tag trigger and the publish job are added by #243.
+on:
+  workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: always
+  # The official OpenFX headers, pinned. They lack Resolve's ofxImageEffectExt.h: sender/ci has a stand-in.
+  OFX_REPO: AcademySoftwareFoundation/openfx
+  OFX_REF: OFX_Release_1.5.1
+
+jobs:
+  platforms:
+    name: platforms
+    runs-on: ubuntu-22.04
+    outputs:
+      list: ${{ steps.list.outputs.list }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: list
+        name: Read packaging/platforms.txt
+        run: |
+          list=$(grep -v -E '^\s*(#|$)' packaging/platforms.txt | jq -R . | jq -s -c .)
+          echo "platforms: $list"
+          echo "list=$list" >> "$GITHUB_OUTPUT"
+
+  build:
+    name: build (${{ matrix.platform }})
+    needs: platforms
+    # Windows and macOS ports add their runner here and their steps below, guarded by matrix.platform.
+    runs-on: ${{ matrix.platform == 'linux' && 'ubuntu-22.04' || 'unsupported' }}
+    strategy:
+      fail-fast: false
+      matrix:
+        platform: ${{ fromJSON(needs.platforms.outputs.list) }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Workspace version
+        id: version
+        run: echo "version=$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -1)" >> "$GITHUB_OUTPUT"
+
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Build the app
+        run: cargo build --release -p scopecreep
+
+      # The Sender needs only the CUDA runtime headers and libcudart_static.a, so the dev package
+      # (no nvcc, no driver, no GPU) is enough. Ubuntu 22.04 ships it as CUDA 11.5, pinned by the runner image.
+      - name: CUDA runtime (no GPU)
+        if: matrix.platform == 'linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends nvidia-cuda-dev
+          # The Makefile wants CUDA_HOME/include and CUDA_HOME/lib64.
+          mkdir -p "$RUNNER_TEMP/cuda"
+          ln -s /usr/include "$RUNNER_TEMP/cuda/include"
+          ln -s /usr/lib/x86_64-linux-gnu "$RUNNER_TEMP/cuda/lib64"
+          test -f /usr/include/cuda_runtime.h
+          test -f /usr/lib/x86_64-linux-gnu/libcudart_static.a
+
+      - name: OpenFX headers
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ env.OFX_REPO }}
+          ref: ${{ env.OFX_REF }}
+          path: openfx
+
+      - name: Build the Sender
+        run: |
+          mkdir -p "$RUNNER_TEMP/ofx-include"
+          cp openfx/include/*.h "$RUNNER_TEMP/ofx-include/"
+          cp sender/ci/ofxImageEffectExt.h "$RUNNER_TEMP/ofx-include/"
+          make -C sender OFX_SDK="$RUNNER_TEMP/ofx-include" CUDA_HOME="$RUNNER_TEMP/cuda"
+
+      - name: Package the Installer
+        run: |
+          scripts/package-linux.sh "${{ steps.version.outputs.version }}" \
+            target/release/scopecreep sender/build/scopecreep_sender.ofx.bundle dist
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: scopecreep-${{ steps.version.outputs.version }}-${{ matrix.platform }}
+          path: |
+            dist/scopecreep-*.tar.gz
+            dist/SHA256SUMS
+          if-no-files-found: error
+          retention-days: 30
