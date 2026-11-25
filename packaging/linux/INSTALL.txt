@@ -1,0 +1,30 @@
+ScopeCreep for Linux (x86-64)
+=============================
+
+This folder holds the ScopeCreep app, the Sender (the plugin that sends
+Resolve's picture to the app) and an install script.
+
+Before you start
+  In DaVinci Resolve, set Preferences > System > Memory and GPU > GPU
+  Processing Mode to CUDA. The Sender works only with CUDA, on an NVIDIA GPU.
+  Auto or OpenCL will not do.
+
+Install
+  1. Open a terminal in this folder.
+  2. Run:   ./install.sh
+  The app goes to ~/.local/bin (or /usr/local/bin when you run the script as
+  root). The Sender goes to /usr/OFX/Plugins, which needs admin rights: the
+  script says so and then asks for your password through sudo.
+  To put things elsewhere, set SCOPECREEP_BIN_DIR and SCOPECREEP_OFX_DIR.
+  3. Restart DaVinci Resolve. It only looks for plugins when it starts.
+  4. On the Color page, add ScopeCreep from Effects > OpenFX to a node
+     (a serial node at the end of your grade), then start scopecreep.
+
+Uninstall
+  Run:   ./install.sh uninstall
+  Then restart DaVinci Resolve.
+
+Check your download
+  sha256sum -c SHA256SUMS   (the file is on the Releases page)
+
+Help: https://github.com/TomZandt/ScopeCreep
