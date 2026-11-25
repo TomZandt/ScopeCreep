@@ -132,13 +132,41 @@ impl Command {
             Command::ClosePanel => "Panel: close".to_string(),
             Command::UndoLayout => "Layout: undo change".to_string(),
             Command::ResetAllPanels => "Panels: reset all to defaults".to_string(),
-            Command::About => "Help: About ScopeCreep".to_string(),
-            Command::Licence => "Help: Licence".to_string(),
-            Command::Changelog => "Help: Changelog".to_string(),
-            Command::Website => "Help: Website".to_string(),
-            Command::ReportProblem => "Help: Report a problem".to_string(),
-            Command::CheckForUpdates => "Help: Check for updates".to_string(),
-            Command::BuyMeACoffee => "Help: Buy Me a Coffee".to_string(),
+            Command::About
+            | Command::Licence
+            | Command::Changelog
+            | Command::Website
+            | Command::ReportProblem
+            | Command::CheckForUpdates
+            | Command::BuyMeACoffee => {
+                format!("Help: {}", self.help_entry().trim_end_matches('\u{2026}'))
+            }
+        }
+    }
+
+    /// The Help menu's entries, in order (#231, #232).
+    pub const HELP: [Command; 7] = [
+        Command::About,
+        Command::Licence,
+        Command::Changelog,
+        Command::Website,
+        Command::ReportProblem,
+        Command::CheckForUpdates,
+        Command::BuyMeACoffee,
+    ];
+
+    /// What the Help menu calls this Command (the one source of the entry text: [`Command::label`] is "Help: " and
+    /// this without its ellipsis). Empty for a Command that is not in the Help menu.
+    pub fn help_entry(self) -> &'static str {
+        match self {
+            Command::About => "About ScopeCreep\u{2026}",
+            Command::Licence => "Licence\u{2026}",
+            Command::Changelog => "Changelog\u{2026}",
+            Command::Website => "Website",
+            Command::ReportProblem => "Report a problem\u{2026}",
+            Command::CheckForUpdates => "Check for updates",
+            Command::BuyMeACoffee => "Buy Me a Coffee\u{2026}",
+            _ => "",
         }
     }
 

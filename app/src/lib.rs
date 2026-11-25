@@ -6,6 +6,7 @@ pub mod arri_false_colour;
 pub mod auto_layout;
 pub mod auto_resize;
 pub mod black_and_white;
+pub mod build_info;
 pub mod channel_view;
 pub mod cie;
 pub mod colour_setup;

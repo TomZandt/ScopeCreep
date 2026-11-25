@@ -395,3 +395,16 @@ fn the_help_commands_have_stable_ids_no_default_hotkey_and_can_be_given_one() {
         assert_eq!(Hotkeys::from_text(&hotkeys.to_text()), hotkeys);
     }
 }
+
+#[test]
+fn a_help_commands_label_is_help_and_its_menu_entry_without_the_ellipsis() {
+    for command in Command::HELP {
+        let entry = command.help_entry();
+        assert!(!entry.is_empty());
+        assert_eq!(
+            command.label(),
+            format!("Help: {}", entry.trim_end_matches('\u{2026}'))
+        );
+    }
+    assert_eq!(Command::DefaultLayout.help_entry(), "");
+}

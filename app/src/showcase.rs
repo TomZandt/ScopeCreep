@@ -387,7 +387,7 @@ pub fn showcase(scale: f32) -> Showcase {
     y = help_area[1] + help_area[3] + row * 0.5;
 
     prims.push(caption("About popover", margin, y, label_w));
-    let about = crate::components::AboutPopover::new("0.0.0", "1.2");
+    let about = crate::components::AboutPopover::new(crate::build_info::Build::new("0.0.0", "1.2"));
     // Centred in a Window just big enough to put it at this row.
     let probe = about.layout([0.0, 0.0], scale).area;
     let at = [margin + label_w, y];

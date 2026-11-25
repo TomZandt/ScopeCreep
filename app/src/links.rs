@@ -1,22 +1,25 @@
 //! The web addresses the Help menu opens (#231, spec #230), in one place: changing the website or the Buy Me a
 //! Coffee page is a one-line change here (and in LICENSE.md and LICENSING.md). The app never goes online itself; it
 //! hands an address to the system's browser.
+use crate::build_info::Build;
 use crate::commands::Command;
 
 const REPO: &str = "https://github.com/TomZandt/ScopeCreep";
 const WEBSITE: &str = "https://www.tomzandtvalentine.co.uk/";
 const BUY_ME_A_COFFEE: &str = "https://www.buymeacoffee.com/tomzandtvalentine";
 
-/// The address a link Command opens, or `None` for a Command that is not a link. `version` and `protocol` (the Feed
-/// protocol, "1.2") fill in the Report a problem issue.
-pub fn address(command: Command, version: &str, protocol: &str) -> Option<String> {
+/// The address a link Command opens, or `None` for a Command that is not a link. `build` fills in the Report a
+/// problem issue.
+pub fn address(command: Command, build: &Build) -> Option<String> {
     Some(match command {
         Command::Licence => format!("{REPO}/blob/main/LICENSING.md"),
         Command::Changelog => format!("{REPO}/blob/main/CHANGELOG.md"),
         Command::Website => WEBSITE.to_string(),
         Command::ReportProblem => {
-            let body =
-                format!("ScopeCreep {version}\nFeed protocol {protocol}\n\nWhat happened:\n");
+            let body = format!(
+                "ScopeCreep {}\nFeed protocol {}\n\nWhat happened:\n",
+                build.version, build.protocol
+            );
             format!("{REPO}/issues/new?body={}", encode(&body))
         }
         Command::CheckForUpdates => format!("{REPO}/releases"),

@@ -1,6 +1,7 @@
 //! The menu bar at the pure UI seam (#147, spec #142): the bar's and a menu's size and hit area at 1x and 2x,
 //! their states, opening, switching and closing, the Layout menu's entries (empty, in use, current) and that each
 //! entry runs the command its shown hotkey runs, and the menus on a small Window.
+use scopecreep::build_info::Build;
 use scopecreep::commands::{Command, Hotkey, Hotkeys, Key};
 use scopecreep::components::*;
 use scopecreep::layout_tree::LayoutTree;
@@ -757,7 +758,7 @@ fn a_help_entry_shows_the_hotkey_it_is_given() {
 
 #[test]
 fn each_link_command_gives_its_address() {
-    let at = |c| links::address(c, "1.2.3", "1.2");
+    let at = |c| links::address(c, &Build::new("1.2.3", "1.2"));
     assert_eq!(
         at(Command::Licence).as_deref(),
         Some(format!("{REPO}/blob/main/LICENSING.md").as_str())
@@ -783,7 +784,7 @@ fn each_link_command_gives_its_address() {
 
 #[test]
 fn report_a_problem_opens_a_new_issue_carrying_the_version_and_feed_protocol() {
-    let url = links::address(Command::ReportProblem, "1.2.3", "1.2").unwrap();
+    let url = links::address(Command::ReportProblem, &Build::new("1.2.3", "1.2")).unwrap();
     let (base, query) = url.split_once('?').unwrap();
     assert_eq!(base, format!("{REPO}/issues/new"));
     let body = query.strip_prefix("body=").expect("the body is filled in");
@@ -794,7 +795,7 @@ fn report_a_problem_opens_a_new_issue_carrying_the_version_and_feed_protocol() {
     );
     assert!(body.contains("ScopeCreep%201.2.3"));
     assert!(body.contains("Feed%20protocol%201.2"));
-    let odd = links::address(Command::ReportProblem, "1 & 2#x", "1.2").unwrap();
+    let odd = links::address(Command::ReportProblem, &Build::new("1 & 2#x", "1.2")).unwrap();
     assert!(
         odd.contains("1%20%26%202%23x"),
         "odd characters are encoded"

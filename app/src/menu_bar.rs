@@ -332,17 +332,12 @@ pub fn settings_menu() -> Menu {
 /// hotkey; each shows the one it is given.
 pub fn help_menu(hotkeys: &Hotkeys) -> Menu {
     let mut menu = Menu::new();
-    for (label, command) in [
-        ("About ScopeCreep…", Command::About),
-        ("Licence…", Command::Licence),
-        ("Changelog…", Command::Changelog),
-        ("Website", Command::Website),
-        ("Report a problem…", Command::ReportProblem),
-        ("Check for updates", Command::CheckForUpdates),
-        ("Buy Me a Coffee…", Command::BuyMeACoffee),
-    ] {
+    for command in Command::HELP {
         menu.push(
-            MenuEntry::Item(MenuItem::new(label, &hotkey_text(hotkeys, command))),
+            MenuEntry::Item(MenuItem::new(
+                command.help_entry(),
+                &hotkey_text(hotkeys, command),
+            )),
             Some(MenuAction::Run(command)),
         );
     }

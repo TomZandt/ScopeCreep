@@ -7,6 +7,7 @@
 //! The drawing is renderer-neutral: the app turns the prims into flat rectangles and glyphon text
 //! (`main.rs`), and the showcase example (`examples/style_showcase.rs`) draws every component in every state to
 //! an image.
+use crate::build_info::Build;
 use crate::commands::Command;
 use crate::layout_tree::Edge;
 use crate::panel_grid::PanelLayout;
@@ -985,24 +986,23 @@ pub struct AboutLayout {
 /// licence line and three links, centred in the Window.
 #[derive(Clone, Debug, PartialEq)]
 pub struct AboutPopover {
-    pub version: String,
-    pub protocol: String,
+    pub build: Build,
 }
 
 impl AboutPopover {
-    pub fn new(version: &str, protocol: &str) -> AboutPopover {
-        AboutPopover {
-            version: version.to_string(),
-            protocol: protocol.to_string(),
-        }
+    pub fn new(build: Build) -> AboutPopover {
+        AboutPopover { build }
     }
 
-    /// The name, version and Feed protocol: the same text `--version` prints.
+    /// The version and Feed protocol, as `--version` prints them after the name (the wordmark is the name here).
     pub fn version_line(&self) -> String {
-        format!(
-            "ScopeCreep {} (Feed protocol {})",
-            self.version, self.protocol
-        )
+        self.build.details()
+    }
+
+    /// What a key does while the popover is open: it takes every key, so nothing behind it changes, and Escape
+    /// closes it. Returns whether it closes.
+    pub fn key(&self, escape: bool) -> bool {
+        escape
     }
 
     fn links() -> [(Command, Chip); 3] {
@@ -1034,16 +1034,20 @@ impl AboutPopover {
                 _ => lines.push(word.to_string()),
             }
         }
+        let links = Self::links();
         let chip_h = style::SPACE_CHIP_HEIGHT * scale;
+        let after_wordmark = style::SPACE_ABOUT_AFTER_WORDMARK * scale;
+        let after_version = style::SPACE_ABOUT_AFTER_VERSION * scale;
+        let before_links = style::SPACE_ABOUT_BEFORE_LINKS * scale;
         let height = pad
             + wordmark_h
-            + gap * 2.0
+            + after_wordmark
             + row
-            + gap / 2.0
+            + after_version
             + row
             + gap
             + row * lines.len() as f32
-            + gap * 1.5
+            + before_links
             + chip_h
             + pad;
         let left = ((window[0] - width) / 2.0).max(0.0);
@@ -1061,9 +1065,9 @@ impl AboutPopover {
         // The wordmark keeps clear of the close control on both sides.
         let clear = close_side + gap;
         let wordmark = [left + clear, y, width - 2.0 * clear, wordmark_h];
-        y += wordmark_h + gap * 2.0;
+        y += wordmark_h + after_wordmark;
         let version = [x, y, inner, row];
-        y += row + gap / 2.0;
+        y += row + after_version;
         let credit = [x, y, inner, row];
         y += row + gap;
         let licence = lines
@@ -1074,11 +1078,11 @@ impl AboutPopover {
                 (l, r)
             })
             .collect();
-        y += gap * 1.5;
-        let chips: Vec<Chip> = Self::links().iter().map(|(_, c)| c.clone()).collect();
+        y += before_links;
+        let chips: Vec<Chip> = links.iter().map(|(_, c)| c.clone()).collect();
         let row_width = chip_row_width(&chips, scale);
         let rects = chip_row(&chips, [x + (inner - row_width) / 2.0, y], scale);
-        let links = Self::links()
+        let links = links
             .iter()
             .zip(rects)
             .map(|((command, _), r)| (*command, r))

@@ -110,3 +110,8 @@ fn the_largest_menus_cover_every_menu_and_the_hotkeys_panel_with_a_conflict() {
     let [_, h] = minimum();
     assert!(MenuBar::height(1.0) + tallest <= h);
 }
+
+#[test]
+fn the_least_size_is_1420_by_764_as_the_changelog_says() {
+    assert_eq!(minimum(), [1420.0, 764.0]);
+}

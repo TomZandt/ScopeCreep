@@ -135,6 +135,10 @@ pub const SPACE_ABOUT_WIDTH: f32 = 400.0;
 pub const SPACE_ABOUT_PAD: f32 = 24.0;
 pub const SPACE_ABOUT_GAP: f32 = 12.0;
 pub const SPACE_ABOUT_CLOSE: f32 = 28.0;
+/// The room under the wordmark, under the version line and above the links.
+pub const SPACE_ABOUT_AFTER_WORDMARK: f32 = 24.0;
+pub const SPACE_ABOUT_AFTER_VERSION: f32 = 6.0;
+pub const SPACE_ABOUT_BEFORE_LINKS: f32 = 18.0;
 /// The tallest a menu's column grows; a longer list flows into a second column (the Hotkeys panel).
 pub const SPACE_MENU_MAX_HEIGHT: f32 = 720.0;
 /// Inside a menu row: the on-mark's left edge and side, the text's left edge (the heading's is nearer), and the

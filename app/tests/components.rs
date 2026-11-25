@@ -1,4 +1,5 @@
 //! The style components on the pure seam (#115): size, hit area, states and drawing, at 1x and 2x. No GPU.
+use scopecreep::build_info::Build;
 use scopecreep::commands::Command;
 use scopecreep::components::*;
 use scopecreep::settings::{Choice, Menu, PanelSettings, SettingDef};
@@ -706,7 +707,7 @@ fn the_showcase_draws_every_component_in_every_state_at_both_scales() {
 // ---- About popover (#232, spec #230) ----
 
 fn about() -> AboutPopover {
-    AboutPopover::new("1.2.3", "1.2")
+    AboutPopover::new(Build::new("1.2.3", "1.2"))
 }
 
 const WINDOW: [f32; 2] = [1420.0, 764.0];
@@ -758,8 +759,13 @@ fn the_about_popover_says_the_name_version_credit_and_licence_at_both_scales() {
         let said = texts(&about().draw(window, [0.0, 0.0], scale));
         assert!(said.contains(&"ScopeCreep".to_string()), "the wordmark");
         assert!(
-            said.contains(&"ScopeCreep 1.2.3 (Feed protocol 1.2)".to_string()),
-            "the text --version prints: {said:?}"
+            said.contains(&"1.2.3 (Feed protocol 1.2)".to_string()),
+            "the version and protocol --version prints: {said:?}"
+        );
+        assert_eq!(
+            said.iter().filter(|s| s.contains("ScopeCreep")).count(),
+            1,
+            "the name shows once: {said:?}"
         );
         assert!(said.contains(&"by Tom Zandt-Valentine".to_string()));
         assert!(
@@ -825,4 +831,33 @@ fn the_about_popover_lights_the_link_under_the_pointer() {
     let rest = about().draw(WINDOW, [0.0, 0.0], 1.0);
     let over = about().draw(WINDOW, centre_of(l.links[0].1), 1.0);
     assert_ne!(rest, over);
+}
+
+#[test]
+fn the_about_version_text_is_what_version_prints_after_the_name() {
+    let build = Build::new("1.2.3", "1.2");
+    assert_eq!(build.line(), "ScopeCreep 1.2.3 (Feed protocol 1.2)");
+    assert_eq!(
+        build.line(),
+        format!(
+            "ScopeCreep {}",
+            AboutPopover::new(build.clone()).version_line()
+        )
+    );
+}
+
+#[test]
+fn the_current_build_reads_the_package_version_and_feed_protocol() {
+    let build = Build::current();
+    assert_eq!(build.version, env!("CARGO_PKG_VERSION"));
+    assert!(build.protocol.split('.').count() == 2 && build.line().starts_with("ScopeCreep "));
+}
+
+#[test]
+fn the_about_popover_takes_every_key_and_only_escape_closes_it() {
+    assert!(about().key(true));
+    assert!(
+        !about().key(false),
+        "a hotkey must not reach the app behind it"
+    );
 }

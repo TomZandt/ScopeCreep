@@ -23,6 +23,7 @@ use glyphon::{
 use scopecreep::accent::{self, Accent};
 use scopecreep::appearance_panel::AppearancePanel;
 use scopecreep::auto_resize;
+use scopecreep::build_info::Build;
 use scopecreep::commands::{Command, Hotkey, Hotkeys, Key};
 use scopecreep::components::{self, AboutHit, AboutPopover, Align, MenuBar, Prim, State, Tooltip};
 use scopecreep::display::{DisplaySet, Pointer};
@@ -152,12 +153,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             "--feed" => feed = args.next().ok_or("--feed needs a path")?.into(),
             "--no-scripting" => scripting = false,
             "--version" => {
-                println!(
-                    "ScopeCreep {} (Feed protocol {}.{})",
-                    env!("CARGO_PKG_VERSION"),
-                    scopecreep_feed::VERSION_MAJOR,
-                    scopecreep_feed::VERSION_MINOR
-                );
+                println!("{}", Build::current().line());
                 return Ok(());
             }
             _ => {
@@ -1329,6 +1325,14 @@ impl AppWindow {
             }
             _ => None,
         };
+        // The About popover takes every key while it is open: Escape closes it, nothing reaches the app behind it.
+        if let Some(about) = &self.about {
+            if about.key(event.logical_key == LogicalKey::Named(NamedKey::Escape)) {
+                self.about = None;
+                self.window.request_redraw();
+            }
+            return;
+        }
         // The Hotkeys panel's key-capture field takes every combination (a modifier alone waits for its key).
         if let Some(panel) = self.hotkeys_panel.as_mut().filter(|p| p.takes_keys()) {
             if let Some(pressed) = pressed {
@@ -1421,9 +1425,7 @@ impl AppWindow {
             return;
         }
         if event.logical_key == LogicalKey::Named(NamedKey::Escape) {
-            if self.about.take().is_some() {
-                self.window.request_redraw();
-            } else if self.panel_drag.take().is_some() {
+            if self.panel_drag.take().is_some() {
                 // Escape cancels a drag: the layout is as it was.
                 self.panel_drag_live = false;
                 self.window.set_cursor(CursorIcon::Default);
@@ -1440,15 +1442,6 @@ impl AppWindow {
         if let Some(command) = pressed.and_then(|h| self.hotkeys.command_for(h)) {
             self.run(command);
         }
-    }
-
-    /// The Feed protocol version as the About popover and Report a problem show it ("1.2").
-    fn feed_protocol() -> String {
-        format!(
-            "{}.{}",
-            scopecreep_feed::VERSION_MAJOR,
-            scopecreep_feed::VERSION_MINOR
-        )
     }
 
     /// A click with the About popover open: a link runs its Command, the close control or a click outside closes
@@ -1477,6 +1470,11 @@ impl AppWindow {
             self.full = None;
         }
         self.layout_notice = None;
+        // A link is a page in the browser: nothing in the Window changes, and a failure to open only logs.
+        if let Some(url) = links::address(command, &Build::current()) {
+            links::open_in_browser(&url);
+            return;
+        }
         match command {
             Command::AddPanel => {
                 self.open_add_list();
@@ -1560,26 +1558,17 @@ impl AppWindow {
                 return;
             }
             Command::About => {
-                self.about = Some(AboutPopover::new(
-                    env!("CARGO_PKG_VERSION"),
-                    &Self::feed_protocol(),
-                ));
+                self.about = Some(AboutPopover::new(Build::current()));
                 self.window.request_redraw();
                 return;
             }
+            // The links went to the browser above.
             Command::Licence
             | Command::Changelog
             | Command::Website
             | Command::ReportProblem
             | Command::CheckForUpdates
-            | Command::BuyMeACoffee => {
-                // A page in the browser: nothing in the Window changes, and a failure to open only logs.
-                let protocol = Self::feed_protocol();
-                if let Some(url) = links::address(command, env!("CARGO_PKG_VERSION"), &protocol) {
-                    links::open_in_browser(&url);
-                }
-                return;
-            }
+            | Command::BuyMeACoffee => return,
             Command::ToggleLegends => {
                 self.displays
                     .toggle_legends(&mut self.settings.lock().unwrap());

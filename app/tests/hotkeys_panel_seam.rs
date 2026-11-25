@@ -303,3 +303,18 @@ fn the_fit_toggle_is_listed_with_z_and_can_be_reassigned_there() {
     assert!(panel.key(plain("F"), &mut hotkeys));
     assert_eq!(hotkeys.command_for(plain("F")), Some(Command::ZoomFit));
 }
+
+#[test]
+fn the_help_commands_are_listed_and_can_be_reassigned_there() {
+    let (mut panel, mut hotkeys) = (HotkeysPanel::default(), Hotkeys::default());
+    for command in Command::HELP {
+        assert_eq!(row(&panel.menu(&hotkeys), &command.label()).1.hotkey, "");
+    }
+    click(&mut panel, &mut hotkeys, "Help: Website");
+    assert!(panel.key(ctrl("H"), &mut hotkeys));
+    assert_eq!(hotkeys.command_for(ctrl("H")), Some(Command::Website));
+    assert_eq!(
+        row(&panel.menu(&hotkeys), "Help: Website").1.hotkey,
+        "Ctrl+H"
+    );
+}
