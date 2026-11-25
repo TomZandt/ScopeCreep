@@ -13,7 +13,11 @@ ScopeCreep takes the picture Resolve is playing (the **Feed**) and shows it next
 
 ## Status
 
-Pre-alpha. Nothing to install yet.
+Pre-alpha.
+
+## Download
+
+Installers are on the [Releases page](https://github.com/TomZandt/ScopeCreep/releases). Each Release lists the platforms it includes (Linux for now) and has a `SHA256SUMS` file to check your download. While the version starts with 0 it is a pre-release. Unpack the Installer and read its `INSTALL.txt`.
 
 | Stage | What | State |
 |---|---|---|

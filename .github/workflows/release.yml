@@ -2,9 +2,13 @@ name: release
 
 # A Test build (spec #233, ticket #242): "Run workflow" on any branch builds the Installer for every
 # platform in packaging/platforms.txt and keeps it as a workflow artifact for 30 days. It never publishes.
-# The `v*` tag trigger and the publish job are added by #243.
+# A Release (ticket #243): pushing a `vX.Y.Z` tag builds the same Installers, then the publish job checks
+# the tag against the workspace version and the changelog and publishes a GitHub pre-release (while 0.y.z).
 on:
   workflow_dispatch:
+  push:
+    tags:
+      - 'v*'
 
 env:
   CARGO_TERM_COLOR: always
@@ -89,3 +93,55 @@ jobs:
             dist/SHA256SUMS
           if-no-files-found: error
           retention-days: 30
+
+  publish:
+    name: publish
+    # Only a tag publishes; "Run workflow" never does.
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [platforms, build]
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      # Fails the job, before anything is published, if the tag is not the workspace version
+      # or the changelog has no section for it.
+      - name: Check the tag
+        id: tag
+        run: echo "version=$(scripts/check-release-tag.sh "$GITHUB_REF_NAME")" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      # Only platforms listed in packaging/platforms.txt are attached, whatever else was built.
+      - name: Gather the Installers
+        env:
+          VERSION: ${{ steps.tag.outputs.version }}
+        run: |
+          mkdir dist
+          : > included.txt
+          for platform in $(grep -v -E '^\s*(#|$)' packaging/platforms.txt); do
+            files=(artifacts/*/scopecreep-"$VERSION"-"$platform"-*.tar.gz)
+            [[ -f ${files[0]} ]] || { echo "no Installer for $platform" >&2; exit 1; }
+            cp "${files[@]}" dist/
+            echo "$platform" >> included.txt
+          done
+          (cd dist && sha256sum scopecreep-*.tar.gz > SHA256SUMS)
+          cat dist/SHA256SUMS
+
+      - name: Publish the Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ steps.tag.outputs.version }}
+        run: |
+          {
+            scripts/release-notes.sh "$VERSION"
+            echo
+            echo "Platforms included: $(paste -sd, included.txt | sed 's/,/, /g')."
+          } > notes.md
+          flags=()
+          [[ $VERSION == 0.* ]] && flags+=(--prerelease)
+          gh release create "$GITHUB_REF_NAME" dist/*.tar.gz dist/SHA256SUMS \
+            --title "$VERSION" --notes-file notes.md --verify-tag "${flags[@]}"

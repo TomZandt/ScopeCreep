@@ -102,9 +102,9 @@ Actions, "release", "Run workflow" on any branch builds the Installer for every 
 
 ### A release
 
-1. **Performance check passes:** `harness/experiments/uhd50_bench` (ADR 0003) on the build being released.
-2. **Versioned:** the Unreleased lines moved under `## [X.Y.Z] - date` (known limitations in their own section), the version bumped, `chore(release): vX.Y.Z` merged to `main`, tagged `vX.Y.Z`, pushed.
-3. **Published:** a GitHub release for the tag (pre-release while `0.y.z`) with the changelog section as notes and the Linux build attached (the app, the plain Sender bundle, `INSTALL.txt`, `SHA256SUMS`).
+1. **Performance check passes, per platform:** `harness/experiments/uhd50_bench` (ADR 0003) on the build being released, on each platform in `packaging/platforms.txt`, before its tag. A platform is added to that file only once its check has passed on that build (GLOSSARY, Release). A Test build gives the Installer to try on a platform's machine first.
+2. **Versioned:** the Unreleased lines moved under `## [X.Y.Z] - date` (known limitations in their own section), the version bumped, `chore(release): vX.Y.Z` merged to `main`.
+3. **Tagged:** `git tag vX.Y.Z` on that commit and push the tag. CI does the rest: the `release` workflow builds the Installer for every platform in `packaging/platforms.txt`, and its `publish` job fails, publishing nothing, if the tag does not match the workspace version or `CHANGELOG.md` has no section for it (`scripts/check-release-tag.sh`). Otherwise it publishes a GitHub pre-release (while `0.y.z`) named by the version, with the changelog section as notes, a Full changelog link, the platforms included, each Installer and `SHA256SUMS`. A platform not in the list is never attached. Check the Release page afterwards.
 4. **Docs current:** README roadmap state, ADR list, findings index; the spec issue closed or its remaining tickets said.
 5. **Issues triaged:** finished or obsolete tickets closed with a reason, labels right, links to deleted branches repointed at `main`.
 6. **Clean everywhere:** only `main` locally and on GitHub; no worktrees or stashes; no ignored files left in the repo (`git status --ignored`); temporary runs removed from `~/scopecreep-testdata` (keep data the tests and findings use); in Resolve, the user's own projects at the top level and only the `scopecreep-test-*` projects in the `scopecreep` folder.

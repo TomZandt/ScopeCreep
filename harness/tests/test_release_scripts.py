@@ -11,6 +11,7 @@ import unittest
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 PACKAGE = os.path.join(ROOT, "scripts", "package-linux.sh")
 NOTES = os.path.join(ROOT, "scripts", "release-notes.sh")
+CHECK_TAG = os.path.join(ROOT, "scripts", "check-release-tag.sh")
 
 CHANGELOG = """# Changelog
 
@@ -225,6 +226,42 @@ class ReleaseNotesTest(unittest.TestCase):
         r = run([NOTES, "0.3.1"])
         self.assertEqual(r.returncode, 0, r.stderr)
         self.assertIn("Full changelog:", r.stdout)
+
+
+class CheckReleaseTagTest(unittest.TestCase):
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self._tmp.cleanup)
+        self.cargo = os.path.join(self._tmp.name, "Cargo.toml")
+        with open(self.cargo, "w") as f:
+            f.write('[workspace.package]\nversion = "1.2.0"\n')
+        self.changelog = os.path.join(self._tmp.name, "CHANGELOG.md")
+        with open(self.changelog, "w") as f:
+            f.write(CHANGELOG)
+
+    def check(self, tag):
+        return run([CHECK_TAG, tag, self.cargo, self.changelog])
+
+    def test_matching_tag_with_a_section_passes(self):
+        r = self.check("v1.2.0")
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertEqual(r.stdout.strip(), "1.2.0")
+
+    def test_tag_not_matching_the_workspace_version_fails(self):
+        r = self.check("v1.1.0")
+        self.assertNotEqual(r.returncode, 0)
+        self.assertIn("workspace version", r.stderr)
+
+    def test_version_without_a_changelog_section_fails(self):
+        with open(self.cargo, "w") as f:
+            f.write('version = "1.3.0"\n')
+        r = self.check("v1.3.0")
+        self.assertNotEqual(r.returncode, 0)
+        self.assertIn("no section", r.stderr)
+
+    def test_a_tag_that_is_not_a_version_fails(self):
+        r = self.check("release-1")
+        self.assertNotEqual(r.returncode, 0)
 
 
 if __name__ == "__main__":
