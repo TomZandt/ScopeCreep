@@ -2,6 +2,8 @@
 
 Real-time, professional-grade video scopes for DaVinci Resolve, on their own screen.
 
+ScopeCreep is free to use, and it is built and maintained by one person. It took a lot of evenings, a lot of testing inside Resolve and a lot of coffee to get here. If it saves you time on a grade, or you would like to see it keep improving, a small donation genuinely helps me keep working on it. Never expected, always appreciated.
+
 <a href="https://www.buymeacoffee.com/tomzandtvalentine"><img src="https://img.buymeacoffee.com/button-api/?text=Buy%20me%20a%20coffee&emoji=%E2%98%95&slug=tomzandtvalentine&button_colour=FFDD00&font_colour=000000&font_family=Cookie&outline_colour=000000&coffee_colour=ffffff" alt="Buy me a coffee" height="48"></a>
 
 ScopeCreep takes the picture Resolve is playing (the **Feed**) and shows it next to **Scopes** (luma waveform with Colorise, vectorscopes) and **Picture Views** (clean picture with channel chips and a Loupe, false colour, skin tone, saturation) in a separate app. The goals:
@@ -134,6 +136,6 @@ DaVinci Resolve                                 scopecreep app (Rust + wgpu)
 
 ## Licence
 
-Free to use, including for paid work, under the [ScopeCreep Licence](LICENSE.md): use it on client work, install it across your company and change it for your own use. Selling it, sharing copies outside your company or bundling it with something else needs a commercial licence. [LICENSING.md](LICENSING.md) explains it with examples. To donate or pay, use [Buy Me a Coffee](https://www.buymeacoffee.com/tomzandtvalentine).
+Free to use, including for paid work, under the [ScopeCreep Licence](LICENSE.md): use it on client work, install it across your company and change it for your own use. Selling it, sharing copies outside your company or bundling it with something else needs a commercial licence. [LICENSING.md](LICENSING.md) explains it with examples. If ScopeCreep earns its place in your workflow, please consider [supporting its development on Buy Me a Coffee](https://www.buymeacoffee.com/tomzandtvalentine): it is what lets one person keep building it.
 
 The fonts and icons the app bundles (DM Mono, Anton, Lucide) keep their own licences: see [THIRD-PARTY.md](THIRD-PARTY.md).
