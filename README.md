@@ -13,6 +13,8 @@ ScopeCreep takes the picture Resolve is playing (the **Feed**) and shows it next
 - **Cross-platform.** Windows, Linux and macOS, on Resolve 21.x.
 - **Quiet.** A tool, not a sales pitch: no clutter, and sensible defaults read from the Resolve project.
 
+![ScopeCreep on its own screen: the picture with a vectorscope, saturation view, waveform, false colour and skin tone panels](docs/images/scopecreep-main.jpg)
+
 ## Status
 
 Pre-alpha.
