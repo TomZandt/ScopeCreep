@@ -18,3 +18,5 @@ scopecreep-accuracy = { path = "../accuracy" }
 scopecreep-feed = { path = "../feed" }
 wgpu = "30.0.2"
 winit = "0.30"
+ureq = "3"
+serde_json = "1"

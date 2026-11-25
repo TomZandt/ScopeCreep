@@ -280,7 +280,7 @@ The menu on the Menu bar between Layout and Settings for display choices that co
 _Avoid_: Display menu, Window menu
 
 **Help menu**:
-The last menu on the Menu bar, after Settings, and the only place in the everyday chrome where ScopeCreep speaks about itself: About ScopeCreep…, Licence…, Website, Report a problem…, Check for updates and Buy Me a Coffee…. Every entry but About opens a page in the browser; the app never goes online itself and never asks for a donation unprompted.
+The last menu on the Menu bar, after Settings, and the only place in the everyday chrome where ScopeCreep speaks about itself: About ScopeCreep…, Licence…, Website, Report a problem…, Check for updates and Buy Me a Coffee…. Every entry but About opens a page in the browser; the app goes online only for the start-up Update check (ADR 0048, a setting) and never asks for a donation unprompted.
 _Avoid_: About menu, ScopeCreep menu
 
 **About popover**:

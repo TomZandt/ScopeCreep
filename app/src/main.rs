@@ -25,7 +25,9 @@ use scopecreep::appearance_panel::AppearancePanel;
 use scopecreep::auto_resize;
 use scopecreep::build_info::Build;
 use scopecreep::commands::{Command, Hotkey, Hotkeys, Key};
-use scopecreep::components::{self, AboutHit, AboutPopover, Align, MenuBar, Prim, State, Tooltip};
+use scopecreep::components::{
+    self, AboutHit, AboutPopover, Align, MenuBar, Prim, State, Tooltip, UpdateDialog, UpdateHit,
+};
 use scopecreep::display::{DisplaySet, Pointer};
 use scopecreep::dock::{self, Zone};
 use scopecreep::feed_loop::{FeedLoop, Texts};
@@ -48,6 +50,7 @@ use scopecreep::settings::{Amount, EditKey, Menu, PanelAction, PanelSettings};
 use scopecreep::style;
 use scopecreep::tab_strip;
 use scopecreep::toolbar::{ChipAction, Toolbar};
+use scopecreep::updates::{self, Platform, UpdatePrefs, Updates};
 use scopecreep::view_block::{self, BlockPart, ViewBlock};
 use scopecreep::window_text;
 use std::path::PathBuf;
@@ -137,6 +140,11 @@ fn layouts_file() -> Option<PathBuf> {
 /// Where the hotkeys the user changed are remembered, next to the layouts (ADR 0036).
 fn hotkeys_file() -> Option<PathBuf> {
     grid_file().map(|p| p.with_file_name("hotkeys"))
+}
+
+/// Where the update preferences are remembered (#245), next to the hotkeys: their own file.
+fn updates_file() -> Option<PathBuf> {
+    grid_file().map(|p| p.with_file_name("updates"))
 }
 
 /// Where the app accent colour is remembered, next to the hotkeys (ADR 0044): its own file.
@@ -300,6 +308,8 @@ struct AppWindow {
     layout_mode: LayoutMode,
     /// The About popover, while open (#232): centred in the Window, over everything.
     about: Option<AboutPopover>,
+    /// The Update dialog, while open (#246): centred in the Window, over everything, never blocking the Feed.
+    update_dialog: Option<(UpdateDialog, updates::Offer)>,
     /// The Hotkeys panel, while it shows in place of the Settings menu (#148).
     hotkeys_panel: Option<HotkeysPanel>,
     /// The Appearance panel, when open in place of the Settings menu, and the accent it edits.
@@ -378,6 +388,9 @@ struct AppWindow {
     status_bar: [f32; 4],
     status_hover: String,
     stop: Arc<AtomicBool>,
+    /// The Update check (#245): what it found, and the Window's wake-up for a check on its own thread.
+    updates: Updates,
+    proxy: EventLoopProxy<Wake>,
     feed_thread: Option<std::thread::JoinHandle<()>>,
     // Last, so it outlives the surface made from it.
     window: Arc<Window>,
@@ -530,6 +543,20 @@ impl AppWindow {
             OutputConversion::new(&device, &queue),
         );
         let texts = feed_loop.texts();
+        // The one start-up check, on its own thread (unless the setting is off); the Window is woken to take it in.
+        let mut updates = Updates::new(
+            updates_file().map_or_else(UpdatePrefs::default, |p| UpdatePrefs::load(&p)),
+            &Build::current().version,
+            Platform::current(),
+        );
+        let update_proxy = proxy.clone();
+        updates.start_up(
+            || updates::fetch_releases(&Build::current().version),
+            move || {
+                let _ = update_proxy.send_event(Wake);
+            },
+        );
+        let window_proxy = proxy.clone();
         let stop = Arc::new(AtomicBool::new(false));
         let feed_thread = {
             let stop = stop.clone();
@@ -595,6 +622,7 @@ impl AppWindow {
             bar_hover: None,
             layout_mode: LayoutMode::Show,
             about: None,
+            update_dialog: None,
             hotkeys_panel: None,
             appearance_panel: None,
             accent: {
@@ -651,6 +679,8 @@ impl AppWindow {
             status_bar: [0.0; 4],
             status_hover: String::new(),
             stop,
+            updates,
+            proxy: window_proxy,
             feed_thread: Some(feed_thread),
             window,
         })
@@ -950,9 +980,15 @@ impl AppWindow {
             menu_bar::SETTINGS => Some(match (&self.hotkeys_panel, &self.appearance_panel) {
                 (Some(panel), _) => panel.menu(&self.hotkeys),
                 (None, Some(panel)) => panel.menu(self.accent),
-                (None, None) => menu_bar::settings_menu(),
+                (None, None) => menu_bar::settings_menu_with(self.updates.prefs().check_at_startup),
             }),
-            menu_bar::HELP => Some(menu_bar::help_menu(&self.hotkeys)),
+            menu_bar::HELP => Some(menu_bar::help_menu_with(
+                &self.hotkeys,
+                self.updates
+                    .offer()
+                    .map(|_| self.updates.help_label())
+                    .as_deref(),
+            )),
             _ => None,
         }
     }
@@ -1085,6 +1121,16 @@ impl AppWindow {
                 self.close_bar();
             }
             Some(MenuAction::CancelReset) => self.close_bar(),
+            Some(MenuAction::ToggleUpdateCheck) => {
+                let on = !self.updates.prefs().check_at_startup;
+                self.updates.set_check_at_startup(on);
+                if let Some(path) = updates_file()
+                    && let Err(e) = self.updates.prefs().save(&path)
+                {
+                    eprintln!("ScopeCreep: cannot remember the update setting: {e}");
+                }
+                self.close_bar();
+            }
             Some(MenuAction::Run(command)) => {
                 self.run(command);
                 self.close_bar();
@@ -1325,6 +1371,14 @@ impl AppWindow {
             }
             _ => None,
         };
+        // The Update dialog takes every key while it is open: Escape is Later.
+        if let Some((dialog, _)) = &self.update_dialog {
+            if dialog.key(event.logical_key == LogicalKey::Named(NamedKey::Escape)) {
+                self.update_dialog = None;
+                self.window.request_redraw();
+            }
+            return;
+        }
         // The About popover takes every key while it is open: Escape closes it, nothing reaches the app behind it.
         if let Some(about) = &self.about {
             if about.key(event.logical_key == LogicalKey::Named(NamedKey::Escape)) {
@@ -1444,6 +1498,53 @@ impl AppWindow {
         }
     }
 
+    /// The Update dialog is due (a check found a newer Release, or the Help entry asked): open it.
+    fn show_update_dialog(&mut self) {
+        if let Some(offer) = self.updates.take_dialog() {
+            // Nothing stays live behind the dialog: close the bar menu, the Panel's popover and a name being typed.
+            self.bar.open = None;
+            self.menu = None;
+            self.hover = None;
+            self.finish_rename(false);
+            self.reset_bar_menus();
+            let dialog = UpdateDialog::new(&offer.version, self.updates.running());
+            self.update_dialog = Some((dialog, offer));
+            self.window.request_redraw();
+        }
+    }
+
+    /// A click with the Update dialog open: What's new and Update open the Release's page (Update does only that
+    /// for now, #259), Skip remembers the version, and Later or a click outside closes it.
+    fn update_dialog_click(&mut self) {
+        let Some((dialog, offer)) = self.update_dialog.as_ref() else {
+            return;
+        };
+        let scale = self.window.scale_factor() as f32;
+        let size = self.window.inner_size();
+        let window = [size.width as f32, size.height as f32];
+        let hit = dialog.hit(window, self.cursor, scale);
+        let page = offer.release_url.clone();
+        match hit {
+            UpdateHit::WhatsNew => links::open_in_browser(&page),
+            UpdateHit::Update => {
+                links::open_in_browser(&page);
+                self.update_dialog = None;
+            }
+            UpdateHit::Skip => {
+                self.updates.skip();
+                if let Some(path) = updates_file()
+                    && let Err(e) = self.updates.prefs().save(&path)
+                {
+                    eprintln!("ScopeCreep: cannot remember the skipped version: {e}");
+                }
+                self.update_dialog = None;
+            }
+            UpdateHit::Later => self.update_dialog = None,
+            UpdateHit::Inside => {}
+        }
+        self.window.request_redraw();
+    }
+
     /// A click with the About popover open: a link runs its Command, the close control or a click outside closes
     /// it, a click on the popover itself stays in it.
     fn about_click(&mut self) {
@@ -1470,6 +1571,21 @@ impl AppWindow {
             self.full = None;
         }
         self.layout_notice = None;
+        // The update entry opens the newer Release's page, or checks first and then opens a page (#245).
+        if command == Command::CheckForUpdates {
+            let wake = self.proxy.clone();
+            let url = self.updates.help_click(
+                || updates::fetch_releases(&Build::current().version),
+                move || {
+                    let _ = wake.send_event(Wake);
+                },
+            );
+            if let Some(url) = url {
+                links::open_in_browser(&url);
+            }
+            self.show_update_dialog();
+            return;
+        }
         // A link is a page in the browser: nothing in the Window changes, and a failure to open only logs.
         if let Some(url) = links::address(command, &Build::current()) {
             links::open_in_browser(&url);
@@ -1956,6 +2072,11 @@ impl AppWindow {
                 self.window.set_cursor(CursorIcon::Default);
                 self.window.request_redraw();
             }
+            return;
+        }
+        // The Update dialog takes every click while it is open.
+        if self.update_dialog.is_some() {
+            self.update_dialog_click();
             return;
         }
         // The About popover takes every click while it is open.
@@ -2784,6 +2905,9 @@ impl AppWindow {
         if let Some(about) = &self.about {
             over.extend(about.draw([width, height], self.cursor, scale));
         }
+        if let Some((dialog, _)) = &self.update_dialog {
+            over.extend(dialog.draw([width, height], self.cursor, scale));
+        }
         let mut texts_used = 0;
         for prim in over {
             match prim {
@@ -2951,7 +3075,12 @@ impl ApplicationHandler<Wake> for App {
     }
 
     fn user_event(&mut self, _event_loop: &ActiveEventLoop, _wake: Wake) {
-        if let Some(w) = &self.window {
+        if let Some(w) = &mut self.window {
+            // A finished Update check: the Help entry may have asked for it, and then opens a page.
+            if let Some(url) = w.updates.poll() {
+                links::open_in_browser(&url);
+            }
+            w.show_update_dialog();
             w.window.request_redraw();
         }
     }

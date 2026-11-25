@@ -1024,16 +1024,7 @@ impl AboutPopover {
         let wordmark_h = wsize * wline * scale;
         // Wrap the licence line on words to the characters that fit.
         let fit = ((inner / (style::SPACE_CHAR_WIDTH * scale)) as usize).max(1);
-        let mut lines: Vec<String> = Vec::new();
-        for word in ABOUT_LICENCE.split(' ') {
-            match lines.last_mut() {
-                Some(last) if last.chars().count() + 1 + word.chars().count() <= fit => {
-                    last.push(' ');
-                    last.push_str(word);
-                }
-                _ => lines.push(word.to_string()),
-            }
-        }
+        let lines = wrap_words(ABOUT_LICENCE, fit);
         let links = Self::links();
         let chip_h = style::SPACE_CHIP_HEIGHT * scale;
         let after_wordmark = style::SPACE_ABOUT_AFTER_WORDMARK * scale;
@@ -1158,6 +1149,173 @@ impl AboutPopover {
         prims.push(Icon::Close.draw(l.close, ink));
         for ((_, chip), (_, r)) in Self::links().iter().zip(&l.links) {
             let state = if contains(*r, cursor) {
+                State::Hover
+            } else {
+                State::Normal
+            };
+            prims.extend(chip.draw([r[0], r[1]], false, state, scale));
+        }
+        prims
+    }
+}
+
+/// `text` broken on spaces into lines of at most `fit` characters (a longer word has a line to itself).
+fn wrap_words(text: &str, fit: usize) -> Vec<String> {
+    let mut lines: Vec<String> = Vec::new();
+    for word in text.split(' ') {
+        match lines.last_mut() {
+            Some(last) if last.chars().count() + 1 + word.chars().count() <= fit => {
+                last.push(' ');
+                last.push_str(word);
+            }
+            _ => lines.push(word.to_string()),
+        }
+    }
+    lines
+}
+
+// ---- Update dialog (#246, spec #234) ----
+
+/// What a click on the Update dialog lands on. A click outside, like Escape, is Later.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum UpdateHit {
+    /// The What's new link: open the Release's page.
+    WhatsNew,
+    Update,
+    Skip,
+    Later,
+    /// On the dialog but on nothing: the click stays in it.
+    Inside,
+}
+
+/// Where the Update dialog's parts are in a Window (device pixels).
+#[derive(Clone, Debug, PartialEq)]
+pub struct UpdateLayout {
+    pub area: [f32; 4],
+    /// The title, wrapped to the dialog's width, one rectangle per line.
+    pub title: Vec<(String, [f32; 4])>,
+    pub whats_new: [f32; 4],
+    pub update: [f32; 4],
+    pub skip: [f32; 4],
+    pub later: [f32; 4],
+}
+
+/// The Update dialog: "ScopeCreep X.Y.Z is available (you have A.B.C)", a What's new link, and the Update, Skip
+/// this version and Later buttons, centred in the Window over everything.
+#[derive(Clone, Debug, PartialEq)]
+pub struct UpdateDialog {
+    pub available: String,
+    pub running: String,
+}
+
+impl UpdateDialog {
+    pub fn new(available: &str, running: &str) -> UpdateDialog {
+        UpdateDialog {
+            available: available.to_string(),
+            running: running.to_string(),
+        }
+    }
+
+    /// The line the dialog opens with.
+    pub fn title_line(&self) -> String {
+        format!(
+            "ScopeCreep {} is available (you have {})",
+            self.available, self.running
+        )
+    }
+
+    /// What a key does while the dialog is open: it takes every key, so nothing behind it changes, and Escape
+    /// means Later. Returns whether it closes.
+    pub fn key(&self, escape: bool) -> bool {
+        escape
+    }
+
+    fn buttons() -> [Chip; 3] {
+        [
+            Chip::new("Update"),
+            Chip::new("Skip this version"),
+            Chip::new("Later"),
+        ]
+    }
+
+    pub fn layout(&self, window: [f32; 2], scale: f32) -> UpdateLayout {
+        let pad = style::SPACE_UPDATE_PAD * scale;
+        let gap = style::SPACE_UPDATE_GAP * scale;
+        let width = style::SPACE_UPDATE_WIDTH * scale;
+        let inner = width - 2.0 * pad;
+        let (size, line) = Face::Label.metrics();
+        let row = size * line * scale;
+        let chip_h = style::SPACE_CHIP_HEIGHT * scale;
+        let fit = ((inner / (style::SPACE_CHAR_WIDTH * scale)) as usize).max(1);
+        let lines = wrap_words(&self.title_line(), fit);
+        let height = pad + row * lines.len() as f32 + gap + chip_h + gap + chip_h + pad;
+        let left = ((window[0] - width) / 2.0).max(0.0);
+        let top = ((window[1] - height) / 2.0).max(0.0);
+        let x = left + pad;
+        let mut y = top + pad;
+        let title = lines
+            .into_iter()
+            .map(|l| {
+                let r = [x, y, inner, row];
+                y += row;
+                (l, r)
+            })
+            .collect();
+        y += gap;
+        let link_w = text_width("What's new", scale) + 2.0 * style::SPACE_CHIP_PAD * scale;
+        let whats_new = [x, y, link_w, chip_h];
+        y += chip_h + gap;
+        let chips = Self::buttons();
+        let row_width = chip_row_width(&chips, scale);
+        let rects = chip_row(&chips, [x + (inner - row_width) / 2.0, y], scale);
+        UpdateLayout {
+            area: [left, top, width, height],
+            title,
+            whats_new,
+            update: rects[0],
+            skip: rects[1],
+            later: rects[2],
+        }
+    }
+
+    /// What a click at `point` lands on; off the dialog it is Later.
+    pub fn hit(&self, window: [f32; 2], point: [f32; 2], scale: f32) -> UpdateHit {
+        let l = self.layout(window, scale);
+        if !contains(l.area, point) {
+            UpdateHit::Later
+        } else if contains(l.whats_new, point) {
+            UpdateHit::WhatsNew
+        } else if contains(l.update, point) {
+            UpdateHit::Update
+        } else if contains(l.skip, point) {
+            UpdateHit::Skip
+        } else if contains(l.later, point) {
+            UpdateHit::Later
+        } else {
+            UpdateHit::Inside
+        }
+    }
+
+    /// Draw it in `window`, with the link or button under `cursor` lit.
+    pub fn draw(&self, window: [f32; 2], cursor: [f32; 2], scale: f32) -> Vec<Prim> {
+        let l = self.layout(window, scale);
+        let mut prims: Vec<Prim> =
+            framed(l.area, style::LINE_BORDER, style::SURFACE_MENU, scale).into();
+        for (line, r) in &l.title {
+            prims.push(text(line, *r, Face::Label, style::TEXT_HIGH, Align::Left));
+        }
+        if contains(l.whats_new, cursor) {
+            prims.push(rect(l.whats_new, style::STATE_HOVER));
+        }
+        prims.push(text(
+            "What's new",
+            l.whats_new,
+            Face::Label,
+            style::accent_text(),
+            Align::Centre,
+        ));
+        for (chip, r) in Self::buttons().iter().zip([l.update, l.skip, l.later]) {
+            let state = if contains(r, cursor) {
                 State::Hover
             } else {
                 State::Normal

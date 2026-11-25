@@ -130,6 +130,7 @@ DaVinci Resolve                                 scopecreep app (Rust + wgpu)
   - [0042](docs/adr/0042-free-to-use-and-modify-commercial-licence-to-sell-or-bundle.md): ScopeCreep is free to use and modify; selling, sharing or bundling needs a commercial licence
   - [0046](docs/adr/0046-icons-are-a-bundled-lucide-font-subset-drawn-through-one-icon-enum.md): icons are a bundled Lucide font subset (ISC, with Feather MIT) drawn through one `Icon` enum
   - [0047](docs/adr/0047-tall-menus-flow-into-a-second-column.md): tall menus flow into a second column; the Window's least size is 1420 × 764
+  - [0048](docs/adr/0048-the-update-check-is-the-one-start-up-network-call.md): the Update check is the one start-up network call; generic User-Agent, silent on failure, can be turned off
   - [0045](docs/adr/0045-the-interface-uses-the-brand-fonts-only-dm-mono-and-anton.md): the interface uses the brand fonts only: DM Mono for all text and numbers, Anton for the wordmark (OFL), all bundled
   - [0044](docs/adr/0044-the-brand-accent-and-the-hairline-look.md): The brand accent is lime (a user option in Settings > Appearance) and the chrome is Hairline: grey, the accent only as thin lines and text; the view block is on picture Panels only, chips overflow as "+N", a Panel is at least 255 wide and the Window at least 1420 × 833
   - [0042](docs/adr/0042-view-controls-return-to-every-panel-title-bar.md): View controls return to every Panel's title bar as a block, the Colour Setup line sits in the menu bar row, and a page tab has a right-click menu

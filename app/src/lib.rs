@@ -56,6 +56,7 @@ pub mod stops_false_colour;
 pub mod style;
 pub mod tab_strip;
 pub mod toolbar;
+pub mod updates;
 pub mod vectorscope;
 pub mod view_block;
 pub mod viewer_gate;

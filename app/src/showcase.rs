@@ -395,6 +395,14 @@ pub fn showcase(scale: f32) -> Showcase {
     prims.extend(about.draw(window, [0.0, 0.0], scale));
     y += probe[3] + row * 0.5;
 
+    prims.push(caption("Update dialog", margin, y, label_w));
+    let update = crate::components::UpdateDialog::new("0.5.0", "0.4.0");
+    let probe = update.layout([0.0, 0.0], scale).area;
+    let at = [margin + label_w, y];
+    let window = [at[0] * 2.0 + probe[2], at[1] * 2.0 + probe[3]];
+    prims.extend(update.draw(window, [0.0, 0.0], scale));
+    y += probe[3] + row * 0.5;
+
     prims.push(caption("Top bar", margin, y, label_w));
     prims.extend(bar(
         BarKind::Top,

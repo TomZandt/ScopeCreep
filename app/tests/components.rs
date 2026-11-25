@@ -684,6 +684,7 @@ fn the_showcase_draws_every_component_in_every_state_at_both_scales() {
             "Settings button",
             "Popover, Tooltip",
             "About popover",
+            "Update dialog",
             "Title bar: focused, +N, Scope",
             "Tab strip, edge +",
             "Appearance: accent",
@@ -860,4 +861,104 @@ fn the_about_popover_takes_every_key_and_only_escape_closes_it() {
         !about().key(false),
         "a hotkey must not reach the app behind it"
     );
+}
+
+// ---- Update dialog (#246, spec #234) ----
+
+fn dialog() -> UpdateDialog {
+    UpdateDialog::new("0.5.0", "0.4.0")
+}
+
+#[test]
+fn the_update_dialog_says_what_is_available_and_what_you_have_at_both_scales() {
+    for scale in SCALES {
+        let window = [WINDOW[0] * scale, WINDOW[1] * scale];
+        let l = dialog().layout(window, scale);
+        let said = texts(&dialog().draw(window, [0.0, 0.0], scale));
+        assert!(
+            said.join(" ")
+                .contains("ScopeCreep 0.5.0 is available (you have 0.4.0)"),
+            "{said:?}"
+        );
+        for part in ["What's new", "Update", "Skip this version", "Later"] {
+            assert!(said.contains(&part.to_string()), "{part}: {said:?}");
+        }
+        for p in dialog().draw(window, [0.0, 0.0], scale) {
+            if let Prim::Text { rect, .. } = p {
+                assert!(inside(l.area, rect), "text {rect:?} outside {:?}", l.area);
+            }
+        }
+    }
+}
+
+#[test]
+fn the_update_dialog_is_centred_scales_and_fits_the_least_window() {
+    let (one, two) = (
+        dialog().layout(WINDOW, 1.0),
+        dialog().layout([2.0 * WINDOW[0], 2.0 * WINDOW[1]], 2.0),
+    );
+    for (l, window) in [(&one, WINDOW), (&two, [2.0 * WINDOW[0], 2.0 * WINDOW[1]])] {
+        let a = l.area;
+        assert!((a[0] + a[2] / 2.0 - window[0] / 2.0).abs() < 0.5, "across");
+        assert!((a[1] + a[3] / 2.0 - window[1] / 2.0).abs() < 0.5, "down");
+        assert!(inside([0.0, 0.0, window[0], window[1]], a));
+    }
+    assert!((two.area[2] - 2.0 * one.area[2]).abs() < 0.01);
+    assert!((two.area[3] - 2.0 * one.area[3]).abs() < 0.01);
+    // Long version numbers still fit.
+    let long = UpdateDialog::new("10.20.30", "9.99.99").layout(WINDOW, 1.0);
+    assert!(inside([0.0, 0.0, WINDOW[0], WINDOW[1]], long.area));
+    for r in [long.whats_new, long.update, long.skip, long.later] {
+        assert!(inside(long.area, r));
+    }
+}
+
+#[test]
+fn the_update_dialog_buttons_and_link_have_real_hit_areas() {
+    for scale in SCALES {
+        let window = [WINDOW[0] * scale, WINDOW[1] * scale];
+        let l = dialog().layout(window, scale);
+        for (rect, want) in [
+            (l.whats_new, UpdateHit::WhatsNew),
+            (l.update, UpdateHit::Update),
+            (l.skip, UpdateHit::Skip),
+            (l.later, UpdateHit::Later),
+        ] {
+            assert!(inside(l.area, rect));
+            assert!(
+                rect[3] >= style::SPACE_CHIP_HEIGHT * scale - 0.01,
+                "tall enough to hit"
+            );
+            assert_eq!(dialog().hit(window, centre_of(rect), scale), want);
+        }
+        for pair in [(l.update, l.skip), (l.skip, l.later)] {
+            assert!(pair.0[0] + pair.0[2] <= pair.1[0], "no overlap");
+        }
+    }
+}
+
+#[test]
+fn a_click_outside_the_update_dialog_is_later_and_one_on_it_stays() {
+    for scale in SCALES {
+        let window = [WINDOW[0] * scale, WINDOW[1] * scale];
+        let l = dialog().layout(window, scale);
+        assert_eq!(dialog().hit(window, [1.0, 1.0], scale), UpdateHit::Later);
+        let corner = [l.area[0] + 1.0, l.area[1] + l.area[3] - 1.0];
+        assert_eq!(dialog().hit(window, corner, scale), UpdateHit::Inside);
+    }
+}
+
+#[test]
+fn the_update_dialog_takes_every_key_and_only_escape_means_later() {
+    assert!(dialog().key(true));
+    assert!(!dialog().key(false));
+}
+
+#[test]
+fn the_update_dialog_lights_the_button_under_the_pointer() {
+    let l = dialog().layout(WINDOW, 1.0);
+    let rest = dialog().draw(WINDOW, [0.0, 0.0], 1.0);
+    for r in [l.whats_new, l.update, l.skip, l.later] {
+        assert_ne!(rest, dialog().draw(WINDOW, centre_of(r), 1.0));
+    }
 }

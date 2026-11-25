@@ -91,6 +91,8 @@ pub enum MenuAction {
     RenamePage,
     /// Add Panel `.0` to the page.
     Add(usize),
+    /// Turn "Check for updates at start-up" on or off (#245).
+    ToggleUpdateCheck,
     /// Show the Hotkeys panel in place of the Settings menu.
     OpenHotkeys,
     /// Reset all Panels was confirmed (#228).
@@ -311,6 +313,11 @@ pub fn view_menu(hotkeys: &Hotkeys, legends_on: bool) -> Menu {
 
 /// The Settings menu: Appearance and Hotkeys, each of which opens its panel in its place.
 pub fn settings_menu() -> Menu {
+    settings_menu_with(true)
+}
+
+/// The Settings menu with "Check for updates at start-up" marked when `check_updates` is on (#245).
+pub fn settings_menu_with(check_updates: bool) -> Menu {
     let mut menu = Menu::new();
     menu.push(
         MenuEntry::Item(MenuItem::new("Appearance…", "")),
@@ -319,6 +326,15 @@ pub fn settings_menu() -> Menu {
     menu.push(
         MenuEntry::Item(MenuItem::new("Hotkeys…", "")),
         Some(MenuAction::OpenHotkeys),
+    );
+    menu.push(
+        MenuEntry::Item(MenuItem {
+            label: "Check for updates at start-up".to_string(),
+            hotkey: String::new(),
+            enabled: true,
+            on: check_updates,
+        }),
+        Some(MenuAction::ToggleUpdateCheck),
     );
     menu.push(MenuEntry::Separator, None);
     menu.push(
@@ -331,13 +347,19 @@ pub fn settings_menu() -> Menu {
 /// The Help menu (#231, #232): About opens the About popover; every other entry opens a page in the system browser (see [`crate::links`]). None has a default
 /// hotkey; each shows the one it is given.
 pub fn help_menu(hotkeys: &Hotkeys) -> Menu {
+    help_menu_with(hotkeys, None)
+}
+
+/// The Help menu with the update entry reading `update` ("Update to 0.5.0…") while a newer Release is known (#245).
+pub fn help_menu_with(hotkeys: &Hotkeys, update: Option<&str>) -> Menu {
     let mut menu = Menu::new();
     for command in Command::HELP {
+        let label = match (command, update) {
+            (Command::CheckForUpdates, Some(text)) => text,
+            _ => command.help_entry(),
+        };
         menu.push(
-            MenuEntry::Item(MenuItem::new(
-                command.help_entry(),
-                &hotkey_text(hotkeys, command),
-            )),
+            MenuEntry::Item(MenuItem::new(label, &hotkey_text(hotkeys, command))),
             Some(MenuAction::Run(command)),
         );
     }
@@ -415,6 +437,7 @@ pub fn largest_menus() -> Vec<DropMenu> {
     }
     menus.push(view_menu(&view, true).drop);
     menus.push(help_menu(&Hotkeys::default()).drop);
+    menus.push(help_menu_with(&Hotkeys::default(), Some("Update to 99.99.99\u{2026}")).drop);
     if let Some(hotkey) = widest {
         let mut help = Hotkeys::default();
         let _ = help.replace(Command::BuyMeACoffee, hotkey);
