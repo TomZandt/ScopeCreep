@@ -6,6 +6,8 @@ The format follows [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-11-25
+
 ### Added
 - Pushing a `vX.Y.Z` tag publishes the Release (#243, spec #233): the `release` workflow builds the Installer for each platform in `packaging/platforms.txt` and a `publish` job makes a GitHub pre-release (while 0.y.z) named by its version, with that version's changelog section, a Full changelog link, the platforms included, each Installer and `SHA256SUMS`. It refuses a tag that does not match the workspace version or has no changelog section (`scripts/check-release-tag.sh`). The README has a Download section pointing at the Releases page.
 - The Linux Installer and its scripts (#241, spec #233): `scripts/package-linux.sh` makes `scopecreep-X.Y.Z-linux-x86_64.tar.gz` (the app, the Sender bundle, `install.sh` and `INSTALL.txt`) and `SHA256SUMS`; `install.sh` installs and uninstalls the app (`~/.local/bin` or `/usr/local/bin`) and the Sender (`/usr/OFX/Plugins`, saying it needs admin rights and to restart Resolve); `scripts/release-notes.sh` prints a version's changelog section and a Full changelog link.
@@ -68,6 +70,10 @@ The format follows [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/
 - A Panel arrangement saved with a border dragged close to its minimum in a large Window, or a layout saved that way, came back as the default layout at the next start. It now comes back as arranged: a column or row too small for the default Window is widened to its minimum there and the others give way (#179, ADR 0012).
 - A narrow Panel's chips no longer run past its title bar. Chips that don't fit leave the bar from the right, a whole setting at a time (the zoom chip stays longest), and its settings button opens a popover that offers them first, Link included. On the clean picture at its smallest only the zoom chip stays; all of Y R G B and L show from 192 px wide (#171).
 - ACES 2.0 to Rec.2100 ST2084 (1000 nit): a few dark, saturated colours were converted up to half a 10-bit code away from the ACES maths, just outside what "exact for ACES 2.0" allows; every colour of a dense test grid is now inside. The ACES 2.0 conversion takes about 1.4 ms more GPU time per UHD frame (#44).
+
+### Known limitations
+- Installers are for Linux (NVIDIA, CUDA) only; Windows and macOS follow. Builds are unsigned.
+- GPU processing in Resolve must be CUDA.
 
 ## [0.3.1] - 2026-11-20
 
@@ -305,7 +311,10 @@ Stage 0: colour and performance checks. Nothing here is the product yet; it is t
 - ADR 0003: "Resolve never waits" is proven at UHD float, 23.976 to 60 fps, on the CUDA path.
 - ADR 0004: Resolve's waveform uses Rec.709 weights for P3; offered as a Match Resolve mode.
 
-[Unreleased]: https://github.com/TomZandt/ScopeCreep/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/TomZandt/ScopeCreep/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/TomZandt/ScopeCreep/compare/v0.3.1...v0.4.0
+[0.3.1]: https://github.com/TomZandt/ScopeCreep/compare/v0.3.0...v0.3.1
+[0.3.0]: https://github.com/TomZandt/ScopeCreep/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/TomZandt/ScopeCreep/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/TomZandt/ScopeCreep/compare/v0.0.0...v0.1.0
 [0.0.0]: https://github.com/TomZandt/ScopeCreep/releases/tag/v0.0.0
