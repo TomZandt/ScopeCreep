@@ -2,7 +2,7 @@
 Resolve free-run (uncapped) throughput: queue a Deliver render of FRAMES frames of the scratch UHD project (NOT realtime-capped),
 with probe copy off/on (copy.off trigger). Records wall time, frames/s, and the probe's own COPYSTATS (renders/s, drops)."""
 import json, os, re, subprocess, sys, time, shutil, glob
-HARNESS = "/home/tom/GitHub/scopecreep/.claude/worktrees/agent-a9b6e642eccbe4530/harness"
+HARNESS = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..")
 sys.path.insert(0, HARNESS)
 from scopecreep_harness import resolve_api, projects
 

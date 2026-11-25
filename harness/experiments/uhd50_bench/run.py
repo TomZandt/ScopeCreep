@@ -7,13 +7,13 @@ import subprocess
 import sys
 import time
 
-sys.path.insert(0, "/home/tom/GitHub/scopecreep/harness")
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", ".."))
 from scopecreep_harness import feed_header, viewer  # noqa: E402
 from scopecreep_harness.resolve_api import connect  # noqa: E402
 
 OUT = os.path.expanduser("~/scopecreep-testdata/bench/uhd50-" + time.strftime("%Y%m%d-%H%M%S"))
 os.makedirs(OUT, exist_ok=True)
-APP = "/home/tom/GitHub/scopecreep/target/release/scopecreep"
+APP = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "..", "target", "release", "scopecreep")
 WARM, MEASURE, SHOT_EVERY = 15, 60, 5
 # Resolve's fps readout, in global screen coordinates (grim -g); set SCOPECREEP_BENCH_GRAB when Resolve sits elsewhere.
 INDICATOR = os.environ.get("SCOPECREEP_BENCH_GRAB", "1395,255 120x30")

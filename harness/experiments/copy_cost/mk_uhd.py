@@ -1,6 +1,7 @@
 """usage: mk_uhd.py FPS  -> creates scratch project scopecreep-test-s12-uhd-<fps> (from the yrgb drp) with UHD media, probe on timeline node."""
+import os
 import sys, time
-HARNESS = "/home/tom/GitHub/scopecreep/.claude/worktrees/agent-a9b6e642eccbe4530/harness"
+HARNESS = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..")
 sys.path.insert(0, HARNESS)
 from scopecreep_harness import resolve_api, projects, testmedia, dump
 
@@ -10,7 +11,7 @@ r = resolve_api.connect()
 pm = r.GetProjectManager()
 if name in (pm.GetProjectListInCurrentFolder() or []):
     projects.delete_project(pm, name)
-drp = "/home/tom/scopecreep-testdata/drp/scopecreep-test-yrgb-rec709g24.drp"
+drp = os.path.expanduser("~/scopecreep-testdata/drp/scopecreep-test-yrgb-rec709g24.drp")
 print("import", pm.ImportProject(drp, name))
 p = projects.load(pm, name)
 print("loaded", p and p.GetName())

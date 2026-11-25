@@ -4,7 +4,7 @@ timeline "no-sender" without it. Then turn on loop playback in Resolve and run r
 import os
 import sys
 
-sys.path.insert(0, "/home/tom/GitHub/scopecreep/harness")
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", ".."))
 from scopecreep_harness import paths, projects  # noqa: E402
 from scopecreep_harness.resolve_api import connect  # noqa: E402
 

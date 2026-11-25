@@ -3,7 +3,7 @@ CONFIG: off | on | on_reader | on_slowreader
 Plays the scratch UHD project for FPS from frame 0 by keystroke, with probe copy off/on (copy.off trigger file),
 reader process off/on, nvidia-smi dmon running. Saves everything needed to /tmp/s12/results/LABEL.json."""
 import json, os, subprocess, sys, threading, time, re
-HARNESS = "/home/tom/GitHub/scopecreep/.claude/worktrees/agent-a9b6e642eccbe4530/harness"
+HARNESS = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..")
 sys.path.insert(0, HARNESS)
 from scopecreep_harness import resolve_api, projects, viewer
 

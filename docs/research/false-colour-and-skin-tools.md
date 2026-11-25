@@ -37,7 +37,7 @@ Desk research for the milestone 2 design, done on 2026-11-16 from public sources
 ## EL Zone System
 
 - **Owner:** a trademark of Cinecam, Inc. (Ed Lachman, ASC); <https://www.elzonesystem.com>. The Sigma fp manual states "EL ZONE™ and EL ZONE SYSTEM™ are trademarks of Cinecam, Inc."
-- **Licensing:** case by case, with no public terms. Contact is ELZoneSystem@gmail.com or the site's contact form.
+- **Licensing:** case by case, with no public terms. Enquiries go through the site's contact form.
 - **Who ships it:**
   - Shipping: SmallHD, Atomos, Accsoon and Sony monitors, plus Sony Venice 2, RED, Panasonic and Sigma fp cameras.
   - "In discussions": ARRI, Blackmagic, Canon, Fujifilm and others.

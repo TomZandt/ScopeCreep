@@ -1,5 +1,6 @@
+import os
 import sys
-sys.path.insert(0, "/home/tom/GitHub/scopecreep/.claude/worktrees/agent-ae523918ca419f48a/harness")
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", ".."))
 from scopecreep_harness import resolve_api, render, setups
 r = resolve_api.connect()
 pm = r.GetProjectManager()

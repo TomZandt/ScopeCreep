@@ -1,5 +1,5 @@
 import sys, time, os
-HARNESS = "/home/tom/GitHub/scopecreep/.claude/worktrees/agent-a9b6e642eccbe4530/harness"
+HARNESS = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..")
 sys.path.insert(0, HARNESS)
 from scopecreep_harness import resolve_api
 r = resolve_api.connect()
