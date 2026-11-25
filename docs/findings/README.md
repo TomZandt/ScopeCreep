@@ -44,6 +44,7 @@ What we learned by testing, kept in the repo so it isn't lost when an issue thre
 | [58](58-stops-false-colour.md) | Milestone 2: does Stops False Colour measure the ColorChecker's published stops in every supported Timeline Colour Space, and do both modes paint the right zones (headless)? |
 | [62](62-cie-plot.md) | Milestone 2: does the CIE plot put every ColorChecker Patch at its reference chromaticity, draw the right triangles and label both spaces (headless)? |
 | [67](67-milestone-2-performance.md) | Milestone 2: does Resolve still play UHD 50 at 50 fps with the Sender, and with the app showing all 14 Panels? |
+| [242](242-release-ci.md) | Release CI: how does the Sender build on a GitHub runner without a GPU, and what is still unverified? |
 | [review-milestone-2](review-milestone-2.md) | Milestone 2 code review: what the review found in the integration branch, what was fixed and what was left, with the tests that pin it |
 | [114](114-style-tokens.md) | Style: are chrome colours and sizes tokens by role with no visible change, and does the check catch a raw literal? |
 | [115](115-style-components.md) | Style: do the components lay out and look right in every state at 1x and 2x, and is every legend horizontal? |

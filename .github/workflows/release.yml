@@ -24,10 +24,19 @@ jobs:
       list: ${{ steps.list.outputs.list }}
     steps:
       - uses: actions/checkout@v4
+      # A bad tag fails here, before any build.
+      - name: Check the tag
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: scripts/check-release-tag.sh "$GITHUB_REF_NAME"
+
+      # Windows and macOS ports add their runner to the build job and lift this check.
       - id: list
         name: Read packaging/platforms.txt
         run: |
-          list=$(grep -v -E '^\s*(#|$)' packaging/platforms.txt | jq -R . | jq -s -c .)
+          for p in $(scripts/platforms.sh); do
+            [[ $p == linux ]] || { echo "::error::platform '$p' is in packaging/platforms.txt but release.yml has no runner for it"; exit 1; }
+          done
+          list=$(scripts/platforms.sh --json)
           echo "platforms: $list"
           echo "list=$list" >> "$GITHUB_OUTPUT"
 
@@ -45,7 +54,7 @@ jobs:
 
       - name: Workspace version
         id: version
-        run: echo "version=$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -1)" >> "$GITHUB_OUTPUT"
+        run: echo "version=$(scripts/workspace-version.sh)" >> "$GITHUB_OUTPUT"
 
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
@@ -122,7 +131,7 @@ jobs:
         run: |
           mkdir dist
           : > included.txt
-          for platform in $(grep -v -E '^\s*(#|$)' packaging/platforms.txt); do
+          for platform in $(scripts/platforms.sh); do
             files=(artifacts/*/scopecreep-"$VERSION"-"$platform"-*.tar.gz)
             [[ -f ${files[0]} ]] || { echo "no Installer for $platform" >&2; exit 1; }
             cp "${files[@]}" dist/
@@ -136,12 +145,13 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           VERSION: ${{ steps.tag.outputs.version }}
         run: |
+          # The platforms line goes first so the notes end with the "Full changelog" link.
           {
-            scripts/release-notes.sh "$VERSION"
-            echo
             echo "Platforms included: $(paste -sd, included.txt | sed 's/,/, /g')."
+            echo
+            scripts/release-notes.sh "$VERSION"
           } > notes.md
           flags=()
           [[ $VERSION == 0.* ]] && flags+=(--prerelease)
           gh release create "$GITHUB_REF_NAME" dist/*.tar.gz dist/SHA256SUMS \
-            --title "$VERSION" --notes-file notes.md --verify-tag "${flags[@]}"
+            --title "$VERSION" --notes-file notes.md --verify-tag ${flags[@]+"${flags[@]}"}

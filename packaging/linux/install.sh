@@ -15,9 +15,9 @@ ofx_dir=${SCOPECREEP_OFX_DIR:-/usr/OFX/Plugins}
 sudo_cmd=${SCOPECREEP_SUDO:-sudo}
 bundle=scopecreep_sender.ofx.bundle
 
-# run DIR CMD...: runs CMD as you when DIR (or the nearest folder above it) is writable,
+# as_owner_or_admin DIR CMD...: runs CMD as you when DIR (or the nearest folder above it) is writable,
 # and with admin rights, after saying so, when it is not.
-run() {
+as_owner_or_admin() {
   local dir=$1
   shift
   local probe=$dir
@@ -32,19 +32,19 @@ run() {
 
 install_all() {
   [[ -f $here/scopecreep && -d $here/$bundle ]] || { echo "install.sh: the app or the Sender is missing next to this script" >&2; exit 1; }
-  run "$bin_dir" mkdir -p "$bin_dir"
-  run "$bin_dir" install -m755 "$here/scopecreep" "$bin_dir/scopecreep"
+  as_owner_or_admin "$bin_dir" mkdir -p "$bin_dir"
+  as_owner_or_admin "$bin_dir" install -m755 "$here/scopecreep" "$bin_dir/scopecreep"
   echo "Installed the app: $bin_dir/scopecreep"
-  run "$ofx_dir" mkdir -p "$ofx_dir"
-  run "$ofx_dir" rm -rf "$ofx_dir/$bundle"
-  run "$ofx_dir" cp -r "$here/$bundle" "$ofx_dir/$bundle"
+  as_owner_or_admin "$ofx_dir" mkdir -p "$ofx_dir"
+  as_owner_or_admin "$ofx_dir" rm -rf "$ofx_dir/$bundle"
+  as_owner_or_admin "$ofx_dir" cp -r "$here/$bundle" "$ofx_dir/$bundle"
   echo "Installed the Sender: $ofx_dir/$bundle"
   echo "Restart DaVinci Resolve: it only looks for OpenFX plugins when it starts."
 }
 
 uninstall_all() {
-  run "$bin_dir" rm -f "$bin_dir/scopecreep"
-  run "$ofx_dir" rm -rf "$ofx_dir/$bundle"
+  as_owner_or_admin "$bin_dir" rm -f "$bin_dir/scopecreep"
+  as_owner_or_admin "$ofx_dir" rm -rf "$ofx_dir/$bundle"
   echo "Removed ScopeCreep. Restart DaVinci Resolve so it forgets the Sender."
 }
 

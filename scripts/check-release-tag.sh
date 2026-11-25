@@ -15,8 +15,7 @@ changelog=${3:-$root/CHANGELOG.md}
   || { echo "check-release-tag: '$tag' is not a vX.Y.Z tag" >&2; exit 1; }
 version=${tag#v}
 
-workspace=$(sed -n 's/^version = "\(.*\)"/\1/p' "$cargo" | head -1)
-[[ -n $workspace ]] || { echo "check-release-tag: no version in $cargo" >&2; exit 1; }
+workspace=$("$root/scripts/workspace-version.sh" "$cargo")
 [[ $workspace == "$version" ]] \
   || { echo "check-release-tag: tag $tag does not match the workspace version $workspace" >&2; exit 1; }
 

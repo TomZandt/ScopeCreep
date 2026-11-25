@@ -12,6 +12,8 @@ ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 PACKAGE = os.path.join(ROOT, "scripts", "package-linux.sh")
 NOTES = os.path.join(ROOT, "scripts", "release-notes.sh")
 CHECK_TAG = os.path.join(ROOT, "scripts", "check-release-tag.sh")
+VERSION = os.path.join(ROOT, "scripts", "workspace-version.sh")
+PLATFORMS = os.path.join(ROOT, "scripts", "platforms.sh")
 
 CHANGELOG = """# Changelog
 
@@ -262,6 +264,56 @@ class CheckReleaseTagTest(unittest.TestCase):
     def test_a_tag_that_is_not_a_version_fails(self):
         r = self.check("release-1")
         self.assertNotEqual(r.returncode, 0)
+
+
+class WorkspaceVersionTest(unittest.TestCase):
+    def test_reads_the_first_version(self):
+        with tempfile.NamedTemporaryFile("w", suffix=".toml") as f:
+            f.write('[workspace.package]\nversion = "1.2.0"\n[x]\nversion = "9"\n')
+            f.flush()
+            r = run([VERSION, f.name])
+        self.assertEqual(r.stdout.strip(), "1.2.0")
+
+    def test_fails_without_a_version(self):
+        with tempfile.NamedTemporaryFile("w", suffix=".toml") as f:
+            f.write("[x]\n")
+            f.flush()
+            r = run([VERSION, f.name])
+        self.assertNotEqual(r.returncode, 0)
+
+    def test_matches_the_real_cargo_toml(self):
+        r = run([VERSION])
+        self.assertRegex(r.stdout.strip(), r"^\d+\.\d+\.\d+")
+
+
+class PlatformsTest(unittest.TestCase):
+    def read(self, text, *flags):
+        with tempfile.NamedTemporaryFile("w", suffix=".txt") as f:
+            f.write(text)
+            f.flush()
+            return run([PLATFORMS, *flags, f.name])
+
+    def test_lists_names_without_comments_and_blanks(self):
+        r = self.read("# c\nlinux\n\n  # d\nwindows\n")
+        self.assertEqual(r.stdout.split(), ["linux", "windows"])
+
+    def test_json_is_an_array(self):
+        r = self.read("# c\nlinux\nwindows\n", "--json")
+        self.assertEqual(r.stdout.strip(), '["linux","windows"]')
+
+    def test_an_empty_list_fails(self):
+        self.assertNotEqual(self.read("# nothing\n").returncode, 0)
+
+    def test_real_list_has_linux(self):
+        self.assertIn("linux", run([PLATFORMS]).stdout.split())
+
+
+class ReleaseWorkflowTest(unittest.TestCase):
+    def test_the_changelog_link_ends_the_notes(self):
+        r = run([NOTES, "0.3.1"])
+        self.assertTrue(r.stdout.rstrip().splitlines()[-1].startswith("Full changelog:"))
+        wf = open(os.path.join(ROOT, ".github", "workflows", "release.yml")).read()
+        self.assertLess(wf.index("Platforms included"), wf.index("scripts/release-notes.sh"))
 
 
 if __name__ == "__main__":
