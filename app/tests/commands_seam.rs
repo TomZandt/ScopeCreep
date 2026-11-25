@@ -53,8 +53,8 @@ fn every_page_up_to_nine_has_a_go_to_command_and_the_save_commands_are_gone() {
     let all = Command::all();
     assert_eq!(
         all.len(),
-        1 + 9 + 3 + 9,
-        "Default layout, go to each of nine pages, new, duplicate and delete page, auto layout, auto resize, the Fit toggle, fill the Window, the legends, add and close a Panel, undo a layout change, reset all Panels"
+        1 + 9 + 3 + 9 + 6,
+        "Default layout, go to each of nine pages, new, duplicate and delete page, auto layout, auto resize, the Fit toggle, fill the Window, the legends, add and close a Panel, undo a layout change, reset all Panels, and the six Help links"
     );
     for page in 0..9 {
         assert!(all.contains(&Command::GoToPage(page)));
@@ -359,4 +359,38 @@ fn reset_all_panels_is_a_command_with_no_default_hotkey() {
     assert_eq!(command.label(), "Panels: reset all to defaults");
     assert!(Command::all().contains(&command));
     assert_eq!(Hotkeys::default().get(command), None);
+}
+
+#[test]
+fn the_help_commands_have_stable_ids_no_default_hotkey_and_can_be_given_one() {
+    let help = [
+        (Command::Licence, "help-licence", "Help: Licence"),
+        (Command::Changelog, "help-changelog", "Help: Changelog"),
+        (Command::Website, "help-website", "Help: Website"),
+        (
+            Command::ReportProblem,
+            "help-report-problem",
+            "Help: Report a problem",
+        ),
+        (
+            Command::CheckForUpdates,
+            "help-check-for-updates",
+            "Help: Check for updates",
+        ),
+        (
+            Command::BuyMeACoffee,
+            "help-buy-me-a-coffee",
+            "Help: Buy Me a Coffee",
+        ),
+    ];
+    for (command, id, label) in help {
+        assert_eq!(command.id(), id);
+        assert_eq!(command.label(), label);
+        assert!(Command::all().contains(&command));
+        assert_eq!(Hotkeys::default().get(command), None);
+        let mut hotkeys = Hotkeys::default();
+        hotkeys.assign(command, ctrl("H")).unwrap();
+        assert_eq!(hotkeys.command_for(ctrl("H")), Some(command));
+        assert_eq!(Hotkeys::from_text(&hotkeys.to_text()), hotkeys);
+    }
 }

@@ -8,6 +8,7 @@ use crate::components::{DropMenu, MenuBar, MenuEntry, MenuItem};
 pub const LAYOUT: usize = 0;
 pub const VIEW: usize = 1;
 pub const SETTINGS: usize = 2;
+pub const HELP: usize = 3;
 
 /// The menu bar's titles.
 pub fn bar() -> MenuBar {
@@ -16,6 +17,7 @@ pub fn bar() -> MenuBar {
             "Layout".to_string(),
             "View".to_string(),
             "Settings".to_string(),
+            "Help".to_string(),
         ],
     }
 }
@@ -326,6 +328,26 @@ pub fn settings_menu() -> Menu {
     menu
 }
 
+/// The Help menu (#231): each entry opens a page in the system browser (see [`crate::links`]). None has a default
+/// hotkey; each shows the one it is given.
+pub fn help_menu(hotkeys: &Hotkeys) -> Menu {
+    let mut menu = Menu::new();
+    for (label, command) in [
+        ("Licence…", Command::Licence),
+        ("Changelog…", Command::Changelog),
+        ("Website", Command::Website),
+        ("Report a problem…", Command::ReportProblem),
+        ("Check for updates", Command::CheckForUpdates),
+        ("Buy Me a Coffee…", Command::BuyMeACoffee),
+    ] {
+        menu.push(
+            MenuEntry::Item(MenuItem::new(label, &hotkey_text(hotkeys, command))),
+            Some(MenuAction::Run(command)),
+        );
+    }
+    menu
+}
+
 /// The confirm row Reset all Panels asks with, in the Settings menu's place (#228): what goes back, then Cancel
 /// (first, and the one Enter takes) and Reset. Undo never touches display settings, so it asks first.
 pub fn reset_confirm_menu() -> Menu {
@@ -396,6 +418,12 @@ pub fn largest_menus() -> Vec<DropMenu> {
         let _ = view.replace(Command::ToggleLegends, hotkey);
     }
     menus.push(view_menu(&view, true).drop);
+    menus.push(help_menu(&Hotkeys::default()).drop);
+    if let Some(hotkey) = widest {
+        let mut help = Hotkeys::default();
+        let _ = help.replace(Command::BuyMeACoffee, hotkey);
+        menus.push(help_menu(&help).drop);
+    }
     if let Some(hotkey) = widest {
         let panel = HotkeysPanel {
             state: State::Conflict {

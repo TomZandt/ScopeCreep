@@ -34,6 +34,7 @@ use scopecreep::hotkeys_panel::HotkeysPanel;
 use scopecreep::layout::MARGIN;
 use scopecreep::layout_tree::{Border, Dir, Edge, LayoutTree, Press};
 use scopecreep::layouts::Layouts;
+use scopecreep::links;
 use scopecreep::menu_bar::{self, AddEntry, BarState, LayoutMode, MenuAction, Template};
 use scopecreep::monitor::Monitor;
 use scopecreep::output_conversion::OutputConversion;
@@ -952,6 +953,7 @@ impl AppWindow {
                 (None, Some(panel)) => panel.menu(self.accent),
                 (None, None) => menu_bar::settings_menu(),
             }),
+            menu_bar::HELP => Some(menu_bar::help_menu(&self.hotkeys)),
             _ => None,
         }
     }
@@ -1524,6 +1526,23 @@ impl AppWindow {
                         .toggle_fit(panel, self.contents[panel], self.scale)
                 {
                     self.window.request_redraw();
+                }
+                return;
+            }
+            Command::Licence
+            | Command::Changelog
+            | Command::Website
+            | Command::ReportProblem
+            | Command::CheckForUpdates
+            | Command::BuyMeACoffee => {
+                // A page in the browser: nothing in the Window changes, and a failure to open only logs.
+                let protocol = format!(
+                    "{}.{}",
+                    scopecreep_feed::VERSION_MAJOR,
+                    scopecreep_feed::VERSION_MINOR
+                );
+                if let Some(url) = links::address(command, env!("CARGO_PKG_VERSION"), &protocol) {
+                    links::open_in_browser(&url);
                 }
                 return;
             }

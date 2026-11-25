@@ -1601,7 +1601,27 @@ impl DropMenu {
             }
     }
 
-    /// Its size: wide enough for the longest name and hotkey, at least the popover's width.
+    /// The entries' columns, as entry numbers. A menu is one column; one taller than the style's cap flows on into
+    /// the next column, so a long list (the Hotkeys panel) stays within the Window.
+    fn columns(&self, scale: f32) -> Vec<Vec<usize>> {
+        let cap = style::SPACE_MENU_MAX_HEIGHT * scale;
+        let mut columns: Vec<Vec<usize>> = vec![Vec::new()];
+        let mut used = 0.0;
+        for (i, e) in self.entries.iter().enumerate() {
+            let h = DropMenu::entry_height(e, scale);
+            if used + h > cap && used > 0.0 {
+                columns.push(Vec::new());
+                used = 0.0;
+            }
+            used += h;
+            if let Some(column) = columns.last_mut() {
+                column.push(i);
+            }
+        }
+        columns
+    }
+
+    /// Its size: wide enough for the longest name and hotkey, at least the popover's width, once per column.
     pub fn size(&self, scale: f32) -> [f32; 2] {
         let widest = self
             .entries
@@ -1624,12 +1644,19 @@ impl DropMenu {
                 MenuEntry::Separator => 0.0,
             })
             .fold(style::SPACE_MENU_WIDTH * scale, f32::max);
-        let rows: f32 = self
-            .entries
+        let columns = self.columns(scale);
+        let rows = columns
             .iter()
-            .map(|e| DropMenu::entry_height(e, scale))
-            .sum();
-        [widest, rows + 2.0 * style::SPACE_MENU_PAD * scale]
+            .map(|c| {
+                c.iter()
+                    .map(|&i| DropMenu::entry_height(&self.entries[i], scale))
+                    .sum::<f32>()
+            })
+            .fold(0.0, f32::max);
+        [
+            widest * columns.len() as f32,
+            rows + 2.0 * style::SPACE_MENU_PAD * scale,
+        ]
     }
 
     /// Where it drops: under `title` (the bar title it belongs to), its left edge on the title's, moved left as
@@ -1659,18 +1686,20 @@ impl DropMenu {
         [anchor[0].min(window[0] - w).max(0.0), y, w, h]
     }
 
-    /// Each entry's row inside `area`.
+    /// Each entry's row inside `area`, column by column.
     pub fn entry_rects(&self, area: [f32; 4], scale: f32) -> Vec<[f32; 4]> {
-        let mut y = area[1] + style::SPACE_MENU_PAD * scale;
-        self.entries
-            .iter()
-            .map(|e| {
-                let h = DropMenu::entry_height(e, scale);
-                let r = [area[0], y, area[2], h];
+        let columns = self.columns(scale);
+        let width = area[2] / columns.len() as f32;
+        let mut rects = vec![[0.0; 4]; self.entries.len()];
+        for (c, column) in columns.iter().enumerate() {
+            let mut y = area[1] + style::SPACE_MENU_PAD * scale;
+            for &i in column {
+                let h = DropMenu::entry_height(&self.entries[i], scale);
+                rects[i] = [area[0] + c as f32 * width, y, width, h];
                 y += h;
-                r
-            })
-            .collect()
+            }
+        }
+        rects
     }
 
     /// The swatch under `point`: its entry and its place in the row.

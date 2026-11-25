@@ -6,6 +6,9 @@ The format follows [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/
 
 ## [Unreleased]
 
+### Added
+- A Help menu, last on the Menu bar after Settings (#231, spec #230): Licence…, Changelog…, Website, Report a problem…, Check for updates and Buy Me a Coffee… each open the right page in the system browser (Report a problem opens a new GitHub issue with the version and Feed protocol filled in). The Hotkeys panel, now long, flows into a second column when it passes the menu height cap, so the Window's least size is 1420 × 764 (was 833). Each is a Command with no default Hotkey (`help-*`), so it can be given one in the Hotkeys panel. The app itself never goes online; a failure to open the browser only logs. About ScopeCreep… comes next.
+
 ## [0.4.0] - 2026-11-25
 
 ### Added

@@ -25,6 +25,7 @@ pub mod layout;
 pub mod layout_history;
 pub mod layout_tree;
 pub mod layouts;
+pub mod links;
 pub mod loupe;
 pub mod measurement;
 pub mod menu_bar;

@@ -4,9 +4,10 @@
 use scopecreep::commands::{Command, Hotkey, Hotkeys, Key};
 use scopecreep::components::*;
 use scopecreep::layout_tree::LayoutTree;
+use scopecreep::links;
 use scopecreep::menu_bar::{
-    self, BarState, LAYOUT, LayoutMode, MenuAction, SETTINGS, Template, VIEW, layout_menu,
-    view_menu,
+    self, BarState, HELP, LAYOUT, LayoutMode, MenuAction, SETTINGS, Template, VIEW, help_menu,
+    layout_menu, view_menu,
 };
 use scopecreep::style;
 
@@ -565,11 +566,11 @@ fn every_layout_menu_fits_the_smallest_window() {
 #[test]
 fn the_view_title_sits_between_layout_and_settings_and_is_hit_where_drawn() {
     let bar = menu_bar::bar();
-    assert_eq!(bar.titles, ["Layout", "View", "Settings"]);
-    assert_eq!((LAYOUT, VIEW, SETTINGS), (0, 1, 2));
+    assert_eq!(bar.titles, ["Layout", "View", "Settings", "Help"]);
+    assert_eq!((LAYOUT, VIEW, SETTINGS, HELP), (0, 1, 2, 3));
     for scale in SCALES {
         let rects = bar.title_rects(0.0, 0.0, scale);
-        assert_eq!(rects.len(), 3);
+        assert_eq!(rects.len(), 4);
         assert_eq!(rects[0][0] + rects[0][2], rects[1][0], "no gap");
         assert_eq!(rects[1][0] + rects[1][2], rects[2][0], "no gap");
         assert_eq!(rects[VIEW][3], MenuBar::height(scale));
@@ -708,5 +709,137 @@ fn the_confirm_row_names_what_goes_back_and_offers_cancel_first_then_reset_at_1x
             r[2] >= text_width(headings[1], scale),
             "wide enough at {scale}x"
         );
+    }
+}
+
+// ---- The Help menu (#231, spec #230) ----
+
+const REPO: &str = "https://github.com/TomZandt/ScopeCreep";
+
+#[test]
+fn help_is_the_last_title_after_settings() {
+    let bar = menu_bar::bar();
+    assert_eq!(bar.titles.last().map(String::as_str), Some("Help"));
+    assert_eq!(HELP, SETTINGS + 1);
+}
+
+#[test]
+fn the_help_menu_lists_its_entries_in_order_each_running_its_command() {
+    let menu = help_menu(&Hotkeys::default());
+    let want = [
+        ("Licence…", Command::Licence),
+        ("Changelog…", Command::Changelog),
+        ("Website", Command::Website),
+        ("Report a problem…", Command::ReportProblem),
+        ("Check for updates", Command::CheckForUpdates),
+        ("Buy Me a Coffee…", Command::BuyMeACoffee),
+    ];
+    let got: Vec<String> = items(&menu).into_iter().map(|(_, it)| it.label).collect();
+    assert_eq!(got, want.map(|(l, _)| l));
+    for (label, command) in want {
+        let (i, entry) = item(&menu, label);
+        assert!(entry.enabled);
+        assert_eq!(entry.hotkey, "", "no default hotkey");
+        assert_eq!(menu.action(i), Some(MenuAction::Run(command)));
+    }
+}
+
+#[test]
+fn a_help_entry_shows_the_hotkey_it_is_given() {
+    let mut hotkeys = Hotkeys::default();
+    hotkeys
+        .assign(Command::Website, Hotkey::ctrl(Key::named("H").unwrap()))
+        .unwrap();
+    let (_, entry) = item(&help_menu(&hotkeys), "Website");
+    assert_eq!(entry.hotkey, "Ctrl+H");
+}
+
+#[test]
+fn each_link_command_gives_its_address() {
+    let at = |c| links::address(c, "1.2.3", "1.2");
+    assert_eq!(
+        at(Command::Licence).as_deref(),
+        Some(format!("{REPO}/blob/main/LICENSING.md").as_str())
+    );
+    assert_eq!(
+        at(Command::Changelog).as_deref(),
+        Some(format!("{REPO}/blob/main/CHANGELOG.md").as_str())
+    );
+    assert_eq!(
+        at(Command::Website).as_deref(),
+        Some("https://www.tomzandtvalentine.co.uk/")
+    );
+    assert_eq!(
+        at(Command::CheckForUpdates).as_deref(),
+        Some(format!("{REPO}/releases").as_str())
+    );
+    assert_eq!(
+        at(Command::BuyMeACoffee).as_deref(),
+        Some("https://www.buymeacoffee.com/tomzandtvalentine")
+    );
+    assert_eq!(at(Command::DefaultLayout), None, "not a link");
+}
+
+#[test]
+fn report_a_problem_opens_a_new_issue_carrying_the_version_and_feed_protocol() {
+    let url = links::address(Command::ReportProblem, "1.2.3", "1.2").unwrap();
+    let (base, query) = url.split_once('?').unwrap();
+    assert_eq!(base, format!("{REPO}/issues/new"));
+    let body = query.strip_prefix("body=").expect("the body is filled in");
+    assert!(
+        body.bytes()
+            .all(|b| b.is_ascii_alphanumeric() || b"-_.~%".contains(&b)),
+        "URL-encoded: {body}"
+    );
+    assert!(body.contains("ScopeCreep%201.2.3"));
+    assert!(body.contains("Feed%20protocol%201.2"));
+    let odd = links::address(Command::ReportProblem, "1 & 2#x", "1.2").unwrap();
+    assert!(
+        odd.contains("1%20%26%202%23x"),
+        "odd characters are encoded"
+    );
+}
+
+#[test]
+fn the_help_menu_fits_a_small_window_at_1x_and_2x() {
+    let menu = help_menu(&Hotkeys::default());
+    for scale in SCALES {
+        let window = [1015.0 * scale, 645.0 * scale];
+        let title = menu_bar::bar().title_rects(0.0, 0.0, scale)[HELP];
+        let r = menu.drop.rect(title, window, scale);
+        assert!(r[0] >= 0.0 && r[0] + r[2] <= window[0] + 0.01, "across");
+        assert!(r[1] + r[3] <= window[1] + 0.01, "down");
+        for (i, _) in items(&menu) {
+            let row = menu.drop.entry_rects(r, scale)[i];
+            assert_eq!(menu.drop.hit(r, centre(row), scale), Some(i));
+        }
+    }
+    assert!(
+        menu_bar::largest_menus().contains(&menu.drop),
+        "the Window's least size is checked against it"
+    );
+}
+
+#[test]
+fn a_menu_taller_than_the_cap_flows_into_a_second_column_with_every_row_hit() {
+    let long = DropMenu {
+        entries: (0..40)
+            .map(|i| MenuEntry::Item(MenuItem::new(&format!("Entry {i}"), "")))
+            .collect(),
+    };
+    let one = DropMenu {
+        entries: long.entries[..5].to_vec(),
+    };
+    for scale in SCALES {
+        let [w1, h1] = one.size(scale);
+        let [w, h] = long.size(scale);
+        assert!(w >= 2.0 * w1 - 0.01, "a second column is as wide again");
+        assert!(h <= style::SPACE_MENU_MAX_HEIGHT * scale + 2.0 * style::SPACE_MENU_PAD * scale);
+        assert!(h > h1);
+        let area = [0.0, 0.0, w, h];
+        for (i, r) in long.entry_rects(area, scale).into_iter().enumerate() {
+            assert!(r[0] >= 0.0 && r[0] + r[2] <= w + 0.01 && r[1] + r[3] <= h + 0.01);
+            assert_eq!(long.hit(area, centre(r), scale), Some(i));
+        }
     }
 }

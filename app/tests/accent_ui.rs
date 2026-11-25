@@ -986,7 +986,7 @@ fn the_window_default_is_at_least_its_least_size_and_every_size_goes_through_tok
         "False Colour - Stops",
     ]);
     let [w, h] = scopecreep::layout::min_window(&tree, &menu_bar::largest_menus());
-    assert_eq!([w, h], [1420.0, 833.0]);
+    assert_eq!([w, h], [1420.0, 764.0]);
     // The Window opens at 1440 x 840, over it.
     assert!(w <= 1440.0 && h <= 840.0);
     // The spacing tokens of the demo.

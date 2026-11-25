@@ -371,6 +371,21 @@ pub fn showcase(scale: f32) -> Showcase {
     prims.extend(drop.draw(area, Some(3), false, scale));
     y = area[1] + area[3] + row * 0.5;
 
+    prims.push(caption("Help menu", margin, y, label_w));
+    let help = crate::menu_bar::help_menu(&crate::commands::Hotkeys::default()).drop;
+    let help_title = menu_bar.title_rects(margin + label_w, y, scale)[crate::menu_bar::HELP];
+    let help_area = help.rect(help_title, [width, f32::MAX], scale);
+    prims.extend(menu_bar.draw(
+        margin + label_w,
+        y,
+        column * 4.0,
+        Some(crate::menu_bar::HELP),
+        None,
+        scale,
+    ));
+    prims.extend(help.draw(help_area, Some(1), false, scale));
+    y = help_area[1] + help_area[3] + row * 0.5;
+
     prims.push(caption("Top bar", margin, y, label_w));
     prims.extend(bar(
         BarKind::Top,

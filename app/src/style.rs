@@ -130,6 +130,8 @@ pub const SPACE_REFERENCE_GAP: f32 = 8.0;
 pub const SPACE_MENU_WIDTH: f32 = 230.0;
 pub const SPACE_MENU_ROW: f32 = 30.0;
 pub const SPACE_MENU_PAD: f32 = 6.0;
+/// The tallest a menu's column grows; a longer list flows into a second column (the Hotkeys panel).
+pub const SPACE_MENU_MAX_HEIGHT: f32 = 720.0;
 /// Inside a menu row: the on-mark's left edge and side, the text's left edge (the heading's is nearer), and the
 /// room the text gives up on the right.
 pub const SPACE_MENU_MARK_LEFT: f32 = 12.0;

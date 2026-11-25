@@ -44,6 +44,18 @@ pub enum Command {
     /// Put every Panel's settings, on every page, back to its display's defaults, after asking (the Settings menu,
     /// #228). Leaves the arrangement, zoom, Link and the app's preferences alone. No default hotkey.
     ResetAllPanels,
+    /// Open the plain-English licence page in the browser (the Help menu, #231). No default hotkey.
+    Licence,
+    /// Open the changelog page in the browser (the Help menu, #231). No default hotkey.
+    Changelog,
+    /// Open the author's website in the browser (the Help menu, #231). No default hotkey.
+    Website,
+    /// Open a new GitHub issue with the version and Feed protocol filled in (the Help menu, #231). No default hotkey.
+    ReportProblem,
+    /// Open the Releases page in the browser (the Help menu, #231). No default hotkey.
+    CheckForUpdates,
+    /// Open the Buy Me a Coffee page in the browser (the Help menu, #231). No default hotkey.
+    BuyMeACoffee,
 }
 
 impl Command {
@@ -64,6 +76,12 @@ impl Command {
         all.push(Command::ClosePanel);
         all.push(Command::UndoLayout);
         all.push(Command::ResetAllPanels);
+        all.push(Command::Licence);
+        all.push(Command::Changelog);
+        all.push(Command::Website);
+        all.push(Command::ReportProblem);
+        all.push(Command::CheckForUpdates);
+        all.push(Command::BuyMeACoffee);
         all
     }
 
@@ -84,6 +102,12 @@ impl Command {
             Command::ClosePanel => "panel-close".to_string(),
             Command::UndoLayout => "layout-undo".to_string(),
             Command::ResetAllPanels => "panels-reset-all".to_string(),
+            Command::Licence => "help-licence".to_string(),
+            Command::Changelog => "help-changelog".to_string(),
+            Command::Website => "help-website".to_string(),
+            Command::ReportProblem => "help-report-problem".to_string(),
+            Command::CheckForUpdates => "help-check-for-updates".to_string(),
+            Command::BuyMeACoffee => "help-buy-me-a-coffee".to_string(),
         }
     }
 
@@ -104,11 +128,17 @@ impl Command {
             Command::ClosePanel => "Panel: close".to_string(),
             Command::UndoLayout => "Layout: undo change".to_string(),
             Command::ResetAllPanels => "Panels: reset all to defaults".to_string(),
+            Command::Licence => "Help: Licence".to_string(),
+            Command::Changelog => "Help: Changelog".to_string(),
+            Command::Website => "Help: Website".to_string(),
+            Command::ReportProblem => "Help: Report a problem".to_string(),
+            Command::CheckForUpdates => "Help: Check for updates".to_string(),
+            Command::BuyMeACoffee => "Help: Buy Me a Coffee".to_string(),
         }
     }
 
     /// The hotkey the command has until the user changes it: Ctrl+1 to 9 to go to a page, Z for the Fit toggle, Ctrl+F to fill the Window with a Panel, Ctrl+Z to undo a layout change. Default layout, the legends,
-    /// adding and closing a Panel and the page commands that make or remove a page have none.
+    /// adding and closing a Panel, the page commands that make or remove a page and the Help links have none.
     pub fn default_hotkey(self) -> Option<Hotkey> {
         let digit = |slot: usize| Key::named(&(slot + 1).to_string());
         match self {
@@ -121,7 +151,13 @@ impl Command {
             | Command::DeletePage
             | Command::AutoLayout
             | Command::AutoResize
-            | Command::ResetAllPanels => None,
+            | Command::ResetAllPanels
+            | Command::Licence
+            | Command::Changelog
+            | Command::Website
+            | Command::ReportProblem
+            | Command::CheckForUpdates
+            | Command::BuyMeACoffee => None,
             Command::GoToPage(page) => digit(page).map(Hotkey::ctrl),
             Command::ZoomFit => Key::named("Z").map(Hotkey::new),
             Command::FillWindow => Key::named("F").map(Hotkey::ctrl),
