@@ -1,4 +1,5 @@
 //! The style components on the pure seam (#115): size, hit area, states and drawing, at 1x and 2x. No GPU.
+use scopecreep::commands::Command;
 use scopecreep::components::*;
 use scopecreep::settings::{Choice, Menu, PanelSettings, SettingDef};
 use scopecreep::style;
@@ -681,6 +682,7 @@ fn the_showcase_draws_every_component_in_every_state_at_both_scales() {
             "Slider with number",
             "Settings button",
             "Popover, Tooltip",
+            "About popover",
             "Title bar: focused, +N, Scope",
             "Tab strip, edge +",
             "Appearance: accent",
@@ -699,4 +701,128 @@ fn the_showcase_draws_every_component_in_every_state_at_both_scales() {
         texts(&two.prims),
         "the same sheet at either scale"
     );
+}
+
+// ---- About popover (#232, spec #230) ----
+
+fn about() -> AboutPopover {
+    AboutPopover::new("1.2.3", "1.2")
+}
+
+const WINDOW: [f32; 2] = [1420.0, 764.0];
+
+fn inside(outer: [f32; 4], inner: [f32; 4]) -> bool {
+    inner[0] >= outer[0] - 0.01
+        && inner[1] >= outer[1] - 0.01
+        && inner[0] + inner[2] <= outer[0] + outer[2] + 0.01
+        && inner[1] + inner[3] <= outer[1] + outer[3] + 0.01
+}
+
+fn centre_of(r: [f32; 4]) -> [f32; 2] {
+    [r[0] + r[2] / 2.0, r[1] + r[3] / 2.0]
+}
+
+#[test]
+fn the_about_popover_is_centred_in_the_window_and_scales_with_the_display() {
+    let (one, two) = (
+        about().layout(WINDOW, 1.0),
+        about().layout([2.0 * WINDOW[0], 2.0 * WINDOW[1]], 2.0),
+    );
+    for (l, window, scale) in [
+        (&one, WINDOW, 1.0),
+        (&two, [2.0 * WINDOW[0], 2.0 * WINDOW[1]], 2.0),
+    ] {
+        let a = l.area;
+        assert!((a[0] + a[2] / 2.0 - window[0] / 2.0).abs() < 0.5, "across");
+        assert!((a[1] + a[3] / 2.0 - window[1] / 2.0).abs() < 0.5, "down");
+        assert!((a[2] - style::SPACE_ABOUT_WIDTH * scale).abs() < 0.01);
+    }
+    assert!((two.area[2] - 2.0 * one.area[2]).abs() < 0.01);
+    assert!((two.area[3] - 2.0 * one.area[3]).abs() < 0.01);
+}
+
+#[test]
+fn the_about_popover_stays_inside_a_small_window() {
+    for scale in [1.0, 2.0] {
+        let window = [1015.0 * scale, 645.0 * scale];
+        let a = about().layout(window, scale).area;
+        assert!(inside([0.0, 0.0, window[0], window[1]], a));
+    }
+}
+
+#[test]
+fn the_about_popover_says_the_name_version_credit_and_licence_at_both_scales() {
+    for scale in [1.0, 2.0] {
+        let window = [WINDOW[0] * scale, WINDOW[1] * scale];
+        let l = about().layout(window, scale);
+        let said = texts(&about().draw(window, [0.0, 0.0], scale));
+        assert!(said.contains(&"ScopeCreep".to_string()), "the wordmark");
+        assert!(
+            said.contains(&"ScopeCreep 1.2.3 (Feed protocol 1.2)".to_string()),
+            "the text --version prints: {said:?}"
+        );
+        assert!(said.contains(&"by Tom Zandt-Valentine".to_string()));
+        assert!(
+            said.join(" ").contains(
+                "\u{a9} 2026 Tom Zandt-Valentine \u{b7} free to use, including paid work; selling or bundling needs a commercial licence"
+            ),
+            "the licence line, wrapped inside the popover: {said:?}"
+        );
+        for p in about().draw(window, [0.0, 0.0], scale) {
+            if let Prim::Text { rect, .. } = p {
+                assert!(inside(l.area, rect), "text {rect:?} outside {:?}", l.area);
+            }
+        }
+    }
+}
+
+#[test]
+fn the_about_popover_links_are_website_licence_and_buy_me_a_coffee_with_real_hit_areas() {
+    for scale in [1.0, 2.0] {
+        let window = [WINDOW[0] * scale, WINDOW[1] * scale];
+        let l = about().layout(window, scale);
+        let got: Vec<Command> = l.links.iter().map(|(c, _)| *c).collect();
+        assert_eq!(
+            got,
+            [Command::Website, Command::Licence, Command::BuyMeACoffee]
+        );
+        for (command, rect) in &l.links {
+            assert!(inside(l.area, *rect));
+            assert!(
+                rect[3] >= style::SPACE_CHIP_HEIGHT * scale - 0.01,
+                "tall enough to hit"
+            );
+            assert_eq!(
+                about().hit(window, centre_of(*rect), scale),
+                AboutHit::Link(*command)
+            );
+        }
+        for pair in l.links.windows(2) {
+            assert!(pair[0].1[0] + pair[0].1[2] <= pair[1].1[0], "no overlap");
+        }
+    }
+}
+
+#[test]
+fn the_about_popover_close_control_and_outside_click_close_it() {
+    for scale in [1.0, 2.0] {
+        let window = [WINDOW[0] * scale, WINDOW[1] * scale];
+        let l = about().layout(window, scale);
+        assert!(inside(l.area, l.close));
+        assert_eq!(
+            about().hit(window, centre_of(l.close), scale),
+            AboutHit::Close
+        );
+        assert_eq!(about().hit(window, [1.0, 1.0], scale), AboutHit::Outside);
+        let corner = [l.area[0] + 1.0, l.area[1] + l.area[3] - 1.0];
+        assert_eq!(about().hit(window, corner, scale), AboutHit::Inside);
+    }
+}
+
+#[test]
+fn the_about_popover_lights_the_link_under_the_pointer() {
+    let l = about().layout(WINDOW, 1.0);
+    let rest = about().draw(WINDOW, [0.0, 0.0], 1.0);
+    let over = about().draw(WINDOW, centre_of(l.links[0].1), 1.0);
+    assert_ne!(rest, over);
 }

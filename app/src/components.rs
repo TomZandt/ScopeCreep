@@ -7,6 +7,7 @@
 //! The drawing is renderer-neutral: the app turns the prims into flat rectangles and glyphon text
 //! (`main.rs`), and the showcase example (`examples/style_showcase.rs`) draws every component in every state to
 //! an image.
+use crate::commands::Command;
 use crate::layout_tree::Edge;
 use crate::panel_grid::PanelLayout;
 use crate::settings::{Menu, MenuRow};
@@ -945,6 +946,221 @@ pub fn popover_tooltip(
             tip.draw(tip.rect(anchor, window, scale), scale)
         }
         None => Vec::new(),
+    }
+}
+
+// ---- About popover (#232, spec #230) ----
+
+/// The credit line under the version.
+pub const ABOUT_CREDIT: &str = "by Tom Zandt-Valentine";
+/// The copyright and licence summary (it follows LICENSE.md and LICENSING.md).
+pub const ABOUT_LICENCE: &str = "\u{a9} 2026 Tom Zandt-Valentine \u{b7} free to use, including paid work; selling or bundling needs a commercial licence";
+
+/// What a click on the About popover lands on.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum AboutHit {
+    /// A link: run its Command.
+    Link(Command),
+    Close,
+    /// On the popover but on nothing: the click stays in it.
+    Inside,
+    /// Off the popover: it closes.
+    Outside,
+}
+
+/// Where the About popover's parts are in a Window (device pixels).
+#[derive(Clone, Debug, PartialEq)]
+pub struct AboutLayout {
+    pub area: [f32; 4],
+    pub close: [f32; 4],
+    pub wordmark: [f32; 4],
+    pub version: [f32; 4],
+    pub credit: [f32; 4],
+    /// The licence line, wrapped to the popover's width, one rectangle per line.
+    pub licence: Vec<(String, [f32; 4])>,
+    pub links: Vec<(Command, [f32; 4])>,
+}
+
+/// The About popover: the wordmark (until the logo, #229), the name, version and Feed protocol, the credit, the
+/// licence line and three links, centred in the Window.
+#[derive(Clone, Debug, PartialEq)]
+pub struct AboutPopover {
+    pub version: String,
+    pub protocol: String,
+}
+
+impl AboutPopover {
+    pub fn new(version: &str, protocol: &str) -> AboutPopover {
+        AboutPopover {
+            version: version.to_string(),
+            protocol: protocol.to_string(),
+        }
+    }
+
+    /// The name, version and Feed protocol: the same text `--version` prints.
+    pub fn version_line(&self) -> String {
+        format!(
+            "ScopeCreep {} (Feed protocol {})",
+            self.version, self.protocol
+        )
+    }
+
+    fn links() -> [(Command, Chip); 3] {
+        [
+            (Command::Website, Chip::new("Website")),
+            (Command::Licence, Chip::new("Licence")),
+            (Command::BuyMeACoffee, Chip::new("Buy Me a Coffee")),
+        ]
+    }
+
+    pub fn layout(&self, window: [f32; 2], scale: f32) -> AboutLayout {
+        let pad = style::SPACE_ABOUT_PAD * scale;
+        let gap = style::SPACE_ABOUT_GAP * scale;
+        let width = style::SPACE_ABOUT_WIDTH * scale;
+        let inner = width - 2.0 * pad;
+        let (size, line) = Face::Label.metrics();
+        let row = size * line * scale;
+        let (wsize, wline) = Face::Wordmark.metrics();
+        let wordmark_h = wsize * wline * scale;
+        // Wrap the licence line on words to the characters that fit.
+        let fit = ((inner / (style::SPACE_CHAR_WIDTH * scale)) as usize).max(1);
+        let mut lines: Vec<String> = Vec::new();
+        for word in ABOUT_LICENCE.split(' ') {
+            match lines.last_mut() {
+                Some(last) if last.chars().count() + 1 + word.chars().count() <= fit => {
+                    last.push(' ');
+                    last.push_str(word);
+                }
+                _ => lines.push(word.to_string()),
+            }
+        }
+        let chip_h = style::SPACE_CHIP_HEIGHT * scale;
+        let height = pad
+            + wordmark_h
+            + gap * 2.0
+            + row
+            + gap / 2.0
+            + row
+            + gap
+            + row * lines.len() as f32
+            + gap * 1.5
+            + chip_h
+            + pad;
+        let left = ((window[0] - width) / 2.0).max(0.0);
+        let top = ((window[1] - height) / 2.0).max(0.0);
+        let area = [left, top, width, height];
+        let x = left + pad;
+        let mut y = top + pad;
+        let close_side = style::SPACE_ABOUT_CLOSE * scale;
+        let close = [
+            left + width - gap - close_side,
+            top + gap,
+            close_side,
+            close_side,
+        ];
+        // The wordmark keeps clear of the close control on both sides.
+        let clear = close_side + gap;
+        let wordmark = [left + clear, y, width - 2.0 * clear, wordmark_h];
+        y += wordmark_h + gap * 2.0;
+        let version = [x, y, inner, row];
+        y += row + gap / 2.0;
+        let credit = [x, y, inner, row];
+        y += row + gap;
+        let licence = lines
+            .into_iter()
+            .map(|l| {
+                let r = [x, y, inner, row];
+                y += row;
+                (l, r)
+            })
+            .collect();
+        y += gap * 1.5;
+        let chips: Vec<Chip> = Self::links().iter().map(|(_, c)| c.clone()).collect();
+        let row_width = chip_row_width(&chips, scale);
+        let rects = chip_row(&chips, [x + (inner - row_width) / 2.0, y], scale);
+        let links = Self::links()
+            .iter()
+            .zip(rects)
+            .map(|((command, _), r)| (*command, r))
+            .collect();
+        AboutLayout {
+            area,
+            close,
+            wordmark,
+            version,
+            credit,
+            licence,
+            links,
+        }
+    }
+
+    /// What a click at `point` lands on.
+    pub fn hit(&self, window: [f32; 2], point: [f32; 2], scale: f32) -> AboutHit {
+        let l = self.layout(window, scale);
+        if !contains(l.area, point) {
+            AboutHit::Outside
+        } else if contains(l.close, point) {
+            AboutHit::Close
+        } else if let Some((command, _)) = l.links.iter().find(|(_, r)| contains(*r, point)) {
+            AboutHit::Link(*command)
+        } else {
+            AboutHit::Inside
+        }
+    }
+
+    /// Draw it in `window`, with the link or the close control under `cursor` lit.
+    pub fn draw(&self, window: [f32; 2], cursor: [f32; 2], scale: f32) -> Vec<Prim> {
+        let l = self.layout(window, scale);
+        let mut prims: Vec<Prim> =
+            framed(l.area, style::LINE_BORDER, style::SURFACE_MENU, scale).into();
+        prims.push(text(
+            "ScopeCreep",
+            l.wordmark,
+            Face::Wordmark,
+            style::TEXT_HIGH,
+            Align::Centre,
+        ));
+        prims.push(text(
+            &self.version_line(),
+            l.version,
+            Face::Label,
+            style::TEXT_PRIMARY,
+            Align::Centre,
+        ));
+        prims.push(text(
+            ABOUT_CREDIT,
+            l.credit,
+            Face::Label,
+            style::TEXT_PRIMARY,
+            Align::Centre,
+        ));
+        for (line, r) in &l.licence {
+            prims.push(text(
+                line,
+                *r,
+                Face::Label,
+                style::TEXT_SECONDARY,
+                Align::Centre,
+            ));
+        }
+        if contains(l.close, cursor) {
+            prims.push(rect(l.close, style::STATE_HOVER));
+        }
+        let ink = if contains(l.close, cursor) {
+            style::TEXT_HIGH
+        } else {
+            style::TEXT_SECONDARY
+        };
+        prims.push(Icon::Close.draw(l.close, ink));
+        for ((_, chip), (_, r)) in Self::links().iter().zip(&l.links) {
+            let state = if contains(*r, cursor) {
+                State::Hover
+            } else {
+                State::Normal
+            };
+            prims.extend(chip.draw([r[0], r[1]], false, state, scale));
+        }
+        prims
     }
 }
 

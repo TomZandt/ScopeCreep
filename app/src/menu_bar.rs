@@ -328,11 +328,12 @@ pub fn settings_menu() -> Menu {
     menu
 }
 
-/// The Help menu (#231): each entry opens a page in the system browser (see [`crate::links`]). None has a default
+/// The Help menu (#231, #232): About opens the About popover; every other entry opens a page in the system browser (see [`crate::links`]). None has a default
 /// hotkey; each shows the one it is given.
 pub fn help_menu(hotkeys: &Hotkeys) -> Menu {
     let mut menu = Menu::new();
     for (label, command) in [
+        ("About ScopeCreep…", Command::About),
         ("Licence…", Command::Licence),
         ("Changelog…", Command::Changelog),
         ("Website", Command::Website),

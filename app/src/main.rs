@@ -24,7 +24,7 @@ use scopecreep::accent::{self, Accent};
 use scopecreep::appearance_panel::AppearancePanel;
 use scopecreep::auto_resize;
 use scopecreep::commands::{Command, Hotkey, Hotkeys, Key};
-use scopecreep::components::{self, Align, MenuBar, Prim, State, Tooltip};
+use scopecreep::components::{self, AboutHit, AboutPopover, Align, MenuBar, Prim, State, Tooltip};
 use scopecreep::display::{DisplaySet, Pointer};
 use scopecreep::dock::{self, Zone};
 use scopecreep::feed_loop::{FeedLoop, Texts};
@@ -302,6 +302,8 @@ struct AppWindow {
     bar: BarState,
     bar_hover: Option<usize>,
     layout_mode: LayoutMode,
+    /// The About popover, while open (#232): centred in the Window, over everything.
+    about: Option<AboutPopover>,
     /// The Hotkeys panel, while it shows in place of the Settings menu (#148).
     hotkeys_panel: Option<HotkeysPanel>,
     /// The Appearance panel, when open in place of the Settings menu, and the accent it edits.
@@ -596,6 +598,7 @@ impl AppWindow {
             bar: BarState::default(),
             bar_hover: None,
             layout_mode: LayoutMode::Show,
+            about: None,
             hotkeys_panel: None,
             appearance_panel: None,
             accent: {
@@ -1418,7 +1421,9 @@ impl AppWindow {
             return;
         }
         if event.logical_key == LogicalKey::Named(NamedKey::Escape) {
-            if self.panel_drag.take().is_some() {
+            if self.about.take().is_some() {
+                self.window.request_redraw();
+            } else if self.panel_drag.take().is_some() {
                 // Escape cancels a drag: the layout is as it was.
                 self.panel_drag_live = false;
                 self.window.set_cursor(CursorIcon::Default);
@@ -1435,6 +1440,31 @@ impl AppWindow {
         if let Some(command) = pressed.and_then(|h| self.hotkeys.command_for(h)) {
             self.run(command);
         }
+    }
+
+    /// The Feed protocol version as the About popover and Report a problem show it ("1.2").
+    fn feed_protocol() -> String {
+        format!(
+            "{}.{}",
+            scopecreep_feed::VERSION_MAJOR,
+            scopecreep_feed::VERSION_MINOR
+        )
+    }
+
+    /// A click with the About popover open: a link runs its Command, the close control or a click outside closes
+    /// it, a click on the popover itself stays in it.
+    fn about_click(&mut self) {
+        let Some(about) = self.about.as_ref() else {
+            return;
+        };
+        let window = [self.config.width as f32, self.config.height as f32];
+        let scale = self.scale;
+        match about.hit(window, self.cursor, scale) {
+            AboutHit::Link(command) => self.run(command),
+            AboutHit::Close | AboutHit::Outside => self.about = None,
+            AboutHit::Inside => {}
+        }
+        self.window.request_redraw();
     }
 
     /// Do a command, from its hotkey or its menu entry.
@@ -1529,6 +1559,14 @@ impl AppWindow {
                 }
                 return;
             }
+            Command::About => {
+                self.about = Some(AboutPopover::new(
+                    env!("CARGO_PKG_VERSION"),
+                    &Self::feed_protocol(),
+                ));
+                self.window.request_redraw();
+                return;
+            }
             Command::Licence
             | Command::Changelog
             | Command::Website
@@ -1536,11 +1574,7 @@ impl AppWindow {
             | Command::CheckForUpdates
             | Command::BuyMeACoffee => {
                 // A page in the browser: nothing in the Window changes, and a failure to open only logs.
-                let protocol = format!(
-                    "{}.{}",
-                    scopecreep_feed::VERSION_MAJOR,
-                    scopecreep_feed::VERSION_MINOR
-                );
+                let protocol = Self::feed_protocol();
                 if let Some(url) = links::address(command, env!("CARGO_PKG_VERSION"), &protocol) {
                     links::open_in_browser(&url);
                 }
@@ -1933,6 +1967,11 @@ impl AppWindow {
                 self.window.set_cursor(CursorIcon::Default);
                 self.window.request_redraw();
             }
+            return;
+        }
+        // The About popover takes every click while it is open.
+        if self.about.is_some() {
+            self.about_click();
             return;
         }
         // The menu bar: with one of its menus open, the click is the menu's; on a title, it opens that menu (and
@@ -2752,6 +2791,9 @@ impl AppWindow {
                 let tip = Tooltip::new(&text);
                 over.extend(tip.draw(tip.rect(anchor, [width, height], scale), scale));
             }
+        }
+        if let Some(about) = &self.about {
+            over.extend(about.draw([width, height], self.cursor, scale));
         }
         let mut texts_used = 0;
         for prim in over {

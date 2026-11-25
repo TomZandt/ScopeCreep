@@ -727,6 +727,7 @@ fn help_is_the_last_title_after_settings() {
 fn the_help_menu_lists_its_entries_in_order_each_running_its_command() {
     let menu = help_menu(&Hotkeys::default());
     let want = [
+        ("About ScopeCreep…", Command::About),
         ("Licence…", Command::Licence),
         ("Changelog…", Command::Changelog),
         ("Website", Command::Website),

@@ -44,6 +44,8 @@ pub enum Command {
     /// Put every Panel's settings, on every page, back to its display's defaults, after asking (the Settings menu,
     /// #228). Leaves the arrangement, zoom, Link and the app's preferences alone. No default hotkey.
     ResetAllPanels,
+    /// Open the About popover (the Help menu, #232). No default hotkey.
+    About,
     /// Open the plain-English licence page in the browser (the Help menu, #231). No default hotkey.
     Licence,
     /// Open the changelog page in the browser (the Help menu, #231). No default hotkey.
@@ -76,6 +78,7 @@ impl Command {
         all.push(Command::ClosePanel);
         all.push(Command::UndoLayout);
         all.push(Command::ResetAllPanels);
+        all.push(Command::About);
         all.push(Command::Licence);
         all.push(Command::Changelog);
         all.push(Command::Website);
@@ -102,6 +105,7 @@ impl Command {
             Command::ClosePanel => "panel-close".to_string(),
             Command::UndoLayout => "layout-undo".to_string(),
             Command::ResetAllPanels => "panels-reset-all".to_string(),
+            Command::About => "help-about".to_string(),
             Command::Licence => "help-licence".to_string(),
             Command::Changelog => "help-changelog".to_string(),
             Command::Website => "help-website".to_string(),
@@ -128,6 +132,7 @@ impl Command {
             Command::ClosePanel => "Panel: close".to_string(),
             Command::UndoLayout => "Layout: undo change".to_string(),
             Command::ResetAllPanels => "Panels: reset all to defaults".to_string(),
+            Command::About => "Help: About ScopeCreep".to_string(),
             Command::Licence => "Help: Licence".to_string(),
             Command::Changelog => "Help: Changelog".to_string(),
             Command::Website => "Help: Website".to_string(),
@@ -152,6 +157,7 @@ impl Command {
             | Command::AutoLayout
             | Command::AutoResize
             | Command::ResetAllPanels
+            | Command::About
             | Command::Licence
             | Command::Changelog
             | Command::Website

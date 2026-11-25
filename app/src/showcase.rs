@@ -386,6 +386,15 @@ pub fn showcase(scale: f32) -> Showcase {
     prims.extend(help.draw(help_area, Some(1), false, scale));
     y = help_area[1] + help_area[3] + row * 0.5;
 
+    prims.push(caption("About popover", margin, y, label_w));
+    let about = crate::components::AboutPopover::new("0.0.0", "1.2");
+    // Centred in a Window just big enough to put it at this row.
+    let probe = about.layout([0.0, 0.0], scale).area;
+    let at = [margin + label_w, y];
+    let window = [at[0] * 2.0 + probe[2], at[1] * 2.0 + probe[3]];
+    prims.extend(about.draw(window, [0.0, 0.0], scale));
+    y += probe[3] + row * 0.5;
+
     prims.push(caption("Top bar", margin, y, label_w));
     prims.extend(bar(
         BarKind::Top,
