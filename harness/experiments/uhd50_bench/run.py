@@ -1,22 +1,30 @@
 """UHD 50: Sender off (timeline without the Sender node) / on / on + app. Each: 15 s warm-up loop pass, then 60 s measured while looping.
 
 Rate with the Sender in the chain: Sender renders per second from the Feed header (no scripting during play).
-Resolve's own fps indicator is screenshotted every 5 s in every config."""
+Resolve's own fps indicator is screenshotted every 5 s in every config, and the GPU sampled by nvidia-smi.
+
+Linux and Windows. On Windows the app's window is not moved off Resolve: place it before the run (it opens where
+it was last closed), and keep Resolve's viewer visible. SCOPECREEP_BENCH_APP runs another app build, such as the
+installed one."""
 import os
 import subprocess
 import sys
 import time
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", ".."))
-from scopecreep_harness import feed_header, viewer  # noqa: E402
+from scopecreep_harness import feed_header, gpu, viewer  # noqa: E402
 from scopecreep_harness.resolve_api import connect  # noqa: E402
 
+WINDOWS = sys.platform == "win32"
 OUT = os.path.expanduser("~/scopecreep-testdata/bench/uhd50-" + time.strftime("%Y%m%d-%H%M%S"))
 os.makedirs(OUT, exist_ok=True)
-APP = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "..", "target", "release", "scopecreep")
+APP = os.environ.get("SCOPECREEP_BENCH_APP") or os.path.join(
+    os.path.dirname(os.path.abspath(__file__)), "..", "..", "..", "target", "release",
+    "scopecreep.exe" if WINDOWS else "scopecreep")
 WARM, MEASURE, SHOT_EVERY = 15, 60, 5
-# Resolve's fps readout, in global screen coordinates (grim -g); set SCOPECREEP_BENCH_GRAB when Resolve sits elsewhere.
-INDICATOR = os.environ.get("SCOPECREEP_BENCH_GRAB", "1395,255 120x30")
+# Resolve's fps readout, in global screen coordinates ("X,Y WxH"); set SCOPECREEP_BENCH_GRAB when Resolve sits
+# elsewhere. Windows has no default: every screen is grabbed unless it is set.
+INDICATOR = os.environ.get("SCOPECREEP_BENCH_GRAB") or (None if WINDOWS else "1395,255 120x30")
 
 r = connect()
 project = r.GetProjectManager().GetCurrentProject()
@@ -51,22 +59,27 @@ def run(label, sender_on, with_app):
         app = subprocess.Popen([APP], env=env, stdout=open(os.path.join(OUT, label + ".app.log"), "w"),
                                stderr=subprocess.STDOUT)
         time.sleep(2)
-        subprocess.run(["hyprctl", "dispatch", 'hl.dsp.window.move({workspace="11", window="class:scopecreep"})'])
+        if not WINDOWS:
+            subprocess.run(["hyprctl", "dispatch", 'hl.dsp.window.move({workspace="11", window="class:scopecreep"})'])
         time.sleep(2)
     viewer.send_key("K")
     time.sleep(0.5)
     viewer.send_key("L")
     time.sleep(WARM)
+    gpu_log = os.path.join(OUT, label + ".gpu.csv")
+    monitor = gpu.start(gpu_log)
     r0, t0 = renders(), time.time()
     for i in range(MEASURE // SHOT_EVERY):
         time.sleep(SHOT_EVERY)
-        subprocess.run(["grim", "-g", INDICATOR, os.path.join(OUT, "%s-%02d.png" % (label, i))])
+        viewer.grab(os.path.join(OUT, "%s-%02d.png" % (label, i)), INDICATOR)
     r1, t1 = renders(), time.time()
+    gpu.stop(monitor)
     viewer.send_key("K")
     rate = (r1 - r0) / (t1 - t0) if (r0 is not None and r1 is not None) else None
     log("%s: Sender renders/s over %.0f s = %s" % (label, t1 - t0, "%.2f" % rate if rate is not None else "n/a"))
+    log("%s: %s" % (label, gpu.summary(gpu_log) if monitor else "GPU: nvidia-smi not found"))
     if app:
-        subprocess.run(["grim", os.path.join(OUT, label + "-screen.png")])
+        viewer.grab(os.path.join(OUT, label + "-screen.png"))
         app.terminate()
         app.wait(10)
     time.sleep(2)

@@ -13,9 +13,7 @@ use std::path::PathBuf;
 use std::process::{Child, ChildStdin, Command, Stdio};
 use std::sync::mpsc::{Receiver, TryRecvError, channel};
 
-/// Resolve's bundled Python on this platform.
-pub const DEFAULT_PYTHON: &str = platform::RESOLVE_PYTHON;
-/// Overrides [`DEFAULT_PYTHON`].
+/// Overrides [`platform::resolve_python`], the Python the helper runs under.
 pub const PYTHON_ENV: &str = "SCOPECREEP_RESOLVE_PYTHON";
 
 const SCRIPT: &str = include_str!("../resolve/colour_setup_helper.py");
@@ -52,12 +50,13 @@ impl ScriptHelper {
         }
     }
 
-    /// The helper under Resolve's Python: `$SCOPECREEP_RESOLVE_PYTHON`, else [`DEFAULT_PYTHON`].
+    /// The helper under Resolve's Python: `$SCOPECREEP_RESOLVE_PYTHON`, else the platform's
+    /// ([`platform::resolve_python`]).
     pub fn from_env() -> ScriptHelper {
         ScriptHelper::new(
             std::env::var_os(PYTHON_ENV)
                 .filter(|p| !p.is_empty())
-                .map_or_else(|| PathBuf::from(DEFAULT_PYTHON), PathBuf::from),
+                .map_or_else(platform::resolve_python, PathBuf::from),
         )
     }
 
@@ -80,8 +79,7 @@ impl ScriptHelper {
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::null());
-        platform::tie_helper_to_app(&mut command);
-        let mut child = command.spawn().map_err(|e| {
+        let mut child = platform::spawn_tied_to_app(&mut command).map_err(|e| {
             format!(
                 "Resolve's Python could not be started from {} ({e})",
                 self.program.display()
@@ -120,7 +118,7 @@ impl ScriptHelper {
     fn stop(&mut self) {
         if let Some(mut r) = self.running.take() {
             let _ = r.child.kill();
-            let _ = r.child.wait(); // after SIGKILL this returns at once
+            let _ = r.child.wait(); // after a kill this returns at once
         }
     }
 

@@ -43,8 +43,11 @@ fn fake_module_dir() -> PathBuf {
     dir
 }
 
+/// The system Python the fake module runs under (`python3` is not a command on a stock Windows install).
+const PYTHON: &str = if cfg!(windows) { "python" } else { "python3" };
+
 fn helper(env: &[(&str, &str)]) -> ScriptHelper {
-    let mut h = ScriptHelper::new("python3").env("PYTHONPATH", fake_module_dir());
+    let mut h = ScriptHelper::new(PYTHON).env("PYTHONPATH", fake_module_dir());
     for (k, v) in env {
         h = h.env(k, v);
     }
@@ -88,6 +91,26 @@ fn the_helper_reads_the_project_and_the_app_understands_it() {
     // A second read goes to the same process.
     h.request();
     assert!(wait_answer(&mut h, Duration::from_secs(10)).is_some());
+}
+
+#[test]
+fn the_helper_finds_the_scripting_module_where_resolve_api_says() {
+    // A Python other than Resolve's (on Windows, the one the user installed) cannot import the module by itself;
+    // Resolve's documented RESOLVE_SCRIPT_API names the folder holding Modules/.
+    let api = PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join("fake-resolve-api");
+    std::fs::create_dir_all(api.join("Modules")).unwrap();
+    std::fs::write(
+        api.join("Modules").join("DaVinciResolveScript.py"),
+        FAKE_MODULE,
+    )
+    .unwrap();
+    let mut h = ScriptHelper::new(PYTHON).env("RESOLVE_SCRIPT_API", &api);
+    h.request();
+    let answer = wait_answer(&mut h, Duration::from_secs(10)).expect("the helper answers");
+    assert!(
+        matches!(Outcome::from_answer(&answer), Outcome::Read(_)),
+        "{answer:?}"
+    );
 }
 
 #[test]
@@ -166,4 +189,60 @@ fn a_missing_resolve_python_is_reported_not_crashed_on() {
         Outcome::Gone(why) => assert!(why.contains("/nonexistent/ResolvePython"), "{why}"),
         other => panic!("{other:?}"),
     }
+}
+
+/// Set in the copy of this test binary that plays the app in the test below.
+const FAKE_APP_ENV: &str = "SCOPECREEP_TEST_FAKE_APP";
+
+#[test]
+#[ignore = "run only as the app process of the_helper_dies_with_the_app_even_when_the_app_is_killed"]
+fn fake_app_holding_a_stuck_helper() {
+    if std::env::var_os(FAKE_APP_ENV).is_none() {
+        return;
+    }
+    let mut h = helper(&[("FAKE_RESOLVE_HANG", "1")]);
+    h.request();
+    // Well into the stuck read, so it has nothing left to write: a helper killed by a broken pipe proves nothing.
+    std::thread::sleep(Duration::from_millis(1000));
+    println!("helper={}", h.running_pid().expect("a helper is running"));
+    std::thread::sleep(Duration::from_secs(60));
+}
+
+#[test]
+fn the_helper_dies_with_the_app_even_when_the_app_is_killed() {
+    // The app is killed outright (a crash, or Task Manager): no Drop runs, so only the OS can take the helper,
+    // stuck in a Resolve call, down with it (Linux: parent-death signal; Windows: a kill-on-close job object).
+    use std::io::BufRead;
+    use std::process::{Command, Stdio};
+    let mut app = Command::new(std::env::current_exe().unwrap())
+        .args([
+            "--exact",
+            "fake_app_holding_a_stuck_helper",
+            "--ignored",
+            "--nocapture",
+        ])
+        .env(FAKE_APP_ENV, "1")
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null())
+        .spawn()
+        .unwrap();
+    let helper_pid: u64 = std::io::BufReader::new(app.stdout.take().unwrap())
+        .lines()
+        .map_while(Result::ok)
+        .find_map(|l| l.strip_prefix("helper=").map(|p| p.trim().parse().unwrap()))
+        .expect("the fake app reports its helper");
+    assert!(
+        scopecreep_feed::process_alive(helper_pid),
+        "the helper is running"
+    );
+    app.kill().unwrap();
+    app.wait().unwrap();
+    let t = Instant::now();
+    while scopecreep_feed::process_alive(helper_pid) && t.elapsed() < Duration::from_secs(5) {
+        std::thread::sleep(Duration::from_millis(20));
+    }
+    assert!(
+        !scopecreep_feed::process_alive(helper_pid),
+        "the helper outlived the app"
+    );
 }

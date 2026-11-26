@@ -1,6 +1,7 @@
 """scopecreep's Resolve helper: reads the project's Colour Setup through Resolve's scripting API, on request only.
 
-The scopecreep app starts this under Resolve's own Python (/opt/resolve/bin/ResolvePython) and owns it. It never
+The scopecreep app starts this under Resolve's own Python (Linux: /opt/resolve/bin/ResolvePython; Windows: a
+Python the user installed, see app/src/platform/windows.rs) and owns it. It never
 calls Resolve by itself: it waits on stdin, and each line `read` makes it do one short read and answer on stdout.
 The app sends `read` only while playback is stopped, because Resolve scripting calls made during playback block
 and starve Resolve's main thread (Stage 0, ADR 0005). See docs/adr/0006-colour-setup-helper.md.
@@ -43,14 +44,29 @@ def answer(fields):
     out.flush()
 
 
+def scripting_paths(platform, environ):
+    """(scripting API folder, fusionscript library) where Resolve installs them on this platform, unless Resolve's
+    own RESOLVE_SCRIPT_API and RESOLVE_SCRIPT_LIB say otherwise. The module is in <API folder>/Modules."""
+    import os
+    if platform == "win32":
+        api = os.path.join(environ.get("PROGRAMDATA") or "C:\\ProgramData",
+                           "Blackmagic Design", "DaVinci Resolve", "Support", "Developer", "Scripting")
+        lib = os.path.join(environ.get("PROGRAMFILES") or "C:\\Program Files",
+                           "Blackmagic Design", "DaVinci Resolve", "fusionscript.dll")
+    else:
+        api, lib = "/opt/resolve/Developer/Scripting", "/opt/resolve/libs/Fusion/fusionscript.so"
+    return environ.get("RESOLVE_SCRIPT_API") or api, environ.get("RESOLVE_SCRIPT_LIB") or lib
+
+
 def scripting_module():
     try:
         import DaVinciResolveScript as dvr  # works as-is under ResolvePython (Resolve 21.1+)
         return dvr
     except ImportError:
         import os
-        sys.path.append("/opt/resolve/Developer/Scripting/Modules")
-        os.environ.setdefault("RESOLVE_SCRIPT_LIB", "/opt/resolve/libs/Fusion/fusionscript.so")
+        api, lib = scripting_paths(sys.platform, os.environ)
+        sys.path.append(os.path.join(api, "Modules"))
+        os.environ["RESOLVE_SCRIPT_LIB"] = lib
         import DaVinciResolveScript as dvr
         return dvr
 

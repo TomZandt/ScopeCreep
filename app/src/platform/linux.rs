@@ -14,11 +14,15 @@ pub fn settings_folder() -> Option<PathBuf> {
     Some(base.join("scopecreep"))
 }
 
-/// Resolve's bundled Python, which can import its scripting module with no setup (Resolve 21.1+).
-pub const RESOLVE_PYTHON: &str = "/opt/resolve/bin/ResolvePython";
+/// The Python to run the Resolve helper under: Resolve's bundled one, which can import its scripting module
+/// with no setup (Resolve 21.1+).
+pub fn resolve_python() -> PathBuf {
+    PathBuf::from("/opt/resolve/bin/ResolvePython")
+}
 
-/// Set up the Resolve helper's process so it dies with the app and holds nothing the app opened.
-pub fn tie_helper_to_app(command: &mut Command) {
+/// Start the Resolve helper's process so it dies with the app, even when the app is killed, and holds nothing
+/// the app opened.
+pub fn spawn_tied_to_app(command: &mut Command) -> std::io::Result<Child> {
     // SAFETY: only async-signal-safe calls between fork and exec.
     unsafe {
         command.pre_exec(|| {
@@ -30,6 +34,7 @@ pub fn tie_helper_to_app(command: &mut Command) {
             Ok(())
         });
     }
+    command.spawn()
 }
 
 /// Start the system's opener on `url`.

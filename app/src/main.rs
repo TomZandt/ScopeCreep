@@ -12,7 +12,8 @@
 //!                    on Windows the named mapping Local\scopecreep-feed)
 //!   --no-scripting   never read the project by Resolve scripting (the Colour Setup then comes only from the
 //!                    Sender node's manual override). Resolve's Python: $SCOPECREEP_RESOLVE_PYTHON, else
-//!                    /opt/resolve/bin/ResolvePython.
+//!                    on Linux /opt/resolve/bin/ResolvePython, on Windows the first found of Resolve's own
+//!                    ResolvePython.exe, the Python launcher (py.exe) and python.exe on PATH.
 //!
 //! Two threads. The Feed thread polls the Feed every millisecond (the ring is short and the Sender never waits),
 //! puts the frames to show on the GPU once, converts them once, hands that one frame to every display, and wakes

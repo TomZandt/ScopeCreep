@@ -4,9 +4,13 @@ import os
 import pathlib
 import stat
 import subprocess
+import sys
 import tarfile
 import tempfile
 import unittest
+
+if sys.platform == "win32":
+    raise unittest.SkipTest("the Linux Installer's scripts are bash, run on Linux")
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 PACKAGE = os.path.join(ROOT, "scripts", "package-linux.sh")
