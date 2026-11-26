@@ -1887,6 +1887,7 @@ name = "scopecreep-feed"
 version = "0.4.0"
 dependencies = [
  "libc",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]

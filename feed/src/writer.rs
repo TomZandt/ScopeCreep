@@ -4,11 +4,10 @@
 //! processes join it as guests.
 use crate::SentColourSetup;
 use crate::layout::*;
-use crate::platform::{create_feed_file, process_alive};
+use crate::platform::{Shared, process_alive};
 use crate::{
     READER_TIMEOUT_NS, REGISTRY_ENTRIES, SENDER_NAME, VERSION_MAJOR, VERSION_MINOR, now_ns,
 };
-use std::fs::OpenOptions;
 use std::io;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::Ordering::{AcqRel, Acquire, Relaxed, Release};
@@ -336,7 +335,8 @@ impl FeedWriter {
         None
     }
 
-    /// Build a Feed file under a temporary name, rename it over `path` and retire the Feed that was there.
+    /// Build a new Feed out of sight, put it at `path` (on Linux, renamed over it) and retire the Feed that was
+    /// there.
     /// `carry`: the previous Feed of the same Sender, whose counters and registry continue in the new file.
     fn publish(
         path: &Path,
@@ -350,11 +350,8 @@ impl FeedWriter {
         let path = path.to_path_buf();
         let slot_capacity = slot_capacity.div_ceil(4096) * 4096;
         let bytes = file_bytes(slot_count, slot_capacity);
-        let tmp = PathBuf::from(format!("{}.{}.tmp", path.display(), std::process::id()));
-        let _ = std::fs::remove_file(&tmp);
-        let file = create_feed_file(&tmp)?;
-        file.set_len(bytes as u64)?;
-        let map = Mapping::map(&file, bytes)?;
+        let shared = Shared::create(&path, bytes)?;
+        let map = Mapping::map(&shared, bytes)?;
         map.set_u32(H_VERSION_MAJOR, major);
         map.set_u32(H_VERSION_MINOR, minor);
         map.set_u32(H_HEADER_BYTES, HEADER_BYTES as u32);
@@ -393,19 +390,12 @@ impl FeedWriter {
         map.set_u64(H_MAGIC, MAGIC);
 
         // Find the Feed that is there now, so it can be told it has been replaced.
-        let old = OpenOptions::new()
-            .read(true)
-            .write(true)
-            .open(&path)
-            .ok()
-            .and_then(|f| {
-                (f.metadata().ok()?.len() >= HEADER_BYTES as u64)
-                    .then(|| Mapping::map(&f, HEADER_BYTES).ok())
-                    .flatten()
-            });
-        std::fs::rename(&tmp, &path).inspect_err(|_| {
-            let _ = std::fs::remove_file(&tmp);
-        })?;
+        let old = Shared::open(&path).ok().and_then(|f| {
+            (f.size() >= HEADER_BYTES as u64)
+                .then(|| Mapping::map(&f, HEADER_BYTES).ok())
+                .flatten()
+        });
+        shared.publish(&path)?;
         if let Some(old) = old
             && old.u64(H_MAGIC) == MAGIC
         {
@@ -424,8 +414,8 @@ impl FeedWriter {
 /// The header of the Feed at `path`, if it is a live Feed of this major version owned by a running process
 /// other than `my_pid`: then a Sender starting in `my_pid` must join it as a guest, not replace it.
 fn live_feed_of_another(path: &Path, my_pid: u64) -> Option<Mapping> {
-    let f = OpenOptions::new().read(true).write(true).open(path).ok()?;
-    if f.metadata().ok()?.len() < HEADER_BYTES as u64 {
+    let f = Shared::open(path).ok()?;
+    if f.size() < HEADER_BYTES as u64 {
         return None;
     }
     let m = Mapping::map(&f, HEADER_BYTES).ok()?;

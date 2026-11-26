@@ -142,7 +142,7 @@ static int cmd_guest(const char* path, int renders)
     printf("%s\n", owner ? "guest" : "owner");
     scfeed_registry_add(h, me, 3, 25.0, "feed_c_tool");
     for (int k = 0; k < renders; ++k) scfeed_registry_note(h, me, 3, (double)k, scfeed_now_ns());
-    if (owner) munmap(owner, SCFEED_HEADER_BYTES);
+    if (owner) scfeed_header_unmap(owner);
     else scfeed_writer_close(&w);
     return 0;
 }

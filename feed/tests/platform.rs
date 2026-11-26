@@ -1,4 +1,5 @@
 //! The Feed's platform seam: the protocol clock and the "is the Sender alive" check.
+mod common;
 use scopecreep_feed::{now_ns, process_alive};
 
 #[test]
@@ -10,7 +11,7 @@ fn this_process_is_alive_and_pid_zero_is_nobody() {
 
 #[test]
 fn a_finished_process_is_not_alive() {
-    let mut child = std::process::Command::new("true").spawn().expect("spawn");
+    let mut child = common::short_process();
     let pid = child.id() as u64;
     child.wait().expect("wait");
     assert!(!process_alive(pid));

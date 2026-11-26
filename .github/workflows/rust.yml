@@ -18,3 +18,18 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - run: cargo fmt --check
       - run: cargo clippy --workspace --all-targets -- -D warnings
+
+  # Windows (#235): the Feed's tests and clippy for the Windows target. No GPU, so not the app's tests.
+  windows:
+    runs-on: windows-latest
+    concurrency:
+      group: rust-windows-${{ github.ref }}
+      cancel-in-progress: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo test -p scopecreep-feed
+      - run: cargo clippy --workspace --all-targets -- -D warnings

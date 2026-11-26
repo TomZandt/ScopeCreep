@@ -135,6 +135,7 @@ fn a_stuck_helper_is_killed_when_abandoned_and_a_fresh_one_starts_on_the_next_re
     assert!(h.running_pid().is_some_and(|p| p != pid), "a fresh helper");
 }
 
+#[cfg(target_os = "linux")] // reads /proc
 #[test]
 fn the_helper_inherits_no_open_files_but_its_pipes() {
     // Found in Resolve testing: run under `flock`, an earlier helper inherited the lock file's descriptor and,

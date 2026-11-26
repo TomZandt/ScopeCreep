@@ -2,7 +2,7 @@
 mod common;
 use common::temp_feed;
 use scopecreep_feed::{FeedReader, FeedWriter, FrameMeta, SenderIdentity, WriteError, synthetic};
-use std::process::{Child, Command};
+use std::process::Child;
 
 fn meta(instance: u32, frame_time: f64, render_ns: u64) -> FrameMeta {
     FrameMeta {
@@ -23,7 +23,7 @@ fn me() -> u64 {
 struct OtherProcess(Child);
 impl OtherProcess {
     fn start() -> OtherProcess {
-        OtherProcess(Command::new("sleep").arg("30").spawn().unwrap())
+        OtherProcess(common::long_running_process())
     }
     fn pid(&self) -> u64 {
         self.0.id() as u64

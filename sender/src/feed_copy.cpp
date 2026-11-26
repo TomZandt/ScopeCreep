@@ -280,7 +280,7 @@ void refreshGuest()
     if (!guest) return;
     scfeed_header* owner = scfeed_live_feed_of_another(scfeed_path(), myPid());
     if (owner && owner->feed_id == guest->feed_id) {
-        munmap(owner, SCFEED_HEADER_BYTES);
+        scfeed_header_unmap(owner);
         return;
     }
     std::lock_guard<std::mutex> lock(gMu);

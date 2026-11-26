@@ -1,4 +1,5 @@
-//! The app's platform seam: where its settings are remembered. One test, since it changes the environment.
+//! The app's platform seam: where its settings are remembered. One test per platform, since it changes the
+//! environment.
 use scopecreep::platform::settings_folder;
 use std::path::PathBuf;
 
@@ -23,5 +24,21 @@ fn settings_folder_follows_xdg_then_home() {
         std::env::remove_var("XDG_CONFIG_HOME");
         std::env::remove_var("HOME");
     }
+    assert_eq!(settings_folder(), None);
+}
+
+#[cfg(windows)]
+#[test]
+fn settings_folder_is_scopecreep_in_appdata() {
+    // SAFETY: this test binary has only this test, so nothing reads the environment meanwhile.
+    unsafe { std::env::set_var("APPDATA", r"C:\Users\someone\AppData\Roaming") };
+    assert_eq!(
+        settings_folder(),
+        Some(PathBuf::from(
+            r"C:\Users\someone\AppData\Roaming\ScopeCreep"
+        ))
+    );
+
+    unsafe { std::env::remove_var("APPDATA") };
     assert_eq!(settings_folder(), None);
 }

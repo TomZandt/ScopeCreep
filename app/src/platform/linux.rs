@@ -42,3 +42,6 @@ pub fn window_attributes(attributes: WindowAttributes) -> WindowAttributes {
     use winit::platform::wayland::WindowAttributesExtWayland;
     attributes.with_name("scopecreep", "scopecreep")
 }
+
+/// The graphics backends wgpu may choose from: any. `WGPU_BACKEND` narrows them, for trying another.
+pub const GRAPHICS_BACKENDS: wgpu::Backends = wgpu::Backends::all();

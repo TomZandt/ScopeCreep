@@ -1,6 +1,5 @@
 //! Byte layout of a Feed file (feed/PROTOCOL.md) and the shared mapping both sides work through.
-use crate::platform;
-use std::fs::File;
+use crate::platform::{Shared, View};
 use std::io;
 use std::sync::atomic::{AtomicU32, AtomicU64};
 
@@ -84,7 +83,7 @@ pub const PIXEL_RGBA32F: u32 = 1;
 /// A shared, writable mapping of (part of) a Feed file. Plain fields are read and written unsynchronised under
 /// the slot protocol (only the side that owns a slot touches its plain fields); shared fields go through atomics.
 pub struct Mapping {
-    ptr: *mut u8,
+    view: View,
     len: usize,
 }
 
@@ -93,9 +92,11 @@ unsafe impl Send for Mapping {}
 unsafe impl Sync for Mapping {}
 
 impl Mapping {
-    pub fn map(file: &File, len: usize) -> io::Result<Mapping> {
-        let ptr = platform::map_shared(file, len)?;
-        Ok(Mapping { ptr, len })
+    pub fn map(shared: &Shared, len: usize) -> io::Result<Mapping> {
+        Ok(Mapping {
+            view: shared.map(len)?,
+            len,
+        })
     }
 
     fn check(&self, off: usize, size: usize) {
@@ -109,12 +110,12 @@ impl Mapping {
     pub fn u32(&self, off: usize) -> u32 {
         self.check(off, 4);
         // SAFETY: in range (checked), 4-byte aligned by the layout.
-        unsafe { (self.ptr.add(off) as *const u32).read_volatile() }
+        unsafe { (self.view.ptr().add(off) as *const u32).read_volatile() }
     }
     pub fn u64(&self, off: usize) -> u64 {
         self.check(off, 8);
         // SAFETY: in range (checked), 8-byte aligned by the layout.
-        unsafe { (self.ptr.add(off) as *const u64).read_volatile() }
+        unsafe { (self.view.ptr().add(off) as *const u64).read_volatile() }
     }
     pub fn f64(&self, off: usize) -> f64 {
         f64::from_bits(self.u64(off))
@@ -122,12 +123,12 @@ impl Mapping {
     pub fn set_u32(&self, off: usize, v: u32) {
         self.check(off, 4);
         // SAFETY: as `u32`.
-        unsafe { (self.ptr.add(off) as *mut u32).write_volatile(v) }
+        unsafe { (self.view.ptr().add(off) as *mut u32).write_volatile(v) }
     }
     pub fn set_u64(&self, off: usize, v: u64) {
         self.check(off, 8);
         // SAFETY: as `u64`.
-        unsafe { (self.ptr.add(off) as *mut u64).write_volatile(v) }
+        unsafe { (self.view.ptr().add(off) as *mut u64).write_volatile(v) }
     }
     pub fn set_f64(&self, off: usize, v: f64) {
         self.set_u64(off, v.to_bits());
@@ -135,12 +136,12 @@ impl Mapping {
     pub fn atomic_u32(&self, off: usize) -> &AtomicU32 {
         self.check(off, 4);
         // SAFETY: in range, aligned, and the memory lives as long as `self`.
-        unsafe { AtomicU32::from_ptr(self.ptr.add(off) as *mut u32) }
+        unsafe { AtomicU32::from_ptr(self.view.ptr().add(off) as *mut u32) }
     }
     pub fn atomic_u64(&self, off: usize) -> &AtomicU64 {
         self.check(off, 8);
         // SAFETY: in range, aligned, and the memory lives as long as `self`.
-        unsafe { AtomicU64::from_ptr(self.ptr.add(off) as *mut u64) }
+        unsafe { AtomicU64::from_ptr(self.view.ptr().add(off) as *mut u64) }
     }
 
     /// NUL-padded UTF-8 text field.
@@ -148,7 +149,7 @@ impl Mapping {
         self.check(off, cap);
         // SAFETY: in range; bytes may change under us, which can only garble the text.
         let bytes: Vec<u8> = (0..cap)
-            .map(|i| unsafe { self.ptr.add(off + i).read_volatile() })
+            .map(|i| unsafe { self.view.ptr().add(off + i).read_volatile() })
             .collect();
         let end = bytes.iter().position(|&b| b == 0).unwrap_or(cap);
         String::from_utf8_lossy(&bytes[..end]).into_owned()
@@ -166,7 +167,7 @@ impl Mapping {
             .enumerate()
         {
             // SAFETY: in range.
-            unsafe { self.ptr.add(off + i).write_volatile(b) }
+            unsafe { self.view.ptr().add(off + i).write_volatile(b) }
         }
     }
 
@@ -175,14 +176,14 @@ impl Mapping {
         self.check(off, len);
         // SAFETY: in range.
         (0..len)
-            .map(|i| unsafe { self.ptr.add(off + i).read_volatile() })
+            .map(|i| unsafe { self.view.ptr().add(off + i).read_volatile() })
             .collect()
     }
     pub fn set_bytes(&self, off: usize, src: &[u8]) {
         self.check(off, src.len());
         for (i, &b) in src.iter().enumerate() {
             // SAFETY: in range.
-            unsafe { self.ptr.add(off + i).write_volatile(b) }
+            unsafe { self.view.ptr().add(off + i).write_volatile(b) }
         }
     }
 
@@ -190,7 +191,7 @@ impl Mapping {
     pub(crate) fn floats(&self, off: usize, count: usize) -> *mut f32 {
         self.check(off, count * 4);
         // SAFETY: in range.
-        unsafe { self.ptr.add(off) as *mut f32 }
+        unsafe { self.view.ptr().add(off) as *mut f32 }
     }
 
     pub fn slot_count(&self) -> usize {
@@ -202,13 +203,6 @@ impl Mapping {
     /// Offset of slot `i`'s header.
     pub fn slot(&self, i: usize) -> usize {
         HEADER_BYTES + i * (SLOT_HEADER_BYTES + self.slot_capacity())
-    }
-}
-
-impl Drop for Mapping {
-    fn drop(&mut self) {
-        // SAFETY: the mapping made in `map`, unmapped once.
-        unsafe { platform::unmap(self.ptr, self.len) };
     }
 }
 

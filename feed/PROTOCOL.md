@@ -8,7 +8,7 @@ Think of it as a row of pigeonholes in a corridor between two rooms. The Sender 
 
 1. **Nobody waits.** No locks, no blocking calls. Every shared field that both sides touch is a lock-free atomic.
 2. **One Sender process writes frames, one app reads.** The first running Sender process owns the Feed; Sender processes started while it runs (another Resolve) only register themselves (see "More than one Sender").
-3. **A Feed file's layout never changes.** To change the slot count or slot size the Sender makes a new file, renames it over the old name, then marks the old file retired. A reader keeps a valid mapping of the old file until it re-opens.
+3. **A Feed file's layout never changes.** To change the slot count or slot size the Sender makes a new Feed, publishes it in place of the old one (on Linux, renames the new file over the old name; on Windows, see "Windows" below), then marks the old one retired. A reader keeps a valid mapping of the old Feed until it re-opens.
 4. **No reader, no work.** The Sender copies frames only while the reader's heartbeat is fresh.
 5. All integers are little-endian. All offsets are fixed. Reserved bytes are written as zero and ignored when read.
 
@@ -20,9 +20,25 @@ The layout below is the same on every platform; only where the Feed lives differ
 |---|---|
 | Linux | the file `/dev/shm/scopecreep-feed` (POSIX shared memory), mode 0600 |
 | macOS | the POSIX shared-memory object `/scopecreep-feed` (`shm_open`) |
-| Windows | the named file mapping `Local\scopecreep-feed`, backed by the paging file |
+| Windows | the named file mapping `Local\scopecreep-feed`, backed by the paging file: a locator naming the Feed now published (below) |
 
-`SCOPECREEP_FEED=<path>` overrides the location for both sides on every platform (tests use this). Only Linux is built so far; the Rust crate keeps its platform calls in `feed/src/platform/`.
+`SCOPECREEP_FEED=<path>` overrides the location for both sides on every platform (tests use this); on Windows it is a mapping name such as `Local\scopecreep-feed-test`. Linux and Windows are built (macOS not yet); the Rust crate keeps its platform calls in `feed/src/platform/`, the C header in its `scfeed_os_*` functions.
+
+### Windows
+
+A named mapping can be neither renamed nor replaced while any process holds it, so the name cannot move to a new Feed the way a Linux file name does. Instead the name holds a **locator**, one 4096-byte page, and each Feed is its own mapping beside it:
+
+| Offset | Size | Field | Meaning |
+|---|---|---|---|
+| 0 | 8 | `current` (atomic) | number N of the Feed now published, 0 = none yet |
+| 8 | 8 | `last` (atomic) | the last N handed out |
+
+Feed N is the mapping named `<location>.N` (N in decimal, such as `Local\scopecreep-feed.3`), with exactly the layout below.
+
+- **Publishing** (Sender): open or make the locator, take N by incrementing `last`, make `<location>.N` (if that name is still taken, take the next N), fill it in, then store N into `current`. Then mark the previous Feed retired, as on Linux.
+- **Opening** (reader): open the locator (missing: there is no Sender), read `current` (0: there is no Sender), open `<location>.N`.
+- **Replaced:** the Feed at the location is another one when `current` is no longer the N the reader opened.
+- Every process using a Feed holds the locator open too, so it lasts as long as anyone uses a Feed. When the last one closes, the locator and every Feed go: an app started after Resolve quit finds no Feed rather than a stale one.
 
 ```
 [ Feed header : 4096 bytes ][ slot 0 ][ slot 1 ] ... [ slot N-1 ]
@@ -68,7 +84,7 @@ A Feed with `slot_count = 0` is valid: it means "a Sender is loaded but has not 
 | 768 | 256 | reserved | | |
 | 1024 | 3072 | `registry` | every Sender process | 24 entries of 128 bytes listing Sender instances (version 1.2, see "More than one Sender") |
 
-**Clock.** Every `_ns` time is the system-wide monotonic clock in nanoseconds (`CLOCK_MONOTONIC` on Linux), so both processes can compare times.
+**Clock.** Every `_ns` time is the system-wide monotonic clock in nanoseconds, so both processes can compare times: `CLOCK_MONOTONIC` on Linux, `QueryPerformanceCounter` scaled by `QueryPerformanceFrequency` on Windows. Process ids are the platform's own (on Windows, the process id `OpenProcess` takes).
 
 ## Slot header (4096 bytes)
 
@@ -188,12 +204,12 @@ Frames are therefore delivered in order, and a slow reader loses the oldest fram
 
 ## Opening a Feed (reader)
 
-1. Open the path. Missing file: there is no Sender. This is a normal state, not an error.
+1. Open the path (on Windows, through the locator). Missing file: there is no Sender. This is a normal state, not an error.
 2. Map the first 4096 bytes. If `magic` does not match, the file is not a Feed.
 3. If `version_major` differs from the reader's, **stop and report both versions**. Do not read anything else.
    A different `version_minor` is compatible: minor versions only give meaning to reserved bytes.
 4. Map the whole file (`header_bytes + slot_count * (slot_header_bytes + slot_capacity)`).
-5. Re-open when `retired` is 1, or when the path now names a different file (the Sender's host restarted).
+5. Re-open when `retired` is 1, or when the path now names a different Feed (the Sender's host restarted).
 
 ## Versioning
 

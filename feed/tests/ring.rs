@@ -1,6 +1,8 @@
 //! The Feed as the app and a test harness use it: frames written with the synthetic writer, read with the reader.
 mod common;
-use common::{forge_header_u64, temp_feed};
+#[cfg(unix)]
+use common::forge_header_u64;
+use common::temp_feed;
 use scopecreep_feed::{
     FeedReader, FeedWriter, FrameMeta, OpenError, Provenance, READER_TIMEOUT_NS, SentColourSetup,
     WriteError, now_ns, synthetic,
@@ -180,6 +182,7 @@ fn a_new_reader_reclaims_the_slot_a_killed_reader_was_holding() {
     assert_eq!(second.next_frame().unwrap().frame_time(), 7.0);
 }
 
+#[cfg(unix)] // forges the Feed file
 #[test]
 fn a_second_app_cannot_attach_while_another_is_using_the_feed() {
     let path = temp_feed("second");
@@ -199,6 +202,7 @@ fn a_missing_feed_is_reported_as_no_feed() {
     assert!(matches!(FeedReader::open(&path), Err(OpenError::NoFeed)));
 }
 
+#[cfg(unix)] // forges the Feed file
 #[test]
 fn a_file_that_is_not_a_feed_is_refused() {
     let path = temp_feed("garbage");
@@ -388,6 +392,7 @@ fn a_reader_accepts_a_1_0_feed_and_finds_no_colour_setup_in_it() {
     assert_eq!(reader.next_frame().unwrap().colour_setup(), None);
 }
 
+#[cfg(unix)] // forges the Feed file
 #[test]
 fn a_colour_setup_block_with_an_impossible_size_or_unknown_provenance_is_ignored() {
     let path = temp_feed("colour-forged");

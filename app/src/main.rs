@@ -8,7 +8,8 @@
 //!
 //!   scopecreep [--feed <path>] [--no-scripting]
 //!
-//!   --feed           default: $SCOPECREEP_FEED, else /dev/shm/scopecreep-feed
+//!   --feed           default: $SCOPECREEP_FEED, else the platform's Feed (on Linux /dev/shm/scopecreep-feed,
+//!                    on Windows the named mapping Local\scopecreep-feed)
 //!   --no-scripting   never read the project by Resolve scripting (the Colour Setup then comes only from the
 //!                    Sender node's manual override). Resolve's Python: $SCOPECREEP_RESOLVE_PYTHON, else
 //!                    /opt/resolve/bin/ResolvePython.
@@ -16,6 +17,8 @@
 //! Two threads. The Feed thread polls the Feed every millisecond (the ring is short and the Sender never waits),
 //! puts the frames to show on the GPU once, converts them once, hands that one frame to every display, and wakes
 //! the window. The window thread only draws.
+// No console window on Windows: the app is a window, and a console would sit behind it.
+#![cfg_attr(windows, windows_subsystem = "windows")]
 use glyphon::{
     Attrs, Buffer, Cache, Color, ColorMode, Family, FontSystem, Metrics, Resolution, Shaping,
     SwashCache, TextArea, TextAtlas, TextBounds, TextRenderer, Viewport,
@@ -400,11 +403,12 @@ impl AppWindow {
         scripting: bool,
         proxy: EventLoopProxy<Wake>,
     ) -> Result<AppWindow, Box<dyn std::error::Error>> {
-        // WGPU_BACKEND and friends are honoured, for trying another graphics backend.
-        let instance =
-            wgpu::Instance::new(wgpu::InstanceDescriptor::new_with_display_handle_from_env(
-                Box::new(event_loop.owned_display_handle()),
-            ));
+        // The platform's graphics backend; WGPU_BACKEND and friends are honoured, for trying another.
+        let mut descriptor = wgpu::InstanceDescriptor::new_with_display_handle(Box::new(
+            event_loop.owned_display_handle(),
+        ));
+        descriptor.backends = scopecreep::platform::GRAPHICS_BACKENDS;
+        let instance = wgpu::Instance::new(descriptor.with_env());
         let surface = instance
             .create_surface(window.clone())
             .map_err(|e| format!("no drawing surface: {e}"))?;

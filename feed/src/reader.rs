@@ -1,9 +1,8 @@
 //! The reader side of the Feed: what the app uses.
 use crate::SentColourSetup;
 use crate::layout::*;
-use crate::platform::{file_identity, process_alive};
+use crate::platform::{Shared, current_identity, process_alive};
 use crate::{READER_TIMEOUT_NS, REGISTRY_ENTRIES, VERSION_MAJOR, VERSION_MINOR, now_ns};
-use std::fs::OpenOptions;
 use std::io;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -110,13 +109,12 @@ impl FeedReader {
     /// long as [`FeedReader::heartbeat`] keeps being called.
     pub fn open(path: impl AsRef<Path>) -> Result<FeedReader, OpenError> {
         let path = path.as_ref().to_path_buf();
-        let file = match OpenOptions::new().read(true).write(true).open(&path) {
+        let file = match Shared::open(&path) {
             Ok(f) => f,
             Err(e) if e.kind() == io::ErrorKind::NotFound => return Err(OpenError::NoFeed),
             Err(e) => return Err(OpenError::Io(e)),
         };
-        let meta = file.metadata().map_err(OpenError::Io)?;
-        if (meta.len() as usize) < HEADER_BYTES {
+        if (file.size() as usize) < HEADER_BYTES {
             return Err(OpenError::NotAFeed);
         }
         let header = Mapping::map(&file, HEADER_BYTES).map_err(OpenError::Io)?;
@@ -136,7 +134,7 @@ impl FeedReader {
             return Err(OpenError::NotAFeed);
         }
         let bytes = file_bytes(header.slot_count(), header.slot_capacity());
-        if (meta.len() as usize) < bytes {
+        if (file.size() as usize) < bytes {
             return Err(OpenError::NotAFeed);
         }
         let now = now_ns();
@@ -159,7 +157,7 @@ impl FeedReader {
         let reader = FeedReader {
             map: Arc::new(map),
             path,
-            file_id: file_identity(&meta),
+            file_id: file.identity(),
         };
         reader.heartbeat(now);
         Ok(reader)
@@ -181,13 +179,10 @@ impl FeedReader {
         self.map.atomic_u32(H_RETIRED).load(Acquire) != 0
     }
 
-    /// Does the path now name a different file (Resolve restarted, so nobody marked this one retired)? If so,
-    /// open the path again. Costs a `stat`, so check it a few times a second, not every poll.
+    /// Is another Feed at the path now (Resolve restarted, so nobody marked this one retired)? If so, open the
+    /// path again. Costs a system call or two, so check it a few times a second, not every poll.
     pub fn replaced(&self) -> bool {
-        match std::fs::metadata(&self.path) {
-            Ok(m) => file_identity(&m) != self.file_id,
-            Err(_) => true,
-        }
+        current_identity(&self.path) != Some(self.file_id)
     }
 
     pub fn sender(&self) -> SenderInfo {

@@ -135,6 +135,7 @@ DaVinci Resolve                                 scopecreep app (Rust + wgpu)
   - [0044](docs/adr/0044-the-brand-accent-and-the-hairline-look.md): The brand accent is lime (a user option in Settings > Appearance) and the chrome is Hairline: grey, the accent only as thin lines and text; the view block is on picture Panels only, chips overflow as "+N", a Panel is at least 255 wide and the Window at least 1420 × 833
   - [0042](docs/adr/0042-view-controls-return-to-every-panel-title-bar.md): View controls return to every Panel's title bar as a block, the Colour Setup line sits in the menu bar row, and a page tab has a right-click menu
   - [0043](docs/adr/0043-the-feed-keeps-its-bytes-and-takes-each-platforms-shared-memory-name.md): The Feed keeps its bytes and takes each platform's shared-memory name (Linux /dev/shm, macOS shm_open, Windows named mapping)
+  - [0049](docs/adr/0049-on-windows-the-feed-name-holds-a-locator.md): On Windows the Feed's name holds a locator and each Feed is its own mapping `<name>.N`, since a named mapping cannot be replaced while held
 - [docs/findings/](docs/findings/): what testing showed, one file per ticket.
 - [docs/research/](docs/research/): what public sources say, with dates and links.
 
