@@ -96,20 +96,16 @@ enum ToolbarHit {
     View(usize, BlockPart),
 }
 
-/// Where the border positions are remembered: `$XDG_CONFIG_HOME/scopecreep/panel-grid`, else
-/// `~/.config/scopecreep/panel-grid`.
 /// The Panel keys as the grid and the saved layouts take them. A layout names Panels by key, which is the display's
 /// name for the first instance of a display, so a layout saved before instances still recalls (ADR 0039).
 fn as_strs(keys: &[String]) -> Vec<&str> {
     keys.iter().map(String::as_str).collect()
 }
 
+/// Where the border positions are remembered: `panel-grid` in the settings folder (on Linux
+/// `$XDG_CONFIG_HOME/scopecreep`, else `~/.config/scopecreep`).
 fn grid_file() -> Option<PathBuf> {
-    let base = std::env::var_os("XDG_CONFIG_HOME")
-        .filter(|v| !v.is_empty())
-        .map(PathBuf::from)
-        .or_else(|| std::env::var_os("HOME").map(|h| PathBuf::from(h).join(".config")))?;
-    Some(base.join("scopecreep").join("panel-grid"))
+    scopecreep::platform::settings_folder().map(|folder| folder.join("panel-grid"))
 }
 
 /// Where the pages are remembered (ADR 0041): the layout of every page and which is shown. `panel-grid` and
@@ -3048,11 +3044,7 @@ impl ApplicationHandler<Wake> for App {
         let attributes = Window::default_attributes()
             .with_title("ScopeCreep")
             .with_inner_size(LogicalSize::new(1440.0, 840.0));
-        #[cfg(target_os = "linux")]
-        let attributes = {
-            use winit::platform::wayland::WindowAttributesExtWayland;
-            attributes.with_name("scopecreep", "scopecreep")
-        };
+        let attributes = scopecreep::platform::window_attributes(attributes);
         let made = event_loop
             .create_window(attributes)
             .map_err(Into::into)

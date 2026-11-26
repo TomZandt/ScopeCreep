@@ -1,10 +1,10 @@
 //! The reader side of the Feed: what the app uses.
 use crate::SentColourSetup;
 use crate::layout::*;
+use crate::platform::{file_identity, process_alive};
 use crate::{READER_TIMEOUT_NS, REGISTRY_ENTRIES, VERSION_MAJOR, VERSION_MINOR, now_ns};
 use std::fs::OpenOptions;
 use std::io;
-use std::os::unix::fs::MetadataExt;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::sync::atomic::Ordering::{AcqRel, Acquire, Relaxed, Release};
@@ -159,7 +159,7 @@ impl FeedReader {
         let reader = FeedReader {
             map: Arc::new(map),
             path,
-            file_id: (meta.dev(), meta.ino()),
+            file_id: file_identity(&meta),
         };
         reader.heartbeat(now);
         Ok(reader)
@@ -185,7 +185,7 @@ impl FeedReader {
     /// open the path again. Costs a `stat`, so check it a few times a second, not every poll.
     pub fn replaced(&self) -> bool {
         match std::fs::metadata(&self.path) {
-            Ok(m) => (m.dev(), m.ino()) != self.file_id,
+            Ok(m) => file_identity(&m) != self.file_id,
             Err(_) => true,
         }
     }

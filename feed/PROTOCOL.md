@@ -14,7 +14,15 @@ Think of it as a row of pigeonholes in a corridor between two rooms. The Sender 
 
 ## The file
 
-Default path `/dev/shm/scopecreep-feed` (POSIX shared memory). `SCOPECREEP_FEED=<path>` overrides it for both sides (tests use this). Mode 0600.
+The layout below is the same on every platform; only where the Feed lives differs (ADR 0043):
+
+| Platform | Where the Feed lives |
+|---|---|
+| Linux | the file `/dev/shm/scopecreep-feed` (POSIX shared memory), mode 0600 |
+| macOS | the POSIX shared-memory object `/scopecreep-feed` (`shm_open`) |
+| Windows | the named file mapping `Local\scopecreep-feed`, backed by the paging file |
+
+`SCOPECREEP_FEED=<path>` overrides the location for both sides on every platform (tests use this). Only Linux is built so far; the Rust crate keeps its platform calls in `feed/src/platform/`.
 
 ```
 [ Feed header : 4096 bytes ][ slot 0 ][ slot 1 ] ... [ slot N-1 ]

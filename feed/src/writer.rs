@@ -4,12 +4,12 @@
 //! processes join it as guests.
 use crate::SentColourSetup;
 use crate::layout::*;
+use crate::platform::{create_feed_file, process_alive};
 use crate::{
     READER_TIMEOUT_NS, REGISTRY_ENTRIES, SENDER_NAME, VERSION_MAJOR, VERSION_MINOR, now_ns,
 };
 use std::fs::OpenOptions;
 use std::io;
-use std::os::unix::fs::OpenOptionsExt;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::Ordering::{AcqRel, Acquire, Relaxed, Release};
 
@@ -352,12 +352,7 @@ impl FeedWriter {
         let bytes = file_bytes(slot_count, slot_capacity);
         let tmp = PathBuf::from(format!("{}.{}.tmp", path.display(), std::process::id()));
         let _ = std::fs::remove_file(&tmp);
-        let file = OpenOptions::new()
-            .read(true)
-            .write(true)
-            .create_new(true)
-            .mode(0o600)
-            .open(&tmp)?;
+        let file = create_feed_file(&tmp)?;
         file.set_len(bytes as u64)?;
         let map = Mapping::map(&file, bytes)?;
         map.set_u32(H_VERSION_MAJOR, major);

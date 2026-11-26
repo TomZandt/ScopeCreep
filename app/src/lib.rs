@@ -40,6 +40,7 @@ pub mod pages;
 pub mod panel_grid;
 pub mod picture_stage;
 pub mod picture_view;
+pub mod platform;
 pub mod playback_rate;
 pub mod project;
 pub mod reference_levels;

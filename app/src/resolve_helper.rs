@@ -4,17 +4,17 @@
 //! The app owns it: it is started on the first request, asked over its stdin, answers on its stdout, and is
 //! killed when a read takes too long or the app quits. It never calls Resolve unless asked, and the Monitor asks
 //! only while Resolve is not playing. Nothing here blocks the caller: answers are collected by a thread.
+use crate::platform;
 use crate::project::{Answer, ProjectReader};
 use std::collections::VecDeque;
 use std::ffi::OsString;
 use std::io::{BufRead, BufReader, Write};
-use std::os::unix::process::CommandExt;
 use std::path::PathBuf;
 use std::process::{Child, ChildStdin, Command, Stdio};
 use std::sync::mpsc::{Receiver, TryRecvError, channel};
 
-/// Resolve's bundled Python, which can import its scripting module with no setup (Resolve 21.1+).
-pub const DEFAULT_PYTHON: &str = "/opt/resolve/bin/ResolvePython";
+/// Resolve's bundled Python on this platform.
+pub const DEFAULT_PYTHON: &str = platform::RESOLVE_PYTHON;
 /// Overrides [`DEFAULT_PYTHON`].
 pub const PYTHON_ENV: &str = "SCOPECREEP_RESOLVE_PYTHON";
 
@@ -80,17 +80,7 @@ impl ScriptHelper {
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::null());
-        // SAFETY: only async-signal-safe calls between fork and exec.
-        unsafe {
-            command.pre_exec(|| {
-                // A helper stuck in a Resolve call must not outlive the app...
-                libc::prctl(libc::PR_SET_PDEATHSIG, libc::SIGKILL);
-                // ...nor hold anything the app inherited (found in testing: a lock file's descriptor). Marked
-                // close-on-exec rather than closed, so the standard library's exec-error pipe still works.
-                libc::close_range(3, u32::MAX, libc::CLOSE_RANGE_CLOEXEC as libc::c_int);
-                Ok(())
-            });
-        }
+        platform::tie_helper_to_app(&mut command);
         let mut child = command.spawn().map_err(|e| {
             format!(
                 "Resolve's Python could not be started from {} ({e})",

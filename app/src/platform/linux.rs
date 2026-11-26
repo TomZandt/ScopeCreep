@@ -1,0 +1,44 @@
+//! The app on Linux.
+use std::os::unix::process::CommandExt;
+use std::path::PathBuf;
+use std::process::{Child, Command};
+use winit::window::WindowAttributes;
+
+/// The folder the app remembers its settings in: `$XDG_CONFIG_HOME/scopecreep`, else `~/.config/scopecreep`.
+/// None with neither set.
+pub fn settings_folder() -> Option<PathBuf> {
+    let base = std::env::var_os("XDG_CONFIG_HOME")
+        .filter(|v| !v.is_empty())
+        .map(PathBuf::from)
+        .or_else(|| std::env::var_os("HOME").map(|h| PathBuf::from(h).join(".config")))?;
+    Some(base.join("scopecreep"))
+}
+
+/// Resolve's bundled Python, which can import its scripting module with no setup (Resolve 21.1+).
+pub const RESOLVE_PYTHON: &str = "/opt/resolve/bin/ResolvePython";
+
+/// Set up the Resolve helper's process so it dies with the app and holds nothing the app opened.
+pub fn tie_helper_to_app(command: &mut Command) {
+    // SAFETY: only async-signal-safe calls between fork and exec.
+    unsafe {
+        command.pre_exec(|| {
+            // A helper stuck in a Resolve call must not outlive the app...
+            libc::prctl(libc::PR_SET_PDEATHSIG, libc::SIGKILL);
+            // ...nor hold anything the app inherited (found in testing: a lock file's descriptor). Marked
+            // close-on-exec rather than closed, so the standard library's exec-error pipe still works.
+            libc::close_range(3, u32::MAX, libc::CLOSE_RANGE_CLOEXEC as libc::c_int);
+            Ok(())
+        });
+    }
+}
+
+/// Start the system's opener on `url`.
+pub fn open_url(url: &str) -> std::io::Result<Child> {
+    Command::new("xdg-open").arg(url).spawn()
+}
+
+/// The window's platform attributes: the Wayland app id, so the desktop can match the app launcher's entry.
+pub fn window_attributes(attributes: WindowAttributes) -> WindowAttributes {
+    use winit::platform::wayland::WindowAttributesExtWayland;
+    attributes.with_name("scopecreep", "scopecreep")
+}

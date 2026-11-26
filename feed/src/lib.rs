@@ -5,12 +5,13 @@
 //! The Sender itself uses the C implementation in `feed/include/scopecreep_feed.h`.
 mod colour_setup;
 mod layout;
+mod platform;
 mod reader;
 pub mod synthetic;
 mod writer;
 
 pub use colour_setup::{Provenance, SentColourSetup};
-pub use layout::process_alive;
+pub use platform::{now_ns, process_alive};
 pub use reader::{FeedReader, FeedStats, Frame, OpenError, RegisteredSender, SenderInfo};
 pub use writer::{FeedWriter, FrameMeta, SenderIdentity, WriteError};
 
@@ -32,21 +33,11 @@ pub const HEARTBEAT_INTERVAL_NS: u64 = 250_000_000;
 
 pub const SENDER_NAME: &str = "ScopeCreep";
 
-/// Where the Feed lives: `SCOPECREEP_FEED` if set, else `/dev/shm/scopecreep-feed`.
+/// Where the Feed lives: `SCOPECREEP_FEED` if set, else the platform's location (on Linux
+/// `/dev/shm/scopecreep-feed`; see `feed/PROTOCOL.md`).
 pub fn default_path() -> PathBuf {
     match std::env::var_os("SCOPECREEP_FEED") {
         Some(p) if !p.is_empty() => PathBuf::from(p),
-        _ => PathBuf::from("/dev/shm/scopecreep-feed"),
+        _ => PathBuf::from(platform::DEFAULT_LOCATION),
     }
-}
-
-/// The system-wide monotonic clock in nanoseconds: the clock every `_ns` field of the Feed uses.
-pub fn now_ns() -> u64 {
-    let mut ts = libc::timespec {
-        tv_sec: 0,
-        tv_nsec: 0,
-    };
-    // SAFETY: a valid timespec to fill in.
-    unsafe { libc::clock_gettime(libc::CLOCK_MONOTONIC, &mut ts) };
-    ts.tv_sec as u64 * 1_000_000_000 + ts.tv_nsec as u64
 }

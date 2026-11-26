@@ -55,16 +55,7 @@ fn encode(text: &str) -> String {
 
 /// Hand `url` to the system's opener. Never waits and never fails the app: a failure only logs.
 pub fn open_in_browser(url: &str) {
-    #[cfg(target_os = "windows")]
-    let opener = std::process::Command::new("cmd")
-        .args(["/C", "start", ""])
-        .arg(url)
-        .spawn();
-    #[cfg(target_os = "macos")]
-    let opener = std::process::Command::new("open").arg(url).spawn();
-    #[cfg(not(any(target_os = "windows", target_os = "macos")))]
-    let opener = std::process::Command::new("xdg-open").arg(url).spawn();
-    match opener {
+    match crate::platform::open_url(url) {
         // Reap it in the background so it does not linger as a zombie.
         Ok(mut child) => {
             std::thread::spawn(move || {

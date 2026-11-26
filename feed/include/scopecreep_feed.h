@@ -28,6 +28,8 @@ extern "C" {
 #define SCFEED_VERSION_MINOR 2u /* 1.1: the slot's Colour Setup block has a defined format; 1.2: the Sender registry */
 #define SCFEED_HEADER_BYTES 4096u
 #define SCFEED_SLOT_HEADER_BYTES 4096u
+/* Where the Feed lives on Linux. macOS: shm_open("/scopecreep-feed"); Windows: the named file mapping
+ * "Local\scopecreep-feed" (feed/PROTOCOL.md, ADR 0043). Only Linux is built so far. */
 #define SCFEED_DEFAULT_PATH "/dev/shm/scopecreep-feed"
 #define SCFEED_PATH_ENV "SCOPECREEP_FEED"
 #define SCFEED_SENDER_NAME "ScopeCreep"

@@ -1,7 +1,7 @@
 //! Byte layout of a Feed file (feed/PROTOCOL.md) and the shared mapping both sides work through.
+use crate::platform;
 use std::fs::File;
 use std::io;
-use std::os::fd::AsRawFd;
 use std::sync::atomic::{AtomicU32, AtomicU64};
 
 pub const MAGIC: u64 = 0x0000_4445_4546_4353; // "SCFEED\0\0"
@@ -94,24 +94,8 @@ unsafe impl Sync for Mapping {}
 
 impl Mapping {
     pub fn map(file: &File, len: usize) -> io::Result<Mapping> {
-        // SAFETY: a fresh shared mapping of a file we hold open; failure is checked.
-        let ptr = unsafe {
-            libc::mmap(
-                std::ptr::null_mut(),
-                len,
-                libc::PROT_READ | libc::PROT_WRITE,
-                libc::MAP_SHARED,
-                file.as_raw_fd(),
-                0,
-            )
-        };
-        if ptr == libc::MAP_FAILED {
-            return Err(io::Error::last_os_error());
-        }
-        Ok(Mapping {
-            ptr: ptr as *mut u8,
-            len,
-        })
+        let ptr = platform::map_shared(file, len)?;
+        Ok(Mapping { ptr, len })
     }
 
     fn check(&self, off: usize, size: usize) {
@@ -224,22 +208,13 @@ impl Mapping {
 impl Drop for Mapping {
     fn drop(&mut self) {
         // SAFETY: the mapping made in `map`, unmapped once.
-        unsafe { libc::munmap(self.ptr as *mut libc::c_void, self.len) };
+        unsafe { platform::unmap(self.ptr, self.len) };
     }
 }
 
 /// Offset of registry entry `i`.
 pub fn entry(i: usize) -> usize {
     H_REGISTRY + i * R_ENTRY_BYTES
-}
-
-/// Is process `pid` running? (Signal 0 only checks; EPERM means it exists but belongs to someone else.)
-pub fn process_alive(pid: u64) -> bool {
-    // SAFETY: signal 0 sends nothing.
-    pid != 0
-        && pid <= i32::MAX as u64
-        && (unsafe { libc::kill(pid as libc::pid_t, 0) } == 0
-            || io::Error::last_os_error().raw_os_error() == Some(libc::EPERM))
 }
 
 /// Total size of a Feed file with this layout.
