@@ -45,14 +45,16 @@ def answer(fields):
 
 
 def scripting_paths(platform, environ):
-    """(scripting API folder, fusionscript library) where Resolve installs them on this platform, unless Resolve's
-    own RESOLVE_SCRIPT_API and RESOLVE_SCRIPT_LIB say otherwise. The module is in <API folder>/Modules."""
-    import os
+    """(scripting API folder, fusionscript library) where Resolve installs them on `platform` (a `sys.platform`
+    value), unless Resolve's own RESOLVE_SCRIPT_API and RESOLVE_SCRIPT_LIB say otherwise. The module is in
+    <API folder>/Modules. A copy of harness/scopecreep_harness/resolve_api.py's `scripting_paths`, since this
+    script runs alone; harness/tests/test_resolve_api.py checks the two agree."""
+    import ntpath
     if platform == "win32":
-        api = os.path.join(environ.get("PROGRAMDATA") or "C:\\ProgramData",
-                           "Blackmagic Design", "DaVinci Resolve", "Support", "Developer", "Scripting")
-        lib = os.path.join(environ.get("PROGRAMFILES") or "C:\\Program Files",
-                           "Blackmagic Design", "DaVinci Resolve", "fusionscript.dll")
+        api = ntpath.join(environ.get("PROGRAMDATA") or "C:\\ProgramData",
+                          "Blackmagic Design", "DaVinci Resolve", "Support", "Developer", "Scripting")
+        lib = ntpath.join(environ.get("PROGRAMFILES") or "C:\\Program Files",
+                          "Blackmagic Design", "DaVinci Resolve", "fusionscript.dll")
     else:
         api, lib = "/opt/resolve/Developer/Scripting", "/opt/resolve/libs/Fusion/fusionscript.so"
     return environ.get("RESOLVE_SCRIPT_API") or api, environ.get("RESOLVE_SCRIPT_LIB") or lib

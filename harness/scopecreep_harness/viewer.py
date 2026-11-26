@@ -29,7 +29,9 @@ def find_window(title_prefix="DaVinci Resolve"):
 
 
 def send_key(key, mods="", window=None):
-    """Send one key combination to the Resolve main window. Raises if Hyprland rejects the dispatch."""
+    """Send one key combination to the Resolve main window. Raises RuntimeError if it was not sent: on Linux when
+    Hyprland rejects the dispatch, on Windows when Resolve cannot be brought to the front or Windows refuses the
+    input. On Windows only a letter or digit with no modifiers (ValueError, NotImplementedError otherwise)."""
     if sys.platform == "win32":
         if mods:
             raise NotImplementedError("modifier keys are not sent on Windows")
@@ -44,8 +46,16 @@ def send_key(key, mods="", window=None):
             raise RuntimeError("Hyprland rejected the keystroke: %r / %r" % (out, legacy))
 
 
+def _windows_virtual_key(key):
+    """The Windows virtual-key code of `key`, a single letter or digit (theirs are the upper-case ASCII codes)."""
+    if len(key) != 1 or not key.isascii() or not key.isalnum():
+        raise ValueError("only a letter or digit is sent on Windows, not %r" % key)
+    return ord(key.upper())
+
+
 def _windows_send_key(key):
     """Bring Resolve's main window to the front and press `key` (a letter or digit) in it."""
+    vk = _windows_virtual_key(key)
     import ctypes
     from ctypes import wintypes
     user32 = ctypes.WinDLL("user32", use_last_error=True)
@@ -72,12 +82,39 @@ def _windows_send_key(key):
         time.sleep(0.2)
         if user32.GetForegroundWindow() != hwnd:
             raise RuntimeError("could not bring Resolve to the front; click its window and run again")
-    vk = ord(key.upper())
     scan = user32.MapVirtualKeyW(vk, 0)
-    KEYEVENTF_KEYUP = 0x0002
-    user32.keybd_event(vk, scan, 0, 0)
-    time.sleep(0.03)
-    user32.keybd_event(vk, scan, KEYEVENTF_KEYUP, 0)
+    for flags in (0, 0x0002):  # key down, then KEYEVENTF_KEYUP
+        _windows_send_input(user32, vk, scan, flags)
+        time.sleep(0.03)
+
+
+def _windows_send_input(user32, vk, scan, flags):
+    """One keyboard event through SendInput, which, unlike keybd_event, says whether Windows took it (it refuses
+    input to a window of a higher integrity level, such as an elevated Resolve)."""
+    import ctypes
+    from ctypes import wintypes
+
+    class KEYBDINPUT(ctypes.Structure):
+        _fields_ = [("wVk", wintypes.WORD), ("wScan", wintypes.WORD), ("dwFlags", wintypes.DWORD),
+                    ("time", wintypes.DWORD), ("dwExtraInfo", ctypes.c_size_t)]
+
+    class MOUSEINPUT(ctypes.Structure):  # the union's largest member, so INPUT has Windows' size
+        _fields_ = [("dx", wintypes.LONG), ("dy", wintypes.LONG), ("mouseData", wintypes.DWORD),
+                    ("dwFlags", wintypes.DWORD), ("time", wintypes.DWORD), ("dwExtraInfo", ctypes.c_size_t)]
+
+    class EVENT(ctypes.Union):
+        _fields_ = [("ki", KEYBDINPUT), ("mi", MOUSEINPUT)]
+
+    class INPUT(ctypes.Structure):
+        _fields_ = [("type", wintypes.DWORD), ("event", EVENT)]
+
+    event = INPUT(type=1)  # INPUT_KEYBOARD
+    event.event.ki = KEYBDINPUT(wVk=vk, wScan=scan, dwFlags=flags)
+    user32.SendInput.argtypes = [wintypes.UINT, ctypes.POINTER(INPUT), ctypes.c_int]
+    user32.SendInput.restype = wintypes.UINT
+    if user32.SendInput(1, ctypes.byref(event), ctypes.sizeof(INPUT)) != 1:
+        raise RuntimeError("Windows refused the keystroke (error %d); is Resolve running as administrator?"
+                           % ctypes.get_last_error())
 
 
 def _windows_find_resolve(user32):

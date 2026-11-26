@@ -9,8 +9,12 @@ import os
 import pathlib
 import re
 import subprocess
+import sys
 import tempfile
 import unittest
+
+if sys.platform == "win32":
+    raise unittest.SkipTest("the packaging script and its stand-in compiler are bash, run directly on Linux")
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 PACKAGE = os.path.join(ROOT, "scripts", "package-windows.sh")

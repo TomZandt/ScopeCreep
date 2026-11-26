@@ -70,6 +70,9 @@ std::once_flag gOpenOnce, gWorkerOnce;
 // While this process is a guest: the header of the other Resolve's Feed (never unmapped: a render thread may
 // still be using an old one; they are 4 KB and replaced rarely). nullptr while this process owns the Feed.
 std::atomic<scfeed_header*> gGuest{nullptr};
+// What the OS needs kept for the current gGuest (Windows: its handles, ADR 0049). Written under gMu or in
+// feedOpen's call_once. An old guest's view stays mapped after its handles close; it keeps its memory.
+scfeed_os_feed gGuestHeld{};
 std::atomic<uint64_t> gNextGuestCheckNs{0};
 constexpr uint64_t kGuestCheckNs = 1000000000ull;
 std::vector<std::pair<uint32_t, double>> gRegistered;  // this process's instances (guarded by gMu)
@@ -276,12 +279,15 @@ void refreshGuest()
 {
     scfeed_header* guest = gGuest.load(std::memory_order_acquire);
     if (!guest) return;
-    scfeed_header* owner = scfeed_live_feed_of_another(scfeed_path(), myPid());
+    scfeed_os_feed held;
+    scfeed_header* owner = scfeed_live_feed_of_another(scfeed_path(), myPid(), &held);
     if (owner && owner->feed_id == guest->feed_id) {
-        scfeed_header_unmap(owner);
+        scfeed_header_unmap(owner, &held);
         return;
     }
     std::lock_guard<std::mutex> lock(gMu);
+    scfeed_os_close_kept(&gGuestHeld);
+    gGuestHeld = held;
     if (owner) {
         gGuest.store(owner, std::memory_order_release);  // the owner published a new Feed file: follow it
     } else {
@@ -319,7 +325,7 @@ void feedOpen(const char* hostName)
     std::call_once(gOpenOnce, [&] {
         gHostName = hostName ? hostName : "";
         // The first running Resolve keeps the Feed; a second one joins it as a guest.
-        if (scfeed_header* owner = scfeed_live_feed_of_another(scfeed_path(), myPid())) {
+        if (scfeed_header* owner = scfeed_live_feed_of_another(scfeed_path(), myPid(), &gGuestHeld)) {
             gGuest.store(owner, std::memory_order_release);
             gNextGuestCheckNs.store(scfeed_now_ns() + kGuestCheckNs, std::memory_order_relaxed);
             return;

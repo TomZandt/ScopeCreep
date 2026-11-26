@@ -12,7 +12,11 @@ ScriptingPaths = collections.namedtuple("ScriptingPaths", "python modules lib")
 def scripting_paths(platform, environ):
     """Where Resolve installs its scripting on `platform` (a `sys.platform` value): its bundled Python (which may
     not exist), the folder holding the DaVinciResolveScript module, and the fusionscript library. Resolve's own
-    RESOLVE_SCRIPT_API and RESOLVE_SCRIPT_LIB override the last two, as its scripting README says."""
+    RESOLVE_SCRIPT_API and RESOLVE_SCRIPT_LIB override the last two, as its scripting README says.
+
+    The one list of Resolve's install paths. The app keeps copies it cannot import: the module and library in
+    app/resolve/colour_setup_helper.py (tests/test_resolve_api.py checks they agree) and the bundled Python in
+    `python_candidates` of app/src/platform/windows.rs and `resolve_python` of app/src/platform/linux.rs."""
     if platform == "win32":
         join = ntpath.join
         resolve = join(environ.get("PROGRAMFILES") or "C:\\Program Files", "Blackmagic Design", "DaVinci Resolve")

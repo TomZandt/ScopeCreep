@@ -189,12 +189,29 @@ static inline const char* scfeed_path(void)
 }
 
 #if defined(_MSC_VER) && !defined(__clang__)
-/* MSVC has no __atomic builtins: the Interlocked intrinsics are full barriers, stronger than the orders below. */
-static inline uint64_t scfeed_load64(const uint64_t* p) { return (uint64_t)_InterlockedOr64((volatile __int64*)p, 0); }
+/* MSVC has no __atomic builtins. Writes and the compare-and-swap use the Interlocked intrinsics, full barriers,
+ * stronger than the orders below. A load is a plain volatile load followed by a compiler barrier: on x64 every
+ * aligned load of up to 8 bytes is atomic and the processor never moves a later load or store ahead of a load,
+ * so all an acquire load needs is that the compiler does not either. (An _InterlockedOr(p, 0) would be a
+ * locked write on every load, on the Sender's render path, and a write to memory a load should only read.) */
+#if !defined(_M_X64)
+#error "scopecreep_feed.h: the MSVC loads below are acquire loads on x64 only; add this architecture's"
+#endif
+static inline uint64_t scfeed_load64(const uint64_t* p)
+{
+    const uint64_t v = *(const volatile uint64_t*)p;
+    _ReadWriteBarrier();
+    return v;
+}
 static inline void scfeed_store64(uint64_t* p, uint64_t v) { _InterlockedExchange64((volatile __int64*)p, (__int64)v); }
 static inline void scfeed_add64(uint64_t* p, uint64_t v) { _InterlockedExchangeAdd64((volatile __int64*)p, (__int64)v); }
 static inline uint64_t scfeed_inc64(uint64_t* p) { return (uint64_t)_InterlockedIncrement64((volatile __int64*)p); }
-static inline uint32_t scfeed_load32(const uint32_t* p) { return (uint32_t)_InterlockedOr((volatile long*)p, 0); }
+static inline uint32_t scfeed_load32(const uint32_t* p)
+{
+    const uint32_t v = *(const volatile uint32_t*)p;
+    _ReadWriteBarrier();
+    return v;
+}
 static inline void scfeed_store32(uint32_t* p, uint32_t v) { _InterlockedExchange((volatile long*)p, (long)v); }
 static inline int scfeed_cas32(uint32_t* p, uint32_t expect, uint32_t v)
 {
@@ -299,13 +316,18 @@ static inline int scfeed_os_open(scfeed_os_feed* f, const char* path)
         scfeed_os_close(f);
         return e == ERROR_FILE_NOT_FOUND ? SCFEED_ERR_NO_FEED : SCFEED_ERR_IO;
     }
-    /* Its size: map all of it and ask how large the view is (a Feed is whole pages). */
-    void* all = MapViewOfFile(f->section, FILE_MAP_READ | FILE_MAP_WRITE, 0, 0, 0);
-    MEMORY_BASIC_INFORMATION info;
-    const int ok = all && VirtualQuery(all, &info, sizeof info) != 0;
-    if (all) UnmapViewOfFile(all);
-    if (!ok) { scfeed_os_close(f); return SCFEED_ERR_IO; }
-    f->size = info.RegionSize;
+    /* Its size, read from its header: Windows tells a mapping's size only by mapping all of it. A mapping that does
+     * not start with a Feed header counts as the one page its header would be (and is then refused as not a Feed). */
+    const scfeed_header* h = (const scfeed_header*)MapViewOfFile(f->section, FILE_MAP_READ, 0, 0, SCFEED_HEADER_BYTES);
+    if (!h) { scfeed_os_close(f); return SCFEED_ERR_IO; }
+    uint64_t size = SCFEED_HEADER_BYTES;
+    if (h->magic == SCFEED_MAGIC && h->header_bytes == SCFEED_HEADER_BYTES && h->slot_header_bytes == SCFEED_SLOT_HEADER_BYTES) {
+        const uint64_t cap = h->slot_capacity, count = h->slot_count, most = UINT64_MAX - SCFEED_HEADER_BYTES;
+        const uint64_t slot = cap > most - SCFEED_SLOT_HEADER_BYTES ? most : cap + SCFEED_SLOT_HEADER_BYTES;
+        size += count > most / slot ? most : count * slot; /* a header claiming more than there is fails to map later */
+    }
+    UnmapViewOfFile(h);
+    f->size = (size_t)size;
     return SCFEED_OK;
 }
 
@@ -351,10 +373,12 @@ static inline int scfeed_os_publish(scfeed_os_feed* f, const char* path)
 }
 /* A Feed from scfeed_os_create that will not be published. */
 static inline void scfeed_os_discard(scfeed_os_feed* f) { scfeed_os_close(f); }
-/* The writer has mapped its Feed: keep the handles, since a mapping's name goes with its last handle. */
-static inline void scfeed_os_keep(scfeed_os_feed* f) { (void)f; }
-/* The writer is done with its Feed. */
-static inline void scfeed_os_release(scfeed_os_feed* f) { scfeed_os_close(f); }
+/* A Feed is mapped: close what its mapping does not need. Windows: nothing. A named mapping's name goes with its
+ * last handle, not its last view, so every process using a Feed keeps the Feed's handle and the locator's open
+ * (ADR 0049) until scfeed_os_close_kept. */
+static inline void scfeed_os_close_unneeded(scfeed_os_feed* f) { (void)f; }
+/* This process is done with the Feed (unmapped, or about to be): close what scfeed_os_close_unneeded kept. */
+static inline void scfeed_os_close_kept(scfeed_os_feed* f) { scfeed_os_close(f); }
 #else
 typedef struct scfeed_os_feed {
     int fd;
@@ -413,10 +437,11 @@ static inline void scfeed_os_discard(scfeed_os_feed* f)
     unlink(f->tmp);
     errno = e;
 }
-/* The writer has mapped its Feed: the file keeps its name by itself, so the descriptor can go. */
-static inline void scfeed_os_keep(scfeed_os_feed* f) { scfeed_os_close(f); }
-/* The writer is done with its Feed. */
-static inline void scfeed_os_release(scfeed_os_feed* f) { (void)f; }
+/* A Feed is mapped: close what its mapping does not need. Linux: the descriptor; the file keeps its name by
+ * itself and the mapping keeps its memory. */
+static inline void scfeed_os_close_unneeded(scfeed_os_feed* f) { scfeed_os_close(f); }
+/* This process is done with the Feed: close what scfeed_os_close_unneeded kept. Linux: nothing is kept. */
+static inline void scfeed_os_close_kept(scfeed_os_feed* f) { (void)f; }
 #endif
 
 /* ------------------------------------------------------------ the registry */
@@ -484,24 +509,30 @@ static inline void scfeed_registry_copy(scfeed_header* to, const scfeed_header* 
     }
 }
 
-/* Unmap a header from scfeed_live_feed_of_another. */
-static inline void scfeed_header_unmap(scfeed_header* h) { scfeed_os_unmap(h, SCFEED_HEADER_BYTES); }
+/* Unmap a header mapped on its own (from scfeed_live_feed_of_another), then close what `held` kept for it. */
+static inline void scfeed_header_unmap(scfeed_header* h, scfeed_os_feed* held)
+{
+    scfeed_os_unmap(h, SCFEED_HEADER_BYTES);
+    scfeed_os_close_kept(held);
+}
 
 /* If the Feed at `path` is a live Feed (this major version, minor >= 1, not retired) of a running process other
- * than `my_pid`, map its header and return it (unmap with scfeed_header_unmap): a Sender starting in `my_pid`
- * must join it as a guest. Otherwise NULL: the Sender may publish its own Feed. */
-static inline scfeed_header* scfeed_live_feed_of_another(const char* path, uint64_t my_pid)
+ * than `my_pid`, map its header and return it, with what the OS needs kept while it is used in `held` (let both go
+ * with scfeed_header_unmap(h, held)): a Sender starting in `my_pid` must join it as a guest. Otherwise NULL, and
+ * `held` holds nothing: the Sender may publish its own Feed. */
+static inline scfeed_header* scfeed_live_feed_of_another(const char* path, uint64_t my_pid, scfeed_os_feed* held)
 {
     scfeed_os_feed f;
-    if (scfeed_os_open(&f, path) != SCFEED_OK) return NULL;
+    if (scfeed_os_open(&f, path) != SCFEED_OK) { scfeed_os_close(&f); *held = f; return NULL; }
     void* m = f.size >= SCFEED_HEADER_BYTES ? scfeed_os_map(&f, SCFEED_HEADER_BYTES) : NULL;
-    scfeed_os_close(&f);
-    if (!m) return NULL;
+    if (!m) { scfeed_os_close(&f); *held = f; return NULL; }
+    scfeed_os_close_unneeded(&f);
+    *held = f;
     scfeed_header* h = (scfeed_header*)m;
     if (h->magic == SCFEED_MAGIC && h->version_major == SCFEED_VERSION_MAJOR && h->version_minor >= 2 && !scfeed_load32(&h->retired) &&
         h->sender_pid != my_pid && scfeed_process_alive(h->sender_pid))
         return h;
-    scfeed_header_unmap(h);
+    scfeed_header_unmap(h, held);
     return NULL;
 }
 
@@ -544,7 +575,7 @@ static inline int scfeed_writer_create(scfeed_writer* w, const char* path, uint3
     if (scfeed_os_create(&w->os, path, bytes) != SCFEED_OK) return SCFEED_ERR_IO;
     void* base = scfeed_os_map(&w->os, bytes);
     if (!base) { scfeed_os_discard(&w->os); return SCFEED_ERR_IO; }
-    scfeed_os_keep(&w->os);
+    scfeed_os_close_unneeded(&w->os);
     scfeed_header* h = (scfeed_header*)base; /* a new Feed is all zeros */
     h->version_major = SCFEED_VERSION_MAJOR;
     h->version_minor = SCFEED_VERSION_MINOR;
@@ -565,11 +596,12 @@ static inline int scfeed_writer_create(scfeed_writer* w, const char* path, uint3
     scfeed_os_feed of;
     if (scfeed_os_open(&of, path) == SCFEED_OK) {
         if (of.size >= SCFEED_HEADER_BYTES) old = (scfeed_header*)scfeed_os_map(&of, SCFEED_HEADER_BYTES);
-        scfeed_os_close(&of);
+        if (old) scfeed_os_close_unneeded(&of);
+        else scfeed_os_close(&of);
     }
     if (scfeed_os_publish(&w->os, path) != SCFEED_OK) {
         const int e = errno;
-        if (old) scfeed_header_unmap(old);
+        if (old) scfeed_header_unmap(old, &of);
         scfeed_os_unmap(base, bytes);
         scfeed_os_discard(&w->os);
         errno = e;
@@ -577,7 +609,7 @@ static inline int scfeed_writer_create(scfeed_writer* w, const char* path, uint3
     }
     if (old) {
         if (old->magic == SCFEED_MAGIC) scfeed_store32(&old->retired, 1);
-        scfeed_header_unmap(old);
+        scfeed_header_unmap(old, &of);
     }
     w->hdr = h;
     w->bytes = bytes;
@@ -590,7 +622,7 @@ static inline void scfeed_writer_close(scfeed_writer* w)
 {
     if (w->hdr) {
         scfeed_os_unmap(w->hdr, w->bytes);
-        scfeed_os_release(&w->os);
+        scfeed_os_close_kept(&w->os);
     }
     w->hdr = NULL;
 }
@@ -648,6 +680,7 @@ typedef struct scfeed_reader {
     scfeed_header* hdr;
     size_t bytes;
     uint32_t found_major, found_minor; /* filled in even when the version is refused */
+    scfeed_os_feed os;                 /* what the OS needs kept while the Feed is in use */
 } scfeed_reader;
 
 static inline void scfeed_reader_heartbeat(scfeed_reader* r, uint64_t now_ns)
@@ -679,11 +712,12 @@ static inline int scfeed_reader_open(scfeed_reader* r, const char* path)
             else if (scfeed_reader_present(h, scfeed_now_ns()) && scfeed_load64(&h->reader_pid) != scfeed_pid()) rc = SCFEED_ERR_BUSY;
         }
     }
-    scfeed_header_unmap(h);
+    scfeed_os_unmap(h, SCFEED_HEADER_BYTES);
     if (rc != SCFEED_OK) { scfeed_os_close(&f); return rc; }
     void* base = scfeed_os_map(&f, bytes);
-    scfeed_os_close(&f);
-    if (!base) return SCFEED_ERR_IO;
+    if (!base) { scfeed_os_close(&f); return SCFEED_ERR_IO; }
+    scfeed_os_close_unneeded(&f);
+    r->os = f;
     r->hdr = (scfeed_header*)base;
     r->bytes = bytes;
     for (uint32_t i = 0; i < r->hdr->slot_count; ++i) /* slots left READING belong to a reader that died */
@@ -698,6 +732,7 @@ static inline void scfeed_reader_close(scfeed_reader* r)
     if (!r->hdr) return;
     scfeed_store64(&r->hdr->reader_heartbeat_ns, 0);
     scfeed_os_unmap(r->hdr, r->bytes);
+    scfeed_os_close_kept(&r->os);
     r->hdr = NULL;
 }
 

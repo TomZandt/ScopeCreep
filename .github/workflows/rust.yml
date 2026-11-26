@@ -19,7 +19,9 @@ jobs:
       - run: cargo fmt --check
       - run: cargo clippy --workspace --all-targets -- -D warnings
 
-  # Windows (#235): the Feed's tests and clippy for the Windows target. No GPU, so not the app's tests.
+  # Windows (#235): clippy for the Windows target, the Feed's tests, the app's tests that need no GPU and the
+  # harness's. The hosted runner has no GPU, so the app's GPU seams (every test file built on app/tests/common,
+  # which takes a GPU adapter) run on Linux only.
   windows:
     runs-on: windows-latest
     concurrency:
@@ -32,4 +34,15 @@ jobs:
           components: clippy
       - uses: Swatinem/rust-cache@v2
       - run: cargo test -p scopecreep-feed
+      - name: app tests that need no GPU
+        shell: bash
+        run: |
+          targets=$(grep -L '^mod common' app/tests/*.rs | sed 's|^app/tests/\(.*\)\.rs$|--test \1|')
+          cargo test -p scopecreep --lib $targets
       - run: cargo clippy --workspace --all-targets -- -D warnings
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+      - name: harness tests
+        working-directory: harness
+        run: python -m unittest discover -s tests

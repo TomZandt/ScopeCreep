@@ -12,6 +12,10 @@ _Avoid_: Input, stream, signal
 The app's one step per poll of the Feed: take a new frame, convert it once, hand it to every display, measure the frame on screen again when a setting or the Colour Setup changed, and remake the labels. The app's Feed thread and the display tests run the same code.
 _Avoid_: Feed thread (that is only where it runs)
 
+**Locator**:
+On Windows, what the Feed's name (`Local\scopecreep-feed`) holds: one page with the number of the Feed now published, each Feed being its own mapping beside it (`Local\scopecreep-feed.N`). Publishing a Feed is storing its number there. A Windows mapping's name can't be moved to a new Feed while anyone holds the old one, so the name points instead. Every process using a Feed keeps the locator open (ADR 0049, `feed/PROTOCOL.md` "Windows"). Linux has none: the Feed file is renamed into place.
+_Avoid_: Index, pointer page, directory
+
 **Feed Source**:
 Where the Feed comes from: either the Sender or a Capture.
 _Avoid_: Input, source type, tap

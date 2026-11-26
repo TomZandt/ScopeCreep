@@ -9,18 +9,22 @@
 use std::ffi::OsStr;
 use std::io;
 use std::os::windows::ffi::OsStrExt;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::atomic::AtomicU64;
 use std::sync::atomic::Ordering::{AcqRel, Acquire, Release};
 use std::sync::{Arc, OnceLock};
+
+use crate::layout::{
+    H_HEADER_BYTES, H_MAGIC, H_SLOT_CAPACITY, H_SLOT_COUNT, H_SLOT_HEADER_BYTES, HEADER_BYTES,
+    MAGIC, Mapping, SLOT_HEADER_BYTES,
+};
 use windows_sys::Win32::Foundation::{
     CloseHandle, ERROR_ACCESS_DENIED, ERROR_ALREADY_EXISTS, GetLastError, HANDLE,
     INVALID_HANDLE_VALUE, SetLastError, WAIT_TIMEOUT,
 };
 use windows_sys::Win32::System::Memory::{
-    CreateFileMappingW, FILE_MAP_READ, FILE_MAP_WRITE, MEMORY_BASIC_INFORMATION,
-    MEMORY_MAPPED_VIEW_ADDRESS, MapViewOfFile, OpenFileMappingW, PAGE_READWRITE, UnmapViewOfFile,
-    VirtualQuery,
+    CreateFileMappingW, FILE_MAP_READ, FILE_MAP_WRITE, MEMORY_MAPPED_VIEW_ADDRESS, MapViewOfFile,
+    OpenFileMappingW, PAGE_READWRITE, UnmapViewOfFile,
 };
 use windows_sys::Win32::System::Performance::{QueryPerformanceCounter, QueryPerformanceFrequency};
 use windows_sys::Win32::System::Threading::{
@@ -178,6 +182,8 @@ pub struct Shared {
     held: Arc<Held>,
     n: u64,
     len: u64,
+    /// The location a Feed made by [`Shared::create`] was made for, where it may be published.
+    staged: Option<PathBuf>,
 }
 
 impl Shared {
@@ -189,27 +195,14 @@ impl Shared {
             return Err(io::ErrorKind::NotFound.into());
         }
         let section = open_mapping(&feed_name(location, n))?;
-        // The mapping's size: map all of it and ask how large the view is (a Feed is whole pages).
-        let all = map_view(&section, 0)?;
-        // SAFETY: an all-zero struct is valid; VirtualQuery fills it in for the view just made.
-        let mut info: MEMORY_BASIC_INFORMATION = unsafe { std::mem::zeroed() };
-        let got = unsafe {
-            VirtualQuery(
-                all as *const core::ffi::c_void,
-                &mut info,
-                std::mem::size_of::<MEMORY_BASIC_INFORMATION>(),
-            )
-        };
-        // SAFETY: the view just made, no longer used.
-        unsafe { unmap_view(all) };
-        if got == 0 {
-            return Err(io::Error::last_os_error());
-        }
-        Ok(Shared {
+        let mut shared = Shared {
             held: Arc::new(Held { locator, section }),
             n,
-            len: info.RegionSize as u64,
-        })
+            len: HEADER_BYTES as u64,
+            staged: None,
+        };
+        shared.len = feed_bytes(&shared)?;
+        Ok(shared)
     }
 
     /// A new Feed of `bytes` bytes, not yet at `location`: the next free N under the locator, which is made if
@@ -224,14 +217,22 @@ impl Shared {
                     held: Arc::new(Held { locator, section }),
                     n,
                     len: bytes as u64,
+                    staged: Some(location.to_path_buf()),
                 });
             } // else a Feed left from an earlier locator is still held: take the next N
         }
         Err(io::ErrorKind::AlreadyExists.into())
     }
 
-    /// Put this Feed (made by [`Shared::create`]) at `location`, in place of whatever Feed was there.
-    pub fn publish(&self, _location: &Path) -> io::Result<()> {
+    /// Put this Feed (made by [`Shared::create`]) at `location`, in place of whatever Feed was there. Its
+    /// locator is the one at the location it was made for, so it can be published only there.
+    pub fn publish(&self, location: &Path) -> io::Result<()> {
+        if self.staged.as_deref() != Some(location) {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "only a new Feed can be published, at the location it was made for",
+            ));
+        }
         with_locator(&self.held.locator, L_CURRENT, |c| c.store(self.n, Release))
     }
 
@@ -252,6 +253,23 @@ impl Shared {
             _held: self.held.clone(),
         })
     }
+}
+
+/// A Feed's size, read from its header. Windows tells a mapping's size only by mapping all of it, which reserves
+/// the whole Feed's address space to read one number. A mapping that does not start with a Feed header counts as
+/// the one page its header would be; the reader then refuses it as not a Feed.
+fn feed_bytes(shared: &Shared) -> io::Result<u64> {
+    let header = Mapping::map(shared, HEADER_BYTES)?;
+    let is_feed = header.u64(H_MAGIC) == MAGIC
+        && header.u32(H_HEADER_BYTES) as usize == HEADER_BYTES
+        && header.u32(H_SLOT_HEADER_BYTES) as usize == SLOT_HEADER_BYTES;
+    if !is_feed {
+        return Ok(HEADER_BYTES as u64);
+    }
+    let slot = (SLOT_HEADER_BYTES as u64).saturating_add(header.u64(H_SLOT_CAPACITY));
+    Ok((header.u32(H_SLOT_COUNT) as u64)
+        .saturating_mul(slot)
+        .saturating_add(HEADER_BYTES as u64))
 }
 
 /// The identity of the Feed at `location` now, if there is one.

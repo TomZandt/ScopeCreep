@@ -36,7 +36,7 @@ A named mapping can be neither renamed nor replaced while any process holds it, 
 Feed N is the mapping named `<location>.N` (N in decimal, such as `Local\scopecreep-feed.3`), with exactly the layout below.
 
 - **Publishing** (Sender): open or make the locator, take N by incrementing `last`, make `<location>.N` (if that name is still taken, take the next N), fill it in, then store N into `current`. Then mark the previous Feed retired, as on Linux.
-- **Opening** (reader): open the locator (missing: there is no Sender), read `current` (0: there is no Sender), open `<location>.N`.
+- **Opening** (reader): open the locator (missing: there is no Sender), read `current` (0: there is no Sender), open `<location>.N`. Its size is read from its header (`header_bytes + slot_count × (slot_header_bytes + slot_capacity)`), since Windows tells a mapping's size only by mapping all of it.
 - **Replaced:** the Feed at the location is another one when `current` is no longer the N the reader opened.
 - Every process using a Feed holds the locator open too, so it lasts as long as anyone uses a Feed. When the last one closes, the locator and every Feed go: an app started after Resolve quit finds no Feed rather than a stale one.
 

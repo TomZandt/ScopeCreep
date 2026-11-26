@@ -5,8 +5,8 @@ use std::os::windows::io::AsRawHandle;
 use std::os::windows::process::CommandExt;
 use std::path::PathBuf;
 use std::process::{Child, Command};
-use std::sync::OnceLock;
-use windows_sys::Win32::Foundation::HANDLE;
+use std::sync::Mutex;
+use windows_sys::Win32::Foundation::{CloseHandle, HANDLE};
 use windows_sys::Win32::System::JobObjects::{
     AssignProcessToJobObject, CreateJobObjectW, JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE,
     JOBOBJECT_EXTENDED_LIMIT_INFORMATION, JobObjectExtendedLimitInformation,
@@ -51,6 +51,8 @@ pub fn resolve_python() -> PathBuf {
 /// ResolvePython, should Resolve ship one on Windows), the Python launcher `py.exe` (installed with python.org's
 /// Python, it runs the newest Python 3 and passes the arguments on), then `python.exe` on `PATH`. The
 /// `WindowsApps` folder goes last: its `python.exe` may be Windows' stand-in that only offers the Store.
+/// Resolve's install paths are listed in `scripting_paths` of harness/scopecreep_harness/resolve_api.py; keep the
+/// bundled Python here the same.
 fn python_candidates(
     program_files: Option<&OsStr>,
     system_root: Option<&OsStr>,
@@ -86,35 +88,37 @@ fn python_candidates(
 
 /// The job object every Resolve helper is put in. The app holds its only handle, never inheritable, and never
 /// closes it, so Windows closes it when the app's process ends however it ends, and kill-on-close then ends
-/// every helper in it: the job object is Windows' parent-death signal.
+/// every helper in it: the job object is Windows' parent-death signal. Made on first use; a failure is not
+/// kept, so the next helper tries again.
 fn helper_job() -> io::Result<HANDLE> {
     // A HANDLE is a pointer, which a static cannot hold; it is kept as its address.
-    static JOB: OnceLock<Result<usize, i32>> = OnceLock::new();
-    let job = JOB.get_or_init(|| {
-        // SAFETY: no security attributes (so the handle is not inheritable) and no name; the information
-        // block is a valid JOBOBJECT_EXTENDED_LIMIT_INFORMATION of the size given.
-        unsafe {
-            let job = CreateJobObjectW(std::ptr::null(), std::ptr::null());
-            if job.is_null() {
-                return Err(io::Error::last_os_error().raw_os_error().unwrap_or(0));
-            }
-            let mut limits = JOBOBJECT_EXTENDED_LIMIT_INFORMATION::default();
-            limits.BasicLimitInformation.LimitFlags = JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE;
-            let ok = SetInformationJobObject(
-                job,
-                JobObjectExtendedLimitInformation,
-                (&raw const limits).cast(),
-                size_of::<JOBOBJECT_EXTENDED_LIMIT_INFORMATION>() as u32,
-            );
-            if ok == 0 {
-                return Err(io::Error::last_os_error().raw_os_error().unwrap_or(0));
-            }
-            Ok(job as usize)
+    static JOB: Mutex<Option<usize>> = Mutex::new(None);
+    let mut job = JOB.lock().unwrap_or_else(|e| e.into_inner());
+    if let Some(address) = *job {
+        return Ok(address as HANDLE);
+    }
+    // SAFETY: no security attributes (so the handle is not inheritable) and no name; the information block is a
+    // valid JOBOBJECT_EXTENDED_LIMIT_INFORMATION of the size given; a job that cannot be set up is closed once.
+    unsafe {
+        let made = CreateJobObjectW(std::ptr::null(), std::ptr::null());
+        if made.is_null() {
+            return Err(io::Error::last_os_error());
         }
-    });
-    match job {
-        Ok(address) => Ok(*address as HANDLE),
-        Err(code) => Err(io::Error::from_raw_os_error(*code)),
+        let mut limits = JOBOBJECT_EXTENDED_LIMIT_INFORMATION::default();
+        limits.BasicLimitInformation.LimitFlags = JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE;
+        let ok = SetInformationJobObject(
+            made,
+            JobObjectExtendedLimitInformation,
+            (&raw const limits).cast(),
+            size_of::<JOBOBJECT_EXTENDED_LIMIT_INFORMATION>() as u32,
+        );
+        if ok == 0 {
+            let e = io::Error::last_os_error();
+            CloseHandle(made);
+            return Err(e);
+        }
+        *job = Some(made as usize);
+        Ok(made)
     }
 }
 

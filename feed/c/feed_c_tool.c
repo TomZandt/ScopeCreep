@@ -132,7 +132,8 @@ static int cmd_serve(const char* path, uint32_t width, uint32_t height, uint64_t
 static int cmd_guest(const char* path, int renders)
 {
     const uint64_t me = (uint64_t)getpid();
-    scfeed_header* owner = scfeed_live_feed_of_another(path, me);
+    scfeed_os_feed held;
+    scfeed_header* owner = scfeed_live_feed_of_another(path, me, &held);
     scfeed_writer w;
     scfeed_header* h = owner;
     if (!owner) {
@@ -142,7 +143,7 @@ static int cmd_guest(const char* path, int renders)
     printf("%s\n", owner ? "guest" : "owner");
     scfeed_registry_add(h, me, 3, 25.0, "feed_c_tool");
     for (int k = 0; k < renders; ++k) scfeed_registry_note(h, me, 3, (double)k, scfeed_now_ns());
-    if (owner) scfeed_header_unmap(owner);
+    if (owner) scfeed_header_unmap(owner, &held);
     else scfeed_writer_close(&w);
     return 0;
 }

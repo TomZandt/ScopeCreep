@@ -12,6 +12,16 @@ const MS: u64 = 1_000_000;
 const SECOND: u64 = 1_000_000_000;
 const FRAME_24: u64 = SECOND / 24;
 
+/// A Feed location private to this test run: a file in `/dev/shm` on Linux, a mapping name in the session's
+/// namespace on Windows (ADR 0049).
+fn test_location(name: &str) -> PathBuf {
+    #[cfg(windows)]
+    let base = "Local\\scopecreep-colour-test";
+    #[cfg(not(windows))]
+    let base = "/dev/shm/scopecreep-colour-test";
+    PathBuf::from(format!("{base}-{}-{name}", std::process::id()))
+}
+
 /// What the fake helper has been asked, and what it will answer.
 #[derive(Default)]
 struct Script {
@@ -126,11 +136,7 @@ struct Bench {
 
 impl Bench {
     fn new(name: &str) -> Bench {
-        let path = PathBuf::from(format!(
-            "/dev/shm/scopecreep-colour-test-{}-{}",
-            std::process::id(),
-            name
-        ));
+        let path = test_location(name);
         let _ = std::fs::remove_file(&path);
         let script = Arc::new(Mutex::new(Script::default()));
         let monitor = Monitor::with_project_reader(&path, Box::new(FakeHelper(script.clone())));
@@ -362,10 +368,7 @@ fn the_manual_override_wins_over_the_project_and_is_labelled_set_manually() {
 #[test]
 fn the_manual_override_works_with_no_scripting_at_all() {
     // Resolve's free version: no external scripting. Monitor::new has no project reader.
-    let path = PathBuf::from(format!(
-        "/dev/shm/scopecreep-colour-test-{}-free",
-        std::process::id()
-    ));
+    let path = test_location("free");
     let mut writer = FeedWriter::create(&path, 4, 16 * 9 * 16).unwrap();
     let mut monitor = Monitor::new(&path);
     let now = now_ns();

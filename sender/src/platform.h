@@ -24,9 +24,15 @@ namespace scopecreep {
 inline std::string envValue(const char* name)
 {
 #ifdef _WIN32
-    char buf[512];
-    const DWORD n = GetEnvironmentVariableA(name, buf, sizeof buf);
-    return n > 0 && n < sizeof buf ? std::string(buf, n) : std::string();
+    // GetEnvironmentVariableA returns the length copied, or, when the buffer is too small, the size needed
+    // (with the nul); the value may change between calls, so ask until it fits.
+    std::string value(256, '\0');
+    for (;;) {
+        const DWORD n = GetEnvironmentVariableA(name, &value[0], (DWORD)value.size());
+        if (n == 0) return std::string();  // unset (or set to "")
+        if (n < value.size()) return value.substr(0, n);
+        value.assign(n, '\0');
+    }
 #else
     const char* v = std::getenv(name);
     return v ? v : "";

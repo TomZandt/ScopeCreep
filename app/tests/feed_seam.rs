@@ -8,6 +8,16 @@ const MS: u64 = 1_000_000;
 /// One frame period at 24 fps.
 const FRAME_24: u64 = 1_000_000_000 / 24;
 
+/// A Feed location private to this test run: a file in `/dev/shm` on Linux, a mapping name in the session's
+/// namespace on Windows (ADR 0049).
+fn test_location(name: &str) -> PathBuf {
+    #[cfg(windows)]
+    let base = "Local\\scopecreep-app-test";
+    #[cfg(not(windows))]
+    let base = "/dev/shm/scopecreep-app-test";
+    PathBuf::from(format!("{base}-{}-{name}", std::process::id()))
+}
+
 /// A stand-in Resolve (the synthetic writer), the app's Feed monitor, a clock, and a record of what the Picture
 /// View was asked to show.
 struct Bench {
@@ -23,11 +33,7 @@ struct Bench {
 
 impl Bench {
     fn new(name: &str) -> Bench {
-        let path = PathBuf::from(format!(
-            "/dev/shm/scopecreep-app-test-{}-{}",
-            std::process::id(),
-            name
-        ));
+        let path = test_location(name);
         let _ = std::fs::remove_file(&path);
         Bench {
             monitor: Monitor::new(&path),
@@ -154,10 +160,7 @@ fn first_pixels_bits(path: &Path, pixels: &[f32], poll_for_ns: u64) -> (Vec<u32>
 
 #[test]
 fn the_picture_view_shows_a_feed_frame_unmodified() {
-    let path = PathBuf::from(format!(
-        "/dev/shm/scopecreep-app-test-{}-unmodified",
-        std::process::id()
-    ));
+    let path = test_location("unmodified");
     let (got, want) = first_pixels_bits(&path, &synthetic::awkward_values(64, 36), 100 * MS);
     let _ = std::fs::remove_file(&path);
     assert_eq!(
@@ -1182,7 +1185,7 @@ fn the_sender_is_told_an_app_is_listening_only_while_one_is() {
         b.writer.as_ref().unwrap().reader_present(b.now),
         "the app keeps its heartbeat fresh"
     );
-    b.monitor = Monitor::new("/dev/shm/scopecreep-app-test-nowhere"); // the app quits
+    b.monitor = Monitor::new(test_location("nowhere")); // the app quits
     assert!(!b.writer.as_ref().unwrap().reader_present(b.now));
 }
 
@@ -1254,6 +1257,7 @@ fn a_sender_error_is_passed_on() {
     assert_eq!(b.notice(), "Sender: cudaHostRegister: out of memory");
 }
 
+#[cfg(unix)] // writes a file where the Feed would be; a Windows Feed is a named mapping
 #[test]
 fn a_file_that_is_not_a_feed_is_reported() {
     let mut b = Bench::new("notafeed");
