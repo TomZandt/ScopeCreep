@@ -2,13 +2,19 @@ name: release
 
 # A Test build (spec #233, ticket #242): "Run workflow" on any branch builds the Installer for every
 # platform in packaging/platforms.txt and keeps it as a workflow artifact for 30 days. It never publishes.
-# A Release (ticket #243): pushing a `vX.Y.Z` tag builds the same Installers, then the publish job checks
-# the tag against the workspace version and the changelog and publishes a GitHub pre-release (while 0.y.z).
+# A Release (ticket #243): pushing a `vX.Y.Z` tag builds the Installers of the platforms marked `yes` there
+# (the ones Releases include), then the publish job checks the tag against the workspace version and the
+# changelog and publishes a GitHub pre-release (while 0.y.z).
 on:
   workflow_dispatch:
   push:
     tags:
       - 'v*'
+
+# A newer Test build of the same branch replaces one still running; a tag's run is never cancelled.
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/') }}
 
 env:
   CARGO_TERM_COLOR: always
@@ -29,27 +35,38 @@ jobs:
         if: startsWith(github.ref, 'refs/tags/v')
         run: scripts/check-release-tag.sh "$GITHUB_REF_NAME"
 
-      # Windows and macOS ports add their runner to the build job and lift this check.
+      # A tag builds only the platforms Releases include; a Test build builds every platform in the file.
+      # The macOS port adds its runner to the build job and to this check.
       - id: list
         name: Read packaging/platforms.txt
         run: |
-          for p in $(scripts/platforms.sh); do
-            [[ $p == linux ]] || { echo "::error::platform '$p' is in packaging/platforms.txt but release.yml has no runner for it"; exit 1; }
+          which=()
+          [[ $GITHUB_REF == refs/tags/v* ]] || which=(--test-builds)
+          for p in $(scripts/platforms.sh "${which[@]}"); do
+            [[ $p == linux || $p == windows ]] || { echo "::error::platform '$p' is in packaging/platforms.txt but release.yml has no runner for it"; exit 1; }
           done
-          list=$(scripts/platforms.sh --json)
+          list=$(scripts/platforms.sh "${which[@]}" --json)
           echo "platforms: $list"
           echo "list=$list" >> "$GITHUB_OUTPUT"
 
   build:
     name: build (${{ matrix.platform }})
     needs: platforms
-    # Windows and macOS ports add their runner here and their steps below, guarded by matrix.platform.
-    runs-on: ${{ matrix.platform == 'linux' && 'ubuntu-22.04' || 'unsupported' }}
+    # The macOS port adds its runner here and its steps below, guarded by matrix.platform.
+    runs-on: ${{ matrix.platform == 'linux' && 'ubuntu-22.04' || matrix.platform == 'windows' && 'windows-latest' || 'unsupported' }}
     strategy:
       fail-fast: false
       matrix:
         platform: ${{ fromJSON(needs.platforms.outputs.list) }}
+    # Git Bash on Windows, so every platform runs the same scripts.
+    defaults:
+      run:
+        shell: bash
     steps:
+      # Windows' Git would check text out with CRLF line ends, which bash and the scripts' sed do not expect.
+      - name: Keep LF line ends
+        if: matrix.platform == 'windows'
+        run: git config --global core.autocrlf false
       - uses: actions/checkout@v4
 
       - name: Workspace version
@@ -75,6 +92,16 @@ jobs:
           test -f /usr/include/cuda_runtime.h
           test -f /usr/lib/x86_64-linux-gnu/libcudart_static.a
 
+      # On Windows the same two pieces come from NVIDIA's network installer: nvcc (so CMake finds the
+      # toolkit) and cudart (headers and cudart_static.lib). No driver, no GPU.
+      - name: CUDA toolkit (no GPU)
+        if: matrix.platform == 'windows'
+        uses: Jimver/cuda-toolkit@v0.2.36
+        with:
+          cuda: '12.6.3'
+          method: network
+          sub-packages: '["nvcc", "cudart"]'
+
       - name: OpenFX headers
         uses: actions/checkout@v4
         with:
@@ -83,22 +110,49 @@ jobs:
           path: openfx
 
       - name: Build the Sender
+        if: matrix.platform == 'linux'
         run: |
           mkdir -p "$RUNNER_TEMP/ofx-include"
           cp openfx/include/*.h "$RUNNER_TEMP/ofx-include/"
           cp sender/ci/ofxImageEffectExt.h "$RUNNER_TEMP/ofx-include/"
           make -C sender OFX_SDK="$RUNNER_TEMP/ofx-include" CUDA_HOME="$RUNNER_TEMP/cuda"
 
+      # The Windows build entry is CMake (ADR 0050). With no GPU, of the Sender's tests only the one that
+      # checks the plugin imports nothing but Windows' own DLLs runs here.
+      - name: Build the Sender (Windows)
+        if: matrix.platform == 'windows'
+        run: |
+          ofx="$(cygpath -m "$RUNNER_TEMP")/ofx-include"
+          mkdir -p "$ofx"
+          cp openfx/include/*.h sender/ci/ofxImageEffectExt.h "$ofx/"
+          cmake -S sender -B sender/build/cmake -DOFX_SDK="$ofx"
+          cmake --build sender/build/cmake --config Release
+          ctest --test-dir sender/build/cmake -C Release -R sender_links_only_system_libraries --output-on-failure
+
       - name: Package the Installer
+        if: matrix.platform == 'linux'
         run: |
           scripts/package-linux.sh "${{ steps.version.outputs.version }}" \
             target/release/scopecreep sender/build/scopecreep_sender.ofx.bundle dist
+
+      # Inno Setup 6, pinned; packaging/windows/scopecreep.iss needs 6.3 or later.
+      - name: Inno Setup
+        if: matrix.platform == 'windows'
+        run: choco install innosetup --version=6.7.1 --no-progress -y
+
+      - name: Package the Installer (Windows)
+        if: matrix.platform == 'windows'
+        env:
+          SCOPECREEP_ISCC: '/c/Program Files (x86)/Inno Setup 6/ISCC.exe'
+        run: |
+          scripts/package-windows.sh "${{ steps.version.outputs.version }}" \
+            target/release/scopecreep.exe sender/build/scopecreep_sender.ofx.bundle dist
 
       - uses: actions/upload-artifact@v4
         with:
           name: scopecreep-${{ steps.version.outputs.version }}-${{ matrix.platform }}
           path: |
-            dist/scopecreep-*.tar.gz
+            dist/scopecreep-*
             dist/SHA256SUMS
           if-no-files-found: error
           retention-days: 30
@@ -132,12 +186,12 @@ jobs:
           mkdir dist
           : > included.txt
           for platform in $(scripts/platforms.sh); do
-            files=(artifacts/*/scopecreep-"$VERSION"-"$platform"-*.tar.gz)
+            files=(artifacts/*/scopecreep-"$VERSION"-"$platform"-*)
             [[ -f ${files[0]} ]] || { echo "no Installer for $platform" >&2; exit 1; }
             cp "${files[@]}" dist/
             echo "$platform" >> included.txt
           done
-          (cd dist && sha256sum scopecreep-*.tar.gz > SHA256SUMS)
+          (cd dist && sha256sum scopecreep-* > SHA256SUMS)
           cat dist/SHA256SUMS
 
       - name: Publish the Release
@@ -153,5 +207,5 @@ jobs:
           } > notes.md
           flags=()
           [[ $VERSION == 0.* ]] && flags+=(--prerelease)
-          gh release create "$GITHUB_REF_NAME" dist/*.tar.gz dist/SHA256SUMS \
+          gh release create "$GITHUB_REF_NAME" dist/scopecreep-* dist/SHA256SUMS \
             --title "$VERSION" --notes-file notes.md --verify-tag ${flags[@]+"${flags[@]}"}

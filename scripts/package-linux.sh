@@ -33,5 +33,5 @@ install -m644 "$src/INSTALL.txt" "$stage/$name/INSTALL.txt"
 out=$(cd "$out" && pwd)
 tar --sort=name --owner=0 --group=0 --numeric-owner --mtime='2000-01-01 00:00:00' \
   -C "$stage" -czf "$out/$name.tar.gz" "$name"
-(cd "$out" && sha256sum scopecreep-*.tar.gz > SHA256SUMS)
+(cd "$out" && shopt -s nullglob && sha256sum scopecreep-*.tar.gz scopecreep-*-setup.exe > SHA256SUMS)
 echo "$out/$name.tar.gz"

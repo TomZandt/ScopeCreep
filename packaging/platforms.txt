@@ -1,3 +1,8 @@
-# Platforms whose Installer is built by CI and goes into a Release, one per line (spec #233).
-# Add a platform here only once its UHD 50 check has passed on that build (GLOSSARY, Release).
-linux
+# Platforms whose Installer CI builds (spec #233), one per line, each with whether Releases include it:
+#   yes  every Test build and every Release carry its Installer
+#   no   only Test builds do, so it can be tried on its machine first
+# Set a platform to yes only once its UHD 50 check has passed on that build (GLOSSARY, Release).
+#
+# platform  in Releases
+linux       yes
+windows     no

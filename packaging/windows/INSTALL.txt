@@ -1,0 +1,45 @@
+ScopeCreep for Windows (x86-64)
+===============================
+
+The setup program installs the ScopeCreep app and the Sender (the plugin
+that sends DaVinci Resolve's picture to the app).
+
+What you need
+  An NVIDIA GPU, and DaVinci Resolve Studio with Preferences > System >
+  Memory and GPU > GPU Processing Mode set to CUDA. The Sender works only
+  with CUDA. AMD and Intel GPUs are not supported, and Auto or OpenCL will
+  not do.
+
+  For the Colour Setup to be read from your project automatically, Python 3
+  (64-bit) must also be installed. Without it ScopeCreep still works, and you
+  set the Colour Setup by hand.
+
+"Windows protected your PC"
+  The setup program is not code-signed yet, so Windows SmartScreen may stop
+  it with a blue "Windows protected your PC" window. Click "More info", check
+  the name is scopecreep-X.Y.Z-windows-x86_64-setup.exe, then click
+  "Run anyway". Windows then asks for admin rights: the Sender goes in a
+  folder shared by every user.
+
+Install
+  1. Close DaVinci Resolve. Setup asks you to if it is still running.
+  2. Run the setup program and follow it. The app goes to
+     C:\Program Files\ScopeCreep and the Sender to
+     C:\Program Files\Common Files\OFX\Plugins, where Resolve looks for
+     plugins.
+  3. Start DaVinci Resolve. On the Color page, add ScopeCreep from
+     Effects > OpenFX to a node (a serial node at the end of your grade),
+     then start ScopeCreep from the Start menu.
+  Installing a newer version over an older one replaces it.
+
+Uninstall
+  Settings > Apps > Installed apps (or Add or Remove Programs), ScopeCreep,
+  Uninstall. Close Resolve first. Restart Resolve afterwards. Your settings
+  stay in %APPDATA%\ScopeCreep; delete that folder to remove them too.
+
+Check your download
+  In PowerShell:  Get-FileHash scopecreep-X.Y.Z-windows-x86_64-setup.exe
+  and compare it with the line in SHA256SUMS (the file is on the Releases
+  page).
+
+Help: https://github.com/TomZandt/ScopeCreep
