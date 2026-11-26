@@ -1,4 +1,4 @@
-// The ScopeCreep Sender: an OFX plugin for DaVinci Resolve (Linux, CUDA) that passes the picture through
+// The ScopeCreep Sender: an OFX plugin for DaVinci Resolve (Linux and Windows, CUDA) that passes the picture through
 // untouched and hands each frame Resolve renders to the scopecreep app through the Feed.
 //
 // What it does, in order of importance (ADR 0003: Resolve never waits for scopecreep):
@@ -22,6 +22,7 @@
 #include "ofxProperty.h"
 
 #include "feed_copy.h"
+#include "platform.h"
 #include "scopecreep_feed.h"
 
 #include <algorithm>
@@ -29,9 +30,9 @@
 #include <cstddef>
 #include <cstdio>
 #include <cstring>
+#include <initializer_list>
 #include <iterator>
 #include <string>
-#include <time.h>
 
 #define SENDER_ID "com.scopecreep.sender"
 #define SENDER_LABEL "ScopeCreep"
@@ -44,13 +45,6 @@ OfxPropertySuiteV1* gProp = nullptr;
 OfxImageEffectSuiteV1* gEffect = nullptr;
 OfxParameterSuiteV1* gParam = nullptr;  // optional: without it there is no manual override
 std::atomic<uint32_t> gInstances{0};
-
-uint64_t nowNs()
-{
-    timespec ts;
-    clock_gettime(CLOCK_MONOTONIC, &ts);
-    return (uint64_t)ts.tv_sec * 1000000000ull + (uint64_t)ts.tv_nsec;
-}
 
 // ------------------------------------------------------------- the manual Colour Setup
 //
@@ -297,7 +291,7 @@ OfxStatus isIdentity(OfxPropertySetHandle inArgs, OfxPropertySetHandle outArgs)
 
 OfxStatus render(OfxImageEffectHandle effect, OfxPropertySetHandle inArgs)
 {
-    const uint64_t t0 = nowNs();
+    const uint64_t t0 = scfeed_now_ns();
     Instance* inst = instanceOf(effect);
     if (!inst) return kOfxStatFailed;
 
@@ -361,7 +355,7 @@ OfxStatus render(OfxImageEffectHandle effect, OfxPropertySetHandle inArgs)
             scopecreep::feedSetError("Resolve is not rendering this effect with CUDA, so no frames can be sent. Set GPU processing mode to CUDA in Resolve's preferences.");
         }
     }
-    scopecreep::feedCount(what, t0, nowNs() - t0);
+    scopecreep::feedCount(what, t0, scfeed_now_ns() - t0);
     return kOfxStatOK;
 }
 
@@ -401,11 +395,11 @@ OfxPlugin gSender = {kOfxImageEffectPluginApi, 1, SENDER_ID, 0, 1, setHost, send
 }  // namespace
 
 extern "C" {
-__attribute__((visibility("default"))) int OfxGetNumberOfPlugins(void)
+SENDER_EXPORT int OfxGetNumberOfPlugins(void)
 {
     return 1;
 }
-__attribute__((visibility("default"))) OfxPlugin* OfxGetPlugin(int nth)
+SENDER_EXPORT OfxPlugin* OfxGetPlugin(int nth)
 {
     if (nth == 0) return &gSender;
     return nullptr;

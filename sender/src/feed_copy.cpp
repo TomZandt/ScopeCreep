@@ -10,6 +10,7 @@
 //    arrives while a ring is being built passes through and is counted as dropped ("Sender busy").
 #include "feed_copy.h"
 
+#include "platform.h"
 #include "scopecreep_feed.h"
 
 #include <atomic>
@@ -23,9 +24,6 @@
 #include <thread>
 #include <utility>
 #include <vector>
-
-#include <sys/mman.h>
-#include <unistd.h>
 
 #include <cuda_runtime.h>
 
@@ -76,7 +74,7 @@ std::atomic<uint64_t> gNextGuestCheckNs{0};
 constexpr uint64_t kGuestCheckNs = 1000000000ull;
 std::vector<std::pair<uint32_t, double>> gRegistered;  // this process's instances (guarded by gMu)
 
-uint64_t myPid() { return (uint64_t)getpid(); }
+uint64_t myPid() { return scfeed_pid(); }
 
 // The header the registry is in: the other Resolve's Feed while a guest, else our own.
 scfeed_header* registryHeader()
@@ -91,7 +89,7 @@ bool publishEmptyFeed()
 {
     Ring* r = new Ring();
     if (scfeed_writer_create(&r->w, scfeed_path(), 0, 0, SCOPECREEP_SENDER_VERSION, gHostName.c_str()) != SCFEED_OK) {
-        std::fprintf(stderr, "ScopeCreep: cannot create the Feed at %s: %s\n", scfeed_path(), std::strerror(errno));
+        std::fprintf(stderr, "ScopeCreep: cannot create the Feed at %s: %s\n", scfeed_path(), lastOsError().c_str());
         delete r;
         return false;
     }
@@ -105,8 +103,8 @@ bool publishEmptyFeed()
 
 int stagingCount()
 {
-    const char* v = std::getenv("SCOPECREEP_SENDER_STAGING");
-    const int n = v && *v ? std::atoi(v) : 2;  // Stage 0 ran with two; graphics memory is tight, so no more
+    const std::string v = envValue("SCOPECREEP_SENDER_STAGING");
+    const int n = !v.empty() ? std::atoi(v.c_str()) : 2;  // Stage 0 ran with two; graphics memory is tight, so no more
     return n < 1 ? 1 : (n > 4 ? 4 : n);
 }
 
@@ -116,8 +114,8 @@ std::string cudaError(const char* what, cudaError_t e) { return std::string(what
 // short can be checked without filling the GPU Resolve is using. Read on the worker thread only.
 bool overGpuLimit(size_t bytes)
 {
-    const char* v = std::getenv("SCOPECREEP_SENDER_GPU_LIMIT_MB");
-    return v && *v && bytes > (size_t)std::strtoull(v, nullptr, 10) * 1000000ull;
+    const std::string v = envValue("SCOPECREEP_SENDER_GPU_LIMIT_MB");
+    return !v.empty() && bytes > (size_t)std::strtoull(v.c_str(), nullptr, 10) * 1000000ull;
 }
 
 // What the app shows (after "Sender: ") when a staging buffer of `bytes` could not be had.
@@ -185,7 +183,7 @@ Ring* buildRing(size_t frameBytes, std::string& err)
         return nullptr;
     }
     if (scfeed_writer_create(&r->w, scfeed_path(), kSlots, capacity, SCOPECREEP_SENDER_VERSION, gHostName.c_str()) != SCFEED_OK) {
-        err = std::string("cannot create the Feed at ") + scfeed_path() + ": " + std::strerror(errno);
+        err = std::string("cannot create the Feed at ") + scfeed_path() + ": " + lastOsError();
         r->w.hdr = nullptr;
         freeRing(r);
         return nullptr;

@@ -25,7 +25,7 @@ CXXFLAGS := -std=c++17 -O2 -fPIC -fvisibility=hidden -Wall -Wextra -Wno-unused-p
 CUDA_LIBS := -L$(CUDA_HOME)/lib64 -lcudart_static -ldl -lrt -lpthread
 
 SOURCES := src/sender.cpp src/feed_copy.cpp
-HEADERS := src/feed_copy.h ../feed/include/scopecreep_feed.h
+HEADERS := src/feed_copy.h src/platform.h ../feed/include/scopecreep_feed.h
 
 all: $(PLUGIN)
 
@@ -38,7 +38,7 @@ $(PLUGIN): $(SOURCES) $(HEADERS) build/flags
 	@mkdir -p $(dir $@)
 	$(CXX) $(CXXFLAGS) -shared $(SOURCES) -o $@ $(CUDA_LIBS) -static-libstdc++ -static-libgcc -Wl,--exclude-libs,ALL -Wl,-z,defs
 
-build/mock_host_test: test/mock_host_test.cpp ../feed/include/scopecreep_feed.h
+build/mock_host_test: test/mock_host_test.cpp test/test_platform.h ../feed/include/scopecreep_feed.h
 	@mkdir -p build
 	$(CXX) -std=c++17 -O1 -Wall -I$(OFX_SDK) -I$(CUDA_HOME)/include -I../feed/include $< -o $@ $(CUDA_LIBS)
 

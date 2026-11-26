@@ -13,11 +13,9 @@
 #include "ofxProperty.h"
 
 #include "scopecreep_feed.h"
+#include "test_platform.h"
 
 #include <cuda_runtime.h>
-#include <dlfcn.h>
-#include <signal.h>
-#include <sys/wait.h>
 
 #include <chrono>
 #include <cstdarg>
@@ -230,10 +228,15 @@ static scfeed_header peek(const char* path)
 {
     scfeed_header h;
     std::memset(&h, 0, sizeof h);
-    if (FILE* f = std::fopen(path, "rb")) {
-        if (std::fread(&h, 1, sizeof h, f) != sizeof h) std::memset(&h, 0, sizeof h);
-        std::fclose(f);
+    scfeed_os_feed f;
+    if (scfeed_os_open(&f, path) != SCFEED_OK) return h;
+    if (f.size >= sizeof h) {
+        if (void* m = scfeed_os_map(&f, sizeof h)) {
+            std::memcpy(&h, m, sizeof h);
+            scfeed_os_unmap(m, sizeof h);
+        }
     }
+    scfeed_os_close(&f);
     return h;
 }
 
@@ -274,12 +277,13 @@ static bool reopen(scfeed_reader& r, const char* path)
 // (registered, no frames, no counters), and take the Feed over once the owner has quit.
 static int guestTest(const char* feed)
 {
-    const pid_t other = fork();
-    if (other == 0) { pause(); _exit(0); }  // "the first Resolve": alive until killed
+    testos::OtherProcess first;  // "the first Resolve": alive until killed
+    if (!first.start()) { std::printf("cannot start a second process\n"); return 2; }
+    const uint64_t other = first.pid();
     scfeed_writer ow;
     if (scfeed_writer_create(&ow, feed, 4, 64 * 36 * 16, "other", "Resolve A") != SCFEED_OK) return 2;
-    ow.hdr->sender_pid = (uint64_t)other;
-    scfeed_registry_add(ow.hdr, (uint64_t)other, 1, 25.0, "Resolve A");
+    ow.hdr->sender_pid = other;
+    scfeed_registry_add(ow.hdr, other, 1, 25.0, "Resolve A");
     scfeed_reader r;
     scfeed_reader_open(&r, feed);
 
@@ -287,7 +291,7 @@ static int guestTest(const char* feed)
     CHECK(gPlugin->mainEntry(kOfxActionLoad, nullptr, nullptr, nullptr) == kOfxStatOK, "load");
     setD((OfxPropertySetHandle)&gEffectProps, kOfxImageEffectPropFrameRate, 0, 50.0);
     CHECK(gPlugin->mainEntry(kOfxActionCreateInstance, gEffect, nullptr, nullptr) == kOfxStatOK, "create instance");
-    CHECK(scfeed_load32(&r.hdr->retired) == 0 && r.hdr->sender_pid == (uint64_t)other, "the Feed is not replaced");
+    CHECK(scfeed_load32(&r.hdr->retired) == 0 && r.hdr->sender_pid == other, "the Feed is not replaced");
     GpuFrame f(64, 36);
     f.fill(1);
     render(f, 7.0);
@@ -295,20 +299,19 @@ static int guestTest(const char* feed)
     std::this_thread::sleep_for(std::chrono::milliseconds(50));
     CHECK(r.hdr->next_sequence == 0 && scfeed_reader_claim(&r) < 0, "the guest copies nothing");
     CHECK(r.hdr->renders_total == 0, "and does not touch the owner's counters");
-    const int e = scfeed_registry_find(r.hdr, (uint64_t)getpid(), 1);
+    const int e = scfeed_registry_find(r.hdr, scfeed_pid(), 1);
     CHECK(e >= 0 && r.hdr->registry[e].renders == 1 && r.hdr->registry[e].frame_rate == 50.0, "its instance and render are registered");
 
     std::printf("the first Resolve quits\n");
-    kill(other, SIGKILL);
-    waitpid(other, nullptr, 0);
+    first.kill();
     std::this_thread::sleep_for(std::chrono::milliseconds(1100));
     f.fill(2);
     const double takeoverCall = render(f, 8.0);
     CHECK(takeoverCall < 5.0, "the render call that notices the owner has gone returns at once: the Feed is not looked at on the render thread");
     CHECK(waitFor([&] { return scfeed_load32(&r.hdr->retired) == 1; }), "within a second the guest takes the Feed over");
     CHECK(reopen(r, feed), "the app re-attaches");
-    CHECK(r.hdr->sender_pid == (uint64_t)getpid(), "the Feed is now this Resolve's");
-    CHECK(scfeed_registry_find(r.hdr, (uint64_t)getpid(), 1) >= 0 && scfeed_registry_find(r.hdr, (uint64_t)other, 1) < 0, "listing only its own instances");
+    CHECK(r.hdr->sender_pid == scfeed_pid(), "the Feed is now this Resolve's");
+    CHECK(scfeed_registry_find(r.hdr, scfeed_pid(), 1) >= 0 && scfeed_registry_find(r.hdr, other, 1) < 0, "listing only its own instances");
     f.fill(3);
     render(f, 9.0);  // asks for the ring
     CHECK(waitFor([&] { return scfeed_load32(&r.hdr->retired) == 1; }), "the first frame makes the ring");
@@ -320,29 +323,31 @@ static int guestTest(const char* feed)
     scfeed_reader_close(&r);
     gPlugin->mainEntry(kOfxActionDestroyInstance, gEffect, nullptr, nullptr);
     scfeed_writer_close(&ow);
-    unlink(feed);
+    testos::removeFeed(feed);
     std::printf(gFails ? "\nSender guest test: %d FAILED\n" : "\nSender guest test: all passed\n", gFails);
     return gFails ? 1 : 0;
 }
 
 int main(int argc, char** argv)
 {
-    setvbuf(stdout, nullptr, _IOLBF, 0);
+    if (testos::OtherProcess::isChild(argc, argv)) return testos::OtherProcess::childMain();
+    testos::unbufferedLines();
     if (argc < 2) { std::printf("usage: mock_host_test <path to .ofx> [--guest]\n"); return 2; }
     const bool guest = argc > 2 && !std::strcmp(argv[2], "--guest");
-    char feed[128];
-    std::snprintf(feed, sizeof feed, "/dev/shm/scopecreep-sender-test-%d", (int)getpid());
-    setenv(SCFEED_PATH_ENV, feed, 1);
-    unlink(feed);
+    const std::string feedPath = testos::privateFeedPath();
+    const char* feed = feedPath.c_str();
+    testos::setEnv(SCFEED_PATH_ENV, feed);
+    testos::removeFeed(feed);
     if (cudaStreamCreateWithFlags(&gHostStream, cudaStreamNonBlocking) != cudaSuccess) {
         std::printf("CUDA is not available (is the GPU out of memory?): cannot run the Sender test\n");
         return 2;
     }
 
-    void* lib = dlopen(argv[1], RTLD_NOW);
-    if (!lib) { std::printf("dlopen: %s\n", dlerror()); return 2; }
-    auto count = (int (*)())dlsym(lib, "OfxGetNumberOfPlugins");
-    auto get = (OfxPlugin * (*)(int))dlsym(lib, "OfxGetPlugin");
+    testos::Plugin plugin;
+    std::string loadError;
+    if (!testos::loadPlugin(argv[1], plugin, loadError)) { std::printf("%s\n", loadError.c_str()); return 2; }
+    auto count = plugin.count;
+    auto get = plugin.get;
 
     std::printf("the plugin identifies itself\n");
     CHECK(count && count() == 1, "the bundle exports exactly one plugin (no second entry)");
@@ -407,7 +412,7 @@ int main(int argc, char** argv)
     waitFor([&] { return r.hdr->renders_total == 3; });  // the counters are carried over when the new Feed becomes current
     CHECK(r.hdr->renders_total == 3 && r.hdr->renders_idle == 1 && r.hdr->renders_thumbnail == 1, "the counters carry over to the new Feed");
     {
-        const int e = scfeed_registry_find(r.hdr, (uint64_t)getpid(), 1);
+        const int e = scfeed_registry_find(r.hdr, scfeed_pid(), 1);
         CHECK(e >= 0, "the instance is listed in the registry, and the listing carries over to the new Feed");
         CHECK(e >= 0 && r.hdr->registry[e].frame_rate == 24.0 && std::string(r.hdr->registry[e].host_name) == "MockHost 9.9", "with its timeline rate and host");
         CHECK(e >= 0 && r.hdr->registry[e].renders == 2 && r.hdr->registry[e].last_frame_time == 12.0, "every render but the thumbnail is recorded against it");
@@ -572,7 +577,7 @@ int main(int argc, char** argv)
     std::printf("the GPU has no memory for a larger frame's staging buffer\n");
     {
         GpuFrame huge(512, 288);  // 2.4 MB a frame
-        setenv("SCOPECREEP_SENDER_GPU_LIMIT_MB", "1", 1);
+        testos::setEnv("SCOPECREEP_SENDER_GPU_LIMIT_MB", "1");
         huge.fill(60);
         const double call = render(huge, 450.0);
         CHECK(call < 5.0, "the render call returns at once");
@@ -582,7 +587,7 @@ int main(int argc, char** argv)
         CHECK(scfeed_load32(&r.hdr->retired) == 0, "the Feed it had stays in place");
         for (int k = 0; k < 5; ++k) render(huge, 451.0 + k);
         CHECK(huge.passedThrough() && scfeed_reader_claim(&r) < 0, "later frames pass through, unfed, and no ring is tried within the retry time");
-        unsetenv("SCOPECREEP_SENDER_GPU_LIMIT_MB");  // memory frees up
+        testos::setEnv("SCOPECREEP_SENDER_GPU_LIMIT_MB", nullptr);  // memory frees up
         for (int k = 0; k < 51; ++k) {  // the app stays attached meanwhile
             scfeed_reader_heartbeat(&r, scfeed_now_ns());
             std::this_thread::sleep_for(std::chrono::milliseconds(100));
@@ -641,7 +646,7 @@ int main(int argc, char** argv)
     scfeed_reader_close(&r2);
 
     gPlugin->mainEntry(kOfxActionDestroyInstance, gEffect, nullptr, nullptr);
-    unlink(feed);
+    testos::removeFeed(feed);
     std::printf(gFails ? "\nSender test: %d FAILED\n" : "\nSender test: all passed\n", gFails);
     return gFails ? 1 : 0;
 }

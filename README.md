@@ -51,6 +51,8 @@ make -C sender test              # drive the built Sender with a fake CUDA host 
 make -C sender install           # developer install into /usr/OFX/Plugins, then restart Resolve
 ```
 
+On Windows the Sender builds with CMake and MSVC instead (commands at the top of `sender/CMakeLists.txt`).
+
 In Resolve, put **ScopeCreep** (Effects > OpenFX > ScopeCreep, the Sender) on its own last timeline node, with no grade on that node. GPU processing must be CUDA.
 
 ### Running the app from the app launcher
@@ -136,6 +138,7 @@ DaVinci Resolve                                 scopecreep app (Rust + wgpu)
   - [0042](docs/adr/0042-view-controls-return-to-every-panel-title-bar.md): View controls return to every Panel's title bar as a block, the Colour Setup line sits in the menu bar row, and a page tab has a right-click menu
   - [0043](docs/adr/0043-the-feed-keeps-its-bytes-and-takes-each-platforms-shared-memory-name.md): The Feed keeps its bytes and takes each platform's shared-memory name (Linux /dev/shm, macOS shm_open, Windows named mapping)
   - [0049](docs/adr/0049-on-windows-the-feed-name-holds-a-locator.md): On Windows the Feed's name holds a locator and each Feed is its own mapping `<name>.N`, since a named mapping cannot be replaced while held
+  - [0050](docs/adr/0050-on-windows-the-sender-carries-its-own-cpp-runtime.md): On Windows the Sender links the C++ runtime statically (`/MT`) and builds with CMake; it reads its environment from the process, not its runtime's copy
 - [docs/findings/](docs/findings/): what testing showed, one file per ticket.
 - [docs/research/](docs/research/): what public sources say, with dates and links.
 
