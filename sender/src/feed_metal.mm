@@ -1,6 +1,6 @@
 // The Metal half of the Sender's frame transport (macOS, Apple Silicon); see feed_core.h for the shared half.
 //
-// UNCOMPILED when written: the author had no Mac. Expect to fix small compile errors on the Mac. The design is the
+// Built and run on an Apple Silicon Mac with Resolve 21.1.1 (docs/findings/255-metal-sender-on-the-mac.md). The design is the
 // one measured in docs/findings/253-metal-handoff.md (route B), on Resolve 21 on an M4:
 //  - Resolve's source image is an MTLBuffer with private storage: the CPU cannot read it, so a CPU copy is out;
 //  - the Feed's shared memory is wrapped once per ring in an MTLBuffer (newBufferWithBytesNoCopy on the mmap'd
