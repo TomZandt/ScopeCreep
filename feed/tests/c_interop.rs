@@ -69,6 +69,8 @@ fn the_header_compiles_as_cpp_for_the_sender() {
             "-Wall",
             "-Wextra",
             "-Werror",
+            // clang flags every unused static inline function when a header is the main file; the Sender includes it
+            "-Wno-unused-function",
             "-fsyntax-only",
             "-x",
             "c++",
