@@ -4,8 +4,11 @@
 //!
 //! A hotkey names a key by its position on the keyboard (winit's physical key), not by the character it types, so
 //! Ctrl+Shift+1 stays Ctrl+Shift+1 although Shift turns the 1 into ! (ADR 0030).
+//!
+//! A hotkey's `ctrl` is the platform's primary modifier: Ctrl, and Cmd on a Mac (#254). It is stored as Ctrl
+//! everywhere, so a hotkeys file written on Linux reads the same on a Mac, where its Ctrl+Z is Cmd+Z.
 use std::fmt;
-use winit::keyboard::KeyCode;
+use winit::keyboard::{KeyCode, ModifiersState};
 
 use crate::pages::NUMBERED;
 
@@ -427,6 +430,23 @@ impl Hotkey {
         }
     }
 
+    /// The hotkey `key` is with `held` pressed, where the primary modifier (`ctrl`) is Cmd when `cmd_is_primary`
+    /// (a Mac) and Ctrl otherwise. A Mac's Ctrl and the other platforms' Super belong to the system, so a key
+    /// with one held is no hotkey. This is why a hotkey stored as Ctrl+Z on Linux is Cmd+Z on a Mac.
+    pub fn from_held(key: Key, held: ModifiersState, cmd_is_primary: bool) -> Option<Hotkey> {
+        let (primary, system) = if cmd_is_primary {
+            (held.super_key(), held.control_key())
+        } else {
+            (held.control_key(), held.super_key())
+        };
+        (!system).then_some(Hotkey {
+            key,
+            ctrl: primary,
+            shift: held.shift_key(),
+            alt: held.alt_key(),
+        })
+    }
+
     pub fn with_shift(self) -> Hotkey {
         Hotkey {
             shift: true,
@@ -470,25 +490,48 @@ impl Hotkey {
     }
 
     fn join(self, key: &str) -> String {
+        self.join_as(key, "Ctrl")
+    }
+
+    /// The hotkey written with `primary` for the primary modifier (`ctrl`). The hotkeys file always says Ctrl;
+    /// what a menu shows is the platform's name for it.
+    fn join_as(self, key: &str, primary: &str) -> String {
         let mut text = String::new();
         for (held, name) in [
-            (self.ctrl, "Ctrl+"),
-            (self.shift, "Shift+"),
-            (self.alt, "Alt+"),
+            (self.ctrl, primary),
+            (self.shift, "Shift"),
+            (self.alt, "Alt"),
         ] {
             if held {
                 text += name;
+                text += "+";
             }
         }
         text + key
     }
+
+    /// How a menu shows the hotkey on a platform whose primary modifier is called `primary`.
+    pub fn shown_as(self, primary: &str) -> String {
+        self.join_as(self.key.shown(), primary)
+    }
 }
 
-/// How a menu shows the hotkey: "Ctrl+Shift+1", "Ctrl+-".
+/// How a menu shows the hotkey: "Ctrl+Shift+1", "Ctrl+-" ("Cmd+Shift+1" on a Mac, where the primary modifier is
+/// Cmd: the same hotkey, stored the same).
 impl fmt::Display for Hotkey {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str(&self.join(self.key.shown()))
+        f.write_str(&self.shown_as(crate::platform::PRIMARY_MODIFIER))
     }
+}
+
+/// `text` (a hotkey, or a sentence holding one, written with Ctrl) as this platform shows it: for tests and the
+/// few strings written out by hand.
+pub fn native_shortcut(text: &str) -> String {
+    text.replacen(
+        "Ctrl+",
+        &format!("{}+", crate::platform::PRIMARY_MODIFIER),
+        1,
+    )
 }
 
 /// Why a hotkey was not assigned.

@@ -19,6 +19,34 @@ jobs:
       - run: cargo fmt --check
       - run: cargo clippy --workspace --all-targets -- -D warnings
 
+  # macOS (#236): the Feed's tests (shared memory, including two processes), the app's tests that need no GPU,
+  # clippy for the macOS target (this runner is Apple Silicon, so it is the target) and the harness's tests. The
+  # hosted runner has no GPU to speak of, so the app's GPU seams (every test file built on app/tests/common)
+  # run on the maintainer's Mac only.
+  macos:
+    runs-on: macos-latest
+    concurrency:
+      group: rust-macos-${{ github.ref }}
+      cancel-in-progress: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo test -p scopecreep-feed
+      - name: app tests that need no GPU
+        run: |
+          targets=$(grep -L '^mod common' app/tests/*.rs | sed 's|^app/tests/\(.*\)\.rs$|--test \1|')
+          cargo test -p scopecreep --lib $targets
+      - run: cargo clippy --workspace --all-targets -- -D warnings
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+      - name: harness tests
+        working-directory: harness
+        run: python -m unittest discover -s tests
+
   # Windows (#235): clippy for the Windows target, the Feed's tests, the app's tests that need no GPU and the
   # harness's. The hosted runner has no GPU, so the app's GPU seams (every test file built on app/tests/common,
   # which takes a GPU adapter) run on Linux only.

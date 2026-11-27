@@ -1,7 +1,7 @@
 //! The Hotkeys panel through its pure description and the command seam (#148, spec #142): capture, cancel, clear,
 //! conflicts (replace and cancel), reserved keys, reset one and all, the menus following a change at once, and the
 //! change surviving a restart.
-use scopecreep::commands::{Command, Hotkey, Hotkeys, Key};
+use scopecreep::commands::{Command, Hotkey, Hotkeys, Key, native_shortcut};
 use scopecreep::components::{MenuEntry, MenuItem};
 use scopecreep::hotkeys_panel::{HotkeysPanel, PRESS_A_KEY, PanelAction, State};
 use scopecreep::menu_bar::{self, LayoutMode, MenuAction, SETTINGS};
@@ -128,7 +128,7 @@ fn a_conflict_names_the_other_command_and_cancel_keeps_both() {
     click(&mut panel, &mut hotkeys, "Go to page 1");
     assert!(!panel.key(ctrl("2"), &mut hotkeys));
     let menu = panel.menu(&hotkeys);
-    assert!(headings(&menu).contains(&"Ctrl+2 is used by Go to page 2".to_string()));
+    assert!(headings(&menu).contains(&native_shortcut("Ctrl+2 is used by Go to page 2")));
     assert!(panel.takes_keys(), "a key now must not run Go to page 2");
     assert!(!click(&mut panel, &mut hotkeys, "Cancel"));
     assert_eq!(hotkeys, Hotkeys::default());
@@ -144,7 +144,10 @@ fn replace_takes_the_key_from_the_other_command() {
     assert_eq!(hotkeys.command_for(ctrl("2")), Some(Command::GoToPage(0)));
     assert_eq!(hotkeys.get(Command::GoToPage(1)), None);
     let menu = panel.menu(&hotkeys);
-    assert_eq!(row(&menu, "Go to page 1").1.hotkey, "Ctrl+2");
+    assert_eq!(
+        row(&menu, "Go to page 1").1.hotkey,
+        native_shortcut("Ctrl+2")
+    );
     assert_eq!(row(&menu, "Go to page 2").1.hotkey, "");
 }
 
@@ -203,12 +206,19 @@ fn reset_one_puts_the_captured_command_back() {
     let (mut panel, mut hotkeys) = (HotkeysPanel::default(), Hotkeys::default());
     hotkeys.clear(Command::GoToPage(0));
     click(&mut panel, &mut hotkeys, "Go to page 1");
-    assert!(click(&mut panel, &mut hotkeys, "Reset to default (Ctrl+1)"));
+    assert!(click(
+        &mut panel,
+        &mut hotkeys,
+        &native_shortcut("Reset to default (Ctrl+1)")
+    ));
     assert_eq!(hotkeys, Hotkeys::default());
     assert_eq!(panel.state, State::Idle);
     // At its default, reset is greyed.
     click(&mut panel, &mut hotkeys, "Go to page 1");
-    let (i, reset) = row(&panel.menu(&hotkeys), "Reset to default (Ctrl+1)");
+    let (i, reset) = row(
+        &panel.menu(&hotkeys),
+        &native_shortcut("Reset to default (Ctrl+1)"),
+    );
     assert!(!reset.enabled);
     assert_eq!(panel.menu(&hotkeys).action(i), None);
 }
@@ -315,6 +325,6 @@ fn the_help_commands_are_listed_and_can_be_reassigned_there() {
     assert_eq!(hotkeys.command_for(ctrl("H")), Some(Command::Website));
     assert_eq!(
         row(&panel.menu(&hotkeys), "Help: Website").1.hotkey,
-        "Ctrl+H"
+        native_shortcut("Ctrl+H")
     );
 }

@@ -9,7 +9,8 @@
 //!   scopecreep [--feed <path>] [--no-scripting]
 //!
 //!   --feed           default: $SCOPECREEP_FEED, else the platform's Feed (on Linux /dev/shm/scopecreep-feed,
-//!                    on Windows the named mapping Local\scopecreep-feed)
+//!                    on Windows the named mapping Local\scopecreep-feed, on macOS the shared-memory object
+//!                    /scopecreep-feed)
 //!   --no-scripting   never read the project by Resolve scripting (the Colour Setup then comes only from the
 //!                    Sender node's manual override). Resolve's Python: $SCOPECREEP_RESOLVE_PYTHON, else
 //!                    on Linux /opt/resolve/bin/ResolvePython, on Windows the first found of Resolve's own
@@ -178,6 +179,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         scripting,
         proxy: event_loop.create_proxy(),
         window: None,
+        _app_menu: None,
     };
     event_loop.run_app(&mut app)?;
     Ok(())
@@ -188,6 +190,8 @@ struct App {
     scripting: bool,
     proxy: EventLoopProxy<Wake>,
     window: Option<AppWindow>,
+    /// The system menu bar's app menu (a Mac's About and Quit), kept alive while the app runs.
+    _app_menu: Option<scopecreep::platform::AppMenu>,
 }
 
 /// How a piece of text is set: everything besides the words and the room that changes how it is shaped.
@@ -1362,14 +1366,9 @@ impl AppWindow {
             return;
         }
         let pressed = match event.physical_key {
-            PhysicalKey::Code(code) if !self.modifiers.super_key() => {
-                Key::from_code(code).map(|key| Hotkey {
-                    key,
-                    ctrl: self.modifiers.control_key(),
-                    shift: self.modifiers.shift_key(),
-                    alt: self.modifiers.alt_key(),
-                })
-            }
+            PhysicalKey::Code(code) => Key::from_code(code).and_then(|key| {
+                Hotkey::from_held(key, self.modifiers, scopecreep::platform::PRIMARY_IS_CMD)
+            }),
             _ => None,
         };
         // The Update dialog takes every key while it is open: Escape is Later.
@@ -3046,6 +3045,7 @@ impl ApplicationHandler<Wake> for App {
         if self.window.is_some() {
             return;
         }
+        self._app_menu = scopecreep::platform::install_app_menu();
         let attributes = Window::default_attributes()
             .with_title("ScopeCreep")
             .with_inner_size(LogicalSize::new(1440.0, 840.0));

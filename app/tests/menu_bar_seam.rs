@@ -2,7 +2,7 @@
 //! their states, opening, switching and closing, the Layout menu's entries (empty, in use, current) and that each
 //! entry runs the command its shown hotkey runs, and the menus on a small Window.
 use scopecreep::build_info::Build;
-use scopecreep::commands::{Command, Hotkey, Hotkeys, Key};
+use scopecreep::commands::{Command, Hotkey, Hotkeys, Key, native_shortcut};
 use scopecreep::components::*;
 use scopecreep::layout_tree::LayoutTree;
 use scopecreep::links;
@@ -361,7 +361,7 @@ fn a_page_goes_to_itself_and_shows_the_hotkey_that_does_the_same() {
     );
     let (i, entry) = item(&menu, "2  Pictures");
     assert_eq!(menu.action(i), Some(MenuAction::Page(1)));
-    assert_eq!(entry.hotkey, "Ctrl+2");
+    assert_eq!(entry.hotkey, native_shortcut("Ctrl+2"));
     // A tenth page has no hotkey.
     let many: Vec<String> = (1..=10).map(|n| format!("P{n}")).collect();
     let menu = layout_menu(&many, 0, &Hotkeys::default(), LayoutMode::Show);
@@ -621,7 +621,7 @@ fn the_views_entry_shows_the_hotkey_the_command_has() {
         )
         .unwrap();
     let (_, entry) = item(&view_menu(&hotkeys, true), "Show legends");
-    assert_eq!(entry.hotkey, "Ctrl+L");
+    assert_eq!(entry.hotkey, native_shortcut("Ctrl+L"));
 }
 
 #[test]
@@ -630,7 +630,7 @@ fn the_view_menu_is_among_the_menus_the_minimum_size_is_worked_out_from_with_its
     assert!(
         menus.iter().any(|m| m.entries.iter().any(|e| matches!(
             e,
-            MenuEntry::Item(i) if i.label == "Show legends" && i.hotkey == "Ctrl+Shift+Alt+Page Down"
+            MenuEntry::Item(i) if i.label == "Show legends" && i.hotkey == native_shortcut("Ctrl+Shift+Alt+Page Down")
         ))),
         "{menus:?}"
     );
@@ -753,7 +753,7 @@ fn a_help_entry_shows_the_hotkey_it_is_given() {
         .assign(Command::Website, Hotkey::ctrl(Key::named("H").unwrap()))
         .unwrap();
     let (_, entry) = item(&help_menu(&hotkeys), "Website");
-    assert_eq!(entry.hotkey, "Ctrl+H");
+    assert_eq!(entry.hotkey, native_shortcut("Ctrl+H"));
 }
 
 #[test]

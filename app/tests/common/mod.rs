@@ -72,12 +72,14 @@ impl Rig {
         colour_setup: Option<&str>,
         project: Option<Box<dyn ProjectReader>>,
     ) -> Rig {
-        let path = PathBuf::from(format!(
-            "/dev/shm/scopecreep-test-{}-{}",
-            std::process::id(),
-            name
-        ));
-        let _ = std::fs::remove_file(&path);
+        // On macOS a shared-memory name holds 31 bytes, `.N` included.
+        let base = if cfg!(target_os = "macos") {
+            "/sctest"
+        } else {
+            "/dev/shm/scopecreep-test"
+        };
+        let path = PathBuf::from(format!("{base}-{}-{name}", std::process::id()));
+        scopecreep_feed::remove_feed(&path);
         let (turn, device, queue) = gpu();
         let mut writer = FeedWriter::create(&path, 4, capacity).unwrap();
         if let Some(text) = colour_setup {
@@ -232,7 +234,7 @@ impl Rig {
 
 impl Drop for Rig {
     fn drop(&mut self) {
-        let _ = std::fs::remove_file(&self.path);
+        scopecreep_feed::remove_feed(&self.path);
     }
 }
 

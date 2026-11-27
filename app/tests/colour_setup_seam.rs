@@ -13,11 +13,13 @@ const SECOND: u64 = 1_000_000_000;
 const FRAME_24: u64 = SECOND / 24;
 
 /// A Feed location private to this test run: a file in `/dev/shm` on Linux, a mapping name in the session's
-/// namespace on Windows (ADR 0049).
+/// namespace on Windows (ADR 0049), a short shared-memory name on macOS (31 bytes, `.N` included; ADR 0052).
 fn test_location(name: &str) -> PathBuf {
     #[cfg(windows)]
     let base = "Local\\scopecreep-colour-test";
-    #[cfg(not(windows))]
+    #[cfg(target_os = "macos")]
+    let base = "/sccol";
+    #[cfg(target_os = "linux")]
     let base = "/dev/shm/scopecreep-colour-test";
     PathBuf::from(format!("{base}-{}-{name}", std::process::id()))
 }
@@ -137,7 +139,7 @@ struct Bench {
 impl Bench {
     fn new(name: &str) -> Bench {
         let path = test_location(name);
-        let _ = std::fs::remove_file(&path);
+        scopecreep_feed::remove_feed(&path);
         let script = Arc::new(Mutex::new(Script::default()));
         let monitor = Monitor::with_project_reader(&path, Box::new(FakeHelper(script.clone())));
         Bench {
@@ -227,7 +229,7 @@ impl Bench {
 
 impl Drop for Bench {
     fn drop(&mut self) {
-        let _ = std::fs::remove_file(&self.path);
+        scopecreep_feed::remove_feed(&self.path);
     }
 }
 
@@ -398,7 +400,7 @@ fn the_manual_override_works_with_no_scripting_at_all() {
             .as_deref(),
         Some("ACEScct → Rec.709 BT.1886 (set manually, ACES 1.3)")
     );
-    let _ = std::fs::remove_file(&path);
+    scopecreep_feed::remove_feed(&path);
 }
 
 #[test]

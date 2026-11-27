@@ -4,6 +4,20 @@ use std::path::PathBuf;
 use std::process::{Child, Command};
 use winit::window::WindowAttributes;
 
+/// What the primary shortcut modifier is called in a menu.
+pub const PRIMARY_MODIFIER: &str = "Ctrl";
+
+/// Whether the primary modifier is the Command key (a Mac) rather than Control.
+pub const PRIMARY_IS_CMD: bool = false;
+
+/// The system menu bar's app menu: none here, the app's menu bar is in its Window.
+pub struct AppMenu;
+
+/// Put the app menu in the system menu bar (a Mac has one): nothing to do here.
+pub fn install_app_menu() -> Option<AppMenu> {
+    None
+}
+
 /// The folder the app remembers its settings in: `$XDG_CONFIG_HOME/scopecreep`, else `~/.config/scopecreep`.
 /// None with neither set.
 pub fn settings_folder() -> Option<PathBuf> {

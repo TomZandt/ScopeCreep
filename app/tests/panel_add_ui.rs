@@ -1,7 +1,7 @@
 //! Add panel and Close at the pure UI seam (#206, ADR 0038): the focus outline, the Close entry in a Panel's
 //! popover, the empty page's Add panel button, and the Add panel and Close entries in the Layout menu, at 1x and 2x.
 //! The two Commands are in the command table and the Hotkeys panel. No GPU, no window.
-use scopecreep::commands::{Command, Hotkeys};
+use scopecreep::commands::{Command, Hotkeys, native_shortcut};
 use scopecreep::components::*;
 use scopecreep::hotkeys_panel::HotkeysPanel;
 use scopecreep::menu_bar::{self, AddEntry, LayoutMode, MenuAction, add_menu, layout_menu};
@@ -189,7 +189,7 @@ fn a_hotkey_given_to_add_panel_shows_beside_its_entry() {
         MenuEntry::Item(i) if i.label == "Add panel…" => Some(i.hotkey.clone()),
         _ => None,
     });
-    assert_eq!(shown.as_deref(), Some("Ctrl+N"));
+    assert_eq!(shown.as_deref(), Some(native_shortcut("Ctrl+N").as_str()));
 }
 
 #[test]

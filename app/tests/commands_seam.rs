@@ -1,7 +1,7 @@
 //! Commands and hotkeys at the pure seam (#146, ADR 0036): the defaults are the layout shortcuts as they were,
 //! assigning, clearing and resetting, conflicts and reserved keys, and the hotkeys file.
-use scopecreep::commands::{Command, Hotkey, Hotkeys, Key, Refused};
-use winit::keyboard::KeyCode;
+use scopecreep::commands::{Command, Hotkey, Hotkeys, Key, Refused, native_shortcut};
+use winit::keyboard::{KeyCode, ModifiersState};
 
 fn key(name: &str) -> Key {
     Key::named(name).unwrap()
@@ -102,10 +102,55 @@ fn keys_are_by_position_so_shift_does_not_change_the_digit() {
 
 #[test]
 fn a_hotkey_is_shown_as_desktop_menus_show_it() {
-    assert_eq!(ctrl_shift("1").to_string(), "Ctrl+Shift+1");
+    assert_eq!(ctrl_shift("1").to_string(), native_shortcut("Ctrl+Shift+1"));
     assert_eq!(Hotkey::new(key("Z")).to_string(), "Z");
-    assert_eq!(ctrl("Minus").to_string(), "Ctrl+-");
+    assert_eq!(ctrl("Minus").to_string(), native_shortcut("Ctrl+-"));
     assert_eq!(Hotkey::new(key("PageUp")).to_string(), "Page Up");
+}
+
+#[test]
+fn a_hotkey_stored_on_linux_reads_the_same_on_a_mac_with_cmd_in_place_of_ctrl() {
+    // A hotkeys file written on Linux: Ctrl+Shift+Z for undo, Ctrl+2 for page 2 (#254).
+    let stored = Hotkeys::from_text("hotkeys 1\nlayout-undo Ctrl+Shift+Z\npage-go-2 Ctrl+2\n");
+
+    // Pressed on a Mac with Cmd (winit's "super") and Shift, it is the same hotkey: same command, same text.
+    let cmd_shift = ModifiersState::SUPER | ModifiersState::SHIFT;
+    let on_mac = Hotkey::from_held(key("Z"), cmd_shift, true).unwrap();
+    assert_eq!(on_mac, ctrl_shift("Z"));
+    assert_eq!(stored.command_for(on_mac), Some(Command::UndoLayout));
+    assert_eq!(
+        on_mac.to_text(),
+        "Ctrl+Shift+Z",
+        "stored the same everywhere"
+    );
+    let page = Hotkey::from_held(key("2"), ModifiersState::SUPER, true).unwrap();
+    assert_eq!(stored.command_for(page), Some(Command::GoToPage(1)));
+
+    // A Mac user is shown Cmd.
+    assert_eq!(on_mac.shown_as("Cmd"), "Cmd+Shift+Z");
+    assert_eq!(on_mac.shown_as("Ctrl"), "Ctrl+Shift+Z");
+
+    // Control is the system's on a Mac (Ctrl+click and friends): with it held there is no hotkey.
+    assert_eq!(
+        Hotkey::from_held(key("Z"), ModifiersState::CONTROL, true),
+        None
+    );
+}
+
+#[test]
+fn off_a_mac_ctrl_is_the_primary_modifier_and_super_belongs_to_the_system() {
+    assert_eq!(
+        Hotkey::from_held(key("Z"), ModifiersState::CONTROL, false),
+        Some(ctrl("Z"))
+    );
+    assert_eq!(
+        Hotkey::from_held(key("Z"), ModifiersState::SUPER, false),
+        None
+    );
+    assert_eq!(
+        Hotkey::from_held(key("Z"), ModifiersState::empty(), false),
+        Some(Hotkey::new(key("Z")))
+    );
 }
 
 #[test]

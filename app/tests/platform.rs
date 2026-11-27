@@ -27,6 +27,22 @@ fn settings_folder_follows_xdg_then_home() {
     assert_eq!(settings_folder(), None);
 }
 
+#[cfg(target_os = "macos")]
+#[test]
+fn settings_folder_is_scopecreep_in_application_support() {
+    // SAFETY: this test binary has only this test, so nothing reads the environment meanwhile.
+    unsafe { std::env::set_var("HOME", "/Users/someone") };
+    assert_eq!(
+        settings_folder(),
+        Some(PathBuf::from(
+            "/Users/someone/Library/Application Support/ScopeCreep"
+        ))
+    );
+
+    unsafe { std::env::remove_var("HOME") };
+    assert_eq!(settings_folder(), None);
+}
+
 #[cfg(windows)]
 #[test]
 fn settings_folder_is_scopecreep_in_appdata() {

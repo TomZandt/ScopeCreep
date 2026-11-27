@@ -1,5 +1,6 @@
 //! Undo layout change at the pure layout seam (ADR 0038, #207): the history steps back through add, close, swap and a
 //! divider drag, one step each, 20 deep, and touches nothing but the arrangement. No GPU, no window.
+use scopecreep::commands::native_shortcut;
 use scopecreep::layout_history::{DEPTH, LayoutHistory};
 use scopecreep::layout_tree::LayoutTree;
 use scopecreep::panel_grid::min_panel_size;
@@ -206,7 +207,7 @@ fn the_layout_menu_has_undo_greyed_when_there_is_nothing_to_undo() {
     let (action, enabled, hotkey) = undo_entry(false);
     assert!(!enabled);
     assert_eq!(action, None, "a greyed entry does nothing");
-    assert_eq!(hotkey, "Ctrl+Z");
+    assert_eq!(hotkey, native_shortcut("Ctrl+Z"));
     let (action, enabled, _) = undo_entry(true);
     assert!(enabled);
     assert_eq!(action, Some(MenuAction::Run(Command::UndoLayout)));

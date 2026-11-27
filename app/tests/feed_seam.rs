@@ -9,11 +9,13 @@ const MS: u64 = 1_000_000;
 const FRAME_24: u64 = 1_000_000_000 / 24;
 
 /// A Feed location private to this test run: a file in `/dev/shm` on Linux, a mapping name in the session's
-/// namespace on Windows (ADR 0049).
+/// namespace on Windows (ADR 0049), a short shared-memory name on macOS (31 bytes, `.N` included; ADR 0052).
 fn test_location(name: &str) -> PathBuf {
     #[cfg(windows)]
     let base = "Local\\scopecreep-app-test";
-    #[cfg(not(windows))]
+    #[cfg(target_os = "macos")]
+    let base = "/scapp";
+    #[cfg(target_os = "linux")]
     let base = "/dev/shm/scopecreep-app-test";
     PathBuf::from(format!("{base}-{}-{name}", std::process::id()))
 }
@@ -34,7 +36,7 @@ struct Bench {
 impl Bench {
     fn new(name: &str) -> Bench {
         let path = test_location(name);
-        let _ = std::fs::remove_file(&path);
+        scopecreep_feed::remove_feed(&path);
         Bench {
             monitor: Monitor::new(&path),
             path,
@@ -127,7 +129,7 @@ impl Bench {
 
 impl Drop for Bench {
     fn drop(&mut self) {
-        let _ = std::fs::remove_file(&self.path);
+        scopecreep_feed::remove_feed(&self.path);
     }
 }
 
@@ -162,7 +164,7 @@ fn first_pixels_bits(path: &Path, pixels: &[f32], poll_for_ns: u64) -> (Vec<u32>
 fn the_picture_view_shows_a_feed_frame_unmodified() {
     let path = test_location("unmodified");
     let (got, want) = first_pixels_bits(&path, &synthetic::awkward_values(64, 36), 100 * MS);
-    let _ = std::fs::remove_file(&path);
+    scopecreep_feed::remove_feed(&path);
     assert_eq!(
         got, want,
         "every value reaches the Picture View bit for bit: negative, over-range, denormal"
@@ -1257,7 +1259,7 @@ fn a_sender_error_is_passed_on() {
     assert_eq!(b.notice(), "Sender: cudaHostRegister: out of memory");
 }
 
-#[cfg(unix)] // writes a file where the Feed would be; a Windows Feed is a named mapping
+#[cfg(target_os = "linux")] // writes a file where the Feed would be; elsewhere a Feed is a named mapping or object
 #[test]
 fn a_file_that_is_not_a_feed_is_reported() {
     let mut b = Bench::new("notafeed");
