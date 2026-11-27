@@ -1,5 +1,5 @@
-// The ScopeCreep Sender: an OFX plugin for DaVinci Resolve (Linux and Windows, CUDA) that passes the picture through
-// untouched and hands each frame Resolve renders to the scopecreep app through the Feed.
+// The ScopeCreep Sender: an OFX plugin for DaVinci Resolve (Linux and Windows on CUDA, macOS on Metal) that passes the
+// picture through untouched and hands each frame Resolve renders to the scopecreep app through the Feed.
 //
 // What it does, in order of importance (ADR 0003: Resolve never waits for scopecreep):
 //  - with no app attached it does nothing: it tells Resolve the effect is an identity, so Resolve does not even
@@ -7,8 +7,9 @@
 //  - thumbnail renders (Resolve flags them) are never fed;
 //  - the Colour Setup can be set by hand on the node (ADR 0006): it wins over the project's, which the app reads by
 //    script, and travels with every frame (Feed protocol 1.1);
-//  - every other render on Resolve's CUDA path starts an asynchronous copy into the Feed and returns
-//    (feed_copy.cpp). Background cache renders and repeat renders cannot be told apart here (Resolve does not
+//  - every other render on Resolve's GPU path (CUDA, or Metal on a Mac: whichever this build's platform gives
+//    Resolve) starts an asynchronous copy into the Feed and returns (feed_core.cpp, feed_cuda.cpp, feed_metal.mm).
+//    Background cache renders and repeat renders cannot be told apart here (Resolve does not
 //    flag them and a plugin cannot see the playhead), so frames are tagged with the frame number, the timeline
 //    rate, the time of the render call and the instance, and the app decides (app/src/viewer_gate.rs).
 //
@@ -33,6 +34,14 @@
 #include <initializer_list>
 #include <iterator>
 #include <string>
+
+#ifdef SCOPECREEP_METAL
+#define SCOPECREEP_GPU_UNSUPPORTED_TEXT \
+    "Resolve is not rendering this effect with Metal, so no frames can be sent. Set GPU processing mode to Metal in Resolve's preferences."
+#else
+#define SCOPECREEP_GPU_UNSUPPORTED_TEXT \
+    "Resolve is not rendering this effect with CUDA, so no frames can be sent. Set GPU processing mode to CUDA in Resolve's preferences."
+#endif
 
 #define SENDER_ID "com.scopecreep.sender"
 #define SENDER_LABEL "ScopeCreep"
@@ -155,8 +164,10 @@ struct Image {
         floatRgba = depth && components && !std::strcmp(depth, kOfxBitDepthFloat) && !std::strcmp(components, kOfxImageComponentRGBA);
         return data != nullptr;
     }
-    // Address of pixel (x, y). Rows are stored bottom first; rowBytes may be negative.
-    char* at(int x, int y) const { return (char*)data + (ptrdiff_t)(y - bounds[1]) * rowBytes + (ptrdiff_t)(x - bounds[0]) * 16; }
+    // Byte offset of pixel (x, y) from the start of the image. Rows are stored bottom first; rowBytes may be negative.
+    ptrdiff_t offset(int x, int y) const { return (ptrdiff_t)(y - bounds[1]) * rowBytes + (ptrdiff_t)(x - bounds[0]) * 16; }
+    // Address of pixel (x, y). Only for host memory: on Metal `data` is an object, not an address.
+    char* at(int x, int y) const { return (char*)data + offset(x, y); }
     ~Image()
     {
         if (props) gEffect->clipReleaseImage(props);
@@ -180,10 +191,16 @@ OfxStatus describe(OfxImageEffectHandle effect, const char* label)
     gProp->propSetInt(p, kOfxImageEffectPropSupportsTiles, 0, 0);
     gProp->propSetInt(p, kOfxImageEffectPropSupportsMultiResolution, 0, 0);
     gProp->propSetString(p, kOfxImageEffectPluginRenderThreadSafety, 0, kOfxImageEffectRenderFullySafe);
+#ifdef SCOPECREEP_METAL
+    // Resolve's Metal render path: frames arrive as MTLBuffers, so Resolve does not copy them to host memory
+    // itself (and the CPU could not read them anyway: they are private to the GPU).
+    gProp->propSetString(p, kOfxImageEffectPropMetalRenderSupported, 0, "true");
+#else
     // Resolve's CUDA render path: frames arrive as GPU pointers, so Resolve does not copy them to host memory
     // itself (that copy slowed UHD playback at 50 and 60 fps to about 30 fps in Stage 0).
     gProp->propSetString(p, kOfxImageEffectPropCudaRenderSupported, 0, "true");
     gProp->propSetString(p, kOfxImageEffectPropCudaStreamSupported, 0, "true");
+#endif
     return kOfxStatOK;
 }
 
@@ -299,10 +316,17 @@ OfxStatus render(OfxImageEffectHandle effect, OfxPropertySetHandle inArgs)
     gProp->propGetDouble(inArgs, kOfxPropTime, 0, &time);
     int win[4] = {0, 0, 0, 0};
     for (int i = 0; i < 4; ++i) gProp->propGetInt(inArgs, kOfxImageEffectPropRenderWindow, i, &win[i]);
-    int cudaEnabled = 0;
-    void* stream = nullptr;
-    gProp->propGetInt(inArgs, kOfxImageEffectPropCudaEnabled, 0, &cudaEnabled);
-    if (cudaEnabled) gProp->propGetPointer(inArgs, kOfxImageEffectPropCudaStream, 0, &stream);
+    // Which GPU API Resolve is rendering this call on: what it offers, not what the Sender would like.
+    int gpuEnabled = 0;
+    void* stream = nullptr;  // CUDA: Resolve's stream. Metal: Resolve's command queue.
+#ifdef SCOPECREEP_METAL
+    gProp->propGetInt(inArgs, kOfxImageEffectPropMetalEnabled, 0, &gpuEnabled);
+    if (gpuEnabled) gProp->propGetPointer(inArgs, kOfxImageEffectPropMetalCommandQueue, 0, &stream);
+    if (!stream) gpuEnabled = 0;
+#else
+    gProp->propGetInt(inArgs, kOfxImageEffectPropCudaEnabled, 0, &gpuEnabled);
+    if (gpuEnabled) gProp->propGetPointer(inArgs, kOfxImageEffectPropCudaStream, 0, &stream);
+#endif
 
     OfxImageClipHandle srcClip = nullptr, dstClip = nullptr;
     OfxPropertySetHandle srcClipProps = nullptr, dstClipProps = nullptr;
@@ -324,9 +348,17 @@ OfxStatus render(OfxImageEffectHandle effect, OfxPropertySetHandle inArgs)
     if (!thumbnail) scopecreep::feedNoteRender(inst->id, time, t0);
 
     scopecreep::Render what = scopecreep::Render::Idle;
-    if (cudaEnabled) {
+    if (gpuEnabled) {
+#ifdef SCOPECREEP_METAL
+        // Resolve's images are MTLBuffers with private storage; the pixel (x1, y1) is `offset` bytes into one.
+        if (src.rowBytes <= 0 || dst.rowBytes <= 0) return kOfxStatFailed;  // bottom-up images have no blit; Resolve does not send them
+        if (!scopecreep::metalPassthrough(stream, dst.data, (size_t)dst.offset(x1, y1), (size_t)dst.rowBytes, src.data, (size_t)src.offset(x1, y1),
+                                          (size_t)src.rowBytes, (size_t)width * 16, (size_t)height))
+            return kOfxStatFailed;
+#else
         if (!scopecreep::cudaPassthrough(stream, dst.at(x1, y1), (size_t)dst.rowBytes, src.at(x1, y1), (size_t)src.rowBytes, (size_t)width * 16, (size_t)height))
             return kOfxStatFailed;
+#endif
         if (thumbnail) {
             what = scopecreep::Render::Thumbnail;
         } else if (scopecreep::feedReaderPresent() && !scopecreep::feedIsGuest()) {
@@ -341,18 +373,22 @@ OfxStatus render(OfxImageEffectHandle effect, OfxPropertySetHandle inArgs)
             info.colourSetupBytes = manualColourSetup(inst, colour, sizeof colour);
             info.colourSetup = colour;
             info.colourProvenance = info.colourSetupBytes ? SCFEED_PROVENANCE_MANUAL : SCFEED_PROVENANCE_NONE;
+#ifdef SCOPECREEP_METAL
+            scopecreep::feedSubmitMetal(stream, src.data, (size_t)src.offset(x1, y1), (size_t)src.rowBytes, info);
+#else
             scopecreep::feedSubmitCuda(stream, src.at(x1, y1), (size_t)src.rowBytes, info);
+#endif
             what = scopecreep::Render::Fed;
         }
     } else {
-        // Resolve is rendering on the CPU or another GPU API. Pass the picture through; frames are not fed:
-        // copying them from here would make Resolve wait.
+        // Resolve is rendering on the CPU or another GPU API than this build's. Pass the picture through; frames
+        // are not fed: copying them from here would make Resolve wait.
         for (int y = y1; y < y2; ++y) std::memcpy(dst.at(x1, y), src.at(x1, y), (size_t)width * 16);
         if (thumbnail) {
             what = scopecreep::Render::Thumbnail;
         } else if (scopecreep::feedReaderPresent() && !scopecreep::feedIsGuest()) {
             what = scopecreep::Render::Unsupported;
-            scopecreep::feedSetError("Resolve is not rendering this effect with CUDA, so no frames can be sent. Set GPU processing mode to CUDA in Resolve's preferences.");
+            scopecreep::feedSetError(SCOPECREEP_GPU_UNSUPPORTED_TEXT);
         }
     }
     scopecreep::feedCount(what, t0, scfeed_now_ns() - t0);

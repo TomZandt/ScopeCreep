@@ -1,12 +1,17 @@
 // The Sender's frame transport: Resolve's frame on the GPU -> the Feed (shared memory), without ever waiting.
 //
-// Everything that touches CUDA or the Feed lives behind this interface, so the OFX glue (sender.cpp) needs
-// neither. The strategy is the one Stage 0 proved (docs/stage0-report.md, section 4):
-//   render call:  copy the frame into a small private staging buffer on Resolve's own CUDA stream (cheap, GPU to
-//                 GPU), queue an asynchronous copy from staging into a pinned Feed slot on the Sender's stream,
-//                 queue a callback that publishes the slot, and return. Nothing is waited for.
+// Everything that touches the GPU API or the Feed lives behind this interface, so the OFX glue (sender.cpp) needs
+// neither. One build has one GPU path: CUDA on Linux and Windows (feed_cuda.cpp), Metal on macOS (feed_metal.mm);
+// the rest (feed_core.cpp: the Feed, the ring, the registry, the guest rule) is shared. The strategies are the ones
+// the measurements chose:
+//   CUDA, render call: copy the frame into a small private staging buffer on Resolve's own stream (GPU to GPU),
+//                 queue an asynchronous copy from staging into a pinned Feed slot on the Sender's stream, queue a
+//                 callback that publishes the slot, and return (docs/stage0-report.md, section 4).
+//   Metal, render call: encode one blit from Resolve's private source buffer straight into a buffer that wraps the
+//                 Feed slot's memory, on Resolve's queue, publish from the command buffer's completion handler,
+//                 and return (docs/findings/253-metal-handoff.md, route B).
 //   no reader:    nothing at all is queued.
-// ADR 0003: no call here may block on the app, on a lock, or on a full ring.
+// ADR 0003: no call here may block on the app, on a lock, on the GPU or on a full ring.
 #pragma once
 #include <cstddef>
 #include <cstdint>
@@ -50,11 +55,16 @@ void feedNoteRender(uint32_t instance, double frameTime, uint64_t renderNs);
 bool feedReaderPresent();
 
 // Start the asynchronous copy of a 32-bit float RGBA frame that lives on the GPU (`src` is a device pointer, rows
-// `srcRowBytes` apart) into the Feed, and return at once. Call only when feedReaderPresent().
+// `srcRowBytes` apart) into the Feed, and return at once. Call only when feedReaderPresent(). CUDA builds.
 // Returns true if a copy was started. Otherwise the frame was not fed and the Feed's counters or `sender_error`
 // say why (ring being built, everything busy, out of graphics memory).
 // The first call with a reader attached builds the ring: a one-off cost of pinning the shared memory.
 bool feedSubmitCuda(void* hostStream, const void* src, size_t srcRowBytes, const FrameInfo& info);
+
+// The same for Metal builds. `queue` is Resolve's id<MTLCommandQueue>, `srcBuffer` the id<MTLBuffer> its image is in
+// (both passed as void* so this header stays plain C++), `srcOffset` the byte offset of the frame's first pixel in
+// that buffer. The frame's pixels are never read by the CPU: Resolve's buffers are private to the GPU.
+bool feedSubmitMetal(void* queue, void* srcBuffer, size_t srcOffset, size_t srcRowBytes, const FrameInfo& info);
 
 // Count one render call in the Feed's counters.
 void feedCount(Render what, uint64_t renderNs, uint64_t callNs);
@@ -64,5 +74,10 @@ void feedSetError(const char* text);
 
 // The picture passes through untouched: dst = src on the host's CUDA stream. Never blocks.
 bool cudaPassthrough(void* hostStream, void* dst, size_t dstRowBytes, const void* src, size_t srcRowBytes, size_t widthBytes, size_t height);
+
+// The same on Resolve's Metal queue: a blit from `srcBuffer` to `dstBuffer` (id<MTLBuffer> as void*), committed and
+// not waited for, as the OFX header asks. False if the blit could not be encoded.
+bool metalPassthrough(void* queue, void* dstBuffer, size_t dstOffset, size_t dstRowBytes, void* srcBuffer, size_t srcOffset, size_t srcRowBytes,
+                      size_t widthBytes, size_t height);
 
 }  // namespace scopecreep

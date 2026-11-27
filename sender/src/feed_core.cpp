@@ -1,14 +1,15 @@
-// See feed_copy.h. Rules for this file (ADR 0003, Resolve never waits):
-//  - no cudaStreamSynchronize / cudaEventSynchronize / cudaDeviceSynchronize, anywhere;
+// See feed_core.h: the Feed, the ring, the registry and the worker, the same for every GPU API. Rules for this file
+// (ADR 0003, Resolve never waits):
+//  - nothing here waits for the GPU (no stream, event or fence waits, anywhere, and none in a backend either);
 //  - the one mutex is only ever taken with try_lock on the render path: if another render thread holds it, this
 //    frame is skipped and counted, not waited for;
-//  - the completion callback (a CUDA thread) touches only atomics;
+//  - a backend's completion callback (a GPU driver thread) touches only atomics;
 //  - everything that takes real time runs on the Sender's own worker thread, never on a render thread: building a
-//    ring (cudaMalloc, pinning the Feed's memory, creating the stream) the first time an app is attached and when
-//    a larger frame arrives, letting an old ring go, and a guest's once-a-second look at the other Resolve's Feed
-//    (scanning and mapping files). A render call only reads state, sets a flag and wakes the worker; a frame that
-//    arrives while a ring is being built passes through and is counted as dropped ("Sender busy").
-#include "feed_copy.h"
+//    ring (the backend's reservations, pinning or wrapping the Feed's memory) the first time an app is attached and
+//    when a larger frame arrives, letting an old ring go, and a guest's once-a-second look at the other Resolve's
+//    Feed (scanning and mapping files). A render call only reads state, sets a flag and wakes the worker; a frame
+//    that arrives while a ring is being built passes through and is counted as dropped ("Sender busy").
+#include "feed_core.h"
 
 #include "platform.h"
 #include "scopecreep_feed.h"
@@ -25,8 +26,6 @@
 #include <utility>
 #include <vector>
 
-#include <cuda_runtime.h>
-
 #ifndef SCOPECREEP_SENDER_VERSION
 #define SCOPECREEP_SENDER_VERSION "0.0.0"
 #endif
@@ -38,24 +37,23 @@ constexpr uint32_t kSlots = 4;                         // Stage 0: four slots he
 constexpr uint64_t kRetryNs = 5ull * 1000000000ull;    // after a failed ring build, leave Resolve alone for a while
 constexpr uint64_t kGraceNs = 2ull * 1000000000ull;    // an old ring is let go this long after it was replaced
 
+}  // namespace
+
 // One Feed file and the GPU resources that go with its layout.
 struct Ring {
     scfeed_writer w{};
-    bool pinned = false;
-    std::vector<void*> staging;            // device buffers, each slot_capacity bytes
-    std::vector<cudaEvent_t> stagingFree;  // complete when the copy out of that staging buffer has finished
-    int nextStaging = 0;
-    std::atomic<int> inFlight{0};          // copies queued and not yet published
+    GpuRing* gpu = nullptr;                // the backend's part; freed with the ring
+    bool usable = false;                   // the backend has tied the Feed's memory to the GPU
+    std::atomic<int> inFlight{0};          // copies started and not yet published
     uint64_t retiredNs = 0;
-    struct Slot { Ring* ring; int index; };
-    std::vector<Slot> slots;               // callback arguments, one per Feed slot
+    std::vector<SlotRef> slots;            // callback arguments, one per Feed slot
 };
+
+namespace {
 
 std::atomic<Ring*> gRing{nullptr};  // the current Feed; replaced, never freed while it might be in use
 std::mutex gMu;                     // guards everything below; render path uses try_lock only
 std::vector<Ring*> gRetired;
-cudaStream_t gStream = nullptr;     // the Sender's own stream: the copies to host memory run here, not on Resolve's
-cudaEvent_t gStaged = nullptr;      // "the frame is in staging", recorded on Resolve's stream
 std::atomic<uint64_t> gRetryAfterNs{0};
 // The worker. Its state is leaked on purpose: the thread is detached and may still be waiting when the process
 // exits, and a condition variable must not be destroyed with a waiter.
@@ -104,30 +102,6 @@ bool publishEmptyFeed()
     return true;
 }
 
-int stagingCount()
-{
-    const std::string v = envValue("SCOPECREEP_SENDER_STAGING");
-    const int n = !v.empty() ? std::atoi(v.c_str()) : 2;  // Stage 0 ran with two; graphics memory is tight, so no more
-    return n < 1 ? 1 : (n > 4 ? 4 : n);
-}
-
-std::string cudaError(const char* what, cudaError_t e) { return std::string(what) + ": " + cudaGetErrorString(e); }
-
-// Test hook: a staging buffer bigger than SCOPECREEP_SENDER_GPU_LIMIT_MB fails as if the GPU were full, so running
-// short can be checked without filling the GPU Resolve is using. Read on the worker thread only.
-bool overGpuLimit(size_t bytes)
-{
-    const std::string v = envValue("SCOPECREEP_SENDER_GPU_LIMIT_MB");
-    return !v.empty() && bytes > (size_t)std::strtoull(v.c_str(), nullptr, 10) * 1000000ull;
-}
-
-// What the app shows (after "Sender: ") when a staging buffer of `bytes` could not be had.
-std::string outOfGpuMemory(size_t bytes)
-{
-    return "Not enough GPU memory in Resolve to send frames (needs about " + std::to_string((bytes + 999999) / 1000000) +
-           " MB). Close another GPU app; the Sender tries again every few seconds.";
-}
-
 void setError(Ring* r, const std::string& text)
 {
     if (!r || !r->w.hdr) return;
@@ -135,78 +109,47 @@ void setError(Ring* r, const std::string& text)
     gErrorShown.store(!text.empty(), std::memory_order_relaxed);
 }
 
-// Runs on a CUDA thread when the copy into a slot has finished: publish the frame.
-void CUDART_CB onCopied(void* arg)
-{
-    Ring::Slot* s = (Ring::Slot*)arg;
-    scfeed_writer_publish(&s->ring->w, s->index);
-    s->ring->inFlight.fetch_sub(1, std::memory_order_release);
-}
-
 void freeRing(Ring* r)
 {
-    for (void* p : r->staging) cudaFree(p);
-    for (cudaEvent_t e : r->stagingFree) cudaEventDestroy(e);
-    if (r->pinned) cudaHostUnregister(r->w.hdr);
+    if (r->gpu && r->w.hdr) backend().detach(r->gpu, r->w.hdr);
     scfeed_writer_close(&r->w);
+    delete r->gpu;
     delete r;
 }
 
-// Publish a new Feed file with a ring whose slots hold `frameBytes`, pin it, and allocate staging.
-// Takes real time (it pins slots * frameBytes of memory): worker thread only, no lock held. Returns nullptr and `err` on failure.
+// Publish a new Feed file with a ring whose slots hold `frameBytes`, and tie it to the GPU.
+// Takes real time (a backend may pin or wrap slots * frameBytes of memory): worker thread only, no lock held.
+// Returns nullptr and `err` on failure.
 Ring* buildRing(size_t frameBytes, std::string& err)
 {
-    if (!gStream) {
-        cudaError_t e = cudaStreamCreateWithFlags(&gStream, cudaStreamNonBlocking);
-        if (e != cudaSuccess) { gStream = nullptr; err = cudaError("cudaStreamCreate", e); return nullptr; }
-        e = cudaEventCreateWithFlags(&gStaged, cudaEventDisableTiming);
-        if (e != cudaSuccess) { err = cudaError("cudaEventCreate", e); return nullptr; }
-    }
-    // Staging first: it is what fails when graphics memory is short, and nothing has been published yet.
-    Ring* r = new Ring();
+    // The backend's reservations first: they are what fails when graphics memory is short, and nothing has been
+    // published yet.
     const size_t capacity = (frameBytes + 4095) & ~(size_t)4095;
-    cudaError_t lastErr = cudaSuccess;
-    for (int i = 0; i < stagingCount(); ++i) {
-        void* p = nullptr;
-        cudaEvent_t ev = nullptr;
-        lastErr = overGpuLimit(capacity) ? cudaErrorMemoryAllocation : cudaMalloc(&p, capacity);
-        if (lastErr != cudaSuccess) break;
-        lastErr = cudaEventCreateWithFlags(&ev, cudaEventDisableTiming);
-        if (lastErr != cudaSuccess) { cudaFree(p); break; }
-        cudaEventRecord(ev, gStream);  // free from the start
-        r->staging.push_back(p);
-        r->stagingFree.push_back(ev);
-    }
-    if (r->staging.empty()) {
-        // The picture has already passed through on Resolve's stream; only the Feed goes without.
-        err = lastErr == cudaErrorMemoryAllocation ? outOfGpuMemory(capacity)
-                                                   : "cannot make a staging buffer for the Feed (" + cudaError("cudaMalloc", lastErr) + ")";
-        cudaGetLastError();  // clear the sticky error so it is not blamed on Resolve
-        freeRing(r);
-        return nullptr;
-    }
+    GpuRing* gpu = backend().reserve(capacity, err);
+    if (!gpu) return nullptr;
+    Ring* r = new Ring();
+    r->gpu = gpu;
     if (scfeed_writer_create(&r->w, scfeed_path(), kSlots, capacity, SCOPECREEP_SENDER_VERSION, gHostName.c_str()) != SCFEED_OK) {
         err = std::string("cannot create the Feed at ") + scfeed_path() + ": " + lastOsError();
         r->w.hdr = nullptr;
         freeRing(r);
         return nullptr;
     }
-    const cudaError_t e = cudaHostRegister(r->w.hdr, r->w.bytes, cudaHostRegisterDefault);
-    if (e != cudaSuccess) {
+    const std::string problem = backend().attach(gpu, r->w.hdr, r->w.bytes);
+    if (!problem.empty()) {
         // The new Feed is already published; say what went wrong in it and leave it without frames.
-        setError(r, "cannot pin the Feed's memory (" + cudaError("cudaHostRegister", e) + ")");
-        cudaGetLastError();
+        setError(r, problem);
         err.clear();
     } else {
-        r->pinned = true;
+        r->usable = true;
     }
     r->slots.resize(kSlots);
-    for (uint32_t i = 0; i < kSlots; ++i) r->slots[i] = Ring::Slot{r, (int)i};
+    for (uint32_t i = 0; i < kSlots; ++i) r->slots[i] = SlotRef{r, (int)i};
     return r;
 }
 
 // Let go of rings that were replaced a while ago and have no copies in flight. Worker thread only; takes gMu just
-// long enough to pick them, and frees them (cudaFree) outside it. Every ring that was replaced ends up here,
+// long enough to pick them, and frees them (the GPU side lets go of its memory) outside it. Every ring that was replaced ends up here,
 // whatever the render threads do afterwards, because the worker keeps coming back until gRetired is empty.
 void reap(uint64_t nowNs)
 {
@@ -395,12 +338,20 @@ void feedSetError(const char* text)
     setError(gRing.load(std::memory_order_acquire), clear ? "" : text);
 }
 
-bool cudaPassthrough(void* hostStream, void* dst, size_t dstRowBytes, const void* src, size_t srcRowBytes, size_t widthBytes, size_t height)
+void feedSlotDone(SlotRef* s)
 {
-    return cudaMemcpy2DAsync(dst, dstRowBytes, src, srcRowBytes, widthBytes, height, cudaMemcpyDeviceToDevice, (cudaStream_t)hostStream) == cudaSuccess;
+    scfeed_writer_publish(&s->ring->w, s->index);
+    s->ring->inFlight.fetch_sub(1, std::memory_order_release);
 }
 
-bool feedSubmitCuda(void* hostStream, const void* src, size_t srcRowBytes, const FrameInfo& info)
+void feedSlotFailed(SlotRef* s, const std::string& text)
+{
+    scfeed_writer_abandon(&s->ring->w, s->index);
+    setError(s->ring, text);
+    s->ring->inFlight.fetch_sub(1, std::memory_order_release);
+}
+
+bool feedSubmit(const FrameInfo& info, Copier& copier)
 {
     if (feedIsGuest()) return false;  // a guest sends no frames
     Ring* r = gRing.load(std::memory_order_acquire);
@@ -424,21 +375,13 @@ bool feedSubmitCuda(void* hostStream, const void* src, size_t srcRowBytes, const
         scfeed_add64(&r->w.hdr->drops_busy, 1);
         return false;
     }
-    if (!r->pinned) return false;  // the error is already in the Feed header
+    if (!r->usable) return false;  // the error is already in the Feed header
 
-    int stg = -1;
-    const int n = (int)r->staging.size();
-    for (int k = 0; k < n; ++k) {
-        const int c = (r->nextStaging + k) % n;
-        if (cudaEventQuery(r->stagingFree[(size_t)c]) == cudaSuccess) { stg = c; break; }  // a query, not a wait
+    switch (copier.ready(r->gpu)) {
+    case Ready::Yes: break;
+    case Ready::Busy: scfeed_add64(&r->w.hdr->drops_busy, 1); return false;
+    case Ready::No: return false;
     }
-    if (stg < 0) {  // every staging buffer still has a copy in flight
-        cudaGetLastError();  // cudaEventQuery reports "not ready" as an error; do not leave it for Resolve to find
-        scfeed_add64(&r->w.hdr->drops_busy, 1);
-        return false;
-    }
-    cudaGetLastError();
-    r->nextStaging = (stg + 1) % n;
     const int si = scfeed_writer_acquire(&r->w);
     if (si < 0) return false;  // counted by the Feed
 
@@ -457,27 +400,20 @@ bool feedSubmitCuda(void* hostStream, const void* src, size_t srcRowBytes, const
     s->flags = 0;
     scfeed_slot_set_colour_setup(s, info.colourProvenance, info.colourSetup, info.colourSetupBytes);
 
-    const cudaStream_t host = (cudaStream_t)hostStream;
-    void* staging = r->staging[(size_t)stg];
-    cudaError_t e;
-    // 1. On Resolve's stream: a private copy of the frame, so the copy to host memory can outlive this call.
-    e = cudaMemcpy2DAsync(staging, rowBytes, src, srcRowBytes, rowBytes, (size_t)info.height, cudaMemcpyDeviceToDevice, host);
-    if (e == cudaSuccess) e = cudaEventRecord(gStaged, host);
-    // 2. On the Sender's stream, ordered after (1) by the event (the GPU waits, this thread does not).
-    if (e == cudaSuccess) e = cudaStreamWaitEvent(gStream, gStaged, 0);
-    if (e == cudaSuccess) e = cudaMemcpyAsync(scfeed_slot_pixels(r->w.hdr, (uint32_t)si), staging, frameBytes, cudaMemcpyDeviceToHost, gStream);
-    if (e == cudaSuccess) e = cudaEventRecord(r->stagingFree[(size_t)stg], gStream);
-    // 3. When the copy has finished, a callback on the Sender's stream publishes the slot.
-    if (e == cudaSuccess) {
-        r->inFlight.fetch_add(1, std::memory_order_acq_rel);
-        e = cudaLaunchHostFunc(gStream, onCopied, &r->slots[(size_t)si]);
-        if (e != cudaSuccess) r->inFlight.fetch_sub(1, std::memory_order_acq_rel);
-    }
-    if (e != cudaSuccess) {
+    FrameCopy copy;
+    copy.dstPixels = scfeed_slot_pixels(r->w.hdr, (uint32_t)si);
+    copy.dstOffset = (size_t)((const char*)copy.dstPixels - (const char*)r->w.hdr);
+    copy.rowBytes = rowBytes;
+    copy.frameBytes = frameBytes;
+    copy.height = info.height;
+    copy.done = &r->slots[(size_t)si];
+    r->inFlight.fetch_add(1, std::memory_order_acq_rel);  // before the copy can finish and take it off again
+    const std::string failure = copier.start(r->gpu, copy);
+    if (!failure.empty()) {
         // Whatever was queued writes into a slot nobody will read. Give the slot back and say what happened.
+        r->inFlight.fetch_sub(1, std::memory_order_acq_rel);
         scfeed_writer_abandon(&r->w, si);
-        setError(r, cudaError("the frame copy could not be queued", e));
-        cudaGetLastError();
+        setError(r, failure);
         return false;
     }
     if (gErrorShown.load(std::memory_order_relaxed)) setError(r, "");

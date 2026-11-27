@@ -1,5 +1,5 @@
 // What the Sender needs from the operating system beyond standard C++ and the Feed header's scfeed_os_* layer
-// (mapping, clock, process id): Linux and Windows. A port adds a branch here, not at the call sites.
+// (mapping, clock, process id): Linux, macOS and Windows. A port adds a branch here, not at the call sites.
 #ifndef SCOPECREEP_SENDER_PLATFORM_H
 #define SCOPECREEP_SENDER_PLATFORM_H
 
@@ -9,6 +9,14 @@
 #include <cstdlib>
 #include <cstring>
 #include <string>
+
+// Which GPU API this build moves frames with, the one Resolve offers on the platform: Metal on a Mac (Resolve there
+// gives plugins Metal buffers and no CUDA), CUDA on Linux and Windows. One Sender build, one GPU path.
+#ifdef __APPLE__
+#define SCOPECREEP_METAL 1
+#else
+#define SCOPECREEP_CUDA 1
+#endif
 
 // Marks the plugin's two OFX entry points as exported from the .ofx (a shared object, or a DLL on Windows).
 #ifdef _WIN32

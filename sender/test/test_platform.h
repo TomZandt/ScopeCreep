@@ -1,5 +1,5 @@
-// What the fake-host test needs from the operating system: Linux and Windows. The test itself stays the same on
-// both; a port adds a branch here.
+// What the fake-host test needs from the operating system: Linux, macOS and Windows. The test itself stays the same
+// on all of them; a port adds a branch here.
 #ifndef SCOPECREEP_SENDER_TEST_PLATFORM_H
 #define SCOPECREEP_SENDER_TEST_PLATFORM_H
 
@@ -36,6 +36,8 @@ inline std::string privateFeedPath()
 {
 #ifdef _WIN32
     return "Local\\scopecreep-sender-test-" + std::to_string(scfeed_pid());
+#elif defined(__APPLE__)
+    return "/scf-snd-" + std::to_string(scfeed_pid());  // a shared-memory name holds 31 bytes, the Feed's own `.N` included
 #else
     return "/dev/shm/scopecreep-sender-test-" + std::to_string(scfeed_pid());
 #endif
@@ -52,11 +54,24 @@ inline void setEnv(const char* name, const char* value)
 #endif
 }
 
-// Remove a Feed left at `path`. Windows: nothing to do, a mapping goes when its last handle closes.
+// Remove a Feed left at `path`. Windows: nothing to do, a mapping goes when its last handle closes. macOS: shared
+// memory lasts until unlinked, so the locator and every Feed made under it go.
 inline void removeFeed(const char* path)
 {
 #ifdef _WIN32
     (void)path;
+#elif defined(__APPLE__)
+    int err = 0;
+    if (uint64_t* locator = scfeed_os_locator(path, 0, &err)) {
+        const uint64_t last = scfeed_load64(&locator[1]);
+        munmap(locator, SCFEED_LOCATOR_BYTES);
+        for (uint64_t n = 1; n <= last; ++n) {
+            char name[64];
+            scfeed_os_name(name, sizeof name, path, n);
+            shm_unlink(name);
+        }
+    }
+    shm_unlink(path);
 #else
     unlink(path);
 #endif

@@ -40,7 +40,7 @@ string(REGEX REPLACE "^version = \"([^\"]*)\".*" "\\1" sender_version "${version
 
 # The bundle goes where the Makefile puts it; `$<0:>` stops Visual Studio adding a Release/ or Debug/ folder.
 set(bundle "${CMAKE_CURRENT_SOURCE_DIR}/build/scopecreep_sender.ofx.bundle")
-add_library(scopecreep_sender MODULE src/sender.cpp src/feed_copy.cpp)
+add_library(scopecreep_sender MODULE src/sender.cpp src/feed_core.cpp src/feed_cuda.cpp)
 target_compile_features(scopecreep_sender PRIVATE cxx_std_17)
 target_include_directories(scopecreep_sender PRIVATE "${OFX_SDK}" ../feed/include)
 target_compile_definitions(scopecreep_sender PRIVATE "SCOPECREEP_SENDER_VERSION=\"${sender_version}\"")
@@ -50,7 +50,7 @@ set_target_properties(scopecreep_sender PROPERTIES
   LIBRARY_OUTPUT_DIRECTORY "${bundle}/Contents/${platform_dir}$<0:>"
   ARCHIVE_OUTPUT_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/lib$<0:>")
 
-add_executable(mock_host_test test/mock_host_test.cpp)
+add_executable(mock_host_test test/mock_host_test.cpp test/test_gpu_cuda.cpp)
 target_compile_features(mock_host_test PRIVATE cxx_std_17)
 target_include_directories(mock_host_test PRIVATE "${OFX_SDK}" ../feed/include)
 target_link_libraries(mock_host_test PRIVATE CUDA::cudart_static ${CMAKE_DL_LIBS})

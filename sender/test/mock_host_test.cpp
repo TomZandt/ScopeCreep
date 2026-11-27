@@ -1,5 +1,6 @@
-// Drives the built Sender plugin through a minimal fake OFX host that renders on CUDA, the way Resolve does,
-// and checks what comes out of the Feed with the C reader. No Resolve needed; an NVIDIA GPU is.
+// Drives the built Sender plugin through a minimal fake OFX host that renders on the GPU API Resolve uses on the
+// platform (CUDA on Linux and Windows, Metal on a Mac: test_gpu.h), and checks what comes out of the Feed with the
+// C reader. No Resolve needed; a GPU is (an NVIDIA one for CUDA).
 //
 //   mock_host_test <path to scopecreep_sender.ofx>
 //
@@ -13,9 +14,8 @@
 #include "ofxProperty.h"
 
 #include "scopecreep_feed.h"
+#include "test_gpu.h"
 #include "test_platform.h"
-
-#include <cuda_runtime.h>
 
 #include <chrono>
 #include <cstdarg>
@@ -130,7 +130,6 @@ static int gFails = 0;
 
 static OfxPlugin* gPlugin = nullptr;
 static OfxImageEffectHandle gEffect = (OfxImageEffectHandle)&gEffectProps;
-static cudaStream_t gHostStream = nullptr;
 static double nowMs() { return std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now().time_since_epoch()).count(); }
 
 // Is a parameter enabled (editable) in the host's UI? kOfxParamPropEnabled defaults to 1.
@@ -152,33 +151,30 @@ static OfxStatus userSets(const char* param, int value)
     return gPlugin->mainEntry(kOfxActionInstanceChanged, gEffect, (OfxPropertySetHandle)&in, nullptr);
 }
 
-// A frame "Resolve rendered": on the GPU, rows `pitch` bytes apart (wider than the picture, as hosts may do).
+// A frame "Resolve rendered": on the GPU, rows `pitch` bytes apart (wider than the picture, as hosts may do, unless
+// asked for the tight layout Resolve itself uses).
 struct GpuFrame {
     int w, h;
     size_t pitch;
     void *src = nullptr, *dst = nullptr;
     std::vector<float> host;  // what the source holds, tightly packed
 
-    GpuFrame(int w_, int h_) : w(w_), h(h_), pitch((size_t)w_ * 16 + 64), host((size_t)w_ * h_ * 4)
+    GpuFrame(int w_, int h_, size_t extraPitch = 64) : w(w_), h(h_), pitch((size_t)w_ * 16 + extraPitch), host((size_t)w_ * h_ * 4)
     {
-        if (cudaMalloc(&src, pitch * (size_t)h) != cudaSuccess || cudaMalloc(&dst, pitch * (size_t)h) != cudaSuccess) {
-            std::printf("cudaMalloc failed: is the GPU out of memory?\n");
-            std::exit(2);
-        }
+        src = testgpu::alloc(pitch * (size_t)h);
+        dst = testgpu::alloc(pitch * (size_t)h);
     }
     void fill(unsigned seed)
     {
         for (size_t i = 0; i < host.size(); ++i) host[i] = (float)((i * 2654435761u + seed * 40503u) % 100003u) / 50000.0f - 0.5f;
         host[0] = -0.5f; host[1] = 7.25f; host[2] = 1e-40f; host[3] = 65504.0f;  // negative, over-range, denormal, huge
-        cudaMemcpy2D(src, pitch, host.data(), (size_t)w * 16, (size_t)w * 16, (size_t)h, cudaMemcpyHostToDevice);
-        cudaMemset(dst, 0, pitch * (size_t)h);
-        cudaDeviceSynchronize();  // the host stream is non-blocking: it does not wait for the legacy stream by itself
+        testgpu::upload(src, pitch, host.data(), (size_t)w * 16, h);
+        testgpu::zero(dst, pitch * (size_t)h);
     }
     bool passedThrough()
     {
         std::vector<float> out(host.size());
-        cudaStreamSynchronize(gHostStream);
-        cudaMemcpy2D(out.data(), (size_t)w * 16, dst, pitch, (size_t)w * 16, (size_t)h, cudaMemcpyDeviceToHost);
+        testgpu::download(dst, pitch, out.data(), (size_t)w * 16, h);
         return std::memcmp(out.data(), host.data(), host.size() * 4) == 0;
     }
 };
@@ -197,7 +193,7 @@ static void describeImages(void* src, void* dst, int w, int h, size_t pitch)
 }
 
 // One render call, as the host makes it. Returns the time spent inside the plugin in ms.
-static double render(void* src, void* dst, int w, int h, size_t pitch, double time, bool cuda, bool thumbnail = false)
+static double render(void* src, void* dst, int w, int h, size_t pitch, double time, bool gpu, bool thumbnail = false)
 {
     describeImages(src, dst, w, h, pitch);
     setI((OfxPropertySetHandle)gClips[kOfxImageEffectSimpleSourceClipName], kOfxImageClipPropThumbnail, 0, thumbnail ? 1 : 0);
@@ -205,8 +201,8 @@ static double render(void* src, void* dst, int w, int h, size_t pitch, double ti
     setD((OfxPropertySetHandle)&in, kOfxPropTime, 0, time);
     const int win[4] = {0, 0, w, h};
     for (int i = 0; i < 4; ++i) setI((OfxPropertySetHandle)&in, kOfxImageEffectPropRenderWindow, i, win[i]);
-    setI((OfxPropertySetHandle)&in, kOfxImageEffectPropCudaEnabled, 0, cuda ? 1 : 0);
-    if (cuda) setP((OfxPropertySetHandle)&in, kOfxImageEffectPropCudaStream, 0, gHostStream);
+    setI((OfxPropertySetHandle)&in, testgpu::kEnabledProp, 0, gpu ? 1 : 0);
+    if (gpu) setP((OfxPropertySetHandle)&in, testgpu::kHandleProp, 0, testgpu::hostHandle());
     const double t0 = nowMs();
     const OfxStatus st = gPlugin->mainEntry(kOfxImageEffectActionRender, gEffect, (OfxPropertySetHandle)&in, nullptr);
     const double ms = nowMs() - t0;
@@ -338,10 +334,8 @@ int main(int argc, char** argv)
     const char* feed = feedPath.c_str();
     testos::setEnv(SCFEED_PATH_ENV, feed);
     testos::removeFeed(feed);
-    if (cudaStreamCreateWithFlags(&gHostStream, cudaStreamNonBlocking) != cudaSuccess) {
-        std::printf("CUDA is not available (is the GPU out of memory?): cannot run the Sender test\n");
-        return 2;
-    }
+    std::string gpuError;
+    if (!testgpu::init(gpuError)) { std::printf("%s\n", gpuError.c_str()); return 2; }
 
     testos::Plugin plugin;
     std::string loadError;
@@ -370,8 +364,16 @@ int main(int argc, char** argv)
     CHECK(gEffectProps.m[kOfxPropLabel][0].s == "ScopeCreep", "label is 'ScopeCreep'");
     CHECK(gEffectProps.m[kOfxImageEffectPluginPropGrouping][0].s == "ScopeCreep", "group is 'ScopeCreep'");
 
-    CHECK(gEffectProps.m[kOfxImageEffectPropCudaRenderSupported][0].s == "true", "declares Resolve's CUDA render path");
+    CHECK(gEffectProps.m[testgpu::kSupportedProp][0].s == "true", (std::string("declares Resolve's ") + testgpu::kApiName + " render path").c_str());
+#ifndef __APPLE__
     CHECK(gEffectProps.m[kOfxImageEffectPropCudaStreamSupported][0].s == "true", "declares CUDA stream support");
+#endif
+    {
+        auto& contexts = gEffectProps.m[kOfxImageEffectPropSupportedContexts];
+        bool filter = false, general = false;
+        for (auto& c : contexts) { filter |= c.s == kOfxImageEffectContextFilter; general |= c.s == kOfxImageEffectContextGeneral; }
+        CHECK(filter && general, "declares the Filter and General contexts (Resolve's timeline node asks for General)");
+    }
     Props ctx;
     gPlugin->mainEntry(kOfxImageEffectActionDescribeInContext, gEffect, (OfxPropertySetHandle)&ctx, nullptr);
     setD((OfxPropertySetHandle)&gEffectProps, kOfxImageEffectPropFrameRate, 0, 24.0);
@@ -436,6 +438,33 @@ int main(int argc, char** argv)
     CHECK(exact, "three frames arrive with every value identical (negative, over-range, denormal included)");
     CHECK(meta, "each frame carries its size, format, frame number, frame rate, instance, sequence and times");
     CHECK(through, "the picture still passes through unchanged");
+
+    std::printf("a frame laid out as Resolve lays it out (rows tight, no padding) arrives bit for bit\n");
+    {
+        GpuFrame tight(64, 36, 0);
+        tight.fill(20);
+        render(tight, 120.0);
+        const int i = nextFrame(r);
+        CHECK(i >= 0 && std::memcmp(scfeed_slot_pixels(r.hdr, (uint32_t)i), tight.host.data(), tight.host.size() * 4) == 0, "every value identical");
+        if (i >= 0) scfeed_reader_release(&r, i);
+        CHECK(tight.passedThrough(), "the picture still passes through unchanged");
+    }
+
+    std::printf("the render call does not wait for the copy\n");
+    {
+        f.fill(21);
+        testgpu::keepBusy();  // the GPU is busy for about 100 ms: nothing queued behind it can finish before then
+        const uint64_t published = scfeed_load64(&r.hdr->frames_published);
+        const double call = render(f, 130.0);
+        CHECK(call < 5.0, "the render call returns at once while the GPU is busy");
+        CHECK(scfeed_load64(&r.hdr->frames_published) == published, "the frame is not in the Feed yet when it returns: the copy is still running");
+        const int i = nextFrame(r);
+        CHECK(i >= 0 && scfeed_slot_at(r.hdr, (uint32_t)i)->frame_time == 130.0 &&
+                  std::memcmp(scfeed_slot_pixels(r.hdr, (uint32_t)i), f.host.data(), f.host.size() * 4) == 0,
+              "when the GPU gets to it, the frame is published, bit for bit");
+        if (i >= 0) scfeed_reader_release(&r, i);
+        CHECK(f.passedThrough(), "the picture still passes through unchanged");
+    }
 
     std::printf("a Colour Setup set by hand on the Sender node travels with each frame\n");
     CHECK(gParams["colourSetupManual"].type == kOfxParamTypeBoolean, "a 'Set Colour Setup manually' switch is defined");
@@ -526,7 +555,7 @@ int main(int argc, char** argv)
         if (ms > worst) worst = ms;
         scfeed_reader_heartbeat(&r, scfeed_now_ns());
     }
-    cudaStreamSynchronize(gHostStream);
+    testgpu::syncHost();
     std::this_thread::sleep_for(std::chrono::milliseconds(300));
     const uint64_t pub = scfeed_load64(&r.hdr->frames_published) - pub0, busy = scfeed_load64(&r.hdr->drops_busy) - busy0, over = scfeed_load64(&r.hdr->drops_overwritten) - over0;
     std::printf("        60 renders: worst call %.3f ms, %llu copied, %llu overwritten unread, %llu skipped busy\n", worst, (unsigned long long)pub,
@@ -562,20 +591,20 @@ int main(int argc, char** argv)
     if (i >= 0) scfeed_reader_release(&r, i);
     CHECK(big.passedThrough(), "the larger picture passes through unchanged");
 
-    std::printf("a render that is not on CUDA is passed through, not fed\n");
+    std::printf("a render that is not on the GPU is passed through, not fed\n");
     std::vector<float> cpuSrc((size_t)64 * 36 * 4, 0.25f), cpuDst(cpuSrc.size(), 0.0f);
     render(cpuSrc.data(), cpuDst.data(), 64, 36, 64 * 16, 400.0, false);
     CHECK(cpuSrc == cpuDst, "the picture passes through unchanged");
     CHECK(scfeed_load64(&r.hdr->renders_unsupported) == 1, "the render is counted as unsupported");
-    CHECK(std::strstr(r.hdr->sender_error, "CUDA") != nullptr, "the Feed says why no frames are sent");
+    CHECK(std::strstr(r.hdr->sender_error, testgpu::kApiName) != nullptr, "the Feed says why no frames are sent");
     big.fill(52);
     render(big, 401.0);
     i = nextFrame(r);
     CHECK(i >= 0 && r.hdr->sender_error[0] == 0, "the message clears when frames flow again");
     if (i >= 0) scfeed_reader_release(&r, i);
 
-    std::printf("the GPU has no memory for a larger frame's staging buffer\n");
-    {
+    if (testgpu::kHasStagingLimit) {
+        std::printf("the GPU has no memory for a larger frame's staging buffer\n");
         GpuFrame huge(512, 288);  // 2.4 MB a frame
         testos::setEnv("SCOPECREEP_SENDER_GPU_LIMIT_MB", "1");
         huge.fill(60);
@@ -611,7 +640,7 @@ int main(int argc, char** argv)
     const uint64_t publishedBefore = h.frames_published, idleBefore = h.renders_idle;
     big.fill(53);
     for (int k = 0; k < 5; ++k) render(big, 500.0 + k);
-    cudaStreamSynchronize(gHostStream);
+    testgpu::syncHost();
     std::this_thread::sleep_for(std::chrono::milliseconds(100));
     h = peek(feed);
     CHECK(h.frames_published == publishedBefore, "nothing is copied");

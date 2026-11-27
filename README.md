@@ -38,7 +38,7 @@ Installers are on the [Releases page](https://github.com/TomZandt/ScopeCreep/rel
 | Part | Where | What |
 |---|---|---|
 | Feed protocol | `feed/PROTOCOL.md`, `feed/include/scopecreep_feed.h`, `feed/` crate | The shared-memory ring between Sender and app: spec, C header (Sender), Rust reader and synthetic writer (app, tests) |
-| Sender | `sender/` | C++ OFX plugin, Resolve's CUDA render path, async pinned copy into the Feed |
+| Sender | `sender/` | C++ OFX plugin: Resolve's CUDA render path with an async pinned copy (Linux, Windows), or its Metal path with a blit into the Feed (macOS, Apple Silicon) |
 | App | `app/` | Rust + wgpu: one window of Pages, each a layout of Panels, by default 7 (Scopes and Picture Views: the Channel Viewer as the hero, one Vectorscope Panel showing 100 % and 200 % side by side; every display and its former name is in the [Displays table](GLOSSARY.md#displays)), all showing the latest Feed frame (GPU, every pixel, full resolution). Gamut Warning, Neutrals and Chromaticity are offered by Add panel but not in the default layout (#222); the Black and white Panel, the Colour Waveform and the Channel view are built and tested but not in the Window (#118, #145, #162) |
 
 ```sh
@@ -51,7 +51,7 @@ make -C sender test              # drive the built Sender with a fake CUDA host 
 make -C sender install           # developer install into /usr/OFX/Plugins, then restart Resolve
 ```
 
-On Windows the Sender builds with CMake and MSVC instead (commands at the top of `sender/CMakeLists.txt`).
+On Windows the Sender builds with CMake and MSVC instead (commands at the top of `sender/CMakeLists.txt`). On a Mac (Apple Silicon) the same `make -C sender` builds the Metal Sender with clang into `sender/build/scopecreep_sender.ofx.bundle` (`Contents/MacOS`), needs only the Xcode command line tools and Resolve's OpenFX headers, and `make -C sender test` runs the fake-host test on the Mac's GPU; `make -C sender install` copies it to `/Library/OFX/Plugins` (asks for sudo).
 
 In Resolve, put **ScopeCreep** (Effects > OpenFX > ScopeCreep, the Sender) on its own last timeline node, with no grade on that node. GPU processing must be CUDA.
 
@@ -140,6 +140,7 @@ DaVinci Resolve                                 scopecreep app (Rust + wgpu)
   - [0049](docs/adr/0049-on-windows-the-feed-name-holds-a-locator.md): On Windows the Feed's name holds a locator and each Feed is its own mapping `<name>.N`, since a named mapping cannot be replaced while held
   - [0050](docs/adr/0050-on-windows-the-sender-carries-its-own-cpp-runtime.md): On Windows the Sender links the C++ runtime statically (`/MT`) and builds with CMake; it reads its environment from the process, not its runtime's copy
   - [0052](docs/adr/0052-on-macos-the-feed-name-holds-a-locator-too.md): On macOS the Feed's name holds a locator too (a shared-memory object cannot be renamed), and publishing unlinks the Feed it replaces
+  - [0053](docs/adr/0053-on-macos-the-sender-blits-each-frame-straight-into-the-feed.md): On macOS the Sender blits each frame from Resolve's Metal buffer straight into the Feed slot and publishes from the completion handler; the GPU-independent half is shared with the CUDA path
   - [0051](docs/adr/0051-on-windows-the-resolve-helper-runs-under-a-found-python-in-a-job-object.md): On Windows the Colour Setup helper runs under a Python the app finds (`SCOPECREEP_RESOLVE_PYTHON`, Resolve's, `py.exe`, `PATH`) and dies with the app through a kill-on-close job object
 - [docs/findings/](docs/findings/): what testing showed, one file per ticket.
 - [docs/research/](docs/research/): what public sources say, with dates and links.
