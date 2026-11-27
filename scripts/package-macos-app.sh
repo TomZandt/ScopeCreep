@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Make ScopeCreep.app from a built app (the first half of the macOS Installer: the .pkg that puts this and the
-# Sender in place is a later ticket, #257).
+# Sender in place is scripts/package-macos.sh, #257).
 #   scripts/package-macos-app.sh VERSION APP OUT_DIR
 # Writes OUT_DIR/ScopeCreep.app (Info.plist with VERSION, the executable, the placeholder icon) and prints its
 # path. On a Mac it signs the bundle ad hoc, which Apple Silicon needs to run it; nothing is notarised.

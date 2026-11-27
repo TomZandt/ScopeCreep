@@ -19,4 +19,5 @@ ADR 0043 puts the Feed on macOS in the POSIX shared-memory object `/scopecreep-f
 ## Consequences
 
 - The Sender's C header needs the same locator code on macOS (the Sender's Metal path, #255), and `feed/tests/c_interop.rs` runs on Linux only until it has it.
+- Amended in the review of spec #236: the Sender's C header has the macOS locator code since #255, so `c_interop.rs` runs on Linux and macOS. This ADR first said Linux only.
 - The harness's Feed reader follows the locator on macOS as on Windows.

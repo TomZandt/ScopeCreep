@@ -1,5 +1,5 @@
-// The Metal side of the fake-host test; see test_gpu.h. UNCOMPILED when written (no Mac was available to the
-// author): expect to fix small compile errors on the Mac.
+// The Metal side of the fake-host test; see test_gpu.h. Built and run on an Apple Silicon Mac
+// (docs/findings/255-metal-sender-on-the-mac.md).
 //
 // The buffers it makes are what Resolve's are on the Mac (docs/findings/253-metal-handoff.md): MTLBuffers with
 // private storage, which the CPU cannot read. The host reaches them only through blits to and from shared buffers.
