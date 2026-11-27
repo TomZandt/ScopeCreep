@@ -73,7 +73,7 @@ def watch_parent(app_pid, helper_pid, poll=0.5):
     macOS has no parent-death signal, and a helper stuck inside a Resolve call cannot be trusted to notice by
     itself (a thread of the helper needs the interpreter lock that call may hold), so the watcher is a separate,
     tiny process, started before Resolve's module is loaded. It also ends when the helper does. Returns the
-    watcher's pid in the helper, None in the watcher (which never returns to the caller's code)."""
+    watcher's pid in the helper; the watcher never returns (it ends with os._exit)."""
     import os
     import signal
     child = os.fork()
@@ -154,7 +154,7 @@ class Helper:
 
 def main():
     import os
-    if os.environ.get(WATCH_PARENT_ENV) == "1" or sys.platform == "darwin":
+    if os.environ.get(WATCH_PARENT_ENV) == "1":  # the app sets it on macOS (app/src/platform/macos.rs)
         watch_parent(os.getppid(), os.getpid())
     helper = Helper()
     answer([("result", "started"), ("python", sys.version.split()[0])])
