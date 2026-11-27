@@ -84,7 +84,7 @@ class PackageWindowsTest(unittest.TestCase):
         self.package("0.9.1")
         pattern = re.search(r'Platform::Windows, "([^"]+)"', pathlib.Path(UPDATES_RS).read_text()).group(1)
         self.assertEqual(pattern, "scopecreep-{v}-windows-x86_64-setup.exe")
-        self.assertEqual(os.listdir(self.out), sorted([pattern.replace("{v}", "0.9.1"), "SHA256SUMS"]))
+        self.assertEqual(sorted(os.listdir(self.out)), sorted([pattern.replace("{v}", "0.9.1"), "SHA256SUMS"]))
         self.assertEqual(self.package("0.9.1").stdout.strip(), self.setup_exe("0.9.1"))
 
     def test_sha256sums_matches_the_installer(self):

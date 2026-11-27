@@ -69,6 +69,7 @@ class Fakes(unittest.TestCase):
         return run([PACKAGE, version, app or self.app, bundle or self.bundle, self.out])
 
 
+@unittest.skipUnless(sys.platform.startswith("linux"), "tests the Linux packaging and install scripts (GNU tar, Linux paths)")
 class PackagingTest(Fakes):
     def test_makes_the_installer_with_its_files(self):
         r = self.package()
@@ -123,6 +124,7 @@ class PackagingTest(Fakes):
         self.assertIn("Restart", text)
 
 
+@unittest.skipUnless(sys.platform.startswith("linux"), "tests the Linux packaging and install scripts (GNU tar, Linux paths)")
 class InstallScriptTest(Fakes):
     def setUp(self):
         super().setUp()
