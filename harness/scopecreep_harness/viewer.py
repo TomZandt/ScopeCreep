@@ -5,6 +5,10 @@ Linux: keystrokes go through Hyprland (Resolve runs under XWayland). Hyprland 0.
 
 Windows (`send_key` and `grab` only): Resolve's main window is brought to the front and sent the key as keyboard
 input; screenshots by PowerShell's System.Drawing, with nothing to install.
+
+macOS (`send_key` and `grab` only): Resolve is brought to the front and sent the key through System Events
+(`osascript`); the terminal running this needs Privacy & Security > Accessibility, and Screen Recording for
+screenshots (`screencapture`). Nothing to install.
 """
 import json
 import os
@@ -36,6 +40,10 @@ def send_key(key, mods="", window=None):
         if mods:
             raise NotImplementedError("modifier keys are not sent on Windows")
         return _windows_send_key(key)
+    if sys.platform == "darwin":
+        if mods:
+            raise NotImplementedError("modifier keys are not sent on macOS")
+        return _macos_send_key(key)
     win = window or find_window()
     addr = win["address"]
     lua = 'hl.dsp.send_shortcut({ mods = "%s", key = "%s", window = "address:%s" })' % (mods, key, addr)
@@ -44,6 +52,32 @@ def send_key(key, mods="", window=None):
         legacy = _hyprctl("dispatch", "sendshortcut", "%s,%s,address:%s" % (mods, key, addr))
         if legacy != "ok":
             raise RuntimeError("Hyprland rejected the keystroke: %r / %r" % (out, legacy))
+
+
+def _macos_key_script(key):
+    """The AppleScript that brings Resolve to the front and types `key`, a single letter or digit."""
+    if len(key) != 1 or not key.isascii() or not key.isalnum():
+        raise ValueError("only a letter or digit is sent on macOS, not %r" % key)
+    return ('tell application "DaVinci Resolve" to activate\n'
+            'delay 0.2\n'
+            'tell application "System Events" to keystroke "%s"' % key.lower())
+
+
+def _macos_send_key(key):
+    script = _macos_key_script(key)
+    r = subprocess.run(["osascript", "-e", script], capture_output=True, text=True, encoding="utf-8",
+                       errors="replace")
+    if r.returncode != 0:
+        raise RuntimeError("could not send %r to Resolve (is this terminal allowed under Privacy & Security > "
+                           "Accessibility?): %s" % (key, r.stderr.strip()))
+
+
+def screencapture_args(path, region=None):
+    """`screencapture` arguments for `region` ("X,Y WxH" in screen points, grim's form) or every screen, silent."""
+    if not region:
+        return ["screencapture", "-x", path]
+    xy, wh = region.split()
+    return ["screencapture", "-x", "-R", "%s,%s" % (xy, wh.replace("x", ",")), path]
 
 
 def _windows_virtual_key(key):
@@ -143,6 +177,9 @@ def _windows_find_resolve(user32):
 
 def grab(path, region=None):
     """Save a screenshot of `region` ("X,Y WxH" in screen pixels, grim's form), or of every screen, to `path`."""
+    if sys.platform == "darwin":
+        subprocess.run(screencapture_args(path, region))
+        return
     if sys.platform != "win32":
         subprocess.run(["grim"] + (["-g", region] if region else []) + [path])
         return

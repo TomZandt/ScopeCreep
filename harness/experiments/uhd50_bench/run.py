@@ -1,11 +1,13 @@
 """UHD 50: Sender off (timeline without the Sender node) / on / on + app. Each: 15 s warm-up loop pass, then 60 s measured while looping.
 
 Rate with the Sender in the chain: Sender renders per second from the Feed header (no scripting during play).
-Resolve's own fps indicator is screenshotted every 5 s in every config, and the GPU sampled by nvidia-smi.
+Resolve's own fps indicator is screenshotted every 5 s in every config, and the GPU sampled by nvidia-smi where
+there is one (Linux and Windows with NVIDIA; on a Mac the frame rates Resolve reports are the measure).
 
-Linux and Windows. On Windows the app's window is not moved off Resolve: place it before the run (it opens where
-it was last closed), and keep Resolve's viewer visible. SCOPECREEP_BENCH_APP runs another app build, such as the
-installed one."""
+Linux, Windows and macOS. On Windows and macOS the app's window is not moved off Resolve: place it before the run
+(it opens where it was last closed), and keep Resolve's viewer visible. On a Mac the terminal needs Accessibility
+(to send keys to Resolve) and Screen Recording (for the screenshots). SCOPECREEP_BENCH_APP runs another app build,
+such as the installed one (/Applications/ScopeCreep.app/Contents/MacOS/scopecreep)."""
 import os
 import subprocess
 import sys
@@ -16,6 +18,7 @@ from scopecreep_harness import feed_header, gpu, viewer  # noqa: E402
 from scopecreep_harness.resolve_api import connect  # noqa: E402
 
 WINDOWS = sys.platform == "win32"
+LINUX = sys.platform.startswith("linux")
 OUT = os.path.expanduser("~/scopecreep-testdata/bench/uhd50-" + time.strftime("%Y%m%d-%H%M%S"))
 os.makedirs(OUT, exist_ok=True)
 APP = os.environ.get("SCOPECREEP_BENCH_APP") or os.path.join(
@@ -23,8 +26,8 @@ APP = os.environ.get("SCOPECREEP_BENCH_APP") or os.path.join(
     "scopecreep.exe" if WINDOWS else "scopecreep")
 WARM, MEASURE, SHOT_EVERY = 15, 60, 5
 # Resolve's fps readout, in global screen coordinates ("X,Y WxH"); set SCOPECREEP_BENCH_GRAB when Resolve sits
-# elsewhere. Windows has no default: every screen is grabbed unless it is set.
-INDICATOR = os.environ.get("SCOPECREEP_BENCH_GRAB") or (None if WINDOWS else "1395,255 120x30")
+# elsewhere. Only Linux has a default: on Windows and macOS every screen is grabbed unless it is set.
+INDICATOR = os.environ.get("SCOPECREEP_BENCH_GRAB") or ("1395,255 120x30" if LINUX else None)
 
 r = connect()
 project = r.GetProjectManager().GetCurrentProject()
@@ -59,7 +62,7 @@ def run(label, sender_on, with_app):
         app = subprocess.Popen([APP], env=env, stdout=open(os.path.join(OUT, label + ".app.log"), "w"),
                                stderr=subprocess.STDOUT)
         time.sleep(2)
-        if not WINDOWS:
+        if LINUX:
             subprocess.run(["hyprctl", "dispatch", 'hl.dsp.window.move({workspace="11", window="class:scopecreep"})'])
         time.sleep(2)
     viewer.send_key("K")
@@ -77,7 +80,7 @@ def run(label, sender_on, with_app):
     viewer.send_key("K")
     rate = (r1 - r0) / (t1 - t0) if (r0 is not None and r1 is not None) else None
     log("%s: Sender renders/s over %.0f s = %s" % (label, t1 - t0, "%.2f" % rate if rate is not None else "n/a"))
-    log("%s: %s" % (label, gpu.summary(gpu_log) if monitor else "GPU: nvidia-smi not found"))
+    log("%s: %s" % (label, gpu.summary(gpu_log) if monitor else "GPU: not sampled (no nvidia-smi)"))
     if app:
         viewer.grab(os.path.join(OUT, label + "-screen.png"))
         app.terminate()

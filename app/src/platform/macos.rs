@@ -23,15 +23,22 @@ pub fn settings_folder() -> Option<PathBuf> {
 }
 
 /// The Python to run the Resolve helper under. Resolve on a Mac has no Python of its own, so this is the system's
-/// `python3`; finding Resolve's scripting module on a Mac is the helper's job (#256).
+/// `python3` (Apple's, from the Command Line Tools). The helper finds Resolve's scripting module
+/// (`/Library/Application Support/Blackmagic Design/DaVinci Resolve/Developer/Scripting/Modules`) and
+/// `fusionscript.so` (in Resolve's app bundle) itself, as on Windows.
 pub fn resolve_python() -> PathBuf {
     PathBuf::from("/usr/bin/python3")
 }
 
-/// Start the Resolve helper's process. It is not yet tied to the app's life on a Mac: macOS has no parent-death
-/// signal, and the helper watching its parent comes with the Colour Setup work (#256).
+/// The variable that makes the helper start its parent watcher (app/resolve/colour_setup_helper.py).
+const WATCH_PARENT_ENV: &str = "SCOPECREEP_HELPER_WATCH_PARENT";
+
+/// Start the Resolve helper's process so it dies with the app, even when the app is killed. macOS has no
+/// parent-death signal, so the helper starts a small watcher process of its own that kills it once the app is
+/// gone (the way a bouncer outside a club closes it when the owner leaves: a helper stuck inside a Resolve call
+/// could not leave by itself). The standard library's children inherit only the descriptors marked to be.
 pub fn spawn_tied_to_app(command: &mut Command) -> std::io::Result<Child> {
-    command.spawn()
+    command.env(WATCH_PARENT_ENV, "1").spawn()
 }
 
 /// Start the system's opener on `url`.
@@ -80,4 +87,20 @@ pub fn install_app_menu() -> Option<AppMenu> {
     menu.append(&app).ok()?;
     menu.init_for_nsapp();
     Some(AppMenu { _menu: menu })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn the_helper_is_started_with_its_parent_watcher_on() {
+        let mut command = Command::new("/usr/bin/true");
+        let mut child = spawn_tied_to_app(&mut command).unwrap();
+        child.wait().unwrap();
+        let on = command
+            .get_envs()
+            .any(|(k, v)| k == WATCH_PARENT_ENV && v == Some(std::ffi::OsStr::new("1")));
+        assert!(on);
+    }
 }

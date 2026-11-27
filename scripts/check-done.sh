@@ -30,11 +30,14 @@ fi
 # The launcher copy of the app is not older than the last commit that touched the app.
 if [ -z "${CI:-}" ]; then
   bin="$HOME/.local/bin/scopecreep"
+  # GNU stat (Linux) or BSD stat (macOS); BSD install has no -D, so the hint makes the folder first.
+  mtime() { stat -c %Y "$1" 2>/dev/null || stat -f %m "$1"; }
+  fix="cargo build --release -p scopecreep && mkdir -p ~/.local/bin && install -m755 target/release/scopecreep $bin"
   last=$(git log -1 --format=%ct -- app feed accuracy Cargo.toml Cargo.lock)
   if [ ! -x "$bin" ]; then
-    open "launcher app missing: cargo build --release -p scopecreep && install -Dm755 target/release/scopecreep $bin"
-  elif [ "$(stat -c %Y "$bin")" -lt "$last" ]; then
-    open "launcher app is older than the last app commit: cargo build --release -p scopecreep && install -Dm755 target/release/scopecreep $bin"
+    open "launcher app missing: $fix"
+  elif [ "$(mtime "$bin")" -lt "$last" ]; then
+    open "launcher app is older than the last app commit: $fix"
   fi
 fi
 
