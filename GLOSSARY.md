@@ -76,6 +76,14 @@ _Avoid_: Nightly, beta, preview, snapshot
 The app's one look, at start-up, for a newer Release that has an Installer for its platform. It can be turned off, and it says nothing when offline. When it finds one, a dialog offers Update, Skip this version or Later. Update installs that Installer where the app can, and otherwise opens the Release's page.
 _Avoid_: Auto-update (nothing installs without the user), phone home
 
+**Diagnostics**:
+The facts and recent log lines Report a problem can attach: app version, Feed protocol, operating system, CPU, GPU and driver, whether Resolve and the Sender are connected (and the Sender's version), non-identifying settings and the last lines of the app's log, with the home folder and user name redacted. Never project or clip names, file paths or picture data. It fills in the public GitHub issue, so the user reads all of it before submitting.
+_Avoid_: Telemetry, analytics, phone home
+
+**Crash report**:
+The Diagnostics the app writes to disk when it closes unexpectedly, offered for reporting at the next launch with one quiet line, never a modal. The app sends nothing itself.
+_Avoid_: Crash dump (a native minidump is a different, later thing), telemetry
+
 ## Displays
 
 The displays, by their name now. Each Panel is one of these (a page can hold the same display more than once: its Panel title then adds the instance number, "Waveform 2", only when the page holds two or more of it). Choosing lists (Add panel, a Panel's edge **+**, Replace with…) list them A to Z. Former names are still read from every saved file (settings, layouts, pages, copies like "Clean picture 2"), and new names are written from the next save on (the rename of the displays, #196).
