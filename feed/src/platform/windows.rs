@@ -279,6 +279,9 @@ pub fn current_identity(location: &Path) -> Option<(u64, u64)> {
     (n != 0).then_some((0, n))
 }
 
+/// Remove the Feed at `location` (tests and tools): a mapping goes with its last handle, so there is nothing to do.
+pub fn remove(_location: &Path) {}
+
 /// A mapping made by [`Shared::map`]; unmapped when dropped. It keeps the Feed's handles open, since a named
 /// mapping's name goes with its last handle, not its last view.
 pub struct View {

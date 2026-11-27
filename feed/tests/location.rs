@@ -5,6 +5,8 @@ use std::path::PathBuf;
 
 #[cfg(target_os = "linux")]
 const PLATFORM_LOCATION: &str = "/dev/shm/scopecreep-feed";
+#[cfg(target_os = "macos")]
+const PLATFORM_LOCATION: &str = "/scopecreep-feed";
 #[cfg(windows)]
 const PLATFORM_LOCATION: &str = "Local\\scopecreep-feed";
 

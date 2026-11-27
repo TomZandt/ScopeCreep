@@ -1,7 +1,8 @@
 //! The two implementations of the Feed protocol, tested against each other: the C header the Sender uses
 //! (`feed/include/scopecreep_feed.h`, driven through `feed/c/feed_c_tool.c`) and this Rust crate.
-//! Built with `cc`, so Linux only for now; see #262.
-#![cfg(unix)]
+//! Built with `cc`, so Linux only for now: the header has no macOS code yet (the Sender's Metal path, #255) and
+//! Windows is #262.
+#![cfg(target_os = "linux")]
 mod common;
 use common::temp_feed;
 use scopecreep_feed::{

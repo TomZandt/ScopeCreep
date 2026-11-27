@@ -4,17 +4,27 @@
 //!
 //! Each platform is one file here with the same items. Adding a platform is adding its file and its two lines
 //! below; no call site changes.
+#[cfg(unix)]
+mod posix;
+#[cfg(unix)]
+pub use posix::{now_ns, process_alive};
+
 #[cfg(target_os = "linux")]
 mod linux;
 #[cfg(target_os = "linux")]
 pub use linux::*;
+
+#[cfg(target_os = "macos")]
+mod macos;
+#[cfg(target_os = "macos")]
+pub use macos::*;
 
 #[cfg(windows)]
 mod windows;
 #[cfg(windows)]
 pub use windows::*;
 
-#[cfg(not(any(target_os = "linux", windows)))]
+#[cfg(not(any(target_os = "linux", target_os = "macos", windows)))]
 compile_error!("the Feed has no platform module for this OS yet (feed/src/platform)");
 
 /// What the reader and writer rely on from every platform file, the same on each OS.
@@ -28,7 +38,8 @@ mod tests {
     use std::io;
     use std::path::PathBuf;
 
-    /// A location private to one test, removed when dropped (on Windows a mapping goes with its last handle).
+    /// A location private to one test, removed when dropped (on Windows a mapping goes with its last handle; on macOS a
+    /// name holds 31 bytes, `.N` included).
     struct Scratch(PathBuf);
 
     impl Scratch {
@@ -36,16 +47,17 @@ mod tests {
             let pid = std::process::id();
             #[cfg(windows)]
             let p = PathBuf::from(format!("Local\\scfeed-unit-{pid}-{name}"));
-            #[cfg(not(windows))]
+            #[cfg(target_os = "linux")]
             let p = PathBuf::from(format!("/dev/shm/scfeed-unit-{pid}-{name}"));
+            #[cfg(target_os = "macos")]
+            let p = PathBuf::from(format!("/scf-u-{pid}-{name}"));
             Scratch(p)
         }
     }
 
     impl Drop for Scratch {
         fn drop(&mut self) {
-            #[cfg(not(windows))]
-            let _ = std::fs::remove_file(&self.0);
+            remove(&self.0);
         }
     }
 

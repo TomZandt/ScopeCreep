@@ -8,7 +8,7 @@ Think of it as a row of pigeonholes in a corridor between two rooms. The Sender 
 
 1. **Nobody waits.** No locks, no blocking calls. Every shared field that both sides touch is a lock-free atomic.
 2. **One Sender process writes frames, one app reads.** The first running Sender process owns the Feed; Sender processes started while it runs (another Resolve) only register themselves (see "More than one Sender").
-3. **A Feed file's layout never changes.** To change the slot count or slot size the Sender makes a new Feed, publishes it in place of the old one (on Linux, renames the new file over the old name; on Windows, see "Windows" below), then marks the old one retired. A reader keeps a valid mapping of the old Feed until it re-opens.
+3. **A Feed file's layout never changes.** To change the slot count or slot size the Sender makes a new Feed, publishes it in place of the old one (on Linux, renames the new file over the old name; on Windows and macOS, see "Locator" below), then marks the old one retired. A reader keeps a valid mapping of the old Feed until it re-opens.
 4. **No reader, no work.** The Sender copies frames only while the reader's heartbeat is fresh.
 5. All integers are little-endian. All offsets are fixed. Reserved bytes are written as zero and ignored when read.
 
@@ -19,26 +19,27 @@ The layout below is the same on every platform; only where the Feed lives differ
 | Platform | Where the Feed lives |
 |---|---|
 | Linux | the file `/dev/shm/scopecreep-feed` (POSIX shared memory), mode 0600 |
-| macOS | the POSIX shared-memory object `/scopecreep-feed` (`shm_open`) |
+| macOS | the POSIX shared-memory object `/scopecreep-feed` (`shm_open`): a locator naming the Feed now published (below) |
 | Windows | the named file mapping `Local\scopecreep-feed`, backed by the paging file: a locator naming the Feed now published (below) |
 
-`SCOPECREEP_FEED=<path>` overrides the location for both sides on every platform (tests use this); on Windows it is a mapping name such as `Local\scopecreep-feed-test`. Linux and Windows are built (macOS not yet); the Rust crate keeps its platform calls in `feed/src/platform/`, the C header in its `scfeed_os_*` functions.
+`SCOPECREEP_FEED=<path>` overrides the location for both sides on every platform (tests use this); on Windows it is a mapping name such as `Local\scopecreep-feed-test`, on macOS a shared-memory name such as `/scopecreep-feed-test` (at most 31 bytes including the `/`, and the `.N` of a Feed's name must fit). Linux, Windows and macOS are built (the C header has no macOS code yet); the Rust crate keeps its platform calls in `feed/src/platform/`, the C header in its `scfeed_os_*` functions.
 
-### Windows
+### Locator (Windows and macOS)
 
-A named mapping can be neither renamed nor replaced while any process holds it, so the name cannot move to a new Feed the way a Linux file name does. Instead the name holds a **locator**, one 4096-byte page, and each Feed is its own mapping beside it:
+A Windows named mapping can be neither renamed nor replaced while any process holds it, and a macOS shared-memory object cannot be renamed at all, so on both the name cannot move to a new Feed the way a Linux file name does. Instead the name holds a **locator**, one 4096-byte page, and each Feed is its own mapping beside it:
 
 | Offset | Size | Field | Meaning |
 |---|---|---|---|
 | 0 | 8 | `current` (atomic) | number N of the Feed now published, 0 = none yet |
 | 8 | 8 | `last` (atomic) | the last N handed out |
 
-Feed N is the mapping named `<location>.N` (N in decimal, such as `Local\scopecreep-feed.3`), with exactly the layout below.
+Feed N is the mapping or object named `<location>.N` (N in decimal, such as `Local\scopecreep-feed.3` or `/scopecreep-feed.3`), with exactly the layout below.
 
 - **Publishing** (Sender): open or make the locator, take N by incrementing `last`, make `<location>.N` (if that name is still taken, take the next N), fill it in, then store N into `current`. Then mark the previous Feed retired, as on Linux.
 - **Opening** (reader): open the locator (missing: there is no Sender), read `current` (0: there is no Sender), open `<location>.N`. Its size is read from its header (`header_bytes + slot_count × (slot_header_bytes + slot_capacity)`), since Windows tells a mapping's size only by mapping all of it.
 - **Replaced:** the Feed at the location is another one when `current` is no longer the N the reader opened.
-- Every process using a Feed holds the locator open too, so it lasts as long as anyone uses a Feed. When the last one closes, the locator and every Feed go: an app started after Resolve quit finds no Feed rather than a stale one.
+- **Windows:** every process using a Feed holds the locator open too, so it lasts as long as anyone uses a Feed. When the last one closes, the locator and every Feed go: an app started after Resolve quit finds no Feed rather than a stale one.
+- **macOS:** shared-memory objects last until unlinked, so publishing a Feed also unlinks the Feed it replaces (a process that has it mapped keeps it), and the locator stays, as a Linux Feed file does after a crash: a reader finds a Feed whose `sender_pid` is gone and treats it as no Sender. An object is sized once, by `ftruncate`, in one call; a process that opens a new locator waits briefly for its size to appear. The size a reader sees is rounded up to the page size, so it checks only that the object is at least as large as the Feed.
 
 ```
 [ Feed header : 4096 bytes ][ slot 0 ][ slot 1 ] ... [ slot N-1 ]
@@ -84,7 +85,7 @@ A Feed with `slot_count = 0` is valid: it means "a Sender is loaded but has not 
 | 768 | 256 | reserved | | |
 | 1024 | 3072 | `registry` | every Sender process | 24 entries of 128 bytes listing Sender instances (version 1.2, see "More than one Sender") |
 
-**Clock.** Every `_ns` time is the system-wide monotonic clock in nanoseconds, so both processes can compare times: `CLOCK_MONOTONIC` on Linux, `QueryPerformanceCounter` scaled by `QueryPerformanceFrequency` on Windows. Process ids are the platform's own (on Windows, the process id `OpenProcess` takes).
+**Clock.** Every `_ns` time is the system-wide monotonic clock in nanoseconds, so both processes can compare times: `CLOCK_MONOTONIC` via `clock_gettime` on Linux and macOS (on macOS it also counts the time the Mac sleeps, which is harmless since both sides read the same clock), `QueryPerformanceCounter` scaled by `QueryPerformanceFrequency` on Windows. Process ids are the platform's own (on Windows, the process id `OpenProcess` takes; on macOS the `pid_t` that `kill(pid, 0)` checks).
 
 ## Slot header (4096 bytes)
 

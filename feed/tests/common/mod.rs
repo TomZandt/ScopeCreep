@@ -2,8 +2,9 @@
 use std::path::PathBuf;
 use std::process::{Child, Command, Stdio};
 
-/// A Feed location private to one test (never the real Feed). On Linux a file in `/dev/shm`, removed when
-/// dropped; on Windows a named mapping in the session's `Local\` namespace, which goes with its last handle.
+/// A Feed location private to one test (never the real Feed), removed when dropped. On Linux a file in
+/// `/dev/shm`; on macOS a short shared-memory name (a name there holds 31 bytes, `.N` included); on Windows a
+/// named mapping in the session's `Local\` namespace, which goes with its last handle.
 pub struct TempFeed(pub PathBuf);
 
 impl std::ops::Deref for TempFeed {
@@ -21,20 +22,20 @@ impl AsRef<std::path::Path> for TempFeed {
 
 impl Drop for TempFeed {
     fn drop(&mut self) {
-        #[cfg(unix)]
-        let _ = std::fs::remove_file(&self.0);
+        scopecreep_feed::remove_feed(&self.0);
     }
 }
 
-/// Overwrite one 8-byte header field of a Feed file, for the few tests that must forge one (Linux only).
-#[cfg(unix)]
+/// Overwrite one 8-byte header field of a Feed file, for the few tests that must forge one (Linux only: the
+/// Feed is a file there).
+#[cfg(target_os = "linux")]
 pub fn forge_header_u64(path: &std::path::Path, offset: u64, value: u64) {
     use std::os::unix::fs::FileExt;
     let f = std::fs::OpenOptions::new().write(true).open(path).unwrap();
     f.write_all_at(&value.to_le_bytes(), offset).unwrap();
 }
 
-#[cfg(unix)]
+#[cfg(target_os = "linux")]
 pub fn temp_feed(name: &str) -> TempFeed {
     let p = PathBuf::from(format!(
         "/dev/shm/scfeed-test-{}-{}",
@@ -42,6 +43,13 @@ pub fn temp_feed(name: &str) -> TempFeed {
         name
     ));
     let _ = std::fs::remove_file(&p);
+    TempFeed(p)
+}
+
+#[cfg(target_os = "macos")]
+pub fn temp_feed(name: &str) -> TempFeed {
+    let p = PathBuf::from(format!("/scf-{}-{}", std::process::id(), name));
+    scopecreep_feed::remove_feed(&p);
     TempFeed(p)
 }
 

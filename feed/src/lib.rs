@@ -11,7 +11,7 @@ pub mod synthetic;
 mod writer;
 
 pub use colour_setup::{Provenance, SentColourSetup};
-pub use platform::{now_ns, process_alive};
+pub use platform::{now_ns, process_alive, remove as remove_feed};
 pub use reader::{FeedReader, FeedStats, Frame, OpenError, RegisteredSender, SenderInfo};
 pub use writer::{FeedWriter, FrameMeta, SenderIdentity, WriteError};
 
@@ -34,7 +34,7 @@ pub const HEARTBEAT_INTERVAL_NS: u64 = 250_000_000;
 pub const SENDER_NAME: &str = "ScopeCreep";
 
 /// Where the Feed lives: `SCOPECREEP_FEED` if set, else the platform's location (on Linux
-/// `/dev/shm/scopecreep-feed`; see `feed/PROTOCOL.md`).
+/// `/dev/shm/scopecreep-feed`, on macOS the shared-memory object `/scopecreep-feed`; see `feed/PROTOCOL.md`).
 pub fn default_path() -> PathBuf {
     match std::env::var_os("SCOPECREEP_FEED") {
         Some(p) if !p.is_empty() => PathBuf::from(p),
