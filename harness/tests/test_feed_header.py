@@ -1,3 +1,4 @@
+import mmap
 import os
 import struct
 import sys
@@ -87,6 +88,7 @@ class WindowsLocator(unittest.TestCase):
         self.assertIsNone(self.read({"Local\\scopecreep-feed": locator(2)}))
 
 
+@unittest.skipIf(sys.platform == "win32", "POSIX shared memory does not exist on Windows")
 class PosixLocator(unittest.TestCase):
     """On macOS the location names a POSIX shared-memory object holding the locator (ADR 0052): /scopecreep-feed
     holds N and the Feed is /scopecreep-feed.N. The same objects work on Linux, so this runs there too."""
@@ -110,7 +112,9 @@ class PosixLocator(unittest.TestCase):
         self.made.append(name)
         try:
             os.ftruncate(fd, 16384)  # macOS rounds an object up to a page
-            os.pwrite(fd, data, 0)
+            # macOS shared-memory fds refuse pwrite (Illegal seek), so write through a mapping
+            with mmap.mmap(fd, 16384) as view:
+                view[: len(data)] = data
         finally:
             os.close(fd)
 
