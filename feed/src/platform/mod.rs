@@ -79,7 +79,13 @@ mod tests {
         let at = Scratch::new("size");
         let _made = published(&at, 3);
         let opened = Shared::open(&at.0).expect("open");
-        assert_eq!(opened.size(), file_bytes(3, 4096) as u64);
+        let made_bytes = file_bytes(3, 4096) as u64;
+        // macOS rounds a shared-memory object up to a page (16 KiB on Apple Silicon); readers only need "at least".
+        if cfg!(target_os = "macos") {
+            assert!(opened.size() >= made_bytes && opened.size() < made_bytes + 16384);
+        } else {
+            assert_eq!(opened.size(), made_bytes);
+        }
     }
 
     #[test]
