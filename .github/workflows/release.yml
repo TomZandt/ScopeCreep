@@ -51,8 +51,8 @@ jobs:
   build:
     name: build (${{ matrix.platform }})
     needs: platforms
-    # macos-14 is a hosted Apple Silicon (arm64) runner, which the arm64-only Installer needs.
-    runs-on: ${{ matrix.platform == 'linux' && 'ubuntu-22.04' || matrix.platform == 'windows' && 'windows-latest' || matrix.platform == 'macos' && 'macos-14' || 'unsupported' }}
+    # macos-latest is a hosted Apple Silicon (arm64) runner, as in rust.yml; macos-14 was refused ("configuration macos-14-arm64-us-default is not supported").
+    runs-on: ${{ matrix.platform == 'linux' && 'ubuntu-22.04' || matrix.platform == 'windows' && 'windows-latest' || matrix.platform == 'macos' && 'macos-latest' || 'unsupported' }}
     strategy:
       fail-fast: false
       matrix:

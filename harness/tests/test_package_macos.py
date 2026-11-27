@@ -233,7 +233,7 @@ class WiringTest(unittest.TestCase):
         self.assertIn("macos", run([PLATFORMS, "--test-builds"]).stdout.split())
 
     def test_the_workflow_has_an_apple_silicon_runner_and_accepts_the_platform(self):
-        self.assertIn("macos-14", self.wf)
+        self.assertIn("macos-latest", self.wf)
         self.assertIn("matrix.platform == 'macos'", self.wf)
         self.assertRegex(self.wf, r"\$p == linux \|\| \$p == windows \|\| \$p == macos")
 
