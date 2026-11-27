@@ -10,6 +10,8 @@
  *   feed_c_tool guest <path> <renders>                           start as a Sender process does (join a live Feed of another
  *                                                                process as a guest, else publish), print the role, record renders
  *   feed_c_tool registry <path>                                  print the live registry entries
+ *   feed_c_tool published <path>                                 print frames_published of the Feed there without attaching
+ *                                                                (exit 1 when there is no Feed yet)
  * The writing commands register their frames' Sender instance (7, or 3 for `guest`) in the registry.
  */
 #include "scopecreep_feed.h"
@@ -148,13 +150,20 @@ static int cmd_guest(const char* path, int renders)
     return 0;
 }
 
+/* The header of the Feed at `path`, mapped without attaching as a reader (attaching would start a Sender copying). */
+static const scfeed_header* peek_header(const char* path, scfeed_os_feed* f)
+{
+    if (scfeed_os_open(f, path) != SCFEED_OK) return NULL;
+    void* m = f->size >= SCFEED_HEADER_BYTES ? scfeed_os_map(f, SCFEED_HEADER_BYTES) : NULL;
+    scfeed_os_close(f);
+    return (const scfeed_header*)m;
+}
+
 static int cmd_registry(const char* path)
 {
-    int fd = open(path, O_RDONLY | O_CLOEXEC);
-    if (fd < 0) { perror("open"); return 1; }
-    const scfeed_header* h = (const scfeed_header*)mmap(NULL, SCFEED_HEADER_BYTES, PROT_READ, MAP_SHARED, fd, 0);
-    close(fd);
-    if (h == MAP_FAILED) { perror("mmap"); return 1; }
+    scfeed_os_feed f;
+    const scfeed_header* h = peek_header(path, &f);
+    if (!h) { fprintf(stderr, "no Feed at %s\n", path); return 1; }
     for (uint32_t i = 0; i < SCFEED_REGISTRY_ENTRIES; ++i) {
         const scfeed_entry* e = &h->registry[i];
         if (scfeed_load32(&e->state) != SCFEED_ENTRY_LIVE) continue;
@@ -164,10 +173,20 @@ static int cmd_registry(const char* path)
     return 0;
 }
 
+static int cmd_published(const char* path)
+{
+    scfeed_os_feed f;
+    const scfeed_header* h = peek_header(path, &f);
+    if (!h) return 1;
+    printf("%llu\n", (unsigned long long)scfeed_load64(&h->frames_published));
+    return 0;
+}
+
 int main(int argc, char** argv)
 {
     if (argc == 4 && !strcmp(argv[1], "guest")) return cmd_guest(argv[2], atoi(argv[3]));
     if (argc == 3 && !strcmp(argv[1], "registry")) return cmd_registry(argv[2]);
+    if (argc == 3 && !strcmp(argv[1], "published")) return cmd_published(argv[2]);
     if (argc == 7 && !strcmp(argv[1], "write"))
         return cmd_write(argv[2], (uint32_t)atoi(argv[3]), (uint32_t)atoi(argv[4]), (uint32_t)atoi(argv[5]), (uint64_t)atoll(argv[6]));
     if (argc == 5 && !strcmp(argv[1], "write-version")) {

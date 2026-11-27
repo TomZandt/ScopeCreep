@@ -22,7 +22,7 @@ The layout below is the same on every platform; only where the Feed lives differ
 | macOS | the POSIX shared-memory object `/scopecreep-feed` (`shm_open`): a locator naming the Feed now published (below) |
 | Windows | the named file mapping `Local\scopecreep-feed`, backed by the paging file: a locator naming the Feed now published (below) |
 
-`SCOPECREEP_FEED=<path>` overrides the location for both sides on every platform (tests use this); on Windows it is a mapping name such as `Local\scopecreep-feed-test`, on macOS a shared-memory name such as `/scopecreep-feed-test` (at most 31 bytes including the `/`, and the `.N` of a Feed's name must fit). Linux, Windows and macOS are built (the C header has no macOS code yet); the Rust crate keeps its platform calls in `feed/src/platform/`, the C header in its `scfeed_os_*` functions.
+`SCOPECREEP_FEED=<path>` overrides the location for both sides on every platform (tests use this); on Windows it is a mapping name such as `Local\scopecreep-feed-test`, on macOS a shared-memory name such as `/scopecreep-feed-test` (at most 31 bytes including the `/`, and the `.N` of a Feed's name must fit). Linux, Windows and macOS are built (the C header has code for all three, and `feed/tests/c_interop.rs` checks it against the Rust crate on Linux and macOS); the Rust crate keeps its platform calls in `feed/src/platform/`, the C header in its `scfeed_os_*` functions.
 
 ### Locator (Windows and macOS)
 

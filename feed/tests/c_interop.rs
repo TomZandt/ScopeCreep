@@ -1,8 +1,7 @@
 //! The two implementations of the Feed protocol, tested against each other: the C header the Sender uses
 //! (`feed/include/scopecreep_feed.h`, driven through `feed/c/feed_c_tool.c`) and this Rust crate.
-//! Built with `cc`, so Linux only for now: the header has no macOS code yet (the Sender's Metal path, #255) and
-//! Windows is #262.
-#![cfg(target_os = "linux")]
+//! Built with `cc`, so Linux and macOS (the header's two POSIX layouts); Windows is #262.
+#![cfg(any(target_os = "linux", target_os = "macos"))]
 mod common;
 use common::temp_feed;
 use scopecreep_feed::{
@@ -247,7 +246,14 @@ fn the_c_sender_works_only_while_the_rust_reader_is_attached() {
         .stdout(Stdio::piped())
         .spawn()
         .unwrap();
-    wait_for("the C tool to publish its Feed", || path.exists());
+    wait_for("the C tool to publish its Feed", || {
+        Command::new(c_tool())
+            .args(["published", path.to_str().unwrap()])
+            .output()
+            .unwrap()
+            .status
+            .success()
+    });
     std::thread::sleep(Duration::from_millis(100)); // no reader yet: these ticks must be idle
     {
         let mut reader = FeedReader::open(&path).unwrap();
@@ -274,17 +280,14 @@ fn the_c_sender_works_only_while_the_rust_reader_is_attached() {
     assert!(out.status.success());
 }
 
-/// Read a counter straight from a Feed file without attaching (attaching would start the Sender copying).
+/// Read a counter straight from the Feed without attaching (attaching would start the Sender copying).
 struct FeedWriterProbe;
 impl FeedWriterProbe {
     fn published(path: &Path) -> u64 {
-        use std::os::unix::fs::FileExt;
-        let mut b = [0u8; 8];
-        std::fs::File::open(path)
+        run(&["published", path.to_str().unwrap()])
+            .trim()
+            .parse()
             .unwrap()
-            .read_exact_at(&mut b, 328)
-            .unwrap();
-        u64::from_le_bytes(b)
     }
 }
 

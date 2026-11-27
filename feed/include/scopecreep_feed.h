@@ -1,5 +1,5 @@
-/* The Feed protocol, version 1.2: C implementation (header only, C11 and C++17; Linux with GCC or Clang, Windows
- * with MSVC or Clang).
+/* The Feed protocol, version 1.2: C implementation (header only, C11 and C++17; Linux with GCC or Clang, macOS with
+ * Clang, Windows with MSVC or Clang).
  * The specification is feed/PROTOCOL.md; keep the two in step. Used by the Sender (writer side) and by
  * feed/c/feed_c_tool.c (both sides, for the interop tests against the Rust crate).
  *
@@ -39,9 +39,13 @@ extern "C" {
 #define SCFEED_SLOT_HEADER_BYTES 4096u
 /* Where the Feed lives (feed/PROTOCOL.md, ADR 0043). Linux: a file in /dev/shm. Windows: the named file mapping
  * "Local\scopecreep-feed", which holds the locator of the Feed now published (PROTOCOL.md, "Windows").
- * macOS (not built yet): shm_open("/scopecreep-feed"). */
+ * macOS: the POSIX shared-memory object "/scopecreep-feed", which holds the same locator, Feed N being the object
+ * "/scopecreep-feed.N" (PROTOCOL.md, "Locator"; ADR 0052). */
 #ifdef _WIN32
 #define SCFEED_DEFAULT_PATH "Local\\scopecreep-feed"
+#define SCFEED_LOCATOR_BYTES 4096u
+#elif defined(__APPLE__)
+#define SCFEED_DEFAULT_PATH "/scopecreep-feed"
 #define SCFEED_LOCATOR_BYTES 4096u
 #else
 #define SCFEED_DEFAULT_PATH "/dev/shm/scopecreep-feed"
@@ -379,6 +383,169 @@ static inline void scfeed_os_discard(scfeed_os_feed* f) { scfeed_os_close(f); }
 static inline void scfeed_os_close_unneeded(scfeed_os_feed* f) { (void)f; }
 /* This process is done with the Feed (unmapped, or about to be): close what scfeed_os_close_unneeded kept. */
 static inline void scfeed_os_close_kept(scfeed_os_feed* f) { scfeed_os_close(f); }
+#elif defined(__APPLE__)
+/* macOS: shared-memory objects (shm_open), laid out as on Windows: the path names a locator page and Feed N is the
+ * object "<path>.N" (ADR 0052; mirrors feed/src/platform/macos.rs). Where it differs from Windows: an object lasts
+ * until it is unlinked, so publishing also unlinks the Feed it replaces (a process that has it mapped keeps it); an
+ * object can be sized only once; a name holds 31 bytes, `.N` included; and the size a reader sees is rounded up
+ * to a page (16 KiB on Apple Silicon). No descriptor is kept once a Feed is mapped. */
+typedef struct scfeed_os_feed {
+    int fd;
+    size_t size;
+    uint64_t n;
+    char name[64]; /* a new Feed's object name, to unlink it if it is never published */
+} scfeed_os_feed;
+
+static inline void scfeed_os_close(scfeed_os_feed* f)
+{
+    if (f->fd >= 0) close(f->fd);
+    f->fd = -1;
+}
+static inline void scfeed_os_name(char* out, size_t cap, const char* path, uint64_t n)
+{
+    snprintf(out, cap, "%s.%llu", path, (unsigned long long)n);
+}
+static inline int scfeed_os_shm_open(const char* name, int flags)
+{
+    const int fd = shm_open(name, flags | O_RDWR, 0600);
+    if (fd >= 0) fcntl(fd, F_SETFD, FD_CLOEXEC);
+    return fd;
+}
+/* The size of an object. An object is made and then sized in two steps and touching an unsized one is a bus error,
+ * so this waits up to half a second for the process that made it. 0 on failure or timeout. */
+static inline size_t scfeed_os_sized(int fd)
+{
+    for (int tries = 0; tries < 500; ++tries) {
+        struct stat st;
+        if (fstat(fd, &st) != 0) return 0;
+        if (st.st_size > 0) return (size_t)st.st_size;
+        struct timespec ms = {0, 1000000};
+        nanosleep(&ms, NULL);
+    }
+    return 0;
+}
+/* Size a new object once; when another process got there first, wait for its size instead. */
+static inline int scfeed_os_size_once(int fd, size_t bytes)
+{
+    if (ftruncate(fd, (off_t)bytes) == 0) return 1;
+    const int e = errno;
+    const int ok = scfeed_os_sized(fd) != 0;
+    errno = e;
+    return ok;
+}
+/* Map the locator page at `path`, making it first when `make`. NULL on failure, *err = SCFEED_ERR_NO_FEED (there
+ * is none) or SCFEED_ERR_IO. The descriptor is closed: the view keeps the page. */
+static inline uint64_t* scfeed_os_locator(const char* path, int make, int* err)
+{
+    *err = SCFEED_ERR_IO;
+    const int fd = scfeed_os_shm_open(path, make ? O_CREAT : 0);
+    if (fd < 0) {
+        if (errno == ENOENT) *err = SCFEED_ERR_NO_FEED;
+        return NULL;
+    }
+    int ok;
+    if (make) {
+        struct stat st;
+        ok = fstat(fd, &st) == 0 && (st.st_size > 0 || scfeed_os_size_once(fd, SCFEED_LOCATOR_BYTES));
+    } else {
+        ok = scfeed_os_sized(fd) != 0;
+    }
+    void* m = ok ? mmap(NULL, SCFEED_LOCATOR_BYTES, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0) : MAP_FAILED;
+    const int e = errno;
+    close(fd);
+    errno = e;
+    return m == MAP_FAILED ? NULL : (uint64_t*)m;
+}
+
+/* Open the Feed published at `path`. SCFEED_OK, SCFEED_ERR_NO_FEED or SCFEED_ERR_IO. */
+static inline int scfeed_os_open(scfeed_os_feed* f, const char* path)
+{
+    memset(f, 0, sizeof *f);
+    f->fd = -1;
+    int err;
+    uint64_t* l = scfeed_os_locator(path, 0, &err);
+    if (!l) return err;
+    f->n = scfeed_load64(&l[0]);
+    munmap(l, SCFEED_LOCATOR_BYTES);
+    if (!f->n) return SCFEED_ERR_NO_FEED;
+    scfeed_os_name(f->name, sizeof f->name, path, f->n);
+    f->fd = scfeed_os_shm_open(f->name, 0);
+    if (f->fd < 0) return errno == ENOENT ? SCFEED_ERR_NO_FEED : SCFEED_ERR_IO;
+    f->size = scfeed_os_sized(f->fd);
+    if (!f->size) { scfeed_os_close(f); return SCFEED_ERR_IO; }
+    f->name[0] = 0; /* not ours to unlink */
+    return SCFEED_OK;
+}
+
+/* Make a new Feed of `bytes` bytes, not yet published at `path`. SCFEED_OK or SCFEED_ERR_IO (errno set). */
+static inline int scfeed_os_create(scfeed_os_feed* f, const char* path, size_t bytes)
+{
+    memset(f, 0, sizeof *f);
+    f->fd = -1;
+    int err;
+    uint64_t* l = scfeed_os_locator(path, 1, &err);
+    if (!l) return SCFEED_ERR_IO;
+    for (int attempt = 0; attempt < 16 && f->fd < 0; ++attempt) {
+        f->n = __atomic_add_fetch(&l[1], 1, __ATOMIC_ACQ_REL);
+        scfeed_os_name(f->name, sizeof f->name, path, f->n);
+        const int fd = scfeed_os_shm_open(f->name, O_CREAT | O_EXCL);
+        if (fd < 0) {
+            if (errno == EEXIST) continue; /* left from an earlier locator: take the next N */
+            break;
+        }
+        if (!scfeed_os_size_once(fd, bytes)) {
+            const int e = errno;
+            close(fd);
+            shm_unlink(f->name);
+            errno = e;
+            break;
+        }
+        f->fd = fd;
+    }
+    const int e = errno;
+    munmap(l, SCFEED_LOCATOR_BYTES);
+    errno = e;
+    if (f->fd < 0) return SCFEED_ERR_IO;
+    f->size = bytes;
+    return SCFEED_OK;
+}
+
+static inline void* scfeed_os_map(scfeed_os_feed* f, size_t len)
+{
+    void* p = mmap(NULL, len, PROT_READ | PROT_WRITE, MAP_SHARED, f->fd, 0);
+    return p == MAP_FAILED ? NULL : p;
+}
+static inline void scfeed_os_unmap(void* p, size_t len) { munmap(p, len); }
+
+/* Make the Feed from scfeed_os_create the one at `path`, and unlink the Feed it replaces. SCFEED_OK or SCFEED_ERR_IO. */
+static inline int scfeed_os_publish(scfeed_os_feed* f, const char* path)
+{
+    int err;
+    uint64_t* l = scfeed_os_locator(path, 0, &err);
+    if (!l) return SCFEED_ERR_IO;
+    const uint64_t before = __atomic_exchange_n(&l[0], f->n, __ATOMIC_RELEASE);
+    munmap(l, SCFEED_LOCATOR_BYTES);
+    if (before && before != f->n) {
+        char name[64];
+        scfeed_os_name(name, sizeof name, path, before);
+        shm_unlink(name);
+    }
+    f->name[0] = 0; /* published: no longer ours to unlink if the writer is discarded */
+    return SCFEED_OK;
+}
+/* A Feed from scfeed_os_create that will not be published. */
+static inline void scfeed_os_discard(scfeed_os_feed* f)
+{
+    const int e = errno;
+    scfeed_os_close(f);
+    if (f->name[0]) shm_unlink(f->name);
+    errno = e;
+}
+/* A Feed is mapped: close what its mapping does not need: the descriptor. The object keeps its name until it is
+ * unlinked and the mapping keeps its memory. */
+static inline void scfeed_os_close_unneeded(scfeed_os_feed* f) { scfeed_os_close(f); }
+/* This process is done with the Feed: close what scfeed_os_close_unneeded kept. macOS: nothing is kept. */
+static inline void scfeed_os_close_kept(scfeed_os_feed* f) { (void)f; }
 #else
 typedef struct scfeed_os_feed {
     int fd;
