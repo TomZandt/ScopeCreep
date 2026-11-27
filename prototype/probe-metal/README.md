@@ -16,15 +16,19 @@ Resolve will play slower while they run; that is expected (the real Sender never
     make test     # optional: the pure helpers, no Metal needed
     make          # build/scopecreep_metal_probe.ofx.bundle, arm64, ad-hoc signed
 
-If it cannot find `ofxCore.h`, find Resolve's headers and pass them:
-`find /Library/Application\ Support/Blackmagic\ Design -name ofxCore.h`, then `make OFX_SDK="<that folder>"`.
+The Makefile's default SDK path is Resolve's own OpenFX headers,
+`/Library/Application Support/Blackmagic Design/DaVinci Resolve/Developer/OpenFX/OpenFX-1.4/include` (installed with
+Resolve), and that is the one to use. Do not clone the openfx repository instead: the probe needs
+`kOfxImageClipPropThumbnail`, which only Resolve's `ofxImageEffectExt.h` declares, so it does not compile against the
+upstream headers. If your Resolve keeps them elsewhere, `find /Library/Application\ Support/Blackmagic\ Design -name
+ofxCore.h`, then `make OFX_SDK="<that include folder>"`.
 Check the result is arm64: `file build/scopecreep_metal_probe.ofx.bundle/Contents/MacOS/scopecreep_metal_probe.ofx`.
 
 ## 2. Install
 
-    make install      # copies the bundle into /Library/OFX/Plugins (asks for your password)
+    sudo make install # copies the bundle into /Library/OFX/Plugins
 
-Quit Resolve completely (Cmd-Q) and start it again; it only scans OFX plugins at start-up. Remove later with `make uninstall`.
+Run it yourself in Terminal: it asks for your password, which a Claude Code session cannot type. Quit Resolve completely (Cmd-Q) and start it again; it only scans OFX plugins at start-up. Remove later with `make uninstall`.
 
 ## 3. Run in Resolve
 

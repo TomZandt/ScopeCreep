@@ -30,6 +30,31 @@ class SendKeyRaisesWhenTheKeyIsNotSent(unittest.TestCase):
             with self.assertRaises(NotImplementedError):
                 viewer.send_key("l", mods="CTRL")
 
+    def test_macos_types_the_key_into_resolve_through_system_events(self):
+        script = viewer._macos_key_script("L")
+        self.assertIn('tell application "DaVinci Resolve" to activate', script)
+        self.assertTrue(script.endswith('keystroke "l"'), script)
+
+    def test_macos_refuses_a_key_it_cannot_send_and_modifiers(self):
+        for key in ("", "space", "-"):
+            with self.assertRaises(ValueError):
+                viewer._macos_key_script(key)
+        with mock.patch.object(viewer.sys, "platform", "darwin"):
+            with self.assertRaises(NotImplementedError):
+                viewer.send_key("l", mods="CTRL")
+
+    def test_macos_says_so_when_osascript_is_refused(self):
+        failed = mock.Mock(returncode=1, stderr="not allowed assistive access")
+        with mock.patch.object(viewer.sys, "platform", "darwin"), \
+                mock.patch.object(viewer.subprocess, "run", return_value=failed):
+            with self.assertRaisesRegex(RuntimeError, "Accessibility"):
+                viewer.send_key("k")
+
+    def test_macos_screenshots_a_region_or_every_screen(self):
+        self.assertEqual(viewer.screencapture_args("/t/a.png", "1395,255 120x30"),
+                         ["screencapture", "-x", "-R", "1395,255,120,30", "/t/a.png"])
+        self.assertEqual(viewer.screencapture_args("/t/a.png"), ["screencapture", "-x", "/t/a.png"])
+
 
 if __name__ == "__main__":
     unittest.main()

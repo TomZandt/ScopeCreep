@@ -3,8 +3,9 @@
 #   make test   offline test of the pure helpers (any OS)
 #   make install / uninstall   into /Library/OFX/Plugins (needs sudo)
 #   make clean
-# OFX_SDK: Resolve's OpenFX headers. If your Resolve keeps them elsewhere, or you cloned
-# https://github.com/AcademySoftwareFoundation/openfx, pass OFX_SDK=<dir containing ofxCore.h>.
+# OFX_SDK: Resolve's OpenFX headers (the default is right for a normal install). Not the upstream openfx repository:
+# kOfxImageClipPropThumbnail is declared only in Resolve's ofxImageEffectExt.h. If your Resolve keeps them
+# elsewhere, pass OFX_SDK=<dir containing ofxCore.h>.
 
 OFX_SDK ?= /Library/Application Support/Blackmagic Design/DaVinci Resolve/Developer/OpenFX/OpenFX-1.4/include
 OFX_PLUGIN_DIR ?= /Library/OFX/Plugins

@@ -56,9 +56,10 @@ class Location(unittest.TestCase):
     def test_each_platform_has_its_own_default(self):
         self.assertEqual(feed_header.default_location("linux", {}), "/dev/shm/scopecreep-feed")
         self.assertEqual(feed_header.default_location("win32", {}), "Local\\scopecreep-feed")
+        self.assertEqual(feed_header.default_location("darwin", {}), "/scopecreep-feed")
 
     def test_scopecreep_feed_overrides_it_everywhere(self):
-        for platform in ("linux", "win32"):
+        for platform in ("linux", "win32", "darwin"):
             self.assertEqual(feed_header.default_location(platform, {"SCOPECREEP_FEED": "Local\\mine"}),
                              "Local\\mine")
 
@@ -84,6 +85,54 @@ class WindowsLocator(unittest.TestCase):
 
     def test_a_feed_gone_since_the_locator_was_read_is_no_feed(self):
         self.assertIsNone(self.read({"Local\\scopecreep-feed": locator(2)}))
+
+
+class PosixLocator(unittest.TestCase):
+    """On macOS the location names a POSIX shared-memory object holding the locator (ADR 0052): /scopecreep-feed
+    holds N and the Feed is /scopecreep-feed.N. The same objects work on Linux, so this runs there too."""
+
+    def setUp(self):
+        import _posixshmem
+        self.shm = _posixshmem
+        # macOS names hold 31 bytes, so keep it short enough for ".N"
+        self.location = "/scfeedtest%d" % os.getpid()
+        self.made = []
+
+    def tearDown(self):
+        for name in self.made:
+            try:
+                self.shm.shm_unlink(name)
+            except OSError:
+                pass
+
+    def publish(self, name, data):
+        fd = self.shm.shm_open(name, os.O_CREAT | os.O_RDWR, 0o600)
+        self.made.append(name)
+        try:
+            os.ftruncate(fd, 16384)  # macOS rounds an object up to a page
+            os.pwrite(fd, data, 0)
+        finally:
+            os.close(fd)
+
+    def test_reads_a_feed_published_in_shared_memory_objects(self):
+        self.publish(self.location, locator(7))
+        self.publish(self.location + ".7", header(renders_total=5))
+        self.assertEqual(feed_header.read_located(self.location, feed_header._read_shm).renders, 5)
+
+    def test_no_object_means_no_feed_and_none_is_made(self):
+        self.assertIsNone(feed_header.read_located(self.location, feed_header._read_shm))
+        with self.assertRaises(OSError):
+            self.shm.shm_open(self.location, os.O_RDONLY, 0o600)
+
+    def test_a_locator_pointing_at_an_unlinked_feed_means_no_feed(self):
+        self.publish(self.location, locator(2))
+        self.assertIsNone(feed_header.read_located(self.location, feed_header._read_shm))
+
+    @unittest.skipUnless(sys.platform == "darwin", "read() follows the locator on macOS only")
+    def test_read_follows_the_locator_on_macos(self):
+        self.publish(self.location, locator(1))
+        self.publish(self.location + ".1", header(renders_total=3))
+        self.assertEqual(feed_header.read(self.location).renders, 3)
 
 
 @unittest.skipUnless(sys.platform == "win32", "named file mappings are Windows'")

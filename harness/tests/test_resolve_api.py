@@ -27,8 +27,16 @@ class ScriptingPaths(unittest.TestCase):
         self.assertEqual(p.lib, "C:\\Program Files\\Blackmagic Design\\DaVinci Resolve\\fusionscript.dll")
         self.assertTrue(p.modules.startswith("C:\\ProgramData\\Blackmagic Design\\"))
 
+    def test_macos_uses_the_library_folder_and_the_app_bundle(self):
+        p = resolve_api.scripting_paths("darwin", {})
+        self.assertEqual(p.modules, "/Library/Application Support/Blackmagic Design/DaVinci Resolve/Developer/"
+                                    "Scripting/Modules")
+        self.assertEqual(p.lib, "/Applications/DaVinci Resolve/DaVinci Resolve.app/Contents/Libraries/Fusion/"
+                                "fusionscript.so")
+        self.assertIsNone(p.python, "Resolve on a Mac has no Python of its own")
+
     def test_resolves_own_variables_override_the_install_paths(self):
-        for platform in ("linux", "win32"):
+        for platform in ("linux", "win32", "darwin"):
             p = resolve_api.scripting_paths(platform, {"RESOLVE_SCRIPT_API": "/x/api", "RESOLVE_SCRIPT_LIB": "/x/lib"})
             self.assertEqual(p.lib, "/x/lib")
             self.assertIn(p.modules, ("/x/api/Modules", "/x/api\\Modules"))
@@ -53,7 +61,7 @@ class TheAppsHelperAgrees(unittest.TestCase):
 
     def test_the_helper_finds_the_scripting_module_and_library_where_the_harness_does(self):
         helper = self.helper()
-        for platform in ("linux", "win32"):
+        for platform in ("linux", "win32", "darwin"):
             for environ in ({}, {"PROGRAMDATA": "D:\\Data", "PROGRAMFILES": "D:\\Apps"},
                             {"RESOLVE_SCRIPT_API": "/x/api", "RESOLVE_SCRIPT_LIB": "/x/lib"}):
                 api, lib = helper.scripting_paths(platform, environ)
