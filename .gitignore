@@ -5,3 +5,4 @@ scopecreep-testdata/
 /sender/build/
 # Agent worktrees (never commit)
 /.claude/worktrees/
+/prototype/probe-metal/build/

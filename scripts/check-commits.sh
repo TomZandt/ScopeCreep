@@ -17,7 +17,7 @@ check_subject() {
 }
 
 if [[ "${1:-}" == "--message-file" ]]; then
-  subject=$(grep -v '^#' "$2" | sed -n '/./{p;q}')
+  subject=$(grep -v '^#' "$2" | awk 'NF {print; exit}')
   check_subject "$subject" "this commit"
   exit
 fi

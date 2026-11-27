@@ -14,6 +14,7 @@
 //      SCOPECREEP_PROBE_QUIET=1 (no per-render lines). touch <DIR>/copy.trigger for another batch of copies.
 #include "ofxCore.h"
 #include "ofxImageEffect.h"
+#include "ofxImageEffectExt.h" // Resolve's own SDK: kOfxImageClipPropThumbnail lives here, not in upstream openfx
 #include "ofxGPURender.h"
 #include "ofxProperty.h"
 
@@ -457,6 +458,10 @@ static OfxStatus onRender(OfxImageEffectHandle effect, OfxPropertySetHandle inAr
 static OfxStatus mainEntry(const char* action, const void* handle, OfxPropertySetHandle inArgs, OfxPropertySetHandle outArgs)
 {
     OfxImageEffectHandle effect = (OfxImageEffectHandle)handle;
+    logf("ACTION %s", action);
+    // Resolve treats the default reply to (Create|Destroy)Instance as a failed create and retries without rendering.
+    if (std::strcmp(action, kOfxActionCreateInstance) == 0 || std::strcmp(action, kOfxActionDestroyInstance) == 0)
+        return kOfxStatOK;
     if (std::strcmp(action, kOfxActionLoad) == 0) return onLoad();
     if (std::strcmp(action, kOfxActionDescribe) == 0) return onDescribe(effect);
     if (std::strcmp(action, kOfxImageEffectActionDescribeInContext) == 0) return onDescribeInContext(effect, inArgs);
