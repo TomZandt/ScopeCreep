@@ -78,6 +78,14 @@ impl Rig {
         } else {
             "/dev/shm/scopecreep-test"
         };
+        // A test's name can be long; on macOS keep the shared-memory name short and still unique with a hash.
+        #[cfg(target_os = "macos")]
+        let name = {
+            use std::hash::{Hash, Hasher};
+            let mut h = std::collections::hash_map::DefaultHasher::new();
+            name.hash(&mut h);
+            format!("{:08x}", h.finish() as u32)
+        };
         let path = PathBuf::from(format!("{base}-{}-{name}", std::process::id()));
         scopecreep_feed::remove_feed(&path);
         let (turn, device, queue) = gpu();
