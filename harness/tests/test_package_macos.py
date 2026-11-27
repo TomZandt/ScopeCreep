@@ -76,6 +76,9 @@ class Fixture(unittest.TestCase):
         os.makedirs(plugin_dir)
         with open(os.path.join(plugin_dir, "scopecreep_sender.ofx"), "w") as f:
             f.write("fake plugin")
+        # pkgbuild only accepts a component that is a valid bundle, so give the stand-in the real Sender's Info.plist
+        plist = pathlib.Path(__file__).resolve().parents[2] / "sender" / "macos" / "Info.plist"
+        pathlib.Path(self.bundle, "Contents", "Info.plist").write_text(plist.read_text().replace("@VERSION@", "1.2.3"))
         self.out = os.path.join(self.tmp, "out")
 
     def pkg(self, version="1.2.3"):
@@ -146,6 +149,7 @@ class PackageMacosFakeToolsTest(Fixture):
         names = [line.split()[1] for line in pathlib.Path(self.out, "SHA256SUMS").read_text().splitlines()]
         self.assertEqual(names, ["scopecreep-1.2.3-linux-x86_64.tar.gz", "scopecreep-1.2.3-macos-arm64.pkg"])
 
+    @unittest.skipUnless(sys.platform.startswith("linux"), "package-linux.sh needs GNU tar")
     def test_the_linux_script_keeps_a_pkg_in_sha256sums_too(self):
         os.makedirs(self.out)
         pathlib.Path(self.out, "scopecreep-1.2.3-macos-arm64.pkg").write_text("mac")
