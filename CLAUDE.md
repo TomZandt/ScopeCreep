@@ -53,7 +53,7 @@ Anything learned by testing is copied into `docs/findings/` when its ticket clos
 
 ## Definition of done
 
-Before reporting a ticket, a spec run or a release finished, run `scripts/check-done.sh` (ADR list, findings index, changelog, launcher copy: it prints what is open and fixes nothing), then complete every item of "Definition of done" in `CONTRIBUTING.md`, without being asked. After an implement-spec run, the spec-level records are yours too: the spec issues (progress comment, close when done) and the glossary. To fix a stale launcher: `cargo build --release -p scopecreep && install -Dm755 target/release/scopecreep ~/.local/bin/scopecreep`.
+Before reporting a ticket, a spec run or a release finished, run `scripts/check-done.sh` (ADR list, findings index, changelog, launcher copy: it prints what is open and fixes nothing), then complete every item of "Definition of done" in `CONTRIBUTING.md`, without being asked. After an implement-spec run, the spec-level records are yours too: the spec issues (progress comment, close when done) and the glossary. To fix a stale launcher: `cargo build --release -p scopecreep && mkdir -p ~/.local/bin && install -m755 target/release/scopecreep ~/.local/bin/scopecreep`.
 
 ## Keeping the repo clean
 

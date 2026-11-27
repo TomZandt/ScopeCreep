@@ -60,7 +60,7 @@ In Resolve, put **ScopeCreep** (Effects > OpenFX > ScopeCreep, the Sender) on it
 The launcher entry (`~/.local/share/applications/scopecreep.desktop`) runs a copy of the app installed outside the repo, so cleaning build outputs (`cargo clean`) never breaks it:
 
 ```sh
-cargo build --release -p scopecreep && install -Dm755 target/release/scopecreep ~/.local/bin/scopecreep
+cargo build --release -p scopecreep && mkdir -p ~/.local/bin && install -m755 target/release/scopecreep ~/.local/bin/scopecreep
 ```
 
 The installed copy doesn't update itself: run the line above again after changing the app. The app shows a picture only while a Sender is playing in Resolve.
@@ -139,9 +139,9 @@ DaVinci Resolve                                 scopecreep app (Rust + wgpu)
   - [0043](docs/adr/0043-the-feed-keeps-its-bytes-and-takes-each-platforms-shared-memory-name.md): The Feed keeps its bytes and takes each platform's shared-memory name (Linux /dev/shm, macOS shm_open, Windows named mapping)
   - [0049](docs/adr/0049-on-windows-the-feed-name-holds-a-locator.md): On Windows the Feed's name holds a locator and each Feed is its own mapping `<name>.N`, since a named mapping cannot be replaced while held
   - [0050](docs/adr/0050-on-windows-the-sender-carries-its-own-cpp-runtime.md): On Windows the Sender links the C++ runtime statically (`/MT`) and builds with CMake; it reads its environment from the process, not its runtime's copy
+  - [0051](docs/adr/0051-on-windows-the-resolve-helper-runs-under-a-found-python-in-a-job-object.md): On Windows the Colour Setup helper runs under a Python the app finds (`SCOPECREEP_RESOLVE_PYTHON`, Resolve's, `py.exe`, `PATH`) and dies with the app through a kill-on-close job object
   - [0052](docs/adr/0052-on-macos-the-feed-name-holds-a-locator-too.md): On macOS the Feed's name holds a locator too (a shared-memory object cannot be renamed), and publishing unlinks the Feed it replaces
   - [0053](docs/adr/0053-on-macos-the-sender-blits-each-frame-straight-into-the-feed.md): On macOS the Sender blits each frame from Resolve's Metal buffer straight into the Feed slot and publishes from the completion handler; the GPU-independent half is shared with the CUDA path
-  - [0051](docs/adr/0051-on-windows-the-resolve-helper-runs-under-a-found-python-in-a-job-object.md): On Windows the Colour Setup helper runs under a Python the app finds (`SCOPECREEP_RESOLVE_PYTHON`, Resolve's, `py.exe`, `PATH`) and dies with the app through a kill-on-close job object
 - [docs/findings/](docs/findings/): what testing showed, one file per ticket.
 - [docs/research/](docs/research/): what public sources say, with dates and links.
 
