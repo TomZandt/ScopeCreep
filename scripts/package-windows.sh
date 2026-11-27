@@ -44,5 +44,5 @@ printf '#define AppVersion "%s"\n#define OutputName "%s"\n' "$version" "$name" >
 
 out=$(cd "$out" && pwd)
 cp "$stage/Output/$name.exe" "$out/"
-(cd "$out" && shopt -s nullglob && sha256sum scopecreep-*.tar.gz scopecreep-*-setup.exe > SHA256SUMS)
+(cd "$out" && shopt -s nullglob && sha256sum scopecreep-*.tar.gz scopecreep-*-setup.exe scopecreep-*.pkg > SHA256SUMS)
 echo "$out/$name.exe"

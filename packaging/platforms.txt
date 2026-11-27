@@ -6,3 +6,4 @@
 # platform  in Releases
 linux       yes
 windows     no
+macos       no

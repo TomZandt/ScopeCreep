@@ -36,14 +36,13 @@ jobs:
         run: scripts/check-release-tag.sh "$GITHUB_REF_NAME"
 
       # A tag builds only the platforms Releases include; a Test build builds every platform in the file.
-      # The macOS port adds its runner to the build job and to this check.
       - id: list
         name: Read packaging/platforms.txt
         run: |
           which=()
           [[ $GITHUB_REF == refs/tags/v* ]] || which=(--test-builds)
           for p in $(scripts/platforms.sh "${which[@]}"); do
-            [[ $p == linux || $p == windows ]] || { echo "::error::platform '$p' is in packaging/platforms.txt but release.yml has no runner for it"; exit 1; }
+            [[ $p == linux || $p == windows || $p == macos ]] || { echo "::error::platform '$p' is in packaging/platforms.txt but release.yml has no runner for it"; exit 1; }
           done
           list=$(scripts/platforms.sh "${which[@]}" --json)
           echo "platforms: $list"
@@ -52,8 +51,8 @@ jobs:
   build:
     name: build (${{ matrix.platform }})
     needs: platforms
-    # The macOS port adds its runner here and its steps below, guarded by matrix.platform.
-    runs-on: ${{ matrix.platform == 'linux' && 'ubuntu-22.04' || matrix.platform == 'windows' && 'windows-latest' || 'unsupported' }}
+    # macos-14 is a hosted Apple Silicon (arm64) runner, which the arm64-only Installer needs.
+    runs-on: ${{ matrix.platform == 'linux' && 'ubuntu-22.04' || matrix.platform == 'windows' && 'windows-latest' || matrix.platform == 'macos' && 'macos-14' || 'unsupported' }}
     strategy:
       fail-fast: false
       matrix:
@@ -129,6 +128,17 @@ jobs:
           cmake --build sender/build/cmake --config Release
           ctest --test-dir sender/build/cmake -C Release -R sender_links_only_system_libraries --output-on-failure
 
+      # The macOS Sender is Metal, built by clang from the same Makefile: no Resolve, no GPU, no CUDA. It
+      # needs the pinned OpenFX headers and the stand-in for Resolve's extension header, as the others do.
+      - name: Build the Sender (macOS)
+        if: matrix.platform == 'macos'
+        run: |
+          mkdir -p "$RUNNER_TEMP/ofx-include"
+          cp openfx/include/*.h "$RUNNER_TEMP/ofx-include/"
+          cp sender/ci/ofxImageEffectExt.h "$RUNNER_TEMP/ofx-include/"
+          make -C sender OFX_SDK="$RUNNER_TEMP/ofx-include"
+          file sender/build/scopecreep_sender.ofx.bundle/Contents/MacOS/scopecreep_sender.ofx
+
       - name: Package the Installer
         if: matrix.platform == 'linux'
         run: |
@@ -147,6 +157,13 @@ jobs:
         run: |
           scripts/package-windows.sh "${{ steps.version.outputs.version }}" \
             target/release/scopecreep.exe sender/build/scopecreep_sender.ofx.bundle dist
+
+      # Unsigned: pkgbuild and productbuild come with macOS.
+      - name: Package the Installer (macOS)
+        if: matrix.platform == 'macos'
+        run: |
+          scripts/package-macos.sh "${{ steps.version.outputs.version }}" \
+            target/release/scopecreep sender/build/scopecreep_sender.ofx.bundle dist
 
       - uses: actions/upload-artifact@v4
         with:

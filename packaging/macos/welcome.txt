@@ -1,0 +1,5 @@
+This installs the ScopeCreep app in /Applications and the Sender, the plugin that sends DaVinci Resolve's picture to the app, in /Library/OFX/Plugins.
+
+Close DaVinci Resolve before you continue, or it will not load the new Sender.
+
+ScopeCreep needs a Mac with an Apple Silicon chip (M1 or later). Intel Macs are not supported.

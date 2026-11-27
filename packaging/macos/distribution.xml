@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<installer-gui-script minSpecVersion="2">
+  <title>ScopeCreep</title>
+  <welcome file="welcome.txt" mime-type="text/plain"/>
+  <readme file="INSTALL.txt" mime-type="text/plain"/>
+  <!-- Apple Silicon only. hostArchitectures makes Installer refuse an Intel Mac; the check below says why. -->
+  <options customize="never" require-scripts="false" hostArchitectures="arm64"/>
+  <installation-check script="installCheck();"/>
+  <script><![CDATA[
+function installCheck() {
+  if (system.sysctl('hw.optional.arm64') != 1) {
+    my.result.title = 'ScopeCreep needs Apple Silicon';
+    my.result.message = 'This Mac has an Intel processor. ScopeCreep runs only on Apple Silicon Macs (M1 or later), so it was not installed.';
+    my.result.type = 'Fatal';
+    return false;
+  }
+  return true;
+}
+  ]]></script>
+  <choices-outline>
+    <line choice="io.github.tomzandt.scopecreep.pkg"/>
+  </choices-outline>
+  <choice id="io.github.tomzandt.scopecreep.pkg" title="ScopeCreep" description="The ScopeCreep app and the Sender plugin for DaVinci Resolve">
+    <pkg-ref id="io.github.tomzandt.scopecreep.pkg"/>
+  </choice>
+  <pkg-ref id="io.github.tomzandt.scopecreep.pkg" version="@VERSION@">scopecreep-component.pkg</pkg-ref>
+</installer-gui-script>

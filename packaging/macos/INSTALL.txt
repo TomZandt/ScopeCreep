@@ -1,0 +1,47 @@
+ScopeCreep for macOS (Apple Silicon)
+====================================
+
+The installer puts the ScopeCreep app in /Applications and the Sender (the
+plugin that sends DaVinci Resolve's picture to the app) in
+/Library/OFX/Plugins, where Resolve looks for plugins.
+
+What you need
+  A Mac with an Apple Silicon chip (M1 or later) and DaVinci Resolve. Intel
+  Macs are not supported: the installer stops with a message on one.
+  Resolve's GPU processing can stay on Metal (the default).
+
+Opening the installer
+  The installer is not signed or notarised yet, so after you download it in a
+  browser macOS will not open it with a double-click. Either:
+    - right-click (or Control-click) scopecreep-X.Y.Z-macos-arm64.pkg,
+      choose Open, then Open again in the window that appears; or
+    - double-click it, dismiss the warning, then open System Settings >
+      Privacy & Security, scroll to the message about the installer and
+      click "Open Anyway".
+  macOS asks for your password, as the Sender goes in a folder shared by
+  every user.
+
+Install
+  1. Close DaVinci Resolve. If it stays open it will not load the new Sender.
+  2. Open the installer as above and follow it.
+  3. Start DaVinci Resolve. On the Color page, add ScopeCreep from
+     Effects > OpenFX to a node (a serial node at the end of your grade),
+     then open ScopeCreep from Launchpad, Spotlight or the Applications
+     folder.
+  Installing a newer version over an older one replaces it.
+
+Uninstall
+  Close DaVinci Resolve, then delete these two items in Finder (Go > Go to
+  Folder...):
+    /Applications/ScopeCreep.app
+    /Library/OFX/Plugins/scopecreep_sender.ofx.bundle
+  and start Resolve again. Your settings stay in
+  ~/Library/Application Support/ScopeCreep; delete that folder to remove them
+  too. This note is also kept in /Library/Application Support/ScopeCreep.
+
+Check your download
+  In Terminal:  shasum -a 256 scopecreep-X.Y.Z-macos-arm64.pkg
+  and compare it with the line in SHA256SUMS (the file is on the Releases
+  page).
+
+Help: https://github.com/TomZandt/ScopeCreep
